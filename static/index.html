@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Escritório</title>
+  <link rel="icon" href="logo.png">
+  <link rel="stylesheet" href="estilo.css?v=50">
+</head>
+<body>
+  <a class="pular" href="#principal">Ir para o conteúdo</a>
+  <!-- barra de 52 px: só no celular e com o menu recolhido (menu, nome da empresa e ações) -->
+  <header id="topo" class="topo">
+    <button id="abrir-menu" class="topo-bt" type="button" aria-controls="lateral" aria-expanded="false" aria-label="Abrir o menu">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
+    </button>
+    <a class="marca topo-marca" href="#escritorio"><img id="logo-topo" src="logo.png" alt="" width="24" height="24"><strong id="empresa-topo">Escritório</strong></a>
+    <div class="topo-acoes">
+      <button id="topo-busca" class="topo-bt" type="button" aria-label="Ir para um agente">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+      </button>
+      <a id="pendencias" class="topo-bt pendencias" href="#aprovacoes" aria-label="Aprovações">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg>
+        <span id="pendencias-n" class="topo-n" aria-hidden="true" hidden></span>
+      </a>
+    </div>
+  </header>
+  <div class="casca">
+    <div id="veu" class="veu" hidden></div>
+    <nav id="lateral" class="lateral" aria-label="Principal">
+      <div class="org">
+        <div class="org-linha">
+          <a class="marca" href="#escritorio"><img id="logo" src="logo.png" alt="" width="30" height="30"><span class="marca-txt"><strong id="empresa">Escritório</strong><span id="org-resumo" class="org-resumo"></span></span></a>
+          <button id="fechar-menu" class="lat-bt so-gaveta" type="button" aria-label="Fechar o menu">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+          </button>
+        </div>
+        <a id="marca-exemplo" class="etiqueta-exemplo" href="#personalizar" hidden>Nome e logo de exemplo · troque no Personalizar</a>
+        <div class="org-busca">
+          <div class="busca" role="search">
+            <label class="oculto" for="busca">Ir para um agente</label>
+            <svg class="busca-ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+            <input id="busca" type="search" placeholder="Ir para…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="busca-lista" aria-autocomplete="list" aria-keyshortcuts="Control+K /">
+            <kbd class="atalho" aria-hidden="true">Ctrl K</kbd>
+            <ul id="busca-lista" class="busca-lista" role="listbox" aria-label="Agentes encontrados" hidden></ul>
+          </div>
+          <button id="recolher" class="lat-bt so-fixa" type="button" aria-label="Recolher o menu" title="Recolher o menu">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"></rect><path d="M9.5 4.5v15"></path></svg>
+          </button>
+        </div>
+      </div>
+      <div class="lat-rolar">
+        <div class="lat-nav">
+          <a href="#escritorio" data-rota="escritorio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5l8-3 8 3v16M9 21v-5h6v5M8 8h2M14 8h2M8 12h2M14 12h2"></path></svg><span>Escritório</span></a>
+          <a href="#aprovacoes" data-rota="aprovacoes"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg><span>Aprovações</span><span class="contador ambar" id="nav-aprovacoes" hidden></span></a>
+          <a href="#conversas" data-rota="conversas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"></path></svg><span>Conversas</span><span class="contador" id="nav-conversas" hidden></span></a>
+          <a href="#personalizar" data-rota="personalizar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4l6 6-9 9H5v-6z"></path></svg><span>Personalizar</span></a>
+          <a href="#ajuda" data-rota="ajuda"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6M12 17h.01"></path></svg><span>Ajuda</span></a>
+        </div>
+        <section class="lat-secao">
+          <h2 class="lat-titulo"><button id="t-salas" type="button" aria-expanded="true" aria-controls="salas">Salas<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button></h2>
+          <ul id="salas" class="salas" aria-labelledby="t-salas"></ul>
+        </section>
+        <section class="lat-secao">
+          <h2 class="lat-titulo"><button id="t-agentes" type="button" aria-expanded="true" aria-controls="lista">Agentes <span id="contagem" class="lat-n"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button></h2>
+          <div id="lista" class="lista" role="group" aria-labelledby="t-agentes"></div>
+        </section>
+        <section class="lat-secao lat-externos" aria-labelledby="t-externos">
+          <h2 id="t-externos" class="lat-titulo">No agentes.chat</h2>
+          <a class="externo" data-externo="team" target="_blank" rel="noopener">Agentes</a>
+          <a class="externo" data-externo="routines" target="_blank" rel="noopener">Rotinas</a>
+          <a class="externo" data-externo="settings/connectors" target="_blank" rel="noopener">Configurações</a>
+          <a class="demo-link" href="?demo=1">Ver demonstração</a>
+        </section>
+      </div>
+      <div class="lat-pe">
+        <span id="usuario-ini" class="usuario-ini" aria-hidden="true"></span>
+        <span class="usuario"><strong id="usuario-nome">Você</strong><span id="usuario-estado" class="usuario-estado">Conectando…</span></span>
+        <button id="simular" class="lat-bt" type="button" aria-haspopup="dialog" aria-label="Simular data, hora e clima" title="Simular data, hora e clima" hidden>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"></circle><path d="M9 1.5v1.5M3.5 3.5l1 1M1.5 9H3M14.5 3.5l-1 1"></path><path d="M8 21h9a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.4 1.6A3.2 3.2 0 0 0 8 21z"></path></svg>
+        </button>
+        <button id="som" class="lat-bt" type="button" aria-pressed="false" aria-expanded="false" aria-controls="painel-som" aria-label="Sons">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"></path><path id="som-onda" d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"></path></svg>
+        </button>
+        <form method="post" action="/sair"><button class="lat-bt" type="submit" aria-label="Sair" title="Sair">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"></path></svg>
+        </button></form>
+        <div id="painel-som" class="painel-som" hidden></div>
+      </div>
+    </nav>
+    <main id="principal" tabindex="-1">
+      <section id="v-escritorio" class="visao">
+        <div class="cabeca cabeca-esc">
+          <div>
+            <h1>Escritório</h1>
+            <p id="resumo-esc" class="resumo">Conectando…</p>
+            <span id="atualizado" class="oculto" role="status"></span>
+          </div>
+          <div id="estados" class="estados" role="group" aria-label="Filtrar agentes por estado">
+            <button type="button" data-filtro="todos" aria-pressed="true"><i class="led todos"></i><span>Todos</span><b class="n" data-n="todos">0</b></button>
+            <button type="button" data-filtro="trab" aria-pressed="false"><i class="led trabalhando"></i><span>Trabalhando</span><b class="n" data-n="trab">0</b></button>
+            <button type="button" data-filtro="esp" aria-pressed="false"><i class="led aprovacao"></i><span>Esperando você</span><b class="n" data-n="esp">0</b></button>
+            <button type="button" data-filtro="livres" aria-pressed="false"><i class="led livre"></i><span>Livres</span><b class="n" data-n="livres">0</b></button>
+            <button type="button" data-filtro="fora" aria-pressed="false"><i class="led fora"></i><span>Fora</span><b class="n" data-n="fora">0</b></button>
+          </div>
+        </div>
+        <section id="palco-cartao" class="cartao palco-cartao" aria-label="Mapa do escritório">
+          <div id="faixa-erro" class="faixa-erro" role="alert" hidden><span id="faixa-erro-txt"></span><button id="tentar" type="button">Tentar agora</button></div>
+          <div id="palco" class="palco">
+            <canvas id="tela" tabindex="0" aria-label="Mapa do escritório. Arraste para mover, use a roda ou a pinça para dar zoom e toque num agente para ver o que ele está fazendo."></canvas>
+            <p class="selo-vivo" aria-hidden="true"><span id="ao-vivo" class="ao-vivo"></span><span id="relogio" class="relogio"></span></p>
+            <div class="controles" role="toolbar" aria-label="Câmera">
+              <button id="zoom-menos" type="button" aria-label="Afastar">−</button>
+              <button id="zoom-mais" type="button" aria-label="Aproximar">+</button>
+              <button id="ver-tudo" type="button" aria-label="Ver tudo"><span class="ic" data-icone="encaixar" aria-hidden="true"></span><span class="rotulo-ver" aria-hidden="true">Ver tudo</span></button>
+              <button id="tela-cheia" type="button" aria-pressed="false" aria-label="Mapa em tela cheia"><span class="ic" data-icone="expandir" aria-hidden="true"></span></button>
+              <button id="modo-foto" type="button" aria-label="Modo foto"><span class="ic" data-icone="camera" aria-hidden="true"></span></button>
+              <button id="girar" type="button" aria-pressed="true" aria-label="Girar a maquete sozinha" hidden><span class="ic" data-icone="girar" aria-hidden="true"></span><span class="rotulo-ver" aria-hidden="true">Girar</span></button>
+              <button id="visao-3d" type="button" aria-label="Ver a maquete 3D" hidden><span class="ic" data-icone="cubo" aria-hidden="true"></span><span class="rotulo-ver" aria-hidden="true">Maquete 3D</span></button>
+            </div>
+            <span class="dica-mapa" aria-hidden="true">Toque num agente</span>
+            <button id="abrir-cheia" class="abrir-cheia" type="button"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"></path></svg>Abrir o mapa em tela cheia</button>
+            <p id="aviso-maquete" class="aviso-maquete" role="status"></p>
+            <div id="cartao-agente" class="cartao-agente" hidden></div>
+            <div id="ficha" class="ficha" role="dialog" aria-labelledby="ficha-nome" hidden></div>
+          </div>
+        </section>
+        <div class="widgets">
+          <section id="esperando" class="cartao widget" aria-labelledby="t-esperando">
+            <div class="widget-topo"><h2 id="t-esperando">Esperando você <span id="esperando-n" class="lat-n so-celular"></span></h2><a id="ver-pedidos" class="link-suave" href="#aprovacoes">Ver todos</a></div>
+            <div id="avisos" class="widget-lista"></div>
+          </section>
+          <section id="trabalhando" class="cartao widget" aria-labelledby="t-trabalhando">
+            <div class="widget-topo"><h2 id="t-trabalhando">Trabalhando agora <span id="trabalhando-n" class="lat-n so-celular"></span></h2><a class="link-suave externo" data-externo="" target="_blank" rel="noopener">Abrir no agentes.chat</a></div>
+            <div id="trabalhando-lista" class="widget-lista"></div>
+          </section>
+        </div>
+        <section class="agora" aria-labelledby="t-agora">
+          <div class="secao-topo"><h2 id="t-agora" class="rotulo-secao">Acontecendo agora <span id="agora-n" class="lat-n"></span></h2><button id="agora-tudo" class="link-suave link-bt" type="button" aria-expanded="false" aria-controls="eventos" hidden>Ver tudo</button></div>
+          <ol id="eventos" class="cartao lista-agrupada" role="log" aria-labelledby="t-agora"></ol>
+        </section>
+      </section>
+      <section id="v-conversas" class="visao" hidden>
+        <div class="cabeca"><h1>Conversas</h1><p class="resumo">Ler e responder os agentes por aqui ainda não está disponível.</p></div>
+        <div class="vazio-grande cartao">
+          <span class="ic ic-grande" data-icone="balao" aria-hidden="true"></span>
+          <h2>Em breve</h2>
+          <p>Por enquanto, as conversas ficam no agentes.chat. O escritório mostra quem está trabalhando e quem espera você.</p>
+          <a class="botao" data-externo="" target="_blank" rel="noopener">Abrir o agentes.chat</a>
+        </div>
+      </section>
+      <section id="v-personalizar" class="visao" hidden>
+        <div class="cabeca"><h1>Personalizar</h1><p class="resumo">A marca do seu escritório. Vale para todo mundo que abre este endereço.</p></div>
+        <div class="personalizar">
+          <form id="form-marca" class="cartao form-marca">
+            <fieldset>
+              <legend>Nome</legend>
+              <label for="m-empresa">Nome da empresa</label>
+              <input id="m-empresa" name="empresa" maxlength="40" required autocomplete="organization" aria-describedby="m-empresa-ajuda">
+              <p id="m-empresa-ajuda" class="ajuda">Aparece no menu, no título da aba, no painel da sala comunal e na moldura do modo foto. Até 40 caracteres.</p>
+            </fieldset>
+            <fieldset>
+              <legend>Cor de destaque</legend>
+              <div id="m-paleta" class="paleta"></div>
+              <div class="cor-livre"><label for="m-cor">Outra cor</label><input id="m-cor" name="cor" type="color" aria-describedby="m-contraste m-cor-ajuda"></div>
+              <p id="m-contraste" class="ajuda" aria-live="polite"></p>
+              <p id="m-cor-ajuda" class="ajuda">Na interface, vale para o botão principal, o item ativo do menu e o contorno de foco do teclado; no mapa, para a placa e a porta da recepção, a passadeira do corredor e o painel da sala comunal; e para o botão da tela de entrada. As cores de estado não mudam: âmbar é sempre “esperando você” (luzes, selos e contadores) e azul, “pergunta”.</p>
+            </fieldset>
+            <fieldset>
+              <legend>Logo</legend>
+              <div id="m-soltar" class="soltar">
+                <img id="m-previa" alt="Logo atual" width="88" height="88">
+                <div class="soltar-txt">
+                  <label class="botao secundario" for="m-logo">Escolher imagem</label>
+                  <input id="m-logo" class="arquivo" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="m-logo-ajuda">
+                  <p id="m-logo-ajuda" class="ajuda">PNG, JPEG ou WEBP, até 600 KB. Também dá para arrastar a imagem para cá. O logo aparece na prévia e vale junto com o resto quando você salva; Desfazer ou sair sem salvar descartam.</p>
+                  <button id="m-remover" type="button" class="link-botao">Voltar ao logo padrão</button>
+                </div>
+              </div>
+            </fieldset>
+            <p id="m-aviso" class="aviso-form" role="status"></p>
+            <div class="acoes"><button id="m-salvar" class="botao" type="submit">Salvar</button><button id="m-desfazer" class="botao fantasma" type="button">Desfazer</button></div>
+          </form>
+          <aside class="cartao previa-marca" aria-labelledby="t-previa">
+            <p id="t-previa" class="olho">Prévia</p>
+            <div class="previa-topo"><img id="p-logo" src="logo.png" alt="" width="28" height="28"><strong id="p-nome"></strong></div>
+            <p class="previa-rotulo">Na interface</p>
+            <div class="previa-ui" aria-hidden="true">
+              <div class="previa-nav">
+                <span class="previa-item ativo"><svg viewBox="0 0 24 24"><path d="M4 21V5l8-3 8 3v16M9 21v-5h6v5M8 8h2M14 8h2M8 12h2M14 12h2"></path></svg>Escritório</span>
+                <span class="previa-item"><svg viewBox="0 0 24 24"><path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg>Aprovações<span class="contador ambar">2</span></span>
+              </div>
+              <div class="previa-pedido"><span class="previa-pedido-txt"><strong>Um agente pede aprovação</strong><span class="selo-tipo aprovacao">Aprovação</span></span><span class="botao">Revisar pedido</span></div>
+              <div class="previa-foco"><span class="botao fantasma">Seguir</span><span class="suave">com o foco do teclado</span></div>
+            </div>
+            <p class="ajuda">A cor fica só no item ativo do menu, no botão principal e no contorno de foco. Âmbar (esperando você) e azul (pergunta) são de estado e não mudam.</p>
+            <p class="previa-rotulo">No mapa</p>
+            <div class="previa-corpo"></div>
+          </aside>
+        </div>
+      </section>
+      <section id="v-ajuda" class="visao" hidden>
+        <div class="cabeca"><h1>Ajuda</h1><p class="resumo">Perguntas frequentes e atalhos.</p></div>
+        <div class="ajuda-busca"><label class="oculto" for="faq-busca">Procurar na ajuda</label><span class="ic busca-ic" data-icone="lupa" aria-hidden="true"></span><input id="faq-busca" type="search" placeholder="Procurar na ajuda" autocomplete="off"></div>
+        <p id="faq-total" class="faq-total" role="status" hidden></p>
+        <div class="faq">
+          <h2 class="faq-grupo">Usar o escritório</h2>
+          <div class="cartao faq-lista">
+            <details><summary>O que é este escritório?</summary><p>Uma visão ao vivo do seu time de agentes do agentes.chat, desenhada como um escritório em pixel art. Cada agente tem uma mesa na sala do seu time; quando recebe uma tarefa, vai para a mesa e digita; quando fica livre, vai para a sala comunal jogar, conversar ou tomar café.</p></details>
+            <details><summary>O que significam o “!” e o “?”?</summary><p>“!” (âmbar, com a mão levantada): o agente espera a sua aprovação. “?” (azul): ele tem uma pergunta para você. Tocar no selo abre o pedido certo no agentes.chat; os mesmos pedidos aparecem em “Esperando você”, com há quanto tempo cada um espera.</p></details>
+            <details><summary>Posso aprovar pedidos por aqui?</summary><p>Não, de propósito: aprovar é sempre no agentes.chat, onde você vê o pedido completo. O botão “Revisar pedido” abre exatamente a conversa do pedido.</p></details>
+            <details><summary>Como navego pelo mapa?</summary><p>No computador: arraste para mover, use a roda do mouse para dar zoom onde está o cursor e dê duplo clique numa sala para focar. No celular: arraste com um dedo e use a pinça para o zoom. Em qualquer tela, a lista “Salas” leva a câmera até a sala, “Ver tudo” volta ao prédio inteiro e o botão de tela cheia amplia o mapa. Toque num agente para abrir o cartão dele; com “Seguir”, a câmera acompanha o agente.</p></details>
+            <details><summary>Dá para brincar com o mapa?</summary><p>Sim. Clique ou toque em objetos como a TV, o fliperama, a jukebox, a cafeteira, o aquário, o relógio, as luminárias, o gato, o quadro de avisos, a lousa e o sino de vendas; pelo teclado, a tecla Tab passa pelos objetos visíveis do mapa e Enter aciona. O botão de câmera abre o modo foto, que esconde a interface e salva um PNG no seu aparelho (Esc sai). Para mostrar o produto sem dados reais, abra a <a href="?demo=1">demonstração</a>. E tem um segredo para quem conhece videogame.</p></details>
+            <details><summary>O que é a maquete 3D?</summary><p>O mesmo prédio em 3D, como uma maquete flutuando: as paredes do mapa ficam em pé e as salas não têm teto. Abra no botão “Maquete 3D” do mapa e volte no “Mapa 2D”. Arraste para girar, arraste com o botão direito (ou com Shift, ou com dois dedos) para mover e use a roda ou a pinça para aproximar; com a maquete selecionada, as setas giram. Clique numa sala para ir até ela. As paredes que ficam na frente baixam sozinhas. “Girar” liga e desliga o giro lento (com “reduzir movimento” no sistema ele vem desligado). Se o aparelho não der conta, a maquete avisa e volta ao mapa. Os agentes aparecem na maquete com os mesmos nomes, selos e balões do mapa: toque num agente para abrir o cartão, ou no selo para abrir o pedido.</p></details>
+            <details><summary>Dá para ver de noite ou na chuva sem esperar?</summary><p>Dá: acrescente ao endereço <code>?hora=21</code> (qualquer hora), <code>?clima=tempestade</code> (chuva, garoa, neve, neblina, nublado, limpo) ou <code>?data=2026-12-25</code>. Pode combinar: <code>?hora=21&amp;clima=neve&amp;data=2026-12-24</code>.</p></details>
+          </div>
+          <div class="atalhos cartao">
+            <h3>Atalhos de teclado</h3>
+            <dl>
+              <div><dt><kbd>Ctrl</kbd> <kbd>K</kbd> ou <kbd>/</kbd></dt><dd>Ir para um agente</dd></div>
+              <div><dt><kbd>+</kbd> <kbd>−</kbd></dt><dd>Aproximar e afastar</dd></div>
+              <div><dt><kbd>0</kbd></dt><dd>Ver o prédio inteiro</dd></div>
+              <div><dt><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Girar a maquete 3D (com Shift, mover)</dd></div>
+              <div><dt><kbd>Esc</kbd></dt><dd>Fechar o cartão ou a busca</dd></div>
+            </dl>
+          </div>
+          <h2 class="faq-grupo">Os agentes</h2>
+          <div class="cartao faq-lista">
+            <details><summary>Por que alguns agentes foram embora?</summary><p>Das 20h às 7h (horário de Brasília) quem está livre vai para casa pela porta da frente. Quem tem tarefa fica trabalhando. De manhã, ou quando chega uma tarefa, eles voltam.</p></details>
+            <details><summary>Eles têm rotina?</summary><p>Têm: daily na sala de reunião às 9h30, almoço na cozinha ao meio-dia e pausa do café às 15h30. Fora disso, escolhem o que fazer, chamam colegas para sinuca, pebolim e pingue-pongue e conversam em dupla.</p></details>
+            <details><summary>Como mudo a aparência de um agente?</summary><p>Em <code>times.json</code>, no bloco “aparencia”: cor, olhos e acessório, os mesmos do agentes.chat. Sem isso, cada agente ganha uma aparência própria automática.</p></details>
+          </div>
+          <h2 class="faq-grupo">Personalizar</h2>
+          <div class="cartao faq-lista">
+            <details><summary>Como troco o nome, a cor e o logo da empresa?</summary><p>Em Personalizar. O logo aparece no menu, na placa da recepção e no painel da sala comunal. Sem um logo seu, vale o logo padrão do escritório.</p></details>
+            <details><summary>Como organizo as salas e os times?</summary><p>No arquivo <code>times.json</code> do servidor: cada time tem nome, tipo (mesas, ops ou gabinete), cor, ícone da placa, estilo de parede e piso e a lista de agentes (handles). Agente que não está em nenhum time ganha mesa na sala “Novos”. O prédio cresce sozinho conforme o número de agentes.</p></details>
+            <details><summary>De onde vem o clima?</summary><p>Do Open-Meteo (gratuito, sem chave), para a cidade configurada em <code>times.json</code>, atualizado a cada 15 minutos. Chuva, garoa, tempestade com raios e trovões, neve, neblina e nublado aparecem lá fora e nas janelas.</p></details>
+            <details><summary>E as datas comemorativas?</summary><p>São automáticas e só aparecem na época: Natal (dezembro), Ano Novo (30/12 a 2/1, com fogos), Carnaval e Páscoa (calculados todo ano), Ano Novo Chinês, Diwali, Halloween, Festa Junina, Dia dos Namorados, Independência, Dia do Programador (256º dia do ano), Dia das Crianças e Dia do Trabalho.</p></details>
+            <details><summary>Como ligo os sons?</summary><p>No botão de alto-falante, no pé do menu (no celular, abra o menu pelo botão ☰): liga tudo, ajusta o volume e escolhe o que ouvir (teclado, conversas em “simlês” com voz própria por agente, jogos, avisos, chuva e trovão, portas e ambiente). Fica salvo neste navegador.</p></details>
+          </div>
+          <h2 class="faq-grupo">Segurança e instalação</h2>
+          <div class="cartao faq-lista">
+            <details><summary>Isso gasta tokens ou usa IA?</summary><p>Não. O servidor só lê o agentes.chat a cada 15 segundos pelo conector de apps externos (MCP), com permissão apenas de leitura. Tudo o que você vê (animações, conversas, sons) é desenhado no seu navegador, sem modelo de IA.</p></details>
+            <details><summary>Quem consegue abrir o escritório?</summary><p>Só aparelhos da sua rede Tailscale, e mesmo assim com usuário e senha. No celular, basta ligar o app da Tailscale e abrir o endereço.</p></details>
+            <details><summary>Esqueci a senha. E agora?</summary><p>No servidor, apague o usuário e as sessões e reinicie o serviço:</p><p class="comandos"><code class="cmd">sudo rm /var/lib/escritorio/usuarios.json /var/lib/escritorio/sessoes.json</code> <code class="cmd">sudo systemctl restart escritorio</code></p><p>Depois leia o novo código e crie o usuário de novo:</p><p class="comandos"><code class="cmd">sudo cat /var/lib/escritorio/codigo-primeiro-acesso.txt</code></p></details>
+            <details><summary>Como conecto (ou reconecto) ao agentes.chat?</summary><p>Abra <code>/oauth/conectar</code> e autorize. O escritório só pede leitura; se o agentes.chat conceder mais que isso, a conexão é recusada.</p></details>
+            <details><summary>O que fica guardado no servidor?</summary><p>Em <code>/var/lib/escritorio</code> (só o serviço lê): o token de leitura do agentes.chat, o hash da sua senha, as sessões (só o hash), a marca e o logo. Nenhuma conversa é gravada; o estado dos agentes fica só na memória.</p></details>
+            <details><summary>É open source? Posso usar na minha empresa?</summary><p>Sim. Cada empresa instala o seu, com a própria marca, times, clima e sons. A arte dos móveis foi gerada para o projeto, os pisos, paredes e avatares são desenhados em código e as fontes são de licença livre. Veja o README para instalar e personalizar.</p></details>
+          </div>
+        </div>
+        <nav class="atalhos-externos" aria-label="Atalhos do agentes.chat">
+          <h2 class="faq-grupo">No agentes.chat</h2>
+          <a class="externo" data-externo="team" target="_blank" rel="noopener">Agentes</a>
+          <a class="externo" data-externo="routines" target="_blank" rel="noopener">Rotinas</a>
+          <a class="externo" data-externo="settings/connectors" target="_blank" rel="noopener">Configurações</a>
+        </nav>
+      </section>
+      <section id="v-aprovacoes" class="visao" hidden>
+        <div class="cabeca"><h1>Aprovações</h1><p id="resumo-aprov" class="resumo">Aprovar acontece no agentes.chat; o botão abre o pedido certo.</p></div>
+        <div class="aprov-barra">
+          <div class="busca-pedidos">
+            <label class="oculto" for="busca-pedidos">Buscar pedidos</label>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+            <input id="busca-pedidos" type="search" placeholder="Buscar pedidos" autocomplete="off" spellcheck="false" aria-describedby="aprov-busca-total">
+          </div>
+          <div id="abas-aprov" class="estados abas" role="tablist" aria-label="Pedidos por estado">
+            <button id="aba-esperando" type="button" role="tab" aria-selected="true" aria-controls="painel-aprov" data-aba="esperando">Esperando<span class="so-largo"> você</span> <b class="n">0</b></button>
+            <button id="aba-resolvidos" type="button" role="tab" aria-selected="false" aria-controls="painel-aprov" tabindex="-1" data-aba="resolvidos">Resolvidos<span class="so-largo"> hoje</span> <b class="n">0</b></button>
+            <button id="aba-todos" type="button" role="tab" aria-selected="false" aria-controls="painel-aprov" tabindex="-1" data-aba="todos">Todos <b class="n">0</b></button>
+          </div>
+        </div>
+        <div id="painel-aprov" class="painel-aprov" role="tabpanel" aria-labelledby="aba-esperando">
+          <p id="aprov-busca-total" class="faq-total" role="status"></p>
+          <div id="aprov-esperando" class="cartao lista-pedidos" hidden></div>
+          <div id="aprov-vazio" class="aprov-vazio" hidden>
+            <span id="aprov-mascote" class="mascote" aria-hidden="true"></span>
+            <strong>Tudo decidido</strong>
+            <span class="suave">Quando um agente pedir aprovação ou fizer uma pergunta, o pedido aparece aqui.</span>
+            <a class="link-suave" href="#ajuda">Como as aprovações funcionam</a>
+          </div>
+          <section id="aprov-hist" aria-labelledby="t-hist" hidden>
+            <div class="secao-topo"><h2 id="t-hist" class="rotulo-secao">Resolvidos há pouco</h2><button id="ver-historico" class="link-suave link-bt" type="button">Ver histórico</button></div>
+            <ol id="lista-resolvidos" class="cartao lista-agrupada"></ol>
+          </section>
+        </div>
+      </section>
+      <footer class="parceria"><p>Uma parceria <a href="https://agentes.chat" target="_blank" rel="noopener noreferrer" aria-label="agentes.chat (abre em nova aba)">agentes.chat</a> + <a href="https://devmaniacs.com.br" target="_blank" rel="noopener noreferrer" aria-label="Dev Maniac's (abre em nova aba)">Dev Maniac's</a> <span id="fonte-par" class="par-fonte" hidden>· <a id="fonte" target="_blank" rel="noopener" aria-label="Código-fonte, licença AGPL-3.0 (abre em nova aba)">Código-fonte (AGPL-3.0)</a></span></p></footer>
+    </main>
+  </div>
+  <dialog id="boas-vindas" class="boas-vindas" aria-labelledby="bv-titulo" aria-describedby="bv-texto">
+    <form id="form-bv" class="form-bv">
+      <img src="logo.png" alt="" width="52" height="52" class="bv-logo">
+      <h2 id="bv-titulo">Como se chama a sua empresa?</h2>
+      <p id="bv-texto" class="ajuda">O nome, a cor e o logo aparecem no menu, no mapa e na tela de entrada. Tudo muda depois em Personalizar.</p>
+      <label for="bv-empresa">Nome da empresa</label>
+      <input id="bv-empresa" name="empresa" maxlength="40" required autocomplete="organization">
+      <fieldset><legend>Cor de destaque</legend><div id="bv-paleta" class="paleta"></div></fieldset>
+      <p class="bv-rotulo">Logo <span class="suave">(opcional)</span></p>
+      <div class="bv-logo-linha"><label class="botao secundario" for="bv-logo">Escolher imagem</label><input id="bv-logo" class="arquivo" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="bv-logo-ajuda bv-logo-nome"><span id="bv-logo-nome" class="suave">Nenhuma imagem escolhida</span></div>
+      <p id="bv-logo-ajuda" class="ajuda">PNG, JPEG ou WEBP, até 600 KB. Sem logo, fica o padrão.</p>
+      <p id="bv-aviso" class="aviso-form" role="status"></p>
+      <div class="acoes"><button id="bv-salvar" class="botao" type="submit">Salvar</button><button id="bv-pular" class="botao fantasma" type="button">Pular</button></div>
+    </form>
+  </dialog>
+  <script src="avatar.js?v=50"></script>
+  <script src="mapa.js?v=50"></script>
+  <script src="vida.js?v=50"></script>
+  <script src="som.js?v=50"></script>
+  <script src="ceu.js?v=50"></script>
+  <script src="clima.js?v=50"></script>
+  <script src="festas.js?v=50"></script>
+  <script src="simular.js?v=50"></script>
+  <script src="efeitos.js?v=50"></script>
+  <script src="brincar.js?v=50"></script>
+  <script src="app.js?v=50"></script>
+  <script src="personalizar.js?v=50"></script>
+</body>
+</html>

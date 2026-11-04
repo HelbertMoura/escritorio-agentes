@@ -1,0 +1,18 @@
+{
+  "agents": [
+    {"id": "exemplo-atlas", "name": "Atlas", "handle": "atlas", "role": "Diretoria"},
+    {"id": "exemplo-bento", "name": "Bento", "handle": "bento", "role": "Infraestrutura"},
+    {"id": "exemplo-cora", "name": "Cora", "handle": "cora", "role": "Desenvolvimento"},
+    {"id": "exemplo-duda", "name": "Duda", "handle": "duda", "role": "Design"},
+    {"id": "exemplo-eco", "name": "Eco", "handle": "eco", "role": "Qualidade"},
+    {"id": "exemplo-faro", "name": "Faro", "handle": "faro", "role": "Prospecção"},
+    {"id": "exemplo-gaia", "name": "Gaia", "handle": "gaia", "role": "Atendimento"}
+  ],
+  "tasks": [
+    {"agent": {"id": "exemplo-cora"}, "status": "running", "label": "Revisando o formulário de cadastro", "started_at": "2026-01-15T13:02:00Z", "url": ""},
+    {"agent": {"id": "exemplo-bento"}, "status": "still_running", "label": "Atualizando o certificado do servidor", "started_at": "2026-01-15T12:40:00Z", "url": ""},
+    {"agent": {"id": "exemplo-faro"}, "status": "running", "label": "Montando a lista de contatos da semana", "started_at": "2026-01-15T13:10:00Z", "url": ""},
+    {"agent": {"id": "exemplo-duda"}, "status": "waiting_approval", "label": "Aprovar a nova paleta do site", "started_at": "2026-01-15T12:55:00Z", "url": ""},
+    {"agent": {"id": "exemplo-gaia"}, "status": "waiting_input", "label": "Qual horário oferecer ao cliente?", "started_at": "2026-01-15T13:05:00Z", "url": ""}
+  ]
+}

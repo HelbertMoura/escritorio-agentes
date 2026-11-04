@@ -1,0 +1,23 @@
+# Dados de cada instalação (tokens, usuários, sessões, logo) e configuração da empresa
+dados/
+times.json
+/dados.json
+# Segredos e logs (o log do servidor registra nomes de usuário)
+.env
+*.env
+*.log
+# Só do desenvolvimento local
+.previa/
+.baseline/
+.maestri/
+__pycache__/
+HANDOFF-MAESTRI.md
+.claude/
+# Ambientes e editores
+.venv/
+venv/
+node_modules/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

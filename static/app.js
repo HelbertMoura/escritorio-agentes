@@ -1,0 +1,1438 @@
+// Escritório: junta configuração (white-label), tema (atlas), estado do agentes.chat, o prédio
+// (mapa.js), a vida dos agentes (vida.js) e os sons (som.js). Desenha tudo num canvas.
+"use strict";
+
+const ESTADOS = {
+  running:          { texto: "Trabalhando",         classe: "trabalhando", balao: null, filtro: "trab" },
+  still_running:    { texto: "Trabalhando",         classe: "trabalhando", balao: null, filtro: "trab" },
+  waiting_approval: { texto: "Esperando aprovação", classe: "aprovacao",   balao: "!",  filtro: "esp" },
+  waiting_input:    { texto: "Esperando resposta",  classe: "pergunta",    balao: "?",  filtro: "esp" },
+};
+const estadoDe = s => (Object.hasOwn(ESTADOS, s) ? ESTADOS[s] : { texto: "Trabalhando", classe: "trabalhando", balao: null, filtro: "trab" });
+
+const tela = document.getElementById("tela"), ctx = tela.getContext("2d");
+let config = null, atlas = null, predio = null, mundo = null, estado = null, assinatura = "", logoImg = null, festa = null, dtQuadro = 0;
+let escala = 1, filtro = "todos", selecionado = null;
+const menosMovimento = matchMedia("(prefers-reduced-motion: reduce)");
+// câmera: centro (x,y) no mundo e k = pixels de tela por pixel do mundo; "alvo" anima até lá
+const cam = { x: 0, y: 0, k: 1, alvo: null, ajustada: false };
+let dpr = 1, vw = 0, vh = 0;
+const $ = id => document.getElementById(id);
+const versaoDaPagina = new URL(document.currentScript.src).searchParams.get("v") || "";   // o import() da maquete usa o mesmo ?v
+let maquete3d = null;   // maquete 3D aberta (maquete.js); null = mapa 2D
+
+// ---------- carga --------------------------------------------------------------------
+async function json(url) {
+  const r = await fetch(url, { cache: "no-store", credentials: "same-origin" });
+  if (r.status === 401) { location.href = "/entrar"; throw new Error("sessão expirou"); }
+  if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json();
+}
+function imagem(src) { return new Promise((ok, erro) => { const i = new Image(); i.onload = () => ok(i); i.onerror = erro; i.src = src; }); }
+
+async function iniciar() {
+  config = Brincar.demo ? Brincar.configDemo() : await json("api/config");   // demonstração: nada vem do servidor
+  const pasta = `tema/`;
+  const mapaJson = await json(pasta + "atlas.json");
+  const img = await imagem(`${pasta}atlas.png?v=${encodeURIComponent(mapaJson.versao || "")}`);
+  atlas = { img, json: mapaJson };
+  try { logoImg = await imagem(config.logo || "logo.png"); } catch (e) { logoImg = null; }
+  // o Personalizar grava config.logo assim que o /api/logo responde: o logo do topo e o do mapa trocam na hora
+  // (mesmo se o salvar do nome e da cor falhar depois), sem esperar recarregar
+  let logoAtual = config.logo;
+  Object.defineProperty(config, "logo", { configurable: true, enumerable: true, get: () => logoAtual, set: v => { logoAtual = v; trocarLogo(v); } });
+  festa = Festas.ativa();
+  aplicarMarca();
+  Brincar.iniciar();
+  medirFaixa();
+  if (Brincar.demo) Ceu.acelerar(8, 26);   // um dia de expediente em uns 6 minutos
+  try { await document.fonts.load(Mapa.PLACA_FONTE); } catch (e) { /* sem a fonte, a placa usa a reserva monoespaçada */ }
+  if (!$("v-personalizar").hidden) Personalizar.abrir(config);   // abriu direto em #personalizar
+  else Personalizar.boasVindas(config);                             // nome de exemplo: pergunta o da empresa (uma vez por sessão)
+  await buscar();
+  setInterval(buscar, 10000);
+  requestAnimationFrame(quadro);
+  if (new URLSearchParams(location.search).get("visao") === "maquete") abrirMaquete();   // para prints e testes, como o ?hora=
+}
+
+function aplicarMarca() {
+  $("empresa").textContent = config.empresa; $("empresa-topo").textContent = config.empresa;
+  $("marca-exemplo").hidden = config.marca_exemplo !== true;   // ninguém trocou o nome padrão ainda
+  if (config.logo) $("logo").src = $("logo-topo").src = config.logo;
+  document.title = `Escritório · ${config.empresa}`;
+  if (config.cor) aplicarCor(config.cor);
+  for (const a of document.querySelectorAll("[data-externo]")) a.href = `${config.app_url}/${a.dataset.externo}`;
+  // código-fonte (AGPL §13): o servidor já validou o https; a demonstração não lê o servidor e fica sem o link
+  const fonte = typeof config.fonte === "string" && /^https:\/\/[^\s"'<>]+$/.test(config.fonte) ? config.fonte : "";
+  if (fonte) $("fonte").href = fonte;
+  $("fonte-par").hidden = !fonte;
+  if (config.previa && !document.querySelector(".faixa-previa")) { // só a prévia local manda previa: true (o servidor real nunca)
+    const f = document.createElement("div"); f.className = "faixa-demo faixa-previa"; f.setAttribute("role", "status");
+    f.append(Object.assign(document.createElement("strong"), { textContent: "Prévia de desenvolvimento" }), " · dados fixos, não é o agentes.chat ao vivo");
+    document.body.prepend(f);
+  }
+}
+
+async function trocarLogo(src) {
+  $("logo").src = $("logo-topo").src = src || "logo.png";
+  try { logoImg = await imagem(src || "logo.png"); } catch (e) { return; }   // sem a imagem nova, o mapa fica com a anterior
+  if (predio) Efeitos.iniciar(predio, atlas, config, logoImg);
+}
+
+// Cor da marca: o texto sobre ela (botões, placas) fica escuro ou claro, o que der mais contraste (WCAG)
+function luminancia(hex) {
+  const n = parseInt(hex.slice(1), 16), c = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * c(n >> 16) + 0.7152 * c((n >> 8) & 255) + 0.0722 * c(n & 255);
+}
+function contraste(a, b) { const x = luminancia(a), y = luminancia(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+function textoSobre(cor) { return contraste(cor, "#1a1408") >= contraste(cor, "#ffffff") ? "#1a1408" : "#ffffff"; }
+function aplicarCor(cor) {
+  document.documentElement.style.setProperty("--destaque", cor);
+  document.documentElement.style.setProperty("--destaque-texto", textoSobre(cor));
+}
+
+function aparencia(handle) {
+  return Object.hasOwn(config.aparencia, handle) ? config.aparencia[handle] : Avatar.padrao(handle);
+}
+
+// Reconstrói o prédio quando muda a lista de agentes ou de times.
+function montar(agentes) {
+  const conhecidos = new Set(agentes.map(a => a.handle));
+  const usados = new Set();
+  const grupos = config.times.map(t => {
+    const hs = t.agentes.filter(h => conhecidos.has(h));
+    hs.forEach(h => usados.add(h));
+    return { ...t, handles: hs };
+  });
+  const novos = agentes.map(a => a.handle).filter(h => !usados.has(h));
+  if (novos.length) grupos.push({ nome: "Novos", tipo: "mesas", parede: 2, piso: 3, handles: novos });
+  const chave = JSON.stringify(grupos.map(g => [g.nome, g.handles]));
+  if (chave === assinatura && predio) return false;
+  assinatura = chave;
+  predio = Mapa.montarPredio(atlas, config, grupos);
+  mundo = Vida.criarMundo(predio);
+  Efeitos.iniciar(predio, atlas, config, logoImg);
+  cam.ajustada = false;
+  fecharFicha();
+  ajustarEscala();
+  montarSalas();
+  Brincar.montar(predio);
+  return true;
+}
+
+async function buscar() {
+  try {
+    estado = Brincar.demo ? Brincar.estadoDemo() : await json("api/estado");
+    Clima.definir(estado.clima);
+    // "Olá de novo" na tela de entrada: só o nome de quem já entrou com sucesso (o servidor só manda usuario com sessão válida)
+    if (!Brincar.demo && typeof estado.usuario === "string" && estado.usuario.length <= 64) try { localStorage.setItem("escritorio:usuario", estado.usuario); } catch (e) { /* aba anônima ou armazenamento bloqueado */ }
+    const novo = montar(estado.agentes || []);
+    const mesas = new Map();
+    for (const s of predio.salas) for (const m of s.mesas || []) if (m.handle) mesas.set(m.handle, m);
+    Vida.sincronizar(mundo, estado.agentes || [], estado.trabalhos || [], mesas, aparencia, novo);
+    falhou = false;
+    desenharPainel(); desenharEventos(); mostrarConexao();
+    if (!$("ficha").hidden) renderFicha();
+  } catch (e) {
+    falhou = true; mostrarConexao();
+  }
+}
+
+// ---------- desenho ------------------------------------------------------------------
+function ajustarEscala() {
+  if (!predio) return;
+  dpr = Math.min(2, window.devicePixelRatio || 1);   // acima de 2x o celular só gasta bateria
+  const palco = $("palco"), cheio = $("palco-cartao").classList.contains("cheio");
+  vw = palco.clientWidth;
+  if (cheio) vh = Math.max(240, window.innerHeight);
+  else if (window.innerWidth <= 760) vh = 268;   // celular: cartão de 268 px; a câmera completa fica na tela cheia
+  else vh = Math.round(Math.max(380, Math.min(window.innerHeight * 0.72, vw * predio.H / predio.W)));
+  tela.width = Math.round(vw * dpr); tela.height = Math.round(vh * dpr);
+  tela.style.width = `${vw}px`; tela.style.height = `${vh}px`;
+  if (!cam.ajustada) { verTudo(true); cam.ajustada = true; }
+  if (maquete3d) maquete3d.redimensionar(vw, vh, window.devicePixelRatio || 1);
+}
+
+// O zoom mínimo cobre o quadro inteiro (nunca sobra área vazia) e a câmera não sai do mundo.
+function encaixe() { return Math.max(vw / predio.W, vh / predio.H) * dpr; }
+function limitarK(k) { return Math.max(encaixe(), Math.min(10 * dpr, k)); }
+function prenderCamera(c) {
+  const meiaW = tela.width / (2 * c.k), meiaH = tela.height / (2 * c.k);
+  c.x = predio.W <= meiaW * 2 ? predio.W / 2 : Math.max(meiaW, Math.min(predio.W - meiaW, c.x));
+  c.y = predio.H <= meiaH * 2 ? predio.H / 2 : Math.max(meiaH, Math.min(predio.H - meiaH, c.y));
+}
+function verTudo(ja) { moverCamera({ x: predio.W / 2, y: predio.H / 2, k: encaixe() }, ja); }
+function moverCamera(alvo, ja) { alvo.k = limitarK(alvo.k); prenderCamera(alvo); if (ja) Object.assign(cam, alvo, { alvo: null }); else cam.alvo = alvo; }
+function focarSala(s) {
+  if (maquete3d) { seguir = null; maquete3d.focarSala(s); marcarSala(s); return; }
+  const k = Math.min((vw * dpr) / (s.pw + 40), (vh * dpr) / (s.ph + 60));
+  seguir = null;
+  moverCamera({ x: s.px + s.pw / 2, y: s.py + s.ph / 2 - 6, k });
+  marcarSala(s);
+}
+function paraMundo(cx, cy) {
+  const r = tela.getBoundingClientRect();
+  const sx = (cx - r.left) * dpr, sy = (cy - r.top) * dpr;
+  return { x: cam.x + (sx - tela.width / 2) / cam.k, y: cam.y + (sy - tela.height / 2) / cam.k };
+}
+function salaEm(p) { return [...predio.salas, ...predio.baixo].find(s => p.x >= s.px && p.x <= s.px + s.pw && p.y >= s.py && p.y <= s.py + s.ph); }
+
+function spr(nome, x, y) {
+  const s = atlas.json.sprites[nome]; if (!s) return;
+  ctx.drawImage(atlas.img, s[0], s[1], s[2], s[3], Math.round(x), Math.round(y), s[2], s[3]);
+}
+
+function quadroAnim(nome, fps, t) {
+  const n = (atlas.json.quadros || {})[nome] || 1;
+  return `${nome}_${Math.floor((t / 1000) * fps) % n}`;
+}
+
+// o agente aparece aceso no mapa e na lista quando bate com o filtro e com a busca
+function combina(b) {
+  if (buscaIds && !buscaIds.has(b.id)) return false;
+  return filtro === "todos" || situacao(b) === filtro;
+}
+
+let antes = performance.now();
+function quadro(t) {
+  requestAnimationFrame(quadro);   // no topo: um erro neste quadro não para o laço
+  const dt = Math.min(0.1, (t - antes) / 1000); antes = t; dtQuadro = dt;
+  if (predio && mundo) {
+    Vida.passo(mundo, dt);
+    for (const e of mundo.eventos.splice(0)) Som.evento(e.nome || e, e);
+    Som.teclado(Vida.digitando(mundo), t);
+    Som.ambiente(true);
+    if (!maquete3d) desenharCena(t);
+    else if (!$("v-escritorio").hidden) { // em outra tela, a maquete não desenha
+      try { maquete3d.quadro(t, dt); }
+      catch (e) { $("palco").dataset.maqueteErro = String((e && e.message) || e); console.warn("Maquete 3D:", e); ponteMaquete.falhou("A maquete 3D parou neste navegador. Seguimos no mapa."); }
+    }
+  }
+}
+
+// handle → boneco, refeito a cada quadro: as telas das mesas consultam sem varrer a lista
+const bonecoDaMesa = new Map();
+function desenharCena(t) {
+  bonecoDaMesa.clear(); for (const b of mundo.bonecos.values()) bonecoDaMesa.set(b.handle, b);
+  const seguido = seguir && boneco(seguir);
+  if (seguido && visivel(seguido)) { const a = { x: seguido.x, y: seguido.y - 10, k: cam.alvo ? cam.alvo.k : cam.k }; prenderCamera(a); cam.alvo = a; }
+  if (cam.alvo) { // anima a câmera até o alvo
+    const f = 0.14;
+    cam.x += (cam.alvo.x - cam.x) * f; cam.y += (cam.alvo.y - cam.y) * f; cam.k += (cam.alvo.k - cam.k) * f;
+    if (Math.abs(cam.alvo.k - cam.k) < 0.002 && Math.abs(cam.alvo.x - cam.x) < 0.3) cam.alvo = null;
+  }
+  cam.k = limitarK(cam.k); prenderCamera(cam);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, tela.width, tela.height);
+  ctx.setTransform(cam.k, 0, 0, cam.k, tela.width / 2 - cam.x * cam.k, tela.height / 2 - cam.y * cam.k);
+  ctx.imageSmoothingEnabled = false;
+  const ceu = Ceu.agora(), ta = menosMovimento.matches ? 0 : t;   // ta: relógio dos objetos (parado com menos movimento)
+  ctx.drawImage(predio.fundo, 0, 0);
+  Efeitos.exterior(ctx, dtQuadro, t, ceu);
+  for (const j of predio.janelas) { Ceu.janela(ctx, j, ceu, ta); Clima.naJanela(ctx, j, t); }
+  Efeitos.painelLogo(ctx, t, ceu);
+  Efeitos.festaChao(ctx, festa);
+  Efeitos.robo(ctx, dtQuadro, t, ceu);
+  for (const a of predio.animados) if (a.parede) desenharAnimado(a, ta);
+  const cena = [];
+  for (const o of predio.objetos) cena.push({ chave: o.chave, desenha: () => desenharObjeto(o, ta) });
+  for (const a of predio.animados) if (!a.parede) cena.push({ chave: a.chave, desenha: () => desenharAnimado(a, ta) });
+  for (const s of [...predio.salas, ...predio.baixo]) if (s.placa) cena.push({ chave: s.placa.y + Mapa.PLACA_H, desenha: () => { desenharPlaca(s); } });
+  for (const b of mundo.bonecos.values()) if (visivel(b)) cena.push({ chave: b.chave ?? b.y + 0.5, desenha: () => desenharBoneco(b, t) });
+  cena.sort((a, b) => a.chave - b.chave).forEach(c => c.desenha());
+  desenharPortas(t);
+  Clima.desenhar(ctx, predio, dtQuadro, t, Som.ligado ? Som : null);
+  desenharLuzes(dt0(t), ceu);
+  Efeitos.luzesNoite(ctx, ceu);
+  Efeitos.festaAr(ctx, festa, t, dtQuadro, ceu);
+  Efeitos.particulas(ctx, dtQuadro, mundo, t);
+  const visiveis = [...mundo.bonecos.values()].filter(visivel);
+  const ocupadas = [];
+  visiveis.sort((a, b) => b.y - a.y || a.x - b.x).forEach(b => desenharEtiqueta(b, t, ocupadas));
+  for (const b of visiveis) Efeitos.emote(ctx, b, t, ceu.escuro);
+  for (const b of visiveis.filter(b => b.fala).sort((a, b) => b.y - a.y || a.x - b.x)) desenharBalao(b, ocupadas);
+  Brincar.desenhar(ctx);   // realce, reações dos objetos e a festa do Konami
+}
+
+function visivel(b) { return !(b.lugar && b.lugar.tipo === "fora" && !b.rota.length) && b.x > -20; }
+
+// Zona de passagem de cada porta (os pés de quem atravessa passam por ela)
+function zonaPorta(p) {
+  if (p.tipo === "lateral") return { x: p.x - 10, y: p.y - 2, w: 20, h: p.h + 4 };
+  if (p.h) return { x: p.x - 2, y: p.y - 6, w: p.w + 4, h: p.h + 12 };   // portas na parede de cima das salas de baixo
+  return { x: p.x - 2, y: p.y - 9, w: p.w + 4, h: 18 };                  // portas na fachada das salas de cima
+}
+// O agente está na zona ou vai entrar nela nos próximos ~34 px da rota (~0,8 s andando)
+const naZonaDaPorta = (z, x, y) => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h;
+function vaiPassar(z, b) {
+  if (naZonaDaPorta(z, b.x, b.y)) return true;
+  let ax = b.x, ay = b.y, resto = 34;
+  for (const [bx, by] of b.rota) {
+    const d = Math.hypot(bx - ax, by - ay), anda = Math.min(d, resto), n = Math.max(1, Math.ceil(anda / 3));
+    for (let k = 1; k <= n; k++) { const f = d ? (anda * k) / n / d : 1; if (naZonaDaPorta(z, ax + (bx - ax) * f, ay + (by - ay) * f)) return true; }
+    resto -= d; if (resto <= 0) return false;
+    ax = bx; ay = by;
+  }
+  return false;
+}
+
+// Portas: abrem antes de o agente chegar, ficam abertas enquanto ele atravessa e fecham logo depois
+function desenharPortas(t) {
+  const bonecos = [...mundo.bonecos.values()].filter(visivel);
+  for (const p of predio.portas) {
+    const z = p.zona || (p.zona = zonaPorta(p));
+    if (bonecos.some(b => vaiPassar(z, b))) p.ate = t + 250;
+    const aberta = t < (p.ate || 0);
+    if (aberta && !p.abrindo) Som.evento("porta", p);
+    p.abrindo = aberta;
+    p.abre = menosMovimento.matches ? +aberta : Math.max(0, Math.min(1, p.abre + (aberta ? dtQuadro * 5 : -dtQuadro * 3)));
+    const A = p.abre * p.abre * (3 - 2 * p.abre);   // suaviza o começo e o fim do movimento
+    const meia = p.w / 2, des = Math.round(A * (meia - 2));
+    ctx.save(); ctx.beginPath(); ctx.rect(p.x, p.y - 2, p.w, (p.h || 4) + 4); ctx.clip();   // a folha some dentro da parede
+    if (p.tipo === "vidro") { // duas folhas de vidro que correm para os lados
+      for (const [x0, dir] of [[p.x, -1], [p.x + meia, 1]]) {
+        const x = x0 + dir * des;
+        ctx.fillStyle = "rgba(170,215,255,.28)"; ctx.fillRect(x, p.y + 2, meia, p.h - 2);
+        ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.fillRect(x + 2, p.y + 4, 1, p.h - 8);
+        ctx.fillStyle = "#5b6478"; ctx.fillRect(x, p.y + 2, meia, 1); ctx.fillRect(dir < 0 ? x + meia - 1 : x, p.y + 2, 1, p.h - 2);
+        ctx.fillStyle = "#c7ccd8"; ctx.fillRect(dir < 0 ? x + meia - 3 : x + 2, p.y + p.h / 2, 1, 4);   // puxador
+      }
+      ctx.restore();
+      ctx.fillStyle = "#23212f"; ctx.fillRect(p.x - 2, p.y, 2, p.h); ctx.fillRect(p.x + p.w, p.y, 2, p.h); ctx.fillRect(p.x - 2, p.y, p.w + 4, 2);
+      continue;
+    } else if (p.tipo === "lateral") { // entrada principal: vidro que corre para cima e para baixo
+      const meiaH = p.h / 2, d2 = Math.round(A * (meiaH - 2));
+      ctx.fillStyle = "rgba(170,215,255,.4)"; ctx.fillRect(p.x, p.y - d2, 3, meiaH); ctx.fillRect(p.x, p.y + meiaH + d2, 3, meiaH);
+      ctx.fillStyle = "#5b6478"; ctx.fillRect(p.x, p.y + meiaH - 1 - d2, 3, 1); ctx.fillRect(p.x, p.y + meiaH + d2, 3, 1);
+    } else if (p.tipo === "vaivem") { // porta vaivém da cozinha, com janelinhas redondas
+      const ab = A * 0.85;
+      for (const [x0, dir] of [[p.x, -1], [p.x + meia, 1]]) {
+        const w = Math.max(2, meia * (1 - ab)), x = dir < 0 ? x0 : x0 + meia - w;
+        ctx.fillStyle = "#8a5a3a"; ctx.fillRect(x, p.y + 8, w, p.h - 8);
+        ctx.fillStyle = "#a8744c"; ctx.fillRect(x, p.y + 8, w, 1);
+        ctx.fillStyle = "#6e4a2c"; ctx.fillRect(x, p.y + p.h - 6, w, 1);              // chute de metal embaixo
+        if (w > 6) { ctx.fillStyle = "rgba(190,225,255,.7)"; ctx.fillRect(x + w / 2 - 2, p.y + 16, 4, 4); ctx.fillStyle = "rgba(255,255,255,.8)"; ctx.fillRect(x + w / 2 - 2, p.y + 16, 1, 1); }
+      }
+      ctx.restore();
+      ctx.fillStyle = "#23212f"; ctx.fillRect(p.x - 2, p.y, 2, p.h); ctx.fillRect(p.x + p.w, p.y, 2, p.h);
+      continue;
+    } else { // folhas na base da sala: madeira, madeira escura, metal, vidro fosco ou pintada na cor do time
+      const cor = p.sala ? corDaSala(p.sala) : "#6e4a2c";
+      const cores = { madeira: ["#6e4a2c", "#9a6a40"], madeira_escura: ["#3e2716", "#5a3a22"], metal: ["#7d828c", "#a7acb6"],
+        fosca: ["rgba(200,220,240,.75)", "#ffffff"], cor: [clarear(cor, -0.35), clarear(cor, 0.2)] }[p.tipo] || ["#6e4a2c", "#9a6a40"];
+      for (const [x0, dir] of [[p.x, -1], [p.x + meia, 1]]) {
+        const x = x0 + dir * des;
+        ctx.fillStyle = cores[0]; ctx.fillRect(x, p.y - 1, meia, 4);
+        ctx.fillStyle = cores[1]; ctx.fillRect(x, p.y - 1, meia, 1);
+        ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(dir < 0 ? x + meia - 1 : x, p.y - 1, 1, 4);   // junta entre as folhas
+        ctx.fillStyle = p.tipo === "metal" ? "#3b3f47" : "#e9d9a6"; ctx.fillRect(dir < 0 ? x + meia - 3 : x + 2, p.y + 1, 1, 1); // maçaneta
+      }
+    }
+    ctx.restore();
+  }
+}
+
+let ultimoLuz = 0;
+function dt0(t) { const d = Math.min(0.1, (t - ultimoLuz) / 1000); ultimoLuz = t; return d; }
+
+function desenharObjeto(o, t) {
+  if (o.tipo === "mesa") {
+    Mapa.desenharMesa(ctx, o.mesa.x, o.mesa.topo, telaDaMesa(o.mesa), t, o.mesa);
+  } else if (o.tipo === "cadeira") {
+    Mapa.desenharCadeira(ctx, o.x, o.y, o.cor, o.estilo);
+  } else {
+    if (o.espelho) { ctx.save(); ctx.translate(2 * o.x + o.w, 0); ctx.scale(-1, 1); }   // árvore ou planta espelhada (mapa.js)
+    if (!Efeitos.objeto(ctx, o, t)) spr(o.nome, o.x, o.y);
+    if (o.espelho) ctx.restore();
+    Efeitos.depoisObjeto(ctx, o, t, mundo);
+  }
+}
+
+// O que o monitor mostra: código com o dono trabalhando na mesa, alerta quando ele espera você,
+// protetor de tela quando ele está no escritório sem tarefa e apagado quando saiu (ou a mesa não tem dono).
+function telaDaMesa(mesa) {
+  const b = mesa.handle && bonecoDaMesa.get(mesa.handle);
+  if (!b || (b.lugar && b.lugar.tipo === "fora") || (b.destino && b.destino.tipo === "fora")) return "apagada";
+  if (b.trabalho) {
+    const est = estadoDe(b.trabalho.status).classe;
+    if (est !== "trabalhando") return est;
+    return b.lugar && b.lugar.tipo === "mesa" ? "codigo" : "descanso";
+  }
+  return "descanso";
+}
+
+function desenharAnimado(a, t) {
+  if (a.tipo === "gato") spr(quadroAnim("gato", 2, t), a.x, a.y);
+  else if (a.tipo === "cafe") spr(quadroAnim("cafe", 5, t), a.x, a.y);
+  else if (a.tipo === "tela") { // TV: videogame quando alguém joga, canais quando alguém assiste (e mais apagada sem ninguém)
+    let modo = "fraca";
+    for (const b of mundo.bonecos.values()) {
+      const v = b.lugar && b.lugar.vaga && !b.rota.length && Math.abs(b.x - (a.x + a.w / 2)) < 70 && b.y > a.y && b.y - a.y < 120 ? b.lugar.vaga.tipo : null;
+      if (v && a.para.includes(v)) { modo = v === "videogame" ? "jogo" : "tv"; if (modo === "jogo") break; }
+    }
+    Efeitos.tela(ctx, a, t, modo);
+  } else if (!Efeitos.animado(ctx, a, t)) spr(quadroAnim(a.tipo, 3, t), a.x, a.y);
+}
+
+function desenharBoneco(b, t) {
+  const est = b.trabalho ? estadoDe(b.trabalho.status) : null;
+  ctx.globalAlpha = combina(b) ? 1 : 0.3;
+  const { x, y } = Avatar.boneco(ctx, b, t, escala);   // sombra, pose e direção (avatar.js); x,y = canto do quadro 22x22
+  Efeitos.chapeu(ctx, b, x, y, festa);
+  if (est && est.classe === "aprovacao") maoLevantada(b, x, y, t);
+  if (selecionado === b.id || realce === b.id) { ctx.strokeStyle = Mapa.cor("destaque"); ctx.lineWidth = Math.max(2, escala); ctx.strokeRect((x + 3) * escala, (y + 6) * escala, 16 * escala, 16 * escala); }
+  ctx.globalAlpha = 1;
+}
+
+function desenharLuzes(dt, ceu) {
+  const ocupadas = new Set();
+  for (const b of mundo.bonecos.values()) {
+    if (b.lugar && b.lugar.tipo === "mesa" && b.trabalho) ocupadas.add(b.lugar.mesa.sala);
+    if (b.lugar && b.lugar.tipo === "vaga") ocupadas.add(b.lugar.vaga.sala);
+    if (b.destino && b.destino.vaga) ocupadas.add(b.destino.vaga.sala);
+    if (b.destino && b.destino.mesa) ocupadas.add(b.destino.mesa.sala);
+  }
+  const noite = ceu.escuro; // 0 = dia claro, 1 = noite
+  if (noite > 0.02) { ctx.fillStyle = `rgba(8,10,34,${noite * 0.5})`; ctx.fillRect(0, 0, predio.W, predio.H); }
+  const agora = performance.now();
+  for (const s of [...predio.salas, ...predio.baixo]) {
+    const acesa = s.tipo === "recepcao" || ocupadas.has(s);
+    if (acesa && s.acesa === false && !menosMovimento.matches) s.pisca = agora + 450;   // lâmpada piscando ao acender
+    s.acesa = acesa;
+    const piscando = s.pisca > agora;
+    s.luz += ((acesa ? (piscando && Math.floor(agora / 70) % 3 === 0 ? 0.2 : 1) : 0) - s.luz) * Math.min(1, dt * (piscando ? 20 : 2.5));
+    const escuroSala = (1 - s.luz) * (0.35 + noite * 0.4);
+    if (escuroSala > 0.01) { ctx.fillStyle = `rgba(6,8,26,${escuroSala})`; ctx.fillRect(s.px, s.py, s.pw, s.ph); }
+    if (noite > 0.05 && s.luz > 0.05) { // luz quente das salas acesas à noite
+      ctx.globalCompositeOperation = "lighter";
+      ctx.fillStyle = `rgba(52,40,22,${noite * 0.55 * s.luz})`; ctx.fillRect(s.px, s.py, s.pw, s.ph);
+      ctx.globalCompositeOperation = "source-over";
+    }
+  }
+  if (noite > 0.05) { // luminárias, monitores e telas brilham
+    ctx.globalCompositeOperation = "lighter";
+    for (const o of predio.objetos) {
+      if (o.nome === "luminaria" || o.nome === "luminaria_chao" || o.nome === "ring_light" || o.nome === "luminaria_arco") { // luminária de chão: acende com a sala (ou no toque, o.aceso)
+        const sala = o.sala || (o.sala = salaEm({ x: o.x + o.w / 2, y: o.y + o.h }));
+        const luz = o.aceso ?? (sala ? sala.luz : 1);
+        if (luz > 0.05) brilho(o.nome === "luminaria_arco" ? o.x + 20 : o.x + o.w / 2, o.nome === "luminaria_arco" ? o.y + 12 : o.y + 6, 34, `rgba(255,200,120,${0.35 * noite * luz})`);
+      } else if (o.tipo === "mesa") {
+        const tela = telaDaMesa(o.mesa), cor = { codigo: "110,170,255", descanso: "150,120,255", aprovacao: Mapa.rgb(Mapa.cor("ambar")), pergunta: Mapa.rgb(Mapa.cor("azul")) }[tela];
+        if (cor) brilho(o.mesa.x, o.mesa.topo - 6, 22, `rgba(${cor},${(cor === "150,120,255" ? 0.14 : 0.3) * noite})`);
+        if (o.mesa.abajur && (o.mesa.abajurAceso ?? tela !== "apagada")) brilho(o.mesa.x + 11, o.mesa.topo + 3, 18, `rgba(255,210,130,${0.4 * noite})`);
+      }
+      else if (/arcade|rack_tv|estacao_gamer|aquario|neon|tv_parede/.test(o.nome || "")) brilho(o.x + o.w / 2, o.y + o.h / 3, 26, `rgba(140,110,255,${0.22 * noite})`);
+    }
+    for (const l of predio.luzesTeto || []) { // luminárias de teto do corredor: lâmpada acesa e a luz no chão
+      brilho(l.x, l.y + 22, 34, `rgba(255,214,150,${0.32 * noite})`);
+      ctx.fillStyle = `rgba(255,236,180,${0.9 * noite})`; ctx.fillRect(l.x - 2, l.y + 3, 5, 1);
+    }
+    ctx.globalCompositeOperation = "source-over";
+  }
+}
+
+function brilho(x, y, r, cor) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, cor); g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+}
+
+// retângulo do mundo que aparece na tela agora (rótulos e balões ficam dentro dele)
+function vistaMundo() { const mw = tela.width / (2 * cam.k), mh = tela.height / (2 * cam.k); return { l: cam.x - mw, r: cam.x + mw, t: cam.y - mh, b: cam.y + mh }; }
+function tamMundo(mult) { return Math.max((11 * dpr) / cam.k, mult); }
+function fonte(peso, mult) { return `${peso} ${tamMundo(mult)}px Figtree, system-ui, sans-serif`; }
+
+function desenharEtiqueta(b, t, ocupadas) {
+  const S = escala, topo = (b.y - Avatar.TAM - 1) * S, v = vistaMundo();
+  ctx.font = fonte(700, 4.6);
+  const tam = tamMundo(4.6), est0 = b.trabalho && estadoDe(b.trabalho.status);
+  const w = ctx.measureText(b.nome).width + tam, h = tam + 6, folga = est0 && est0.balao ? tam * 2.4 : 0;
+  const x = Math.max(v.l + 2, Math.min(v.r - w - 2 - folga, b.x * S - w / 2)), cx = x + w / 2;   // nunca cortado na borda da tela
+  let y = Math.max(v.t + 2, topo - h);
+  for (let i = 0; i < 6 && ocupadas.some(r => x < r.x + r.w + 3 && x + w + 3 > r.x && y < r.y + r.h + 2 && y + h + 2 > r.y); i++) y -= h + 3;
+  ocupadas.push({ x, y, w, h });
+  b.etq = { x, y, w, h };
+  ctx.globalAlpha = combina(b) ? 1 : 0.35;
+  ctx.fillStyle = selecionado === b.id ? "#f2f2f3" : "rgba(15,15,17,.85)";
+  arred(x, y, w, h, h / 2); ctx.fill();
+  ctx.fillStyle = selecionado === b.id ? "#111" : "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(b.nome, cx, y + h / 2 + 1);
+  const est = b.trabalho && estadoDe(b.trabalho.status);
+  b.selo = null;
+  if (est && est.balao) { // selo "!" (aprovação) ou "?" (pergunta): pulsa até a pessoa resolver no agentes.chat
+    const aprov = est.classe === "aprovacao", calmo = menosMovimento.matches;
+    const r = tam * (aprov ? 1.1 : 0.9), bx = x + w + r * 0.8, by = y + h / 2 - (calmo ? 0 : Math.floor(t / 400) % 2);
+    const cor = Mapa.rgb(Mapa.cor(aprov ? "ambar" : "azul"));
+    if (!calmo) { // anel que cresce e some
+      const f = (t % 1400) / 1400;
+      ctx.strokeStyle = `rgba(${cor},${0.85 * (1 - f)})`; ctx.lineWidth = Math.max(0.6, (1.6 * dpr) / cam.k);
+      ctx.beginPath(); ctx.arc(bx, by, r * (1 + f * 1.1), 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.fillStyle = "#1b1a26"; ctx.beginPath(); ctx.arc(bx, by, r + Math.max(0.5, dpr / cam.k), 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = `rgb(${cor})`; ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#111"; ctx.font = fonte(800, aprov ? 5.6 : 4.6); ctx.fillText(est.balao, bx, by + 1);
+    if (b.trabalho.url) b.selo = { x: bx, y: by, r: r * 1.6 };
+    ocupadas.push({ x: bx - r * 1.3, y: by - r * 1.3, w: r * 2.6, h: r * 2.6 });   // balões não cobrem o selo
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Mão levantada de quem espera aprovação: braço na cor do agente, acenando (parado com menos movimento)
+function maoLevantada(b, x, y, t) {
+  const pal = Avatar.CORES[b.ap.color] || Avatar.CORES.graphite;
+  const aceno = menosMovimento.matches ? 0 : Math.floor(t / 280) % 2;
+  const ax = x + 17 + aceno, ay = y + 2;
+  ctx.fillStyle = pal.contorno; ctx.fillRect(ax, ay, 5, 5); ctx.fillRect(ax + 1 - aceno, ay + 4, 3, 7);
+  ctx.fillStyle = pal.base; ctx.fillRect(ax + 1, ay + 1, 3, 3); ctx.fillRect(ax + 2 - aceno, ay + 4, 1, 6);
+  ctx.fillStyle = pal.claro; ctx.fillRect(ax + 1, ay + 1, 1, 1);
+}
+
+// Balão de fala acima do nome de quem fala. Nunca cobre nome, selo nem outro balão: tenta à direita,
+// à esquerda e no meio; se não couber, sobe uma linha e tenta de novo.
+function desenharBalao(b, ocupadas) {
+  ctx.font = fonte(600, 4.4);
+  const tam = tamMundo(4.4);
+  const w = Math.min(ctx.measureText(b.fala).width + tam * 1.2, tam * 22), h = tam * 1.9, rabo = 4;
+  const cx = b.x + 4, topoNome = b.etq ? b.etq.y : b.y - Avatar.TAM - 3 - tam - 4;
+  const bate = r => ocupadas.some(o => r.x < o.x + o.w + 2 && r.x + r.w + 2 > o.x && r.y < o.y + o.h + 2 && r.y + r.h + 2 > o.y);
+  const v = vistaMundo(), prende = x => Math.min(Math.max(v.l + 2, x), v.r - w - 2);
+  let pos = null;
+  for (let nivel = 0; nivel < 6 && !pos; nivel++) {
+    const y = topoNome - rabo - 1 - h - nivel * (h + 3);
+    for (const x of [cx - 4, cx - w + 6, cx - w / 2].map(prende)) { const r = { x, y, w, h, nivel }; if (!bate(r)) { pos = r; break; } }
+  }
+  pos = pos || { x: prende(cx - 4), y: topoNome - rabo - 1 - h, w, h };
+  ocupadas.push(pos);
+  const { x, y } = pos, ponta = Math.min(Math.max(cx, x + 4), x + w - 6);
+  ctx.fillStyle = "#ffffff"; ctx.strokeStyle = "#1b1b22"; ctx.lineWidth = Math.max(0.6, (1.5 * dpr) / cam.k);
+  arred(x, y, w, h, h / 3); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(ponta - 1, y + h - 0.5); ctx.lineTo(ponta + 3, y + h + rabo); ctx.lineTo(ponta + 5, y + h - 0.5); ctx.closePath(); ctx.fill();
+  if (pos.nivel) { // subiu para não cobrir ninguém: um fio liga o balão ao nome de quem fala
+    ctx.setLineDash([2, 2]); ctx.beginPath(); ctx.moveTo(ponta + 3, y + h + rabo); ctx.lineTo(cx, topoNome); ctx.stroke(); ctx.setLineDash([]);
+  }
+  ctx.fillStyle = "#18181b"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  ctx.fillText(b.fala, x + tam * 0.6, y + h / 2 + 1, w - tam * 1.2);
+}
+
+// Ícones 8x8 das placas: "#" = cor principal, "+" = brilho
+const ICONES = {
+  codigo:   ["........", ".#....#.", "#..+...#", "#..+...#", "#...+..#", "#...+..#", ".#....#.", "........"],
+  megafone: ["......#.", "....###.", "#.#####.", "########", "########", "#.#####.", "...#.##.", "...#..#."],
+  servidor: ["########", "#+.....#", "########", "#+.....#", "########", "#+.....#", "########", "..#..#.."],
+  coroa:    ["........", "#..#...#", "##.##.##", "########", "#+#+#+##", "########", ".######.", "........"],
+  sino:     "...##...|..####..|.######.|.######.|.######.|########|........|...##...".split("|"),
+  controle: ["........", ".######.", "#+#..#.#", "###.#.##", "#+#..#.#", "########", "##....##", "........"],
+  xicara:   ["..+.+...", "...+.+..", "######..", "#++++###", "#++++#.#", "#++++###", ".####...", "######.."],
+  pessoas:  [".##..##.", ".##..##.", "........", "###.####", "####.###", "####.###", "........", "........"],
+  grafico:  ["......#.", ".....##.", "....#.#.", "#..#..#.", "##.#..#.", "#.##..#.", "#..#..#.", "########"],
+  pincel:   [".....##.", "....###.", "...###..", "..###...", ".+##....", "#++.....", "##......", "#......."],
+  camera:   ["........", "..##....", "########", "#..++..#", "#.+..+.#", "#.+..+.#", "#..++..#", "########"],
+  estrela:  ["...#....", "...#....", "..###...", "#######.", ".#####..", "..#.#...", ".#...#..", "........"],
+};
+const ICONE_DO_TIPO = { recepcao: "sino", gabinete: "coroa", ops: "servidor", reuniao: "pessoas", lounge: "controle", cozinha: "xicara" };
+const CORES_TIME = ["#3b82f6", "#e8587a", "#22c55e", "#f59e0b", "#8b5cf6", "#14b8a6", "#f97316"];
+
+function corDaSala(s) {
+  if (s.cor) return s.cor;
+  const fixas = { recepcao: Mapa.cor("destaque"), reuniao: "#0ea5e9", lounge: "#a855f7", cozinha: "#f97316", gabinete: "#eab308", ops: "#10b981" };
+  if (fixas[s.tipo]) return fixas[s.tipo];
+  let h = 0; for (const ch of s.nome) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return CORES_TIME[h % CORES_TIME.length];
+}
+
+function iconeDaSala(s) {
+  if (s.icone && ICONES[s.icone]) return s.icone;
+  if (ICONE_DO_TIPO[s.tipo]) return ICONE_DO_TIPO[s.tipo];
+  const n = s.nome.toLowerCase();
+  if (/dev|eng|tec|código|codigo/.test(n)) return "codigo";
+  if (/market|social|comun/.test(n)) return "megafone";
+  if (/dado|anal|bi|estrat/.test(n)) return "grafico";
+  if (/design|arte|cria/.test(n)) return "pincel";
+  return "estrela";
+}
+
+function clarear(hex, k) {
+  const n = parseInt(hex.slice(1), 16), f = c => Math.max(0, Math.min(255, Math.round(c + (k > 0 ? (255 - c) * k : c * k))));
+  return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
+}
+
+// Placa da sala em pixel art presa na parede, junto da porta (moldura, parafusos, ícone, nome) + quem está na mesa.
+// Tamanho fixo no mundo: cresce e diminui com o zoom como o resto do prédio; o mapa.js já reservou o espaço.
+// c: outro contexto (a maquete 3D pinta a placa na textura dela); devolve o contador, para ela só repintar quando ele muda.
+function desenharPlaca(s, c = ctx) {
+  const p = s.placa; if (!p) return "";
+  const px = (x, y, w, h, cor) => { c.fillStyle = cor; c.fillRect(x, y, w, h); };
+  const cor = corDaSala(s), txt = Mapa.nomePlaca(s.nome).toUpperCase(), h = Mapa.PLACA_H, contador = s.mesas && s.mesas.length;
+  const w = Math.max(30, Math.min(p.w, p.max - (contador ? p.total - p.w : 0))), x = p.x, y = p.y;
+  if (c === ctx) s.placaRet = { x, y, w, h };
+  c.font = Mapa.PLACA_FONTE; c.textBaseline = "middle"; c.textAlign = "left";
+  px(x - 1, y - 1, w + 2, h + 2, "#1b1a26");                 // moldura
+  px(x, y, w, h, clarear(cor, -0.45));
+  px(x + 1, y + 1, w - 2, h - 3, cor);                        // face
+  px(x + 1, y + 1, w - 2, 1, clarear(cor, 0.35));             // brilho
+  px(x + 1, y + h - 2, w - 2, 1, clarear(cor, -0.3));         // sombra
+  px(x + 2, y + 3, 1, 1, "#e5e7eb"); px(x + w - 3, y + 3, 1, 1, "#e5e7eb"); // parafusos
+  px(x + 2, y + h - 4, 1, 1, "#9ca3af"); px(x + w - 3, y + h - 4, 1, 1, "#9ca3af");
+  px(x + 4, y + 2, 10, 10, clarear(cor, -0.55));             // fundo do ícone
+  ICONES[iconeDaSala(s)].forEach((linha, iy) => [...linha].forEach((ch, ix) => { if (ch !== ".") px(x + 5 + ix, y + 3 + iy, 1, 1, ch === "+" ? clarear(cor, 0.6) : "#ffffff"); }));
+  const tinta = textoSobre(cor);   // placa clara (ex.: a recepção na cor da marca "Gelo") pede letra escura
+  c.fillStyle = tinta === "#ffffff" ? "rgba(0,0,0,.35)" : "rgba(255,255,255,.3)"; c.fillText(txt, x + 17.5, y + h / 2 + 1.5, w - 23);
+  c.fillStyle = tinta; c.fillText(txt, x + 17, y + h / 2 + 1, w - 23);
+  if (contador && (c !== ctx || cam.k / dpr >= 1)) {          // quem está na mesa, colado na placa (só quando dá para ler)
+    const na = [...mundo.bonecos.values()].filter(b => b.lugar && b.lugar.tipo === "mesa" && b.lugar.mesa.sala === s && b.trabalho).length;
+    const etq = `${na}/${s.mesas.filter(m => m.handle).length}`, lw = Math.ceil(c.measureText(etq).width) + 6;
+    px(x + w + 2, y + 2, lw + 2, h - 4, "#1b1a26");
+    px(x + w + 3, y + 3, lw, h - 6, na ? "#163a24" : "#26262b");
+    c.fillStyle = na ? "#6ee7a0" : "#a1a1aa"; c.fillText(etq, x + w + 6, y + h / 2 + 1);
+    return etq;
+  }
+  return "";
+}
+
+function arred(x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+// ---------- painel e telas -----------------------------------------------------------
+function tempoDesde(iso) {
+  if (!iso) return "";
+  const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
+  if (s < 60) return "agora"; if (s < 3600) return `há ${Math.floor(s / 60)} min`;
+  if (s < 86400) return `há ${Math.floor(s / 3600)} h`; return `há ${Math.floor(s / 86400)} d`;
+}
+const FMT_HORA = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+const horaDe = iso => (iso ? FMT_HORA.format(new Date(iso)) : "");
+// desde quando a tarefa está no estado atual (o servidor manda "desde"; sem ele, vale o início)
+const desdeDe = t => t.desde || t.inicio;
+function tempoNoEstado(t) {
+  const d = tempoDesde(desdeDe(t)), espera = /^waiting_/.test(t.status);
+  return d === "agora" ? (espera ? "esperando agora" : "começou agora") : `${espera ? "esperando" : "rodando"} ${d}`;
+}
+
+function mini(ap) {
+  const cv = document.createElement("canvas"); cv.width = 44; cv.height = 44; cv.className = "mini";
+  const c = cv.getContext("2d"); c.imageSmoothingEnabled = false; c.drawImage(Avatar.desenhar(ap), 0, 0, 44, 44);
+  cv.setAttribute("aria-hidden", "true");
+  return cv;
+}
+
+function textoSe(e, txt) { if (e.textContent !== txt) e.textContent = txt; }   // só escreve quando muda
+function elem(tag, classe, texto) { const e = document.createElement(tag); if (classe) e.className = classe; if (texto != null) e.textContent = texto; return e; }
+
+// Ícones da interface em pixel art: os mesmos desenhos 8x8 das placas, como SVG nítido
+function iconeSvg(nome) {
+  const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 8 8"); svg.setAttribute("aria-hidden", "true"); svg.setAttribute("focusable", "false");
+  (ICONES[nome] || ICONES.estrela).forEach((linha, y) => [...linha].forEach((ch, x) => {
+    if (ch === ".") return;
+    const r = document.createElementNS(ns, "rect");
+    r.setAttribute("x", x); r.setAttribute("y", y); r.setAttribute("width", 1); r.setAttribute("height", 1); r.setAttribute("fill", "currentColor");
+    if (ch === "+") r.setAttribute("fill-opacity", ".5");
+    svg.append(r);
+  }));
+  return svg;
+}
+function pintarIcones(raiz) { for (const e of raiz.querySelectorAll("[data-icone]")) if (!e.firstChild) e.append(iconeSvg(e.dataset.icone)); }
+Object.assign(ICONES, {
+  predio:   ["..####..", ".#+##+#.", ".######.", ".#+##+#.", ".######.", ".#+##+#.", ".##..##.", "########"],
+  balao:    [".######.", "########", "##+##+##", "########", "########", ".######.", "..##....", ".#......"],
+  ajuda:    ["..####..", ".##..##.", ".....##.", "....##..", "...##...", "...##...", "........", "...##..."],
+  lupa:     ["..###...", ".#...#..", "#.....#.", "#.....#.", ".#...#..", "..####..", ".....##.", "......##"],
+  expandir: ["###..###", "#......#", "#......#", "........", "........", "#......#", "#......#", "###..###"],
+  recolher: ["#......#", ".##..##.", ".##..##.", "........", "........", ".##..##.", ".##..##.", "#......#"],
+  alvo:     ["...##...", "..####..", ".##..##.", "###..###", "###..###", ".##..##.", "..####..", "...##..."],
+  encaixar: ["##....##", "#......#", "..####..", "..#++#..", "..#++#..", "..####..", "#......#", "##....##"],
+  copiar:   ["..#####.", "..#...#.", "###...#.", "#.#...#.", "#.#####.", "#...#...", "#####...", "........"],
+  cubo:     ["..#####.", ".#+++##.", "#####+#.", "#...#+#.", "#...#+#.", "#...##..", "#####...", "........"],
+  girar:    ["..####..", ".#....#.", "#......#", "#...####", "#.....#.", ".#......", "..####..", "........"],
+  mapa:     ["........", "##.##.##", "#+#+#+##", "#+#+#+##", "#+#+#+##", "#+#+#+##", "##.##.##", "........"],
+});
+
+// Onde está e o que faz cada agente (o mapa e o painel usam a mesma resposta)
+function situacao(b) {
+  if (b.trabalho) return estadoDe(b.trabalho.status).filtro;
+  if ((b.lugar && b.lugar.tipo === "fora") || (b.destino && b.destino.tipo === "fora")) return "fora";
+  return "livres";
+}
+function classeDe(b) { const sit = situacao(b); return sit === "trab" || sit === "esp" ? estadoDe(b.trabalho.status).classe : sit === "fora" ? "fora" : "livre"; }
+function textoEstado(b) { return b.trabalho ? estadoDe(b.trabalho.status).texto : situacao(b) === "fora" ? "Fora" : "Livre"; }
+function ondeEsta(b) {
+  if (situacao(b) === "fora") return b.rota.length ? "Indo para casa" : "Foi para casa";
+  if (b.rota.length) return "Andando pelo escritório";
+  if (b.lugar && b.lugar.tipo === "mesa") return `Na mesa, sala ${b.lugar.mesa.sala.nome}`;
+  if (b.lugar && b.lugar.vaga) return b.lugar.vaga.sala.nome;
+  return "No escritório";
+}
+const boneco = id => (mundo ? mundo.bonecos.get(id) : null);
+const porHandle = h => (mundo ? [...mundo.bonecos.values()].find(b => b.handle === h) : null);
+function salaDoAgente(handle) { const s = predio && predio.salas.find(q => (q.handles || []).includes(handle)); return s ? s.nome : ""; }
+
+// ---------- chips de estado (contam e filtram) ----------------------------------------
+function atualizarEstados() {
+  if (!mundo) return;
+  const n = { todos: 0, trab: 0, esp: 0, livres: 0, fora: 0 };
+  for (const b of mundo.bonecos.values()) { n.todos++; n[situacao(b)]++; }
+  for (const b of document.querySelectorAll("#estados [data-filtro]")) {
+    const k = b.dataset.filtro, alvo = b.querySelector("[data-n]");
+    if (alvo.textContent !== String(n[k])) alvo.textContent = n[k];
+    b.classList.toggle("zero", !n[k] && k !== "todos");
+  }
+  const partes = [[n.esp, "esperando você", "esperando você"], [n.trab, "trabalhando", "trabalhando"], [n.livres, "livre", "livres"], [n.fora, "fora", "fora"]]
+    .filter(([q], i) => q || i < 3).map(([q, um, varios]) => `${q} ${q === 1 ? um : varios}`);
+  const resumo = n.todos ? partes.join(" · ") : "Nenhum agente nesta organização ainda";
+  if ($("resumo-esc").textContent !== resumo) $("resumo-esc").textContent = resumo;
+}
+function filtrar(qual) {
+  filtro = qual;
+  document.querySelectorAll("[data-filtro]").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.filtro === filtro)));
+  if (estado) desenharPainel();
+}
+for (const b of document.querySelectorAll("[data-filtro]")) b.addEventListener("click", () => filtrar(filtro === b.dataset.filtro && filtro !== "todos" ? "todos" : b.dataset.filtro));   // clicar de novo desliga o filtro
+
+// ---------- painel: esperando você, agentes e pedidos ---------------------------------
+function desenharPainel() {
+  if (!mundo) return;
+  const ags = estado.agentes || [], trs = estado.trabalhos || [];
+  const nomeDe = id => (ags.find(a => a.id === id) || {}).nome || "Agente";
+  const handleDe = id => (ags.find(a => a.id === id) || {}).handle;
+  const esperando = trs.filter(t => /^waiting_/.test(t.status)).sort((a, b) => Date.parse(desdeDe(a)) - Date.parse(desdeDe(b)));
+  const aprov = esperando.filter(t => t.status === "waiting_approval").length, perg = esperando.length - aprov;
+  // sino da barra do celular: contador âmbar e o resumo no nome acessível
+  const resumo = !esperando.length ? "" : aprov && perg ? `${esperando.length} esperando você` : aprov ? `${aprov} ${aprov === 1 ? "aprovação pendente" : "aprovações pendentes"}` : `${perg} ${perg === 1 ? "pergunta para você" : "perguntas para você"}`;
+  $("pendencias-n").hidden = !esperando.length; $("pendencias-n").textContent = esperando.length;
+  $("pendencias").setAttribute("aria-label", resumo ? `Aprovações: ${resumo}` : "Aprovações");
+  $("nav-aprovacoes").hidden = !esperando.length; $("nav-aprovacoes").textContent = esperando.length;
+  $("nav-aprovacoes").setAttribute("aria-label", resumo);
+  // "Esperando você" no escritório: cartões de uma linha (2 no máximo a partir do 3º pedido, para o mapa
+  // ficar na primeira dobra); a tela Aprovações mostra todos, completos
+  // widgets embaixo do mapa: até 3 pedidos (a tela Aprovações mostra todos) e quem está trabalhando agora
+  $("avisos").replaceChildren(...esperando.slice(0, 3).map(t => cartaoPedido(t, nomeDe(t.agente_id), handleDe(t.agente_id), true)));
+  if (!esperando.length) $("avisos").append(elem("p", "widget-vazio", "Nada esperando você agora."));
+  $("ver-pedidos").textContent = esperando.length > 3 ? `Ver todos (${esperando.length})` : "Ver todos";
+  $("esperando-n").textContent = esperando.length || "";
+  const rodando = trs.filter(t => !/^waiting_/.test(t.status)).sort((a, b) => Date.parse(desdeDe(a)) - Date.parse(desdeDe(b)));
+  $("trabalhando-lista").replaceChildren(...rodando.slice(0, 4).map(t => linhaTrabalho(t, nomeDe(t.agente_id), handleDe(t.agente_id))));
+  if (rodando.length > 4) { const mais = elem("button", "widget-mais link-bt", `Mais ${rodando.length - 4} trabalhando: mostrar no mapa`); mais.type = "button"; mais.addEventListener("click", () => filtrar("trab")); $("trabalhando-lista").append(mais); }
+  if (!rodando.length) $("trabalhando-lista").append(elem("p", "widget-vazio", "Ninguém trabalhando agora."));
+  $("trabalhando-n").textContent = rodando.length || "";
+  desenharAprovacoes(esperando, nomeDe, handleDe);
+  // agentes na lateral: quem espera primeiro, depois quem trabalha, livres e fora (avatar com a luz do estado)
+  const ordem = { esp: 0, trab: 1, livres: 2, fora: 3 };
+  const bs = [...mundo.bonecos.values()].sort((a, b) => ordem[situacao(a)] - ordem[situacao(b)] || a.nome.localeCompare(b.nome));
+  let visiveis = 0;
+  $("lista").replaceChildren(...bs.map(b => {
+    const ok = combina(b); if (ok) visiveis++;
+    const item = elem("button", "item" + (selecionado === b.id ? " sel" : "") + (ok ? "" : " apagado"));
+    item.type = "button";
+    if (b.trabalho && b.trabalho.rotulo) item.title = b.trabalho.rotulo;
+    item.addEventListener("click", () => { irParaEscritorio(); focarAgente(b, { seguir: true, foco: true }); });
+    item.addEventListener("mouseenter", () => { realce = b.id; });
+    item.addEventListener("mouseleave", () => { realce = null; });
+    const foto = elem("span", "foto"); foto.append(mini(b.ap), elem("i", `led ${classeDe(b)}`));
+    const sala = salaDoAgente(b.handle), txt = elem("span", "txt");
+    txt.append(elem("strong", "nome", b.nome), elem("span", "sub", b.trabalho ? `${textoEstado(b)}${sala ? " · " + sala : ""}` : ondeEsta(b)));
+    item.append(foto, txt);
+    return item;
+  }));
+  if (!bs.length) $("lista").append(elem("p", "vazio", "Nenhum agente nesta organização ainda."));
+  $("contagem").textContent = filtro === "todos" ? `${bs.length}` : `${visiveis} de ${bs.length}`;
+  const nSalas = predio.salas.length + predio.baixo.length;
+  $("org-resumo").textContent = `${bs.length} ${bs.length === 1 ? "agente" : "agentes"} · ${nSalas} ${nSalas === 1 ? "sala" : "salas"}`;
+  atualizarEstados();
+}
+
+function cartaoPedido(t, nome, handle, compacto) {
+  const pergunta = t.status === "waiting_input";
+  const c = elem("article", "pedido");
+  c.setAttribute("aria-label", pergunta ? `${nome} tem uma pergunta para você` : `${nome} pede a sua aprovação`);
+  const verNoMapa = () => { const b = boneco(t.agente_id); if (b) { irParaEscritorio(); focarAgente(b, { seguir: true, foco: true }); } };
+  if (compacto) { // uma linha: quem e o quê (leva ao agente no mapa), há quanto tempo e o botão principal
+    const linha = elem("div", "linha-widget"), ir = elem("button", "linha-ir"); ir.type = "button";
+    const txt = elem("span", "txt"), quem = elem("span", "quem"), sub = elem("span", "sub");
+    quem.append(elem("strong", null, nome), pergunta ? " tem uma pergunta" : " pede aprovação");
+    sub.append(elem("span", pergunta ? "quando pergunta" : "quando", tempoDesde(desdeDe(t))), ` · ${t.rotulo || "Pedido sem descrição"}`);
+    txt.append(quem, sub); ir.append(mini(aparencia(handle)), txt); ir.title = t.rotulo || "";
+    ir.setAttribute("aria-label", `${nome} ${pergunta ? "tem uma pergunta" : "pede aprovação"} ${tempoDesde(desdeDe(t))}: ${t.rotulo || "pedido sem descrição"}. Ver no mapa`);
+    ir.addEventListener("click", verNoMapa);
+    linha.append(ir);
+    if (t.url) { const a = elem("a", "botao", pergunta ? "Responder" : "Revisar"); a.href = t.url; a.target = "_blank"; a.rel = "noopener"; a.setAttribute("aria-label", pergunta ? `Responder ${nome} no agentes.chat` : `Revisar o pedido de ${nome} no agentes.chat`); linha.append(a); }
+    return linha;
+  }
+  // tela Aprovações: quem pede, o selo do tipo, o pedido, há quanto tempo espera e as ações
+  const titulo = elem("div", "pedido-titulo"), corpo = elem("div", "pedido-corpo");
+  titulo.append(elem("strong", null, pergunta ? `${nome} tem uma pergunta` : `${nome} pede a sua aprovação`), elem("span", `selo-tipo ${pergunta ? "pergunta" : "aprovacao"}`, pergunta ? "Pergunta" : "Aprovação"));
+  const meta = elem("p", "meta"); meta.dataset.desde = desdeDe(t) || ""; meta.dataset.sala = salaDoAgente(handle);
+  corpo.append(titulo, elem("p", "oque", t.rotulo || "Pedido sem descrição"), meta);
+  const acoes = elem("div", "pedido-acoes");
+  if (t.url) { const a = elem("a", "botao", pergunta ? "Responder" : "Revisar pedido"); a.href = t.url; a.target = "_blank"; a.rel = "noopener"; a.setAttribute("aria-label", pergunta ? `Responder ${nome} no agentes.chat` : `Revisar o pedido de ${nome} no agentes.chat`); acoes.append(a); }
+  const ver = elem("button", "botao fantasma", "Ver no mapa"); ver.type = "button"; ver.setAttribute("aria-label", `Ver ${nome} no mapa`);
+  ver.addEventListener("click", verNoMapa);
+  acoes.append(ver);
+  c.append(mini(aparencia(handle)), corpo, acoes);
+  metaPedido(meta);
+  return c;
+}
+
+// quem está trabalhando: sala, o que faz e há quanto tempo (a linha leva ao agente no mapa)
+function linhaTrabalho(t, nome, handle) {
+  const ir = elem("button", "linha-ir linha-widget"); ir.type = "button";
+  const sala = salaDoAgente(handle), txt = elem("span", "txt"), quem = elem("span", "quem");
+  quem.append(elem("strong", null, nome), sala ? elem("span", "suave-in", ` na sala ${sala}`) : "");
+  txt.append(quem, elem("span", "sub", t.rotulo || "Tarefa sem descrição"));
+  ir.append(mini(aparencia(handle)), txt, elem("span", "ha", tempoDesde(desdeDe(t)).replace("há ", "")));
+  ir.title = t.rotulo || "";
+  ir.addEventListener("click", () => { const b = boneco(t.agente_id); if (b) focarAgente(b, { seguir: true, foco: true }); });
+  return ir;
+}
+
+// ---------- salas: contagem ao vivo e câmera até a sala --------------------------------
+function montarSalas() {
+  $("salas").replaceChildren(...[...predio.salas, ...predio.baixo].map(s => {
+    // sala como canal: "#" na cor da sala, nome e quem está na mesa
+    const li = elem("li"), b = elem("button"); b.type = "button"; b.dataset.sala = s.nome;
+    const ic = elem("span", "sala-ic", "#"); ic.setAttribute("aria-hidden", "true"); ic.style.color = clarear(corDaSala(s), 0.25);
+    b.append(ic, elem("span", "sala-nome", s.nome), elem("span", "sala-n"));
+    b.addEventListener("click", () => { irParaEscritorio(); fecharFicha(); focarSala(s); if (innerWidth <= 760) $("palco-cartao").scrollIntoView({ block: "start", behavior: menosMovimento.matches ? "auto" : "smooth" }); });
+    li.append(b); return li;
+  }));
+  atualizarSalas();
+}
+function atualizarSalas() {
+  if (!mundo) return;
+  const bs = [...mundo.bonecos.values()];
+  for (const s of [...predio.salas, ...predio.baixo]) {
+    const b = $("salas").querySelector(`[data-sala="${CSS.escape(s.nome)}"]`); if (!b) continue;
+    let txt, ativa, espera = false;
+    if (s.mesas && s.mesas.length) { // time: quem está na mesa trabalhando, de quantos; âmbar se alguém espera você
+      const donos = bs.filter(x => (s.handles || []).includes(x.handle));
+      const na = donos.filter(x => x.lugar && x.lugar.tipo === "mesa" && x.trabalho).length;
+      txt = `${na}/${donos.length}`; ativa = na > 0; espera = donos.some(x => situacao(x) === "esp");
+    } else {
+      const aqui = bs.filter(x => visivel(x) && salaEm(x) === s);   // pela posição de agora (quem está chegando já conta)
+      txt = aqui.length ? `${aqui.length} aqui` : "vazia"; ativa = false;
+    }
+    const n = b.querySelector(".sala-n");
+    if (n.textContent !== txt) n.textContent = txt;
+    n.classList.toggle("ativa", ativa && !espera); n.classList.toggle("espera", espera);
+    b.setAttribute("aria-label", `${s.nome}: ${s.mesas && s.mesas.length ? `${txt} na mesa` : txt}`);
+  }
+}
+
+// ---------- ficha do agente (abre pela busca, pela lista ou tocando no mapa) ----------
+let seguir = null, realce = null, assinaturaFicha = "";
+function focarAgente(b, { seguir: seg = false, foco = false } = {}) {
+  selecionado = b.id;
+  seguir = seg ? b.id : null;
+  moverCamera({ x: b.x, y: b.y - 10, k: Math.max(cam.k, 3.2 * dpr) });
+  if (maquete3d) maquete3d.focarAgente(b);
+  abrirFicha(b, foco);
+  if (innerWidth <= 760 && !$("palco-cartao").classList.contains("cheio")) $("palco-cartao").scrollIntoView({ block: "start", behavior: menosMovimento.matches ? "auto" : "smooth" });
+  desenharPainel();
+}
+function abrirFicha(b, foco) {
+  selecionado = b.id; assinaturaFicha = "";
+  renderFicha();
+  $("ficha").hidden = false; $("cartao-agente").hidden = true;
+  if (foco) $("ficha").focus({ preventScroll: true });
+}
+function fecharFicha() {
+  const estava = !$("ficha").hidden;
+  $("ficha").hidden = true; selecionado = null; seguir = null;
+  if (estava && estado) desenharPainel();
+}
+function renderFicha() {
+  const f = $("ficha"), b = boneco(selecionado);
+  if (!b) { if (!f.hidden) fecharFicha(); return; }
+  const t = b.trabalho, chave = [b.id, t && t.status, t && t.rotulo, t && t.url, ondeEsta(b), seguir === b.id].join("|");
+  if (chave === assinaturaFicha) { const q = f.querySelector(".ficha-tempo"); if (q && t) q.textContent = tempoNoEstado(t); return; }
+  assinaturaFicha = chave;
+  f.tabIndex = -1;
+  const topo = elem("div", "ficha-topo"), nomes = elem("div");
+  const h = elem("h2", null, b.nome); h.id = "ficha-nome";
+  nomes.append(h, elem("p", "funcao", b.funcao || salaDoAgente(b.handle)));
+  const x = elem("button", "fechar", "×"); x.type = "button"; x.setAttribute("aria-label", "Fechar o cartão"); x.addEventListener("click", fecharFicha);
+  topo.append(mini(b.ap), nomes, x);
+  const dl = elem("dl"), linha = (rot, ...conteudo) => { const dd = elem("dd"); dd.append(...conteudo); dl.append(elem("dt", null, rot), dd); };
+  const chip = elem("span", `chip ${classeDe(b)}`, textoEstado(b));
+  linha("Estado", chip, ...(t ? [document.createTextNode(" "), elem("span", "ficha-tempo suave", tempoNoEstado(t))] : []));
+  if (t) linha("Fazendo", document.createTextNode(t.rotulo || "Tarefa sem descrição"));
+  linha("Onde", document.createTextNode(ondeEsta(b)));
+  const acoes = elem("div", "acoes");
+  if (t && t.url) {
+    const espera = /^waiting_/.test(t.status), a = elem("a", espera ? "botao" : "botao fantasma", t.status === "waiting_approval" ? "Revisar pedido" : t.status === "waiting_input" ? "Responder no agentes.chat" : "Abrir no agentes.chat");
+    a.href = t.url; a.target = "_blank"; a.rel = "noopener"; acoes.append(a);
+  }
+  const seg = elem("button", "botao fantasma seguir"); seg.type = "button"; seg.setAttribute("aria-pressed", String(seguir === b.id));
+  const ic = elem("span", "ic"); ic.append(iconeSvg("alvo")); seg.append(ic, document.createTextNode(seguir === b.id ? "Seguindo" : "Seguir"));
+  seg.addEventListener("click", () => { seguir = seguir === b.id ? null : b.id; renderFicha(); $("ficha").querySelector(".seguir").focus(); });   // a ficha é refeita: o foco volta ao botão novo
+  acoes.append(seg);
+  f.replaceChildren(topo, dl, acoes);
+}
+
+// ---------- busca por nome -----------------------------------------------------------
+let buscaIds = null, buscaAtivo = -1;
+const normalizar = s => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+function resultadosBusca(q) {
+  if (!mundo || !q) return [];
+  const n = normalizar(q);
+  return [...mundo.bonecos.values()].filter(b => normalizar(`${b.nome} ${b.handle} ${b.funcao}`).includes(n))
+    .sort((a, b) => (normalizar(a.nome).startsWith(n) ? 0 : 1) - (normalizar(b.nome).startsWith(n) ? 0 : 1) || a.nome.localeCompare(b.nome)).slice(0, 8);
+}
+function desenharBusca() {
+  const inp = $("busca"), lista = $("busca-lista"), q = inp.value.trim(), rs = resultadosBusca(q);
+  buscaIds = q ? new Set(rs.map(b => b.id)) : null;       // no mapa, quem não bate fica apagado
+  if (!q) { lista.hidden = true; inp.setAttribute("aria-expanded", "false"); inp.removeAttribute("aria-activedescendant"); return; }
+  buscaAtivo = Math.min(Math.max(buscaAtivo, 0), rs.length - 1);
+  lista.replaceChildren(...rs.map((b, i) => {
+    const li = elem("li"); li.id = `busca-op-${i}`; li.setAttribute("role", "option"); li.setAttribute("aria-selected", String(i === buscaAtivo));
+    const txt = elem("span", "txt"), nome = elem("strong");
+    const k = normalizar(b.nome).indexOf(normalizar(q));
+    if (k >= 0) nome.append(b.nome.slice(0, k), elem("mark", null, b.nome.slice(k, k + q.length)), b.nome.slice(k + q.length)); else nome.textContent = b.nome;
+    txt.append(nome, elem("span", null, `${textoEstado(b)} · ${ondeEsta(b)}`));
+    li.append(mini(b.ap), txt);
+    li.addEventListener("pointerdown", ev => ev.preventDefault());   // não tira o foco do campo antes do clique
+    li.addEventListener("click", () => escolherBusca(b));
+    return li;
+  }));
+  if (!rs.length) { const li = elem("li", "vazio", `Ninguém com “${q}”.`); li.setAttribute("role", "option"); li.setAttribute("aria-disabled", "true"); lista.append(li); }
+  lista.hidden = false; inp.setAttribute("aria-expanded", "true");
+  if (rs.length) inp.setAttribute("aria-activedescendant", `busca-op-${buscaAtivo}`); else inp.removeAttribute("aria-activedescendant");
+}
+function escolherBusca(b) {
+  $("busca").value = ""; buscaIds = null; desenharBusca();
+  irParaEscritorio();
+  focarAgente(b, { seguir: true, foco: true });
+}
+$("busca").addEventListener("input", () => { buscaAtivo = 0; desenharBusca(); });
+$("busca").addEventListener("keydown", ev => {
+  const rs = resultadosBusca($("busca").value.trim());
+  if (ev.key === "ArrowDown" || ev.key === "ArrowUp") { ev.preventDefault(); if (rs.length) { buscaAtivo = (buscaAtivo + (ev.key === "ArrowDown" ? 1 : rs.length - 1)) % rs.length; desenharBusca(); } }
+  else if (ev.key === "Enter" && rs[buscaAtivo]) { ev.preventDefault(); escolherBusca(rs[buscaAtivo]); }
+  else if (ev.key === "Escape" && $("busca").value) { ev.stopPropagation(); $("busca").value = ""; desenharBusca(); }   // vazio: o Esc segue e fecha a gaveta
+});
+$("busca").addEventListener("blur", () => setTimeout(() => { if (document.activeElement !== $("busca")) { $("busca-lista").hidden = true; $("busca").setAttribute("aria-expanded", "false"); } }, 120));
+$("busca").addEventListener("focus", () => { if ($("busca").value.trim()) desenharBusca(); });
+
+// ---------- acontecendo agora (eventos) ---------------------------------------------
+// O servidor manda eventos[] com horário. Sem eles (versão antiga), deduzimos pela diferença entre leituras.
+const FRASES_EVENTO = { comecou: "começou uma tarefa", pediu_aprovacao: "pediu a sua aprovação", pediu_resposta: "fez uma pergunta", voltou_a_trabalhar: "voltou a trabalhar", terminou: "terminou uma tarefa" };
+let eventosLocais = [], statusAnterior = null;
+const vistosEvento = new Set();
+function deduzirEventos(e) {
+  const agora = new Map((e.trabalhos || []).map(t => [t.agente_id, t.status]));
+  const handle = id => ((e.agentes || []).find(a => a.id === id) || {}).handle;
+  if (statusAnterior) for (const id of new Set([...agora.keys(), ...statusAnterior.keys()])) {
+    const a = statusAnterior.get(id), d = agora.get(id); if (a === d || (/running/.test(a) && /running/.test(d))) continue;
+    const tipo = !d ? "terminou" : d === "waiting_approval" ? "pediu_aprovacao" : d === "waiting_input" ? "pediu_resposta" : a ? "voltou_a_trabalhar" : "comecou";
+    eventosLocais.unshift({ em: e.atualizado || new Date().toISOString(), tipo, agente: handle(id) });
+  }
+  statusAnterior = agora; eventosLocais = eventosLocais.slice(0, 50);
+  return eventosLocais;
+}
+const eventosDe = e => (Array.isArray(e.eventos) ? e.eventos : deduzirEventos(e));
+// ---------- aprovações: esperando você, resolvidos hoje e todos (busca e abas) ---------
+// "resolvidos" vem do diário do servidor (só hoje, em memória). Sem ele (demonstração ou servidor antigo),
+// deduzimos pela troca de estado de cada agente entre leituras.
+const DESFECHOS = { voltou_a_trabalhar: ["Voltou a trabalhar", "ok"], terminou: ["Terminou", "ok"], outro_pedido: ["Pediu outra coisa", "info"] };
+const FMT_DIA = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" });
+let resolvidosLocais = [], pedidosAnteriores = null;
+function deduzirResolvidos(e) {
+  const handle = id => ((e.agentes || []).find(a => a.id === id) || {}).handle;
+  const agora = new Map((e.trabalhos || []).map(t => [t.agente_id, t]));
+  if (pedidosAnteriores) for (const [id, p] of pedidosAnteriores) {
+    const t = agora.get(id); if (t && t.status === p.status) continue;
+    const desfecho = !t ? "terminou" : /^waiting_/.test(t.status) ? "outro_pedido" : "voltou_a_trabalhar";
+    resolvidosLocais.unshift({ run_id: p.run_id || id, agente: handle(id), tipo: p.status === "waiting_input" ? "pergunta" : "aprovacao", rotulo: p.rotulo || "",
+      pediu_em: desdeDe(p), resolvido_em: e.atualizado || new Date().toISOString(), desfecho, desde_inicio: false });
+  }
+  pedidosAnteriores = new Map([...agora].filter(([, t]) => /^waiting_/.test(t.status)));
+  resolvidosLocais = resolvidosLocais.slice(0, 50);
+  return resolvidosLocais;
+}
+let resolvidosDaLeitura = null, leituraDosResolvidos = null;
+function resolvidosHoje() {   // da leitura atual (a dedução roda uma vez por leitura) e só os de hoje em São Paulo
+  if (leituraDosResolvidos !== estado) { leituraDosResolvidos = estado; resolvidosDaLeitura = Array.isArray(estado.resolvidos) ? estado.resolvidos : deduzirResolvidos(estado); }
+  const hoje = FMT_DIA.format(new Date());
+  // item com data inválida fica de fora (nunca derruba o painel); agente que saiu da organização também, como no "Acontecendo agora"
+  return resolvidosDaLeitura.filter(r => { const em = r && Date.parse(r.resolvido_em); return Number.isFinite(em) && Object.hasOwn(DESFECHOS, r.desfecho) && porHandle(r.agente) && FMT_DIA.format(new Date(em)) === hoje; });
+}
+function duracao(ms) {
+  const m = Math.max(1, Math.round(ms / 60000));
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${String(m % 60).padStart(2, "0")}` : ""}`;
+}
+function metaPedido(meta) {   // "Dev · esperando há 6 min, desde 10:24" (o tempo anda sem refazer a linha)
+  const d = meta.dataset.desde, ha = tempoDesde(d);
+  textoSe(meta, `${meta.dataset.sala ? meta.dataset.sala + " · " : ""}esperando ${ha === "agora" ? "agora" : ha}${d ? `, desde ${horaDe(d)}` : ""}`);
+}
+function linhaResolvido(r) {
+  const b = porHandle(r.agente), nome = b ? b.nome : r.agente || "Agente", sala = salaDoAgente(r.agente);
+  const [texto, tom] = DESFECHOS[r.desfecho], li = elem("li"), linha = elem(b ? "button" : "div", "linha-resolvido");
+  const ms = Date.parse(r.resolvido_em) - Date.parse(r.pediu_em), espera = Number.isFinite(ms) ? ` · esperou ${r.desde_inicio ? "pelo menos " : ""}${duracao(ms)}` : "";
+  const txt = elem("span", "txt");
+  txt.append(elem("strong", null, `${nome} · ${r.rotulo || "Pedido sem descrição"}`),
+    elem("span", "sub", `${sala ? sala + " · " : ""}${r.tipo === "pergunta" ? "pergunta" : "aprovação"}${espera} · hoje ${horaDe(r.resolvido_em)}`));
+  const selo = elem("span", `selo-desfecho ${tom}`), ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg"), p = document.createElementNS(ns, "path");
+  svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("aria-hidden", "true");
+  p.setAttribute("d", tom === "ok" ? "m5 12 5 5 9-10" : "M8 12h8"); svg.append(p); selo.append(svg, texto);
+  linha.append(mini(aparencia(r.agente)), txt, selo);
+  if (b) { linha.type = "button"; linha.append(elem("span", "oculto", " · ver no mapa")); linha.addEventListener("click", () => { const q = porHandle(r.agente); if (q) { irParaEscritorio(); focarAgente(q, { seguir: true, foco: true }); } }); }
+  li.append(linha);
+  return li;
+}
+let abaAprov = "esperando", chaveAprov = "";
+function desenharAprovacoes(esperando, nomeDe, handleDe) {
+  const q = normalizar($("busca-pedidos").value.trim()), res = resolvidosHoje();
+  const bate = (...txt) => !q || normalizar(txt.join(" ")).includes(q);
+  const esp = esperando.filter(t => bate(nomeDe(t.agente_id), t.rotulo, salaDoAgente(handleDe(t.agente_id))));
+  const rs = res.filter(r => bate((porHandle(r.agente) || {}).nome || r.agente, r.rotulo, salaDoAgente(r.agente)));
+  const n = { esperando: esperando.length, resolvidos: res.length, todos: esperando.length + res.length };
+  for (const b of document.querySelectorAll("#abas-aprov [data-aba]")) textoSe(b.querySelector(".n"), String(n[b.dataset.aba]));
+  textoSe($("resumo-aprov"), esperando.length ? `${esperando.length} esperando você. Aprovar acontece no agentes.chat; o botão abre o pedido certo.` : "Nada esperando você agora. Aprovar acontece no agentes.chat; o botão abre o pedido certo.");
+  const vistos = (abaAprov === "resolvidos" ? 0 : esp.length) + (abaAprov === "esperando" ? Math.min(3, rs.length) : rs.length);   // só o que a aba mostra
+  textoSe($("aprov-busca-total"), q ? (vistos ? `${vistos} ${vistos === 1 ? "pedido" : "pedidos"} com “${$("busca-pedidos").value.trim()}”` : `Nenhum pedido com “${$("busca-pedidos").value.trim()}”.`) : "");
+  // mesma lista: só o "há quanto tempo" anda (refazer as linhas tiraria o foco de quem está nelas)
+  const chave = [abaAprov, q, ...esp.map(t => [t.run_id, t.agente_id, t.status, t.rotulo, t.url, desdeDe(t)].join("|")), ...rs.map(r => `${r.run_id}|${r.resolvido_em}|${r.desfecho}`)].join("¦");
+  if (chave === chaveAprov) { for (const m of $("aprov-esperando").querySelectorAll(".meta")) metaPedido(m); return; }
+  chaveAprov = chave;
+  const mostraEsp = abaAprov !== "resolvidos";
+  $("aprov-esperando").replaceChildren(...esp.map(t => cartaoPedido(t, nomeDe(t.agente_id), handleDe(t.agente_id))));
+  $("aprov-esperando").hidden = !mostraEsp || !esp.length;
+  $("aprov-vazio").hidden = !mostraEsp || esperando.length > 0 || !!q;
+  if (!$("aprov-mascote").firstChild) $("aprov-mascote").append(mini(Avatar.padrao("tudo-decidido")));
+  const lista = abaAprov === "esperando" ? rs.slice(0, 3) : rs;
+  textoSe($("t-hist"), abaAprov === "esperando" ? "Resolvidos há pouco" : "Resolvidos hoje");
+  $("ver-historico").hidden = abaAprov !== "esperando" || rs.length <= 3;
+  $("aprov-hist").hidden = abaAprov === "esperando" && !lista.length;
+  $("lista-resolvidos").replaceChildren(...lista.map(linhaResolvido));
+  if (!lista.length) $("lista-resolvidos").append(elem("li", "vazio-linha", q ? "Nenhum pedido resolvido com essa busca." : "Nada resolvido hoje ainda."));
+}
+function escolherAba(aba, foco) {
+  abaAprov = aba;
+  for (const b of document.querySelectorAll("#abas-aprov [data-aba]")) {
+    const sel = b.dataset.aba === aba; b.setAttribute("aria-selected", String(sel)); b.tabIndex = sel ? 0 : -1;
+    if (sel) { $("painel-aprov").setAttribute("aria-labelledby", b.id); if (foco) b.focus(); }
+  }
+  if (estado) desenharPainel();
+}
+for (const b of document.querySelectorAll("#abas-aprov [data-aba]")) b.addEventListener("click", () => escolherAba(b.dataset.aba));
+$("abas-aprov").addEventListener("keydown", ev => {   // abas: setas, Home e End (padrão ARIA de abas)
+  const abas = [...document.querySelectorAll("#abas-aprov [data-aba]")], i = abas.findIndex(b => b.dataset.aba === abaAprov);
+  const j = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: abas.length - 1 }[ev.key];
+  if (j === undefined) return;
+  ev.preventDefault(); escolherAba(abas[(j + abas.length) % abas.length].dataset.aba, true);
+});
+$("ver-historico").addEventListener("click", () => escolherAba("resolvidos", true));
+$("busca-pedidos").addEventListener("input", () => { if (estado) desenharPainel(); });
+
+let eventosTodos = false;   // "Ver tudo": 5 linhas fechado, 15 aberto
+function desenharEventos() {
+  const lista = $("eventos"), todos = eventosDe(estado).filter(v => FRASES_EVENTO[v.tipo] && porHandle(v.agente)).slice(0, 15);
+  const evs = eventosTodos ? todos : todos.slice(0, 5);
+  $("agora-n").textContent = todos.length || "";
+  $("agora-tudo").hidden = todos.length <= 5;
+  $("agora-tudo").textContent = eventosTodos ? "Ver menos" : "Ver tudo"; $("agora-tudo").setAttribute("aria-expanded", String(eventosTodos));
+  if (!evs.length) { // sem eventos: diz isso sem negar quem está esperando você
+    const n = (estado.trabalhos || []).filter(t => /^waiting_/.test(t.status)).length, chaveVazio = `vazio:${n}`;
+    if (lista.dataset.chave === chaveVazio) return;
+    lista.dataset.chave = chaveVazio;
+    const li = elem("li", "vazio-linha", n ? "Sem novidades agora · " : "Sem novidades agora. Quando alguém começar, terminar ou pedir algo, aparece aqui.");
+    if (n) { const a = elem("a", "link-suave espera", `${n} esperando você`); a.href = "#aprovacoes"; li.append(a); }
+    lista.replaceChildren(li); return;
+  }
+  const chave = v => `${v.em}|${v.tipo}|${v.agente}|${v.run_id || ""}`;
+  if (lista.dataset.chave === evs.map(chave).join(",")) { // mesma lista: só o "há quanto tempo" anda
+    for (const q of lista.querySelectorAll("time")) { const txt = tempoDesde(q.dateTime); if (q.textContent !== txt) q.textContent = txt; }
+    return;
+  }
+  lista.dataset.chave = evs.map(chave).join(",");
+  const primeira = !vistosEvento.size;
+  lista.replaceChildren(...evs.map(v => {
+    const b = porHandle(v.agente), li = elem("li", !primeira && !vistosEvento.has(chave(v)) ? "novo" : null), bt = elem("button", "linha-ir");
+    vistosEvento.add(chave(v));
+    bt.type = "button"; bt.addEventListener("click", () => { const q = porHandle(v.agente); if (q) focarAgente(q, { seguir: true, foco: true }); });
+    const quando = elem("time", null, tempoDesde(v.em)); quando.dateTime = v.em; quando.title = horaDe(v.em);
+    const txt = elem("span", "txt"), frase = elem("span", "quem");
+    frase.append(elem("strong", null, b.nome), ` ${FRASES_EVENTO[v.tipo]}`);
+    txt.append(frase, quando);
+    bt.append(mini(b.ap), txt, elem("span", "botao fantasma ver-mapa", "Ver no mapa"));
+    li.append(bt); return li;
+  }));
+}
+$("agora-tudo").addEventListener("click", () => { eventosTodos = !eventosTodos; $("eventos").dataset.chave = ""; desenharEventos(); });
+
+// ---------- conexão: ao vivo, aviso do agentes.chat e sem conexão --------------------
+let falhou = false;
+function mostrarConexao() {
+  const at = $("atualizado"), faixa = $("faixa-erro"), aoVivo = $("ao-vivo");
+  if (falhou) {
+    textoSe(at, "Sem conexão com o servidor"); at.classList.add("erro"); aoVivo.classList.add("erro");
+    estadoUsuario("Sem conexão", true);
+    faixa.hidden = false; faixa.classList.remove("aviso-ambar"); textoSe($("faixa-erro-txt"), predio ? "Sem conexão. Mostrando a última leitura e tentando de novo a cada 10 s." : "Não consegui carregar o escritório. Tentando de novo a cada 10 s.");
+    return;
+  }
+  if (!estado) return;
+  const semConexao = typeof estado.erro === "string" && /^o escritório ainda não está conectado/i.test(estado.erro);   // sem OAuth (escritorio.py, PermissaoNegada)
+  const doServidor = semConexao ? estado.erro.charAt(0).toUpperCase() + estado.erro.slice(1) + "." : "";
+  at.classList.toggle("erro", !!estado.erro); aoVivo.classList.toggle("erro", !!estado.erro);
+  textoSe(at, semConexao ? doServidor : estado.erro ? "O agentes.chat não respondeu na última leitura" : `Ao vivo · atualizado ${tempoDesde(estado.atualizado)}`);   // role=status: só anuncia quando muda
+  estadoUsuario(semConexao ? "Não conectado" : estado.erro ? "agentes.chat sem resposta" : "Conectado", !!estado.erro);
+  faixa.hidden = !estado.erro; faixa.classList.add("aviso-ambar");
+  if (estado.erro) textoSe($("faixa-erro-txt"), semConexao ? doServidor : "O agentes.chat não respondeu agora. Mostrando a última leitura.");   // textContent: o texto do servidor nunca vira HTML
+}
+// pé da lateral: quem entrou e o estado da conexão
+function estadoUsuario(texto, ruim) {
+  const e = $("usuario-estado"); if (e.textContent !== texto) e.textContent = texto;
+  e.classList.toggle("ruim", ruim);
+  const nome = estado && typeof estado.usuario === "string" && estado.usuario ? estado.usuario : "Você";
+  if ($("usuario-nome").textContent !== nome) { $("usuario-nome").textContent = nome; $("usuario-ini").textContent = nome.trim().charAt(0).toUpperCase(); }
+}
+$("tentar").addEventListener("click", () => { $("faixa-erro-txt").textContent = "Tentando…"; buscar(); });
+
+// ---------- som --------------------------------------------------------------------
+// painel de som: liga/desliga geral, volume e cada tipo de som
+const CATEGORIAS = [["teclado", "Teclado de quem digita"], ["conversa", "Conversas (simlês)"], ["jogos", "Jogos"], ["avisos", "Avisos de aprovação"], ["clima", "Chuva e trovão"], ["ambiente", "Portas e ambiente"]];
+function montarPainelSom() {
+  const p = $("painel-som"), c = Som.config;
+  p.replaceChildren();
+  const linha = (rotulo, input) => { const l = elem("label", "linha-som"); l.append(input, elem("span", null, rotulo)); return l; };
+  const geral = elem("input"); geral.type = "checkbox"; geral.checked = c.ligado; geral.addEventListener("change", () => { Som.ajustar({ ligado: geral.checked }); atualizarBotaoSom(); });
+  p.append(elem("h3", null, "Sons do escritório"), linha("Som ligado", geral));
+  const vol = elem("input"); vol.type = "range"; vol.min = "0"; vol.max = "1"; vol.step = "0.05"; vol.value = c.volume; vol.setAttribute("aria-label", "Volume");
+  vol.addEventListener("input", () => Som.ajustar({ volume: +vol.value }));
+  const lv = elem("label", "linha-som volume"); lv.append(elem("span", null, "Volume"), vol); p.append(lv);
+  for (const [k, rot] of CATEGORIAS) { const i = elem("input"); i.type = "checkbox"; i.checked = c[k]; i.addEventListener("change", () => Som.ajustar({ [k]: i.checked })); p.append(linha(rot, i)); }
+}
+function atualizarBotaoSom() {
+  const on = Som.ligado;
+  $("som").setAttribute("aria-pressed", String(on));
+  $("som").setAttribute("aria-label", on ? "Sons ligados: abrir ajustes" : "Sons desligados: abrir ajustes");
+}
+function fecharPainelSom(devolverFoco) { const p = $("painel-som"); if (p.hidden) return; p.hidden = true; $("som").setAttribute("aria-expanded", "false"); if (devolverFoco) $("som").focus(); }
+if (window.Simular) { $("simular").hidden = false; $("simular").addEventListener("click", () => Simular.abrir()); }   // simular.js: data, hora e clima (só visual)
+$("som").addEventListener("click", ev => {
+  ev.stopPropagation();
+  const p = $("painel-som"), abrir = p.hidden;
+  if (abrir) { montarPainelSom(); p.hidden = false; $("som").setAttribute("aria-expanded", "true"); p.querySelector("input").focus(); } else fecharPainelSom();
+});
+document.addEventListener("click", ev => { if (!$("painel-som").contains(ev.target)) fecharPainelSom(); });
+atualizarBotaoSom();
+
+// ---------- câmera: mouse, toque (um dedo arrasta, dois dão pinça) e teclado ----------
+tela.addEventListener("wheel", ev => {
+  if (!predio) return; ev.preventDefault();
+  const antes = paraMundo(ev.clientX, ev.clientY);
+  cam.alvo = null; seguir = null; cam.k = limitarK(cam.k * Math.exp(-ev.deltaY * 0.0015));
+  const depois = paraMundo(ev.clientX, ev.clientY);
+  cam.x += antes.x - depois.x; cam.y += antes.y - depois.y;
+}, { passive: false });
+// agente mais perto do ponto (no mundo) e selo "!"/"?" que foi tocado
+function agenteEm(p, raio) {
+  let perto = null, dist = raio;
+  for (const b of mundo.bonecos.values()) { if (!visivel(b)) continue; const d = Math.hypot(b.x - p.x, b.y - 9 - p.y); if (d < dist) { dist = d; perto = b; } }
+  return perto;
+}
+function seloEm(p) { return [...mundo.bonecos.values()].find(b => b.selo && visivel(b) && Math.hypot(b.selo.x - p.x, b.selo.y - p.y) < b.selo.r) || null; }
+function esperaVoce(b) { return !!(b.trabalho && b.trabalho.url && /^waiting_/.test(b.trabalho.status)); }
+
+const dedos = new Map();   // pointerId -> último ponto na tela
+let arrasto = null, pinca = null;
+tela.addEventListener("pointerdown", ev => {
+  tela.setPointerCapture(ev.pointerId);
+  dedos.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+  if (dedos.size === 2) { // começa a pinça: guarda a distância e o ponto do mundo sob o meio dos dedos
+    const [a, b] = [...dedos.values()];
+    pinca = { d: Math.hypot(a.x - b.x, a.y - b.y), k: cam.k, meio: paraMundo((a.x + b.x) / 2, (a.y + b.y) / 2) };
+    if (arrasto) arrasto.moveu = true;
+  } else if (dedos.size === 1) arrasto = { x: ev.clientX, y: ev.clientY, cx: cam.x, cy: cam.y, moveu: false, tipo: ev.pointerType };
+});
+tela.addEventListener("pointermove", ev => {
+  if (!dedos.has(ev.pointerId)) return;
+  dedos.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+  if (pinca && dedos.size >= 2) {
+    const [a, b] = [...dedos.values()], mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    cam.alvo = null; seguir = null;
+    cam.k = limitarK(pinca.k * Math.hypot(a.x - b.x, a.y - b.y) / Math.max(1, pinca.d));
+    const agora = paraMundo(mx, my); cam.x += pinca.meio.x - agora.x; cam.y += pinca.meio.y - agora.y;
+    return;
+  }
+  if (!arrasto) return;
+  const dx = ev.clientX - arrasto.x, dy = ev.clientY - arrasto.y;
+  if (Math.hypot(dx, dy) > (arrasto.tipo === "touch" ? 8 : 4)) arrasto.moveu = true;
+  if (arrasto.moveu) { cam.alvo = null; seguir = null; cam.x = arrasto.cx - (dx * dpr) / cam.k; cam.y = arrasto.cy - (dy * dpr) / cam.k; tela.style.cursor = "grabbing"; }
+});
+function soltarDedo(ev) {
+  dedos.delete(ev.pointerId);
+  if (dedos.size < 2) pinca = null;
+  if (dedos.size === 1) { const [p] = [...dedos.values()]; arrasto = { x: p.x, y: p.y, cx: cam.x, cy: cam.y, moveu: true }; }   // o dedo que ficou continua arrastando
+}
+tela.addEventListener("pointercancel", ev => { soltarDedo(ev); if (!dedos.size) arrasto = null; });
+tela.addEventListener("pointerup", ev => {
+  const toque = arrasto && !arrasto.moveu && dedos.size === 1;
+  soltarDedo(ev); tela.style.cursor = "";
+  if (dedos.size) return;
+  arrasto = null;
+  if (!toque || !mundo) return;
+  const p = paraMundo(ev.clientX, ev.clientY);
+  const selo = seloEm(p);
+  if (selo && esperaVoce(selo)) { window.open(selo.trabalho.url, "_blank", "noopener"); return; }   // aprovar continua só no agentes.chat
+  const perto = agenteEm(p, ev.pointerType === "touch" ? 16 : 12);
+  if (perto) { focarAgente(perto); return; }
+  const s = [...predio.salas, ...predio.baixo].find(r => r.placaRet && p.x >= r.placaRet.x && p.x <= r.placaRet.x + r.placaRet.w + 20 && p.y >= r.placaRet.y && p.y <= r.placaRet.y + r.placaRet.h);
+  if (s) { focarSala(s); return; }
+  if (Brincar.tocar(p, ev.pointerType)) return;   // objeto do mapa (TV, café, sino…)
+  fecharFicha();
+});
+// cartão rápido ao passar o mouse (no toque, a ficha faz esse papel)
+tela.addEventListener("pointermove", ev => {
+  const card = $("cartao-agente");
+  if (ev.pointerType !== "mouse" || !mundo || (arrasto && arrasto.moveu)) { card.hidden = true; return; }
+  const p = paraMundo(ev.clientX, ev.clientY);
+  const perto = seloEm(p) || agenteEm(p, 11), objeto = Brincar.sobre(p);
+  tela.style.cursor = perto || objeto ? "pointer" : "";
+  mostrarCartao(perto, ev.clientX, ev.clientY);
+});
+// cartão rápido de um agente perto do ponteiro (null esconde); a maquete 3D usa o mesmo
+function mostrarCartao(perto, cx, cy) {
+  const card = $("cartao-agente");
+  if (!perto || perto.id === selecionado) { card.hidden = true; return; }
+  card.replaceChildren(mini(perto.ap), elem("strong", null, perto.nome), elem("span", `chip ${classeDe(perto)}`, textoEstado(perto)),
+    elem("p", null, perto.trabalho ? perto.trabalho.rotulo : ondeEsta(perto)));
+  card.append(elem("p", "dica", esperaVoce(perto) ? "Toque no selo para abrir o pedido; no agente, para ver o cartão" : "Clique para abrir o cartão"));
+  const r = $("palco").getBoundingClientRect();
+  card.style.left = `${Math.min(cx - r.left + 14, r.width - 254)}px`; card.style.top = `${Math.max(8, cy - r.top - 20)}px`;
+  card.hidden = false;
+}
+tela.addEventListener("pointerleave", () => { $("cartao-agente").hidden = true; Brincar.sobre({ x: -1e9, y: -1e9 }); });
+tela.addEventListener("dblclick", ev => { const s = predio && salaEm(paraMundo(ev.clientX, ev.clientY)); if (s) { fecharFicha(); focarSala(s); } });
+$("zoom-mais").addEventListener("click", () => (maquete3d ? maquete3d.zoom(1.4) : moverCamera({ x: cam.x, y: cam.y, k: cam.k * 1.4 })));
+$("zoom-menos").addEventListener("click", () => { seguir = null; if (maquete3d) maquete3d.zoom(1 / 1.4); else moverCamera({ x: cam.x, y: cam.y, k: cam.k / 1.4 }); });
+$("ver-tudo").addEventListener("click", () => { fecharFicha(); marcarSala(null); if (maquete3d) maquete3d.verTudo(); else verTudo(); });
+function telaCheia(ligar) {
+  const c = $("palco-cartao"); if (ligar === c.classList.contains("cheio")) return;
+  if (!ligar && window.innerWidth <= 760) fecharMaquete();   // celular: a maquete só existe em tela cheia; saindo dela, volta o cartão 2D
+  c.classList.toggle("cheio", ligar); document.body.classList.toggle("travado", ligar);
+  $("tela-cheia").setAttribute("aria-pressed", String(ligar)); $("tela-cheia").setAttribute("aria-label", ligar ? "Sair da tela cheia" : "Mapa em tela cheia");
+  $("tela-cheia").querySelector(".ic").replaceChildren(iconeSvg(ligar ? "recolher" : "expandir"));
+  ajustarEscala();
+  if (!ligar && window.innerWidth <= 760) $("abrir-cheia").focus();   // o botão de sair some com a tela cheia: o foco não cai no body
+}
+$("tela-cheia").addEventListener("click", () => telaCheia(!$("palco-cartao").classList.contains("cheio")));
+$("abrir-cheia").addEventListener("click", () => { telaCheia(true); $("tela-cheia").focus(); });   // celular: o foco vai para o botão que sai da tela cheia
+document.addEventListener("keydown", ev => {
+  if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && ev.key.toLowerCase() === "k") { ev.preventDefault(); irParaBusca(); return; }
+  if (ev.key === "Escape") {
+    if (!$("painel-som").hidden) { fecharPainelSom(true); return; }
+    if (gavetaAberta()) { fecharGaveta(true); return; }
+    if (!$("ficha").hidden) { fecharFicha(); (maquete3d ? $("palco").querySelector("canvas.maquete") : tela).focus(); return; }
+    if ($("palco-cartao").classList.contains("cheio")) { telaCheia(false); return; }
+  }
+  if (!predio || $("v-escritorio").hidden || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  if (ev.key === "/" && !ev.ctrlKey && !ev.metaKey) { ev.preventDefault(); irParaBusca(); }
+  else if (ev.key === "+" || ev.key === "=") { if (maquete3d) maquete3d.zoom(1.3); else moverCamera({ x: cam.x, y: cam.y, k: cam.k * 1.3 }); }
+  else if (ev.key === "-") { seguir = null; if (maquete3d) maquete3d.zoom(1 / 1.3); else moverCamera({ x: cam.x, y: cam.y, k: cam.k / 1.3 }); }
+  else if (ev.key === "0") { fecharFicha(); if (maquete3d) maquete3d.verTudo(); else verTudo(); }
+});
+function marcarSala(s) { for (const b of $("salas").querySelectorAll("button")) b.setAttribute("aria-current", String(!!s && b.dataset.sala === s.nome)); }
+
+// ---------- maquete 3D: o mesmo prédio "dobrado" (maquete.js, baixado só quando a pessoa escolhe) ----------
+// Ponte só de leitura: a maquete não enxerga as variáveis daqui; lê o estado por estas funções.
+const ponteMaquete = Object.freeze({
+  predio: () => predio, atlas: () => atlas, config: () => config, calmo: menosMovimento,
+  corDaSala, iconeDaSala, salaEm, marcarSala,
+  falhou: (texto, focado) => { // o foco que estava na maquete volta ao botão do mapa (não cai no body); focado vem da maquete quando o canvas já saiu
+    const tinha = focado ?? (document.activeElement && document.activeElement.classList.contains("maquete"));
+    fecharMaquete(); avisoMaquete(texto);
+    if (tinha) ($("visao-3d").hidden ? tela : $("visao-3d")).focus();
+  },
+  // fatia 2: os agentes (leitura) e as ações que continuam no app.js
+  mundo: () => mundo, estadoDe, visivel, combina,
+  selecionado: () => selecionado, seguindo: () => seguir, pararDeSeguir: () => { seguir = null; },
+  tocarAgente: b => focarAgente(b),
+  abrirPedido: b => { if (esperaVoce(b)) window.open(b.trabalho.url, "_blank", "noopener"); },   // aprovar continua só no agentes.chat
+  cartao: (b, cx, cy) => mostrarCartao(b, cx, cy),
+  desenharPlaca: (c, s) => desenharPlaca(s, c),
+});
+let avisoAte = 0;
+function avisoMaquete(texto, fica) { // aviso em texto no palco (role="status"); o detalhe técnico vai só para o console
+  const a = $("aviso-maquete"); a.textContent = texto || "";
+  clearTimeout(avisoAte); if (texto && !fica) avisoAte = setTimeout(() => { a.textContent = ""; }, 7000);
+}
+function botaoVisao() {
+  const b = $("visao-3d"), em3d = !!maquete3d;
+  b.setAttribute("aria-label", em3d ? "Voltar ao mapa 2D" : "Ver a maquete 3D");
+  b.querySelector(".rotulo-ver").textContent = em3d ? "Mapa 2D" : "Maquete 3D";
+  b.querySelector(".ic").replaceChildren(iconeSvg(em3d ? "mapa" : "cubo"));
+}
+async function abrirMaquete() {
+  const b = $("visao-3d");
+  if (maquete3d || !predio || b.hidden || b.getAttribute("aria-busy") === "true") return;
+  b.setAttribute("aria-busy", "true"); avisoMaquete("Carregando a maquete…", true);
+  const falha = (e, semBotao) => {
+    b.removeAttribute("aria-busy"); if (semBotao) b.hidden = true;   // sem WebGL que funcione: o botão some até o fim da sessão
+    $("palco").dataset.maqueteErro = String((e && e.message) || e); console.warn("Maquete 3D:", e);
+    avisoMaquete("Este navegador não conseguiu abrir a maquete 3D. Seguimos no mapa.");
+  };
+  let mod;
+  try { mod = await import(`./maquete.js?v=${encodeURIComponent(versaoDaPagina)}`); } catch (e) { falha(e, false); return; }   // rede: dá para tentar de novo
+  try { maquete3d = mod.abrir($("palco"), ponteMaquete); } catch (e) { maquete3d = null; falha(e, true); return; }
+  b.removeAttribute("aria-busy"); avisoMaquete("");
+  if (window.innerWidth <= 760) telaCheia(true);   // celular: no cartão de 268 px a maquete prenderia o gesto, sem controles
+  $("palco").classList.add("em-3d"); tela.hidden = true; $("cartao-agente").hidden = true;
+  $("modo-foto").hidden = true;   // o modo foto fotografa o mapa 2D
+  $("girar").hidden = false; maquete3d.girar($("girar").getAttribute("aria-pressed") === "true");
+  botaoVisao(); ajustarEscala();
+}
+function fecharMaquete() {
+  if (!maquete3d) return;
+  maquete3d.fechar(); maquete3d = null;
+  const u = new URL(location.href);   // voltou ao 2D: um ?visao=maquete (digitado ou do simular) não reabre a maquete no F5
+  if (u.searchParams.has("visao")) { u.searchParams.delete("visao"); history.replaceState(history.state, "", u.pathname + u.search + u.hash); }
+  $("palco").classList.remove("em-3d"); tela.hidden = false; $("modo-foto").hidden = false; $("girar").hidden = true;
+  botaoVisao(); ajustarEscala();
+}
+if (window.WebGL2RenderingContext) $("visao-3d").hidden = false;   // sem WebGL 2 o botão nem aparece
+$("visao-3d").addEventListener("click", () => { if (maquete3d) { fecharMaquete(); tela.focus(); } else abrirMaquete(); });
+// Girar: giro lento quando ninguém mexe (WCAG 2.2.2: dá para parar); vem desligado com menos movimento
+$("girar").setAttribute("aria-pressed", String(!menosMovimento.matches));
+$("girar").addEventListener("click", () => {
+  const ligar = $("girar").getAttribute("aria-pressed") !== "true";
+  $("girar").setAttribute("aria-pressed", String(ligar));
+  if (maquete3d) maquete3d.girar(ligar);
+});
+
+// ---------- relógio e atualizações de 1 s -----------------------------------------
+setInterval(() => {
+  const c = Ceu.agora(), mo = Vida.momento();
+  const f = (festa ? ` · ${festa.nome}` : "") + (mo ? ` · ${{ daily: "hora da daily", almoco: "almoço", cafe: "pausa do café" }[mo.nome]}` : "");
+  const completo = `${c.hora} · ${c.periodo} · ${Clima.texto()}${f}`, curto = Clima.texto(true);
+  const vivo = falhou ? "Sem conexão" : estado && estado.erro ? "Última leitura" : "Ao vivo";
+  $("relogio").textContent = `${vivo} · ${innerWidth <= 760 ? `${c.hora}${curto ? " · " + curto : ""}` : completo}`;
+  $("relogio").title = completo;
+  if (!predio || !mundo || document.hidden) return;
+  atualizarEstados(); atualizarSalas(); mostrarConexao();
+  if (!$("ficha").hidden) renderFicha();
+}, 1000);
+
+// ---------- menu lateral: fixo no computador (dá para recolher); gaveta no celular -------
+const menuLargo = matchMedia("(min-width: 901px)");
+let lateralRecolhida = false, focoAntesDaGaveta = null;
+try { lateralRecolhida = localStorage.getItem("escritorio:lateral") === "recolhida"; } catch (e) { /* aba anônima ou armazenamento bloqueado */ }
+function gavetaAberta() { return document.body.classList.contains("gaveta-aberta"); }
+function aplicarLateral() {
+  document.body.classList.toggle("lateral-recolhida", lateralRecolhida && menuLargo.matches);
+  if (menuLargo.matches) fecharGaveta();
+  medirFaixa();
+  $("abrir-menu").setAttribute("aria-label", menuLargo.matches ? "Mostrar o menu" : "Abrir o menu");
+  ajustarEscala();
+}
+function recolherLateral(recolher) {
+  lateralRecolhida = recolher;
+  try { localStorage.setItem("escritorio:lateral", recolher ? "recolhida" : "fixa"); } catch (e) { /* fica só nesta visita */ }
+  aplicarLateral();
+  (recolher ? $("abrir-menu") : $("recolher")).focus();
+}
+function abrirGaveta(naBusca) {
+  focoAntesDaGaveta = document.activeElement;
+  document.body.classList.add("gaveta-aberta"); $("veu").hidden = false;
+  $("abrir-menu").setAttribute("aria-expanded", "true");
+  $("principal").inert = $("topo").inert = true;   // o resto da página fica fora do Tab e do leitor de tela
+  (naBusca ? $("busca") : $("fechar-menu")).focus();
+}
+function fecharGaveta(devolverFoco) {
+  if (!gavetaAberta()) return;
+  document.body.classList.remove("gaveta-aberta"); $("veu").hidden = true;
+  $("abrir-menu").setAttribute("aria-expanded", "false");
+  $("principal").inert = $("topo").inert = false;
+  if (devolverFoco) (focoAntesDaGaveta && focoAntesDaGaveta.isConnected && focoAntesDaGaveta !== document.body ? focoAntesDaGaveta : $("abrir-menu")).focus();
+}
+// Ctrl K, "/" e a lupa da barra: o campo "Ir para…" da lateral (abre a gaveta ou mostra o menu recolhido)
+function irParaBusca() {
+  if (!menuLargo.matches) { if (!gavetaAberta()) abrirGaveta(true); else $("busca").focus(); return; }
+  if (lateralRecolhida) recolherLateral(false);
+  $("busca").focus();
+}
+// escolher sala ou agente na lateral leva ao mapa (e fecha a gaveta antes, para o foco ir à ficha)
+function irParaEscritorio() {
+  fecharGaveta();
+  if (location.hash && location.hash !== "#escritorio") { location.hash = "#escritorio"; rota(); }   // já mostra o mapa: o foco vai para a ficha
+}
+// faixa de demonstração ou de prévia presa no topo: a lateral fixa começa embaixo dela
+function medirFaixa() {
+  const f = document.querySelector("body > .faixa-demo");
+  document.documentElement.style.setProperty("--faixa", `${f && menuLargo.matches ? f.offsetHeight : 0}px`);
+}
+$("abrir-menu").addEventListener("click", () => (menuLargo.matches ? recolherLateral(false) : abrirGaveta(false)));
+$("recolher").addEventListener("click", () => recolherLateral(true));
+$("fechar-menu").addEventListener("click", () => fecharGaveta(true));
+$("veu").addEventListener("click", () => fecharGaveta(true));
+$("topo-busca").addEventListener("click", irParaBusca);
+menuLargo.addEventListener("change", aplicarLateral);
+for (const id of ["t-salas", "t-agentes"]) $(id).addEventListener("click", () => {   // seções recolhíveis da lateral
+  const b = $(id), abrir = b.getAttribute("aria-expanded") !== "true";
+  b.setAttribute("aria-expanded", String(abrir)); $(b.getAttribute("aria-controls")).hidden = !abrir;
+});
+aplicarLateral();
+
+// ---------- telas (rotas pelo #) ---------------------------------------------------
+function rota() {
+  if (gavetaAberta()) { fecharGaveta(); $("principal").focus({ preventScroll: true }); }   // item do menu na gaveta: o foco vai ao conteúdo
+  const r = (location.hash || "#escritorio").slice(1);
+  const TELAS = ["escritorio", "conversas", "aprovacoes", "personalizar", "ajuda"];
+  // na demonstração o Personalizar não existe: ele grava a marca no servidor de verdade
+  const valida = TELAS.includes(r) && !(r === "personalizar" && Brincar.demo) ? r : "escritorio";
+  for (const v of TELAS) $(`v-${v}`).hidden = v !== valida;
+  if (valida === "personalizar" && window.Personalizar) Personalizar.abrir(config);
+  document.querySelectorAll("[data-rota]").forEach(a => { if (a.dataset.rota === valida) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
+  if (valida !== "escritorio") telaCheia(false);
+  else ajustarEscala();
+}
+
+// ajuda: procurar nas perguntas, com o termo destacado, a contagem e "Copiar" nos comandos de terminal
+const faqOriginal = new Map();
+function prepararPergunta(d, q) {
+  if (!faqOriginal.has(d)) faqOriginal.set(d, d.innerHTML);
+  d.innerHTML = faqOriginal.get(d);   // conteúdo fixo do próprio index.html
+  const ok = !q || normalizar(d.textContent).includes(q);
+  if (q && ok) { // <mark> em cada ocorrência, ignorando acentos e maiúsculas
+    const nos = [], w = document.createTreeWalker(d, NodeFilter.SHOW_TEXT);
+    while (w.nextNode()) nos.push(w.currentNode);
+    for (const no of nos) {
+      const txt = no.nodeValue, mapa = [];
+      let norm = "";
+      for (let i = 0; i < txt.length; i++) for (const ch of normalizar(txt[i])) { norm += ch; mapa.push(i); }
+      let ini = norm.indexOf(q); if (ini < 0) continue;
+      const frag = document.createDocumentFragment(); let ultimo = 0;
+      for (; ini >= 0; ini = norm.indexOf(q, ini + q.length)) {
+        const a = mapa[ini], b = mapa[ini + q.length - 1] + 1;
+        frag.append(txt.slice(ultimo, a), elem("mark", null, txt.slice(a, b))); ultimo = b;
+      }
+      frag.append(txt.slice(ultimo)); no.replaceWith(frag);
+    }
+  }
+  for (const c of d.querySelectorAll("code.cmd")) {
+    const bt = elem("button", "copiar"); bt.type = "button"; bt.setAttribute("aria-label", `Copiar o comando: ${c.textContent}`);
+    const ic = elem("span", "ic"); ic.append(iconeSvg("copiar")); bt.append(ic, elem("span", null, "Copiar"));
+    bt.addEventListener("click", async () => {
+      let ok2 = true; try { await navigator.clipboard.writeText(c.textContent); } catch (e) { ok2 = false; }
+      bt.lastChild.textContent = ok2 ? "Copiado" : "Selecione e copie"; setTimeout(() => { bt.lastChild.textContent = "Copiar"; }, 1600);
+    });
+    c.after(bt);
+  }
+  return ok;
+}
+function buscarNaAjuda() {
+  const q = normalizar($("faq-busca").value.trim());
+  let n = 0;
+  for (const d of document.querySelectorAll(".faq details")) { const ok = prepararPergunta(d, q); d.hidden = !ok; if (ok) n++; if (q && ok) d.open = true; }
+  for (const h of document.querySelectorAll(".faq .faq-grupo, .faq .atalhos")) h.hidden = !!q;
+  $("faq-total").hidden = !q;
+  $("faq-total").textContent = n ? `${n} ${n === 1 ? "resposta" : "respostas"}` : "Nenhuma pergunta com esse termo.";
+}
+$("faq-busca").addEventListener("input", buscarNaAjuda);
+buscarNaAjuda();
+
+pintarIcones(document);
+window.addEventListener("hashchange", rota);
+window.addEventListener("resize", () => { medirFaixa(); ajustarEscala(); });
+rota();
+iniciar().catch(() => { falhou = true; mostrarConexao(); setTimeout(() => location.reload(), 10000); });

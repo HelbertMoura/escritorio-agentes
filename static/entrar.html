@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="pt-BR" data-cor="{{cor}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Entrar · {{empresa}}</title>
+  <link rel="icon" href="{{logo}}">
+  <link rel="stylesheet" href="entrar.css?v=12">
+</head>
+<body>
+  <main class="tela">
+    <section class="hero" aria-hidden="true">
+      <div class="marca"><img src="{{logo}}" alt="" width="36" height="36"><strong>{{empresa}}</strong><span class="exemplo" {{oculto_exemplo}}>Nome e logo de exemplo · troque no Personalizar</span></div>
+      <div class="chamada">
+        <span class="etiqueta">ESCRITÓRIO DE AGENTES</span>
+        <h1>Seu time de agentes trabalhando à vista.</h1>
+        <p>Veja quem está na mesa, quem está na sala comunal e quem espera a sua aprovação, sem abrir dez abas.</p>
+      </div>
+      <canvas id="desfile" class="desfile" aria-hidden="true"></canvas>
+      <ul class="legenda">
+        <li><i class="ponto verde"></i>Na mesa: trabalhando</li>
+        <li><i class="ponto ambar"></i>Esperando você</li>
+        <li><i class="ponto cinza"></i>Na sala comunal: livre</li>
+      </ul>
+    </section>
+    <section class="lado">
+      <form method="post" action="{{acao}}" class="cartao">
+        <div {{modo_entrar}}>
+          <h2>Entrar no escritório</h2>
+          <p class="suave">Use o usuário e a senha que você criou.</p>
+          <p id="ola" class="ola" hidden><span id="ola-txt"></span> <button id="nao-sou" class="nao-sou" type="button">Não é você?</button></p>
+        </div>
+        <div {{modo_primeiro}}>
+          <h2>Primeiro acesso</h2>
+          <p class="suave">Crie o usuário do escritório. O código de primeiro acesso vale uma vez só: depois disso, você entra com o usuário e a senha que criar aqui.</p>
+          <label for="codigo">Código de primeiro acesso</label>
+          <input id="codigo" name="codigo" autocomplete="one-time-code" inputmode="text">
+          <details class="onde">
+            <summary>Onde encontro o código?</summary>
+            <p>Com quem instalou o escritório: o código aparece no fim da instalação. Para ver de novo, quem administra o servidor roda <code>sudo escritorio-codigo</code>.</p>
+          </details>
+        </div>
+        <p class="erro" role="alert" {{oculto_erro}}><span class="erro-ic" aria-hidden="true">!</span><span>{{erro}}</span></p>
+        <label for="usuario">Usuário</label>
+        <input id="usuario" name="usuario" autocomplete="username" autocapitalize="none" required>
+        <label for="senha">Senha</label>
+        <div class="campo-senha">
+          <input id="senha" name="senha" type="password" autocomplete="current-password" required minlength="10" aria-describedby="caps">
+          <button class="ver-senha" type="button" aria-controls="senha" aria-pressed="false">Mostrar</button>
+        </div>
+        <p id="caps" class="caps" aria-live="polite"></p>
+        <div {{modo_primeiro}}>
+          <label for="confirmar">Confirmar senha</label>
+          <div class="campo-senha">
+            <input id="confirmar" name="confirmar" type="password" autocomplete="new-password" minlength="10">
+            <button class="ver-senha" type="button" aria-controls="confirmar" aria-pressed="false">Mostrar</button>
+          </div>
+        </div>
+        <button id="enviar" class="enviar" type="submit">Entrar</button>
+        <p class="rodape suave">Acesso só pela sua rede Tailscale.</p>
+      </form>
+      <footer class="parceria">
+        <p>Uma parceria <a href="https://agentes.chat" target="_blank" rel="noopener noreferrer" aria-label="agentes.chat (abre em nova aba)">agentes.chat</a>
+          + <a href="https://devmaniacs.com.br" target="_blank" rel="noopener noreferrer" aria-label="Dev Maniac's (abre em nova aba)">Dev Maniac's</a>
+          <span class="par-fonte">· <a href="{{fonte}}" target="_blank" rel="noopener" aria-label="Código-fonte, licença AGPL-3.0 (abre em nova aba)">Código-fonte (AGPL-3.0)</a></span></p>
+      </footer>
+    </section>
+  </main>
+  <script src="avatar.js?v=12"></script>
+  <script src="entrar.js?v=12"></script>
+</body>
+</html>

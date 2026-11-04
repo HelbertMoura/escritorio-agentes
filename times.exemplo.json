@@ -1,0 +1,79 @@
+{
+  "cor": "#4f8cff",
+  "times": [
+    {
+      "nome": "Diretoria",
+      "tipo": "gabinete",
+      "parede": 1,
+      "piso": 1,
+      "agentes": [
+        "atlas"
+      ],
+      "cor": "#eab308",
+      "icone": "coroa"
+    },
+    {
+      "nome": "Ops",
+      "tipo": "ops",
+      "parede": 3,
+      "piso": 4,
+      "agentes": [
+        "bento"
+      ],
+      "cor": "#10b981",
+      "icone": "servidor"
+    },
+    {
+      "nome": "Produto",
+      "tipo": "mesas",
+      "parede": 0,
+      "piso": 2,
+      "agentes": [
+        "cora",
+        "duda",
+        "eco"
+      ],
+      "cor": "#3b82f6",
+      "icone": "codigo"
+    },
+    {
+      "nome": "Vendas",
+      "tipo": "mesas",
+      "parede": 2,
+      "piso": 0,
+      "agentes": [
+        "faro",
+        "gaia"
+      ],
+      "cor": "#e8587a",
+      "icone": "grafico"
+    }
+  ],
+  "aparencia": {
+    "atlas": {
+      "color": "amber",
+      "eyes": "happy",
+      "accessory": "crown"
+    },
+    "bento": {
+      "color": "graphite",
+      "eyes": "round",
+      "accessory": "headset"
+    },
+    "cora": {
+      "color": "indigo",
+      "eyes": "wide",
+      "accessory": "antenna"
+    },
+    "faro": {
+      "color": "rose",
+      "eyes": "happy",
+      "accessory": "headphones"
+    }
+  },
+  "clima": {
+    "cidade": "São Paulo",
+    "lat": -23.55,
+    "lon": -46.633
+  }
+}
