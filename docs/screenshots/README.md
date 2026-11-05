@@ -4,6 +4,8 @@ Captured images for the README, retaken on 2026-11-05 (2D map, Conversations pag
 
 `docs/social-preview.png` (1280×640) is the repository's social preview. · É a prévia social do repositório.
 
+`docs/demo.gif` (800 px, 12 fps, 12 s, captions in Portuguese) is the animated demo at the top of the READMEs, cut from the demo-mode video; with "reduce motion" on, the READMEs show `01-escritorio-dia.png` instead. To redo it, run `gif.sh` next to the video (two ffmpeg passes: `palettegen=max_colors=192:stats_mode=diff`, then `paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle`, both with `fps=12,scale=800:-1:flags=lanczos`, from 3.2 s for 12 s) and copy the result here. · É a demonstração animada do topo dos READMEs, cortada do vídeo do modo demonstração; com "reduzir movimento" ligado, os READMEs mostram a `01-escritorio-dia.png`. Para refazer, rode o `gif.sh` ao lado do vídeo (duas passadas do ffmpeg, com os filtros acima) e copie o resultado para cá.
+
 **Rule · Regra:** fictional data only. Use demo mode (`?demo=1`) or a preview with fictional data (`times.exemplo.json` and a made-up `dados.json`). Never a real workspace, a real organization id or real agent names, and no browser address bar in the image. · Só dados fictícios: modo demonstração (`?demo=1`) ou uma prévia com dados inventados (`times.exemplo.json` e um `dados.json` fictício). Nunca um workspace real, o id de uma organização real ou nomes reais de agentes, e sem a barra de endereço do navegador na imagem.
 
 PNG, 1440×900 for desktop and 390×844 for phone. · PNG, 1440×900 no computador e 390×844 no celular.
