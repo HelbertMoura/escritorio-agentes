@@ -18,8 +18,6 @@ const menosMovimento = matchMedia("(prefers-reduced-motion: reduce)");
 const cam = { x: 0, y: 0, k: 1, alvo: null, ajustada: false };
 let dpr = 1, vw = 0, vh = 0;
 const $ = id => document.getElementById(id);
-const versaoDaPagina = new URL(document.currentScript.src).searchParams.get("v") || "";   // o import() da maquete usa o mesmo ?v
-let maquete3d = null;   // maquete 3D aberta (maquete.js); null = mapa 2D
 
 // ---------- carga --------------------------------------------------------------------
 async function json(url) {
@@ -31,6 +29,7 @@ function imagem(src) { return new Promise((ok, erro) => { const i = new Image();
 
 async function iniciar() {
   config = Brincar.demo ? Brincar.configDemo() : await json("api/config");   // demonstração: nada vem do servidor
+  Expediente.definir(config.expediente);   // sem a chave (demonstração, servidor antigo): 07:00 às 20:00
   const pasta = `tema/`;
   const mapaJson = await json(pasta + "atlas.json");
   const img = await imagem(`${pasta}atlas.png?v=${encodeURIComponent(mapaJson.versao || "")}`);
@@ -42,6 +41,7 @@ async function iniciar() {
   Object.defineProperty(config, "logo", { configurable: true, enumerable: true, get: () => logoAtual, set: v => { logoAtual = v; trocarLogo(v); } });
   festa = Festas.ativa();
   aplicarMarca();
+  paginaConversas();
   Brincar.iniciar();
   medirFaixa();
   if (Brincar.demo) Ceu.acelerar(8, 26);   // um dia de expediente em uns 6 minutos
@@ -51,7 +51,6 @@ async function iniciar() {
   await buscar();
   setInterval(buscar, 10000);
   requestAnimationFrame(quadro);
-  if (new URLSearchParams(location.search).get("visao") === "maquete") abrirMaquete();   // para prints e testes, como o ?hora=
 }
 
 function aplicarMarca() {
@@ -120,8 +119,10 @@ function montar(agentes) {
 }
 
 async function buscar() {
+  const pedido = performance.now();
   try {
     estado = Brincar.demo ? Brincar.estadoDemo() : await json("api/estado");
+    modoDoServidor(estado.modo_resposta, pedido);
     Clima.definir(estado.clima);
     // "Olá de novo" na tela de entrada: só o nome de quem já entrou com sucesso (o servidor só manda usuario com sessão válida)
     if (!Brincar.demo && typeof estado.usuario === "string" && estado.usuario.length <= 64) try { localStorage.setItem("escritorio:usuario", estado.usuario); } catch (e) { /* aba anônima ou armazenamento bloqueado */ }
@@ -130,7 +131,7 @@ async function buscar() {
     for (const s of predio.salas) for (const m of s.mesas || []) if (m.handle) mesas.set(m.handle, m);
     Vida.sincronizar(mundo, estado.agentes || [], estado.trabalhos || [], mesas, aparencia, novo);
     falhou = false;
-    desenharPainel(); desenharEventos(); mostrarConexao();
+    desenharPainel(); desenharEventos(); mostrarConexao(); paginaConversas();
     if (!$("ficha").hidden) renderFicha();
   } catch (e) {
     falhou = true; mostrarConexao();
@@ -149,7 +150,6 @@ function ajustarEscala() {
   tela.width = Math.round(vw * dpr); tela.height = Math.round(vh * dpr);
   tela.style.width = `${vw}px`; tela.style.height = `${vh}px`;
   if (!cam.ajustada) { verTudo(true); cam.ajustada = true; }
-  if (maquete3d) maquete3d.redimensionar(vw, vh, window.devicePixelRatio || 1);
 }
 
 // O zoom mínimo cobre o quadro inteiro (nunca sobra área vazia) e a câmera não sai do mundo.
@@ -163,7 +163,6 @@ function prenderCamera(c) {
 function verTudo(ja) { moverCamera({ x: predio.W / 2, y: predio.H / 2, k: encaixe() }, ja); }
 function moverCamera(alvo, ja) { alvo.k = limitarK(alvo.k); prenderCamera(alvo); if (ja) Object.assign(cam, alvo, { alvo: null }); else cam.alvo = alvo; }
 function focarSala(s) {
-  if (maquete3d) { seguir = null; maquete3d.focarSala(s); marcarSala(s); return; }
   const k = Math.min((vw * dpr) / (s.pw + 40), (vh * dpr) / (s.ph + 60));
   seguir = null;
   moverCamera({ x: s.px + s.pw / 2, y: s.py + s.ph / 2 - 6, k });
@@ -201,11 +200,7 @@ function quadro(t) {
     for (const e of mundo.eventos.splice(0)) Som.evento(e.nome || e, e);
     Som.teclado(Vida.digitando(mundo), t);
     Som.ambiente(true);
-    if (!maquete3d) desenharCena(t);
-    else if (!$("v-escritorio").hidden) { // em outra tela, a maquete não desenha
-      try { maquete3d.quadro(t, dt); }
-      catch (e) { $("palco").dataset.maqueteErro = String((e && e.message) || e); console.warn("Maquete 3D:", e); ponteMaquete.falhou("A maquete 3D parou neste navegador. Seguimos no mapa."); }
-    }
+    desenharCena(t);
   }
 }
 
@@ -557,13 +552,12 @@ function clarear(hex, k) {
 
 // Placa da sala em pixel art presa na parede, junto da porta (moldura, parafusos, ícone, nome) + quem está na mesa.
 // Tamanho fixo no mundo: cresce e diminui com o zoom como o resto do prédio; o mapa.js já reservou o espaço.
-// c: outro contexto (a maquete 3D pinta a placa na textura dela); devolve o contador, para ela só repintar quando ele muda.
-function desenharPlaca(s, c = ctx) {
-  const p = s.placa; if (!p) return "";
+function desenharPlaca(s) {
+  const p = s.placa, c = ctx; if (!p) return;
   const px = (x, y, w, h, cor) => { c.fillStyle = cor; c.fillRect(x, y, w, h); };
   const cor = corDaSala(s), txt = Mapa.nomePlaca(s.nome).toUpperCase(), h = Mapa.PLACA_H, contador = s.mesas && s.mesas.length;
   const w = Math.max(30, Math.min(p.w, p.max - (contador ? p.total - p.w : 0))), x = p.x, y = p.y;
-  if (c === ctx) s.placaRet = { x, y, w, h };
+  s.placaRet = { x, y, w, h };
   c.font = Mapa.PLACA_FONTE; c.textBaseline = "middle"; c.textAlign = "left";
   px(x - 1, y - 1, w + 2, h + 2, "#1b1a26");                 // moldura
   px(x, y, w, h, clarear(cor, -0.45));
@@ -577,15 +571,13 @@ function desenharPlaca(s, c = ctx) {
   const tinta = textoSobre(cor);   // placa clara (ex.: a recepção na cor da marca "Gelo") pede letra escura
   c.fillStyle = tinta === "#ffffff" ? "rgba(0,0,0,.35)" : "rgba(255,255,255,.3)"; c.fillText(txt, x + 17.5, y + h / 2 + 1.5, w - 23);
   c.fillStyle = tinta; c.fillText(txt, x + 17, y + h / 2 + 1, w - 23);
-  if (contador && (c !== ctx || cam.k / dpr >= 1)) {          // quem está na mesa, colado na placa (só quando dá para ler)
+  if (contador && cam.k / dpr >= 1) {                         // quem está na mesa, colado na placa (só quando dá para ler)
     const na = [...mundo.bonecos.values()].filter(b => b.lugar && b.lugar.tipo === "mesa" && b.lugar.mesa.sala === s && b.trabalho).length;
     const etq = `${na}/${s.mesas.filter(m => m.handle).length}`, lw = Math.ceil(c.measureText(etq).width) + 6;
     px(x + w + 2, y + 2, lw + 2, h - 4, "#1b1a26");
     px(x + w + 3, y + 3, lw, h - 6, na ? "#163a24" : "#26262b");
     c.fillStyle = na ? "#6ee7a0" : "#a1a1aa"; c.fillText(etq, x + w + 6, y + h / 2 + 1);
-    return etq;
   }
-  return "";
 }
 
 function arred(x, y, w, h, r) {
@@ -643,9 +635,6 @@ Object.assign(ICONES, {
   alvo:     ["...##...", "..####..", ".##..##.", "###..###", "###..###", ".##..##.", "..####..", "...##..."],
   encaixar: ["##....##", "#......#", "..####..", "..#++#..", "..#++#..", "..####..", "#......#", "##....##"],
   copiar:   ["..#####.", "..#...#.", "###...#.", "#.#...#.", "#.#####.", "#...#...", "#####...", "........"],
-  cubo:     ["..#####.", ".#+++##.", "#####+#.", "#...#+#.", "#...#+#.", "#...##..", "#####...", "........"],
-  girar:    ["..####..", ".#....#.", "#......#", "#...####", "#.....#.", ".#......", "..####..", "........"],
-  mapa:     ["........", "##.##.##", "#+#+#+##", "#+#+#+##", "#+#+#+##", "#+#+#+##", "##.##.##", "........"],
 });
 
 // Onde está e o que faz cada agente (o mapa e o painel usam a mesma resposta)
@@ -824,26 +813,28 @@ function focarAgente(b, { seguir: seg = false, foco = false } = {}) {
   selecionado = b.id;
   seguir = seg ? b.id : null;
   moverCamera({ x: b.x, y: b.y - 10, k: Math.max(cam.k, 3.2 * dpr) });
-  if (maquete3d) maquete3d.focarAgente(b);
   abrirFicha(b, foco);
   if (innerWidth <= 760 && !$("palco-cartao").classList.contains("cheio")) $("palco-cartao").scrollIntoView({ block: "start", behavior: menosMovimento.matches ? "auto" : "smooth" });
   desenharPainel();
 }
 function abrirFicha(b, foco) {
+  fecharConversa(false);
   selecionado = b.id; assinaturaFicha = "";
   renderFicha();
   $("ficha").hidden = false; $("cartao-agente").hidden = true;
   if (foco) $("ficha").focus({ preventScroll: true });
 }
 function fecharFicha() {
-  const estava = !$("ficha").hidden;
+  const estava = !$("ficha").hidden || !$("conversa").hidden;
+  fecharConversa(false);
   $("ficha").hidden = true; selecionado = null; seguir = null;
   if (estava && estado) desenharPainel();
 }
 function renderFicha() {
   const f = $("ficha"), b = boneco(selecionado);
   if (!b) { if (!f.hidden) fecharFicha(); return; }
-  const t = b.trabalho, chave = [b.id, t && t.status, t && t.rotulo, t && t.url, ondeEsta(b), seguir === b.id].join("|");
+  const t = b.trabalho, resp = itemParaResponder(b);
+  const chave = [b.id, t && t.status, t && t.rotulo, t && t.url, ondeEsta(b), seguir === b.id, resp && resp.id].join("|");
   if (chave === assinaturaFicha) { const q = f.querySelector(".ficha-tempo"); if (q && t) q.textContent = tempoNoEstado(t); return; }
   assinaturaFicha = chave;
   f.tabIndex = -1;
@@ -858,15 +849,500 @@ function renderFicha() {
   if (t) linha("Fazendo", document.createTextNode(t.rotulo || "Tarefa sem descrição"));
   linha("Onde", document.createTextNode(ondeEsta(b)));
   const acoes = elem("div", "acoes");
+  if (resp) { // uma caixa só: a resposta mora na página Conversas, e a ficha leva até ela
+    const rb = elem("button", "botao", "Responder"); rb.type = "button"; rb.setAttribute("aria-label", `Responder ${b.nome} na página Conversas`);
+    rb.addEventListener("click", () => irParaResposta(resp.id)); acoes.append(rb);
+  }
   if (t && t.url) {
-    const espera = /^waiting_/.test(t.status), a = elem("a", espera ? "botao" : "botao fantasma", t.status === "waiting_approval" ? "Revisar pedido" : t.status === "waiting_input" ? "Responder no agentes.chat" : "Abrir no agentes.chat");
+    const espera = /^waiting_/.test(t.status) && !resp, a = elem("a", espera ? "botao" : "botao fantasma", t.status === "waiting_approval" ? "Revisar pedido" : t.status === "waiting_input" && !resp ? "Responder no agentes.chat" : "Abrir no agentes.chat");
     a.href = t.url; a.target = "_blank"; a.rel = "noopener"; acoes.append(a);
   }
   const seg = elem("button", "botao fantasma seguir"); seg.type = "button"; seg.setAttribute("aria-pressed", String(seguir === b.id));
   const ic = elem("span", "ic"); ic.append(iconeSvg("alvo")); seg.append(ic, document.createTextNode(seguir === b.id ? "Seguindo" : "Seguir"));
   seg.addEventListener("click", () => { seguir = seguir === b.id ? null : b.id; renderFicha(); $("ficha").querySelector(".seguir").focus(); });   // a ficha é refeita: o foco volta ao botão novo
   acoes.append(seg);
+  if (t && t.url && conversaLigada()) {
+    const vc = elem("button", "botao fantasma ver-conversa", "Ver conversa"); vc.type = "button"; vc.setAttribute("aria-haspopup", "dialog");
+    vc.addEventListener("click", () => abrirConversa(b)); acoes.append(vc);
+  }
   f.replaceChildren(topo, dl, acoes);
+}
+
+// ---------- conversa do trabalho atual (contrato L, fase 1): só leitura pelo GET /api/conversa; texto puro, sem markdown
+// nem autolink. Aparece no lugar da ficha; o nome de pessoas nunca vem do servidor, então quem não é agente aparece como "Pessoa".
+const conversaLigada = () => !!config && (config.conversas === "ler" || config.conversas === "responder") && !Brincar.demo
+  && !["data", "hora", "clima"].some(k => new URLSearchParams(location.search).has(k));   // escondida na demonstração e na Simulação
+const ERROS_CONVERSA = { 404: "Esta conversa não está disponível agora: a tarefa pode ter terminado.", 429: "Muitas leituras de conversa agora. Tente de novo em um minuto.",
+  503: "O agentes.chat pediu uma pausa nas leituras. Tente de novo daqui a pouco.", 502: "O agentes.chat não respondeu agora. Tente de novo daqui a pouco." };
+let pedidoConversa = 0;
+function abrirConversa(b) {
+  const c = $("conversa"), t = b.trabalho;
+  const topo = elem("div", "conversa-topo"), nomes = elem("div");
+  const volta = elem("button", "fechar", "←"); volta.type = "button"; volta.setAttribute("aria-label", "Voltar à ficha"); volta.addEventListener("click", () => fecharConversa(true));
+  const h = elem("h2", null, "Conversa"); h.id = "conversa-titulo";
+  nomes.append(h, elem("p", null, `${b.nome} · tarefa atual`));
+  const x = elem("button", "fechar", "×"); x.type = "button"; x.setAttribute("aria-label", "Fechar a conversa"); x.addEventListener("click", () => { fecharFicha(); focoNoMapa(); });
+  topo.append(volta, nomes, x);
+  const aviso = elem("p", "conversa-estado"); aviso.setAttribute("role", "status");
+  const lista = elem("ol", "conversa-lista"); lista.setAttribute("aria-label", "Mensagens, da mais antiga para a mais nova"); lista.tabIndex = 0;
+  const pe = elem("div", "conversa-pe");
+  const atualizar = elem("button", "botao fantasma", "Atualizar"); atualizar.type = "button"; atualizar.addEventListener("click", () => carregarConversa(b));
+  const responder = elem("a", "botao", "Responder no agentes.chat"); responder.href = t.url; responder.target = "_blank"; responder.rel = "noopener";
+  pe.append(atualizar, responder);
+  c.replaceChildren(topo, aviso, lista, pe);
+  $("ficha").hidden = true; c.hidden = false; c.focus({ preventScroll: true });
+  carregarConversa(b);
+}
+function fecharConversa(voltar) {
+  const c = $("conversa"); if (c.hidden) return;
+  c.hidden = true; c.replaceChildren(); pedidoConversa++;   // uma leitura que ainda volte é descartada
+  if (!voltar) return;
+  if (boneco(selecionado)) { assinaturaFicha = ""; renderFicha(); $("ficha").hidden = false; ($("ficha").querySelector(".ver-conversa") || $("ficha")).focus(); }
+  else focoNoMapa();   // o agente saiu da leitura enquanto a conversa estava aberta
+}
+function focoNoMapa() { tela.focus(); }
+async function carregarConversa(b) {
+  const n = ++pedidoConversa, c = $("conversa"), aviso = c.querySelector(".conversa-estado"), lista = c.querySelector(".conversa-lista"), bt = c.querySelector(".conversa-pe button");
+  aviso.className = "conversa-estado"; aviso.textContent = "Carregando a conversa…"; lista.setAttribute("aria-busy", "true"); bt.disabled = true;
+  let r = null, d = null;
+  try { r = await fetch(`api/conversa?agente=${encodeURIComponent(b.id)}`, { cache: "no-store", credentials: "same-origin" }); d = await r.json().catch(() => null); }
+  catch (e) { r = null; }
+  if (n !== pedidoConversa) return;   // fechou ou pediu de novo enquanto esperava
+  lista.removeAttribute("aria-busy"); bt.disabled = false;
+  if (r && r.status === 401) { location.href = "/entrar"; return; }
+  if (!r || !r.ok || !d || !Array.isArray(d.mensagens)) {
+    const doServidor = d && typeof d.erro === "string" && d.erro.length <= 200 ? d.erro.charAt(0).toUpperCase() + d.erro.slice(1).replace(/\.?$/, ".") : "";
+    aviso.className = "conversa-estado ruim"; aviso.textContent = doServidor || (r && ERROS_CONVERSA[r.status]) || "Não deu para ler a conversa agora. Tente de novo.";
+    return;   // o que já estava na lista fica à vista
+  }
+  lista.replaceChildren(...d.mensagens.map(itemMensagem));
+  const q = d.mensagens.length, lida = typeof d.atualizado === "string" && !isNaN(Date.parse(d.atualizado)) ? ` · lida às ${horaDe(d.atualizado)}` : "";
+  aviso.textContent = q ? `${q} ${q === 1 ? "mensagem" : "mensagens"}${lida}` : "Ainda não há mensagens nesta conversa.";
+  lista.scrollTop = lista.scrollHeight;   // a mais nova fica embaixo, à vista
+}
+
+// uma mensagem (ficha e página Conversas): texto puro, sempre por textContent
+function itemMensagem(m) {
+  const agente = m.autor === "agente", li = elem("li", `msg ${agente ? "de-agente" : "de-pessoa"}`), cab = elem("div", "msg-cabeca");
+  cab.append(elem("strong", null, agente ? (typeof m.nome === "string" && m.nome ? m.nome : "Agente") : "Pessoa"));
+  if (typeof m.hora === "string" && !isNaN(Date.parse(m.hora))) { const tm = elem("time", null, horaDe(m.hora)); tm.dateTime = m.hora; cab.append(tm); }
+  const texto = typeof m.texto === "string" ? m.texto : "";
+  li.append(cab, elem("p", texto ? "msg-texto" : "msg-texto vazio", texto || "sem texto: cartão ou anexo; veja no agentes.chat"));
+  if (m.cortado === true) li.append(elem("p", "msg-nota", "Mensagem cortada; a inteira está no agentes.chat."));
+  const anexos = Number.isInteger(m.anexos) && m.anexos > 0 ? m.anexos : 0;
+  if (anexos) li.append(elem("p", "msg-nota", anexos === 1 ? "1 anexo, só no agentes.chat" : `${anexos} anexos, só no agentes.chat`));
+  return li;
+}
+
+// ---------- página Conversas (contrato P) ---------------------------------------------
+// A lista do dia vem pronta no /api/estado.conversas: ordenada, 7 campos, sem url nem canal. A conversa abre pelo id
+// estável (GET /api/conversa?id=) e só é relida quando o item muda (run_id, status ou fim) com a página à vista, ou
+// no "Atualizar": cada leitura conta no teto de 200 por dia, dividido com a ficha. Sem timer próprio.
+const GRUPOS_CONV = [["Esperando você", s => /^waiting_/.test(s), "Ninguém esperando você agora."],
+  ["Trabalhando", s => s === "running" || s === "still_running", "Ninguém trabalhando agora."],
+  ["Terminadas hoje", s => s === "terminou", "Nenhuma tarefa terminou hoje."]];
+const LED_CONV = { waiting_approval: "aprovacao", waiting_input: "pergunta", running: "trabalhando", still_running: "trabalhando", terminou: "fora" };
+let convAberta = null, convLida = "", convDesenho = "", pedidoConv = 0;   // id aberto; versão do item na última leitura pedida; lista desenhada
+const itensConv = () => (estado && Array.isArray(estado.conversas) ? estado.conversas.filter(i => i && typeof i.id === "string") : []);
+const versaoConv = it => `${it.run_id}|${it.status}|${it.terminou_em}`;
+const nomeConv = it => { const b = boneco(it.agente_id); return b ? b.nome : ((estado.agentes || []).find(a => a.id === it.agente_id) || {}).nome || "Agente"; };
+const rotuloConv = it => (typeof it.rotulo === "string" && it.rotulo) || "Tarefa sem título";
+const celularConv = () => matchMedia("(max-width: 760px)").matches;
+function situacaoConv(it) {
+  const desde = horaDe(it.desde), ate = horaDe(it.terminou_em);
+  if (it.status === "terminou") return `Terminou${ate ? ` às ${ate}` : ""}${desde ? ` · começou às ${desde}` : ""}`;
+  const t = { waiting_approval: "Esperando sua aprovação", waiting_input: "Esperando sua resposta", still_running: "Trabalhando há um tempo" }[it.status] || "Trabalhando";
+  return desde ? `${t} · desde ${desde}` : t;
+}
+function fotoConv(it) {
+  const b = boneco(it.agente_id);
+  if (b) return mini(b.ap);
+  const v = elem("span", "mini"); v.setAttribute("aria-hidden", "true"); return v;
+}
+
+// chamada a cada leitura do estado, ao entrar na tela e quando a aba volta a ficar visível
+function paginaConversas() {
+  const ligada = conversaLigada(), pronta = ligada && !!estado, itens = pronta ? itensConv() : [];
+  $("conv-breve").hidden = ligada;   // desligada, demonstração e Simulação: o "em breve" de antes
+  $("conv-reconectar").hidden = !(ligada && config.conversas === "responder" && config.pode_responder === false && !config.previa);   // a prévia nunca tem escrita
+  $("conv-pagina").hidden = !itens.length; $("conv-vazio").hidden = !pronta || itens.length > 0;
+  const n = f => itens.filter(i => f(i.status)).length, term = n(GRUPOS_CONV[2][1]);
+  textoSe($("conv-resumo"), !ligada ? "Ler e responder os agentes por aqui ainda não está disponível." : !pronta ? "Carregando as conversas…"
+    : !itens.length ? "Hoje · nenhuma conversa ainda"
+    : `Hoje · ${n(GRUPOS_CONV[0][1])} esperando você · ${n(GRUPOS_CONV[1][1])} trabalhando · ${term} ${term === 1 ? "terminada" : "terminadas"}`);
+  if (!pronta) return;
+  // a lista só é refeita quando algo nela muda (o foco no item continua no lugar)
+  const desenho = itens.map(i => `${i.id}|${versaoConv(i)}|${i.rotulo}|${i.desde}|${nomeConv(i)}`).join("\n") + `|${convAberta}`;
+  if (desenho !== convDesenho) { convDesenho = desenho; desenharListaConv(itens); }
+  if (!convAberta) { if (!$("conv-aberta").childElementCount) escolhaConv(); return; }
+  const it = itens.find(i => i.id === convAberta);
+  if (!it) { fecharConvPagina("Essa conversa saiu da lista de hoje (a lista recomeça à meia-noite e quando o serviço reinicia)."); return; }
+  const st = $("conv-aberta").querySelector(".cp-status"); if (st) textoSe(st, situacaoConv(it));
+  pintarCaixa(it);
+  // o item mudou (tarefa nova, outro status, terminou): relê, mas só com a página à vista. A conversa só é montada de
+  // novo quando a estrutura muda (virou terminada ou voltou a viver); no resto, o cabeçalho acompanha e a lista atual
+  // fica até a leitura nova dar certo (numa pausa, a última leitura continua à vista)
+  if (versaoConv(it) !== convLida && !document.hidden && !$("v-conversas").hidden) {
+    if ($("conv-aberta").dataset.fim !== String(it.status === "terminou")) remontarConvAberta(it); else ajustarConvAberta(it);
+    carregarConvPagina(it);
+  }
+}
+
+function desenharListaConv(itens) {
+  const lista = $("conv-lista"), focado = lista.contains(document.activeElement) ? document.activeElement.dataset.id : null;
+  lista.replaceChildren(...GRUPOS_CONV.map(([titulo, filtro, vazio]) => {
+    const sel = itens.filter(i => filtro(i.status)), g = elem("section", "cp-grupo"), h = elem("h2", null, titulo);
+    h.append(elem("b", null, String(sel.length))); g.append(h);
+    if (!sel.length) { g.append(elem("p", "cp-vazio-grupo", vazio)); return g; }
+    const ul = elem("ul");
+    for (const it of sel) {
+      const b = elem("button", "cp-item"), f = elem("span", "cp-foto"), rot = elem("span", "cp-rot"), nome = nomeConv(it);
+      b.type = "button"; b.dataset.id = it.id;
+      if (it.id === convAberta) b.setAttribute("aria-current", "true");
+      f.append(fotoConv(it), elem("i", `led ${LED_CONV[it.status] || "trabalhando"}`));
+      if (it.status === "waiting_approval") rot.append(elem("b", "selo-tipo aprovacao", "Aprovação"));
+      if (it.status === "waiting_input") rot.append(elem("b", "selo-tipo pergunta", "Pergunta"));
+      rot.append(elem("span", null, rotuloConv(it)));
+      const hora = it.status === "terminou" ? (it.terminou_em ? `até ${horaDe(it.terminou_em)}` : "") : horaDe(it.desde);
+      b.append(f, elem("span", "cp-nome", nome), elem("span", "cp-hora", hora), rot);
+      b.setAttribute("aria-label", `${nome}: ${rotuloConv(it)}. ${situacaoConv(it)}`);
+      b.addEventListener("click", () => abrirConvPagina(it.id));
+      const li = elem("li"); li.append(b); ul.append(li);
+    }
+    g.append(ul); return g;
+  }));
+  if (focado) { const b = lista.querySelector(`[data-id="${CSS.escape(focado)}"]`); if (b) b.focus({ preventScroll: true }); }
+}
+// setas para cima e para baixo andam pela lista (o Tab também)
+$("conv-lista").addEventListener("keydown", ev => {
+  if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp") return;
+  const bs = [...$("conv-lista").querySelectorAll(".cp-item")], i = bs.indexOf(document.activeElement);
+  if (i < 0) return;
+  ev.preventDefault(); bs[Math.max(0, Math.min(bs.length - 1, i + (ev.key === "ArrowDown" ? 1 : -1)))].focus();
+});
+
+function telaConv(t) { $("conv-pagina").dataset.tela = $("v-conversas").dataset.tela = t; }   // celular: lista ou conversa
+function escolhaConv(nota) { // nada aberto: no computador, o convite à direita (no celular, só a lista aparece)
+  const e = elem("div", "cp-escolha"), ic = elem("span", "ic ic-grande"); ic.dataset.icone = "balao"; ic.setAttribute("aria-hidden", "true");
+  e.append(ic, elem("h2", null, "Escolha uma conversa"), elem("p", null, nota || "As que esperam você ficam em cima. A lista é só de hoje e recomeça à meia-noite."));
+  $("conv-aberta").replaceChildren(e); pintarIcones(e);
+}
+function abrirConvPagina(id) {
+  const it = itensConv().find(i => i.id === id); if (!it) return;
+  convAberta = id; telaConv("conversa");
+  for (const b of $("conv-lista").querySelectorAll(".cp-item")) { if (b.dataset.id === id) b.setAttribute("aria-current", "true"); else b.removeAttribute("aria-current"); }
+  convDesenho = convDesenho.replace(/\|[^|]*$/, `|${id}`);   // a lista já está certa: não precisa refazer
+  montarConvAberta(it); carregarConvPagina(it);
+  const sec = $("conv-aberta");
+  if (celularConv()) sec.scrollIntoView({ block: "start" });
+  sec.focus({ preventScroll: true });
+}
+function fecharConvPagina(nota) {
+  if (!convAberta) return;
+  const id = convAberta; convAberta = null; convLida = ""; pedidoConv++;   // uma leitura que ainda volte é descartada
+  telaConv("lista"); escolhaConv(nota);
+  for (const b of $("conv-lista").querySelectorAll(".cp-item[aria-current]")) b.removeAttribute("aria-current");
+  convDesenho = convDesenho.replace(/\|[^|]*$/, "|null");
+  const b = $("conv-lista").querySelector(`[data-id="${CSS.escape(id)}"]`);
+  if (b && celularConv()) { b.scrollIntoView({ block: "center" }); b.focus({ preventScroll: true }); }   // volta ao item de onde saiu
+}
+function montarConvAberta(it) {
+  const sec = $("conv-aberta"), fim = it.status === "terminou", nome = nomeConv(it);
+  const topo = elem("div", "cp-topo"), v = elem("button", "cp-voltar", "←"), txt = elem("div"), h = elem("h2", null, `${nome} · ${rotuloConv(it)}`);
+  v.type = "button"; v.setAttribute("aria-label", "Voltar às conversas"); v.addEventListener("click", () => fecharConvPagina());
+  h.id = "conv-aberta-titulo"; txt.append(h, elem("p", "cp-status", situacaoConv(it)));
+  topo.append(v, fotoConv(it), txt);
+  const partes = [topo];
+  if (fim) {
+    const f = elem("p", "cp-fim"), t = elem("span"), ate = horaDe(it.terminou_em);
+    t.append(elem("strong", null, `Tarefa terminada${ate ? ` às ${ate}` : ""}. `), "A conversa mostra só até o fim da tarefa; o que veio depois no canal não aparece aqui.");
+    f.append(elem("i", "led fora"), t); partes.push(f);
+  }
+  const aviso = elem("p", "cp-aviso"); aviso.setAttribute("role", "status"); aviso.hidden = true;
+  const est = elem("p", "conversa-estado"); est.setAttribute("role", "status");
+  const lista = elem("ol", "conversa-lista"); lista.setAttribute("aria-label", "Mensagens, da mais antiga para a mais nova"); lista.tabIndex = 0;
+  const pe = elem("div", "cp-pe");
+  pe.append(caixaResposta(it));
+  const ac = elem("div", "cp-acoes"), at = elem("button", "botao fantasma cp-atualizar", "Atualizar");
+  at.type = "button"; at.addEventListener("click", () => {
+    if (at.getAttribute("aria-disabled") === "true") return;   // carregando ou na pausa
+    const i = itensConv().find(x => x.id === convAberta); if (i) carregarConvPagina(i);
+  });
+  const ext = elem("a", "botao secundario cp-externo", it.status === "waiting_approval" ? "Revisar no agentes.chat" : fim ? "Abrir no agentes.chat" : "Responder no agentes.chat");
+  ext.target = "_blank"; ext.rel = "noopener"; ext.hidden = true;   // o link chega com a leitura (a lista não tem url)
+  ac.append(at, ext); pe.append(ac);
+  partes.push(aviso, est, lista, pe);
+  sec.replaceChildren(...partes); sec.dataset.fim = String(fim); sec.dataset.run = "";
+  pintarCaixa(it);
+}
+function remontarConvAberta(it) { // o foco que estava dentro da conversa volta para a peça equivalente (ou para a conversa)
+  const sec = $("conv-aberta"), ativo = sec.contains(document.activeElement) ? document.activeElement : null;
+  const classe = ativo && ["cp-atualizar", "cp-externo", "cp-voltar", "conversa-lista", "cp-texto", "cp-enviar"].find(c => ativo.classList.contains(c));
+  const ta = sec.querySelector(".cp-texto"), rascunho = ta ? ta.value : "";   // o texto que estava sendo escrito não se perde
+  montarConvAberta(it);
+  if (rascunho) { sec.querySelector(".cp-texto").value = rascunho; contarResposta(); }
+  if (ativo) (classe && sec.querySelector(`.${classe}:not([hidden]):not(:disabled)`) || sec).focus({ preventScroll: true });
+}
+function ajustarConvAberta(it) { // mesma estrutura: só o título, o status, a caixa e o rótulo do link
+  const sec = $("conv-aberta"), h = sec.querySelector("#conv-aberta-titulo");
+  if (h) textoSe(h, `${nomeConv(it)} · ${rotuloConv(it)}`);
+  pintarCaixa(it);
+}
+async function carregarConvPagina(it) {
+  const n = ++pedidoConv, sec = $("conv-aberta"), est = sec.querySelector(".conversa-estado"), aviso = sec.querySelector(".cp-aviso");
+  const lista = sec.querySelector(".conversa-lista"), bt = sec.querySelector(".cp-atualizar"), ext = sec.querySelector(".cp-externo");
+  if (!est) return;
+  convLida = versaoConv(it);   // mesmo se falhar: a releitura automática só volta quando o item mudar de novo (orçamento)
+  est.textContent = "Carregando a conversa…"; lista.setAttribute("aria-busy", "true"); bt.setAttribute("aria-disabled", "true");
+  pintarCaixa(it);
+  let r = null, d = null;
+  try { r = await fetch(`api/conversa?id=${encodeURIComponent(it.id)}`, { cache: "no-store", credentials: "same-origin" }); d = await r.json().catch(() => null); }
+  catch (e) { r = null; }
+  if (n !== pedidoConv) return;   // fechou ou pediu de novo enquanto esperava
+  lista.removeAttribute("aria-busy"); bt.removeAttribute("aria-disabled");
+  const atual = itensConv().find(x => x.id === it.id) || it;
+  if (r && r.status === 401) { if (!sec.querySelector(".cp-texto").value) location.href = "/entrar"; else avisoEnvio("ruim", "Sua sessão acabou. Copie o texto e entre de novo."); return; }   // com rascunho, não some com ele
+  const tinha = lista.childElementCount > 0;
+  if (!r || !r.ok || !d || !Array.isArray(d.mensagens)) {
+    const doServidor = d && typeof d.erro === "string" && d.erro.length <= 200 ? d.erro.charAt(0).toUpperCase() + d.erro.slice(1).replace(/\.?$/, ".") : "";
+    const pausa = !!r && (r.status === 503 || r.status === 429), dia = pausa && r.status === 429 && /hoje/i.test(doServidor);
+    aviso.hidden = false; aviso.className = `cp-aviso${dia ? " neutro" : pausa ? "" : " ruim"}`;   // pausa: âmbar; teto do dia: neutro
+    aviso.textContent = (doServidor || (r && ERROS_CONVERSA[r.status]) || "Não deu para ler a conversa agora. Tente de novo.")
+      + (tinha ? " A conversa abaixo é a última leitura." : "") + (dia ? " Dá para ler no agentes.chat." : "");
+    est.textContent = tinha ? est.dataset.ultima || "" : "";
+    if (pausa) { bt.setAttribute("aria-disabled", "true"); setTimeout(() => { if (n === pedidoConv) bt.removeAttribute("aria-disabled"); }, 60000); }   // espera antes de pedir de novo
+    pintarCaixa(atual);
+    return;   // o que já estava na lista fica à vista
+  }
+  aviso.hidden = true;
+  if (typeof d.url === "string" && /^https:\/\//.test(d.url)) { ext.href = d.url; ext.hidden = false; }
+  sec.dataset.run = it.run_id;   // o envio leva o run_id da conversa que está à vista
+  pintarCaixa(atual);
+  const ta = sec.querySelector(".cp-texto");
+  if (sec.dataset.focarTexto && !ta.disabled && (document.activeElement === sec || document.activeElement === document.body)) ta.focus({ preventScroll: true });
+  delete sec.dataset.focarTexto;
+  const fim = d.ate != null, itens = d.mensagens.map(itemMensagem);   // ate: terminada, já cortada no fim da tarefa (A1)
+  if (fim && itens.length) { const ate = horaDe(it.terminou_em); itens.push(elem("li", "cp-corte", `Fim da tarefa${ate ? ` · ${ate}` : ""}`)); }
+  lista.replaceChildren(...itens);
+  const q = d.mensagens.length, lida = typeof d.atualizado === "string" && !isNaN(Date.parse(d.atualizado)) ? ` · lida às ${horaDe(d.atualizado)}` : "";
+  est.textContent = est.dataset.ultima = q ? `${q} ${q === 1 ? "mensagem" : "mensagens"}${lida}`
+    : fim ? "As mensagens desta tarefa já saíram das 20 mais recentes do canal; veja no agentes.chat." : "Ainda não há mensagens nesta conversa.";
+  lista.scrollTop = lista.scrollHeight;   // a mais nova fica embaixo, à vista
+}
+// a aba voltou a ficar visível: se o item aberto mudou enquanto ela estava escondida, relê agora
+document.addEventListener("visibilitychange", () => { if (!document.hidden) paginaConversas(); });
+
+// ---------- resposta pela página Conversas (fase R) -------------------------------------
+// O modo resposta vive no servidor (1 h renovada a cada envio, teto de 8 h, só nesta sessão do navegador): o navegador só
+// mostra o tempo que o /api/estado manda e a contagem local preenche os 10 s entre as leituras. A senha abre o modo e
+// nunca é guardada. Uma caixa só, na página; a ficha leva até ela. Os erros das rotas novas vêm como {erro, mensagem}.
+const RESPOSTA_MAX = 2000;   // depois da limpeza do servidor; o corpo do POST vai até 8 KB
+const respostaLigada = () => conversaLigada() && config.conversas === "responder" && config.pode_responder === true;
+let modoAte = 0, modoMudou = 0;   // performance.now() em que o modo fecha (0: fechado); quando ele mudou aqui por último
+function modoDoServidor(m, pedido) {
+  if (pedido < modoMudou) return;   // leitura pedida antes de abrir ou fechar aqui: já está velha
+  const resta = m && Number.isFinite(m.resta_s) && Number.isFinite(m.teto_s) ? Math.min(m.resta_s, m.teto_s) : 0;
+  modoAte = resta > 0 ? performance.now() + resta * 1000 : 0;
+  pintarSelo();
+}
+const modoAberto = () => modoAte > performance.now();
+function pintarSelo() {
+  const s = $("modo-resposta"), resta = modoAte - performance.now(), aberto = resta > 0 && respostaLigada();
+  if (!aberto && !s.hidden && s.contains(document.activeElement)) $("principal").focus({ preventScroll: true });   // o foco não cai no body
+  s.hidden = !aberto; document.body.classList.toggle("modo-aberto", aberto);   // celular: a conversa aberta desconta o selo
+  if (aberto) textoSe($("modo-tempo"), resta < 60000 ? "fecha em menos de 1 min" : `fecha em ${Math.floor(resta / 60000)} min`);
+}
+setInterval(pintarSelo, 1000);
+$("modo-fechar").addEventListener("click", async () => {
+  const bt = $("modo-fechar");
+  if (bt.getAttribute("aria-disabled") === "true") return;
+  bt.setAttribute("aria-disabled", "true");
+  const r = await postarResposta("api/conversa/modo/fechar", {});
+  bt.removeAttribute("aria-disabled");
+  if (r.status !== 200) { $("modo-anuncio").textContent = r.status === 401 ? "Sua sessão acabou; o modo resposta já está fechado." : "Não deu para fechar o modo agora. Tente de novo."; if (r.status !== 401) return; }
+  else $("modo-anuncio").textContent = "Modo resposta fechado. O próximo envio pede a senha.";
+  modoMudou = performance.now(); modoAte = 0;
+  const ta = $("conv-aberta").querySelector(".cp-texto");
+  if (ta && !ta.disabled && !$("v-conversas").hidden) ta.focus({ preventScroll: true }); else $("principal").focus({ preventScroll: true });
+  pintarSelo();
+});
+
+async function postarResposta(url, corpo) {   // POST same-origin com JSON exato (o navegador manda o Origin); status 0: sem conexão
+  try {
+    const r = await fetch(url, { method: "POST", cache: "no-store", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo) });
+    return { status: r.status, d: await r.json().catch(() => null) };
+  } catch (e) { return { status: 0, d: null }; }
+}
+const mensagemDe = (r, padrao) => (r.d && typeof r.d.mensagem === "string" && r.d.mensagem && r.d.mensagem.length <= 300 ? r.d.mensagem.charAt(0).toUpperCase() + r.d.mensagem.slice(1).replace(/\.?$/, ".") : padrao);
+function chaveEnvio() {   // uma nova por mensagem (vira a idempotency_key no servidor)
+  if (crypto.randomUUID) return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16)); b[6] = b[6] & 15 | 64; b[8] = b[8] & 63 | 128;   // uuid4 fora de contexto seguro
+  const h = [...b].map(x => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
+// diálogo da senha: resolve true quando o servidor abriu o modo; o campo é limpo logo depois de ler
+let senhaFim = null;
+function pedirSenha() {
+  const d = $("dlg-senha");
+  if (!d.showModal) return Promise.resolve(false);
+  if (senhaFim) return Promise.resolve(false);   // já está aberto
+  $("senha-aviso").textContent = ""; $("senha-campo").value = ""; $("senha-usuario").value = (estado && estado.usuario) || "";
+  d.showModal(); $("senha-campo").focus();
+  return new Promise(res => { senhaFim = res; });
+}
+function fecharSenha(ok) {
+  const f = senhaFim; senhaFim = null;
+  $("senha-campo").value = "";
+  if ($("dlg-senha").open) $("dlg-senha").close();
+  if (f) f(ok);
+}
+$("dlg-senha").addEventListener("close", () => fecharSenha(false));   // Esc (cancel do próprio <dialog>)
+$("senha-cancelar").addEventListener("click", () => fecharSenha(false));
+$("form-senha").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const campo = $("senha-campo"), bt = $("senha-abrir"), aviso = $("senha-aviso"), senha = campo.value;
+  if (bt.getAttribute("aria-disabled") === "true") return;
+  campo.value = "";
+  if (!senha) { aviso.textContent = "Digite a senha do escritório."; campo.focus(); return; }
+  bt.setAttribute("aria-disabled", "true"); bt.textContent = "Abrindo…"; aviso.textContent = "";
+  const r = await postarResposta("api/conversa/modo", { senha });
+  bt.removeAttribute("aria-disabled"); bt.textContent = "Abrir e enviar";
+  if (r.status === 200 && r.d) { modoMudou = performance.now(); modoDoServidor(r.d, modoMudou); fecharSenha(true); return; }
+  const erro = r.d && r.d.erro;
+  aviso.textContent = r.status === 401 ? "Sua sessão acabou. Copie o texto, recarregue a página e entre de novo."
+    : r.status === 0 ? "Sem conexão com o escritório. Tente de novo."
+    : erro === "senha_incorreta" ? `${mensagemDe(r, "Senha incorreta.")} Depois de 8 erros em 15 minutos, o modo e o login travam por um tempo.`
+    : mensagemDe(r, erro === "tentativas_demais" ? "Muitas tentativas erradas. Espere uns 15 minutos e tente de novo."
+      : erro === "responder_desligado" ? "Responder por aqui está desligado neste escritório." : "Não deu para abrir o modo resposta. Tente de novo.");
+  campo.focus();
+});
+
+// a caixa de cada conversa aberta: sempre no lugar; desabilitada, diz o porquê
+function caixaResposta(it) {
+  const nome = nomeConv(it), c = elem("div", "cp-caixa");
+  const envio = elem("p", "cp-envio"); envio.setAttribute("role", "status"); envio.hidden = true;
+  const aviso = elem("p", "cp-nota cp-aviso-envio", "Sai no agentes.chat como a conta conectada, marcada “via Escritório dos agentes”. Aprovar é só no agentes.chat. Mensagens de agentes podem pedir coisas: confira antes de responder.");
+  const r = elem("div", "cp-resposta"), rot = elem("label", "oculto", `Mensagem para ${nome}`), ta = elem("textarea", "cp-texto");
+  const env = elem("button", "botao cp-enviar", "Enviar");
+  ta.id = "cp-texto"; rot.htmlFor = "cp-texto"; ta.rows = 1; ta.maxLength = RESPOSTA_MAX; ta.setAttribute("aria-describedby", "cp-motivo cp-dica cp-contador");
+  env.type = "button";
+  const linha = elem("div", "cp-linha"), dica = elem("span", "cp-dica"), cont = elem("span", "cp-contador");
+  dica.id = "cp-dica"; cont.id = "cp-contador";
+  const motivo = elem("p", "cp-motivo"); motivo.id = "cp-motivo";
+  linha.append(dica, cont); r.append(rot, ta, env);
+  ta.addEventListener("input", () => { contarResposta(); crescerTexto(ta); });
+  ta.addEventListener("keydown", ev => {
+    if (ev.key !== "Enter" || ev.isComposing || ev.shiftKey || ev.altKey) return;
+    if (ev.ctrlKey || ev.metaKey || !toqueConv()) { ev.preventDefault(); enviarResposta(); }   // no toque, Enter quebra a linha
+  });
+  env.addEventListener("click", enviarResposta);
+  c.append(envio, aviso, r, linha, motivo);
+  return c;
+}
+const toqueConv = () => matchMedia("(pointer: coarse)").matches;
+function crescerTexto(ta) { ta.style.height = "auto"; ta.style.height = `${Math.min(ta.scrollHeight + 2, 160)}px`; }
+function contarResposta() {
+  const ta = $("conv-aberta").querySelector(".cp-texto"), c = $("conv-aberta").querySelector(".cp-contador");
+  if (!ta || !c) return;
+  const n = ta.value.length;
+  textoSe(c, `${n.toLocaleString("pt-BR")} / ${RESPOSTA_MAX.toLocaleString("pt-BR")}`);
+  c.classList.toggle("perto", n > RESPOSTA_MAX - 200);
+}
+function motivoCaixa(it, sec) { // "" quando dá para enviar
+  if (!respostaLigada()) return config.conversas === "responder" ? "Responder por aqui não está disponível agora (a conexão com o agentes.chat é só de leitura). Use o agentes.chat."
+    : "Responder por aqui está desligado neste escritório. Use o agentes.chat.";
+  if (it.status === "waiting_approval") return "Pedido de aprovação: revise no agentes.chat.";
+  if (it.status === "running" || it.status === "still_running") return "Espere o agente terminar para responder, ou mande no agentes.chat.";
+  if (it.responder !== true) return "Esta conversa só recebe mensagens no agentes.chat (por enquanto, só as conversas diretas aceitam resposta por aqui).";
+  if (sec.dataset.run !== it.run_id) return sec.querySelector(".conversa-lista[aria-busy]") ? "Carregando a conversa…" : "A conversa mudou. Atualize para responder.";
+  return "";
+}
+function pintarCaixa(it) {
+  const sec = $("conv-aberta"), ta = sec.querySelector(".cp-texto");
+  if (!ta) return;
+  const motivo = motivoCaixa(it, sec), pode = !motivo, enviando = sec.dataset.enviando === "1";
+  const env = sec.querySelector(".cp-enviar"), ext = sec.querySelector(".cp-externo"), dica = sec.querySelector(".cp-dica");
+  if (!pode && !enviando && document.activeElement === ta) sec.focus({ preventScroll: true });   // a caixa vai desabilitar: o foco não cai no body
+  if (!enviando) { ta.disabled = !pode; env.disabled = !pode; }
+  ta.placeholder = pode ? `Escreva para ${nomeConv(it)}…` : "Indisponível nesta conversa";   // o motivo inteiro fica logo abaixo
+  textoSe(sec.querySelector(".cp-motivo"), motivo); sec.querySelector(".cp-motivo").hidden = pode;
+  sec.querySelector(".cp-aviso-envio").hidden = sec.querySelector(".cp-linha").hidden = !pode;
+  textoSe(dica, toqueConv() ? "Toque em Enviar para mandar" : "Enter envia · Shift+Enter quebra a linha");
+  contarResposta();
+  if (ext) textoSe(ext, pode ? "Mandar imagem ou arquivo no agentes.chat" : it.status === "waiting_approval" ? "Revisar no agentes.chat" : it.status === "terminou" ? "Abrir no agentes.chat" : "Responder no agentes.chat");
+}
+function avisoEnvio(tipo, texto, link) { // link: "Abrir no agentes.chat" na thread, quando o envio só pode sair por lá
+  const p = $("conv-aberta").querySelector(".cp-envio"); if (!p) return;
+  p.className = `cp-envio ${tipo}`; p.textContent = texto; p.hidden = !texto;
+  if (link) { const a = elem("a", null, "Abrir no agentes.chat"); a.href = link; a.target = "_blank"; a.rel = "noopener"; p.append(" ", a); }
+}
+const ERROS_ENVIO = { 400: "A mensagem não foi aceita. Confira o texto (de 1 a 2.000 caracteres) e tente de novo.",
+  403: "Responder por aqui está desligado neste escritório.", 404: "Essa conversa saiu da lista de hoje. Mande no agentes.chat.",
+  409: "A conversa mudou desde que você abriu. Atualize para ver o estado atual.", 429: "Limite de envios: até 5 por minuto e 50 por dia. Tente de novo daqui a pouco.",
+  503: "O agentes.chat pediu uma pausa nos envios. Tente de novo em alguns minutos.", 502: "O agentes.chat não confirmou o envio; ela pode ter saído. Confira a conversa antes de mandar de novo.",
+  0: "Sem resposta do escritório; a mensagem pode ter saído. Confira a conversa antes de mandar de novo." };
+// a última tentativa sem 200: o mesmo envio (mesmo item, run_id e texto) repete a chave, para um 502 ou uma queda de
+// conexão seguidos de um novo clique não duplicarem a mensagem; chave nova só depois de um 200 ou com outro texto ou item
+let tentativaResp = null;
+async function enviarResposta() {
+  const sec = $("conv-aberta"), ta = sec.querySelector(".cp-texto"), env = sec.querySelector(".cp-enviar");
+  const it = itensConv().find(x => x.id === convAberta);
+  if (!ta || !it || sec.dataset.enviando === "1" || ta.disabled) return;   // sem envio duplo
+  const texto = ta.value.trim();
+  if (!texto) { avisoEnvio("ruim", "Escreva a mensagem antes de enviar."); ta.focus(); return; }
+  if (!modoAberto() && !(await pedirSenha())) { ta.focus(); return; }   // cancelou a senha: o texto fica
+  const t = tentativaResp, mesmo = t && t.id === it.id && t.run_id === sec.dataset.run && t.texto === texto;
+  const corpo = { id: it.id, run_id: sec.dataset.run, texto, chave: mesmo ? t.chave : chaveEnvio() };
+  tentativaResp = { ...corpo };
+  const ocupado = sim => {
+    sec.dataset.enviando = sim ? "1" : ""; ta.readOnly = sim; textoSe(env, sim ? "Enviando…" : "Enviar");
+    if (sim) env.setAttribute("aria-disabled", "true"); else env.removeAttribute("aria-disabled");   // aria-disabled: o foco fica no botão
+  };
+  ocupado(true); avisoEnvio("", "");
+  let r = await postarResposta("api/conversa/responder", corpo);
+  if (r.status === 403 && r.d && r.d.erro === "modo_fechado") { // o modo venceu no servidor: senha de novo e o MESMO envio, com a mesma chave
+    modoMudou = performance.now(); modoAte = 0; pintarSelo();
+    ocupado(false);
+    if (!(await pedirSenha())) { avisoEnvio("neutro", "O modo resposta fechou. A mensagem não saiu; ela continua na caixa."); ta.focus(); return; }
+    ocupado(true);
+    r = await postarResposta("api/conversa/responder", corpo);
+  }
+  if (r.status === 200) tentativaResp = null;
+  if (convAberta !== it.id) return;   // saiu da conversa enquanto enviava: a caixa é outra
+  ocupado(false);
+  if (r.status === 200) {
+    if (r.d) { modoMudou = performance.now(); modoDoServidor(r.d, modoMudou); }
+    ta.value = ""; crescerTexto(ta); contarResposta();
+    avisoEnvio("ok", `Mensagem enviada às ${horaDe(new Date().toISOString())}. Para ver a resposta, use Atualizar (ou abra no agentes.chat).`);
+    ta.focus({ preventScroll: true });
+    const reler = () => { const atual = itensConv().find(x => x.id === it.id); if (atual && convAberta === it.id) carregarConvPagina(atual); };
+    reler();
+    setTimeout(() => { if (!document.hidden && !$("v-conversas").hidden) reler(); }, 20000);   // uma releitura a mais por envio (teto do dia: 50 envios)
+    return;
+  }
+  if (r.status === 401) { avisoEnvio("ruim", "Sua sessão acabou. Copie o texto e entre de novo; a mensagem não saiu."); return; }
+  const erro = r.d && r.d.erro;
+  if (erro === "modo_fechado") { modoMudou = performance.now(); modoAte = 0; pintarSelo(); }
+  const neutro = r.status === 429 || r.status === 503;
+  const ext = $("conv-aberta").querySelector(".cp-externo"), soLa = erro === "sem_thread" || erro === "tipo_nao_liberado";   // T1: canal só no agentes.chat
+  avisoEnvio(neutro || soLa ? "neutro" : "ruim", mensagemDe(r, soLa ? "Mande esta no agentes.chat." : ERROS_ENVIO[r.status] || "A mensagem não saiu. Tente de novo."),
+    soLa && ext && !ext.hidden ? ext.href : "");
+  if (r.status === 409 || r.status === 404) buscar();   // o estado novo ajusta a caixa (e o motivo, se ela fechar)
+  ta.focus({ preventScroll: true });
+}
+// ficha do agente: o item de hoje que aceita resposta (o da tarefa atual; sem tarefa, o último terminado)
+function itemParaResponder(b) {
+  if (!respostaLigada()) return null;
+  const t = b.trabalho;
+  return itensConv().find(i => i.agente_id === b.id && i.responder === true && (!t || i.run_id === t.run_id)) || null;
+}
+function irParaResposta(id) {
+  fecharFicha();
+  if (location.hash !== "#conversas") { location.hash = "#conversas"; rota(); }
+  if (convAberta !== id) abrirConvPagina(id);
+  const sec = $("conv-aberta"), ta = sec.querySelector(".cp-texto");
+  if (ta && !ta.disabled) ta.focus({ preventScroll: true }); else { sec.dataset.focarTexto = "1"; sec.focus({ preventScroll: true }); }   // abre o texto quando a leitura chegar
 }
 
 // ---------- busca por nome -----------------------------------------------------------
@@ -1071,13 +1547,15 @@ function mostrarConexao() {
     return;
   }
   if (!estado) return;
-  const semConexao = typeof estado.erro === "string" && /^o escritório ainda não está conectado/i.test(estado.erro);   // sem OAuth (escritorio.py, PermissaoNegada)
-  const doServidor = semConexao ? estado.erro.charAt(0).toUpperCase() + estado.erro.slice(1) + "." : "";
+  const erro = typeof estado.erro === "string" ? estado.erro : "";
+  const semConexao = /^o escritório ainda não está conectado/i.test(erro);   // sem OAuth (escritorio.py, PermissaoNegada)
+  const pausa = /^o agentes\.chat pediu uma pausa/i.test(erro);              // 429 do agentes.chat (escritorio.py, PAUSA_429)
+  const doServidor = semConexao || pausa ? erro.charAt(0).toUpperCase() + erro.slice(1).replace(/\.?$/, ".") : "";
   at.classList.toggle("erro", !!estado.erro); aoVivo.classList.toggle("erro", !!estado.erro);
-  textoSe(at, semConexao ? doServidor : estado.erro ? "O agentes.chat não respondeu na última leitura" : `Ao vivo · atualizado ${tempoDesde(estado.atualizado)}`);   // role=status: só anuncia quando muda
-  estadoUsuario(semConexao ? "Não conectado" : estado.erro ? "agentes.chat sem resposta" : "Conectado", !!estado.erro);
+  textoSe(at, doServidor || (estado.erro ? "O agentes.chat não respondeu na última leitura" : `Ao vivo · atualizado ${tempoDesde(estado.atualizado)}`));   // role=status: só anuncia quando muda
+  estadoUsuario(semConexao ? "Não conectado" : pausa ? "Em pausa" : estado.erro ? "agentes.chat sem resposta" : "Conectado", !!estado.erro);
   faixa.hidden = !estado.erro; faixa.classList.add("aviso-ambar");
-  if (estado.erro) textoSe($("faixa-erro-txt"), semConexao ? doServidor : "O agentes.chat não respondeu agora. Mostrando a última leitura.");   // textContent: o texto do servidor nunca vira HTML
+  if (estado.erro) textoSe($("faixa-erro-txt"), doServidor || "O agentes.chat não respondeu agora. Mostrando a última leitura.");   // textContent: o texto do servidor nunca vira HTML
 }
 // pé da lateral: quem entrou e o estado da conexão
 function estadoUsuario(texto, ruim) {
@@ -1191,7 +1669,7 @@ tela.addEventListener("pointermove", ev => {
   tela.style.cursor = perto || objeto ? "pointer" : "";
   mostrarCartao(perto, ev.clientX, ev.clientY);
 });
-// cartão rápido de um agente perto do ponteiro (null esconde); a maquete 3D usa o mesmo
+// cartão rápido de um agente perto do ponteiro (null esconde)
 function mostrarCartao(perto, cx, cy) {
   const card = $("cartao-agente");
   if (!perto || perto.id === selecionado) { card.hidden = true; return; }
@@ -1204,12 +1682,11 @@ function mostrarCartao(perto, cx, cy) {
 }
 tela.addEventListener("pointerleave", () => { $("cartao-agente").hidden = true; Brincar.sobre({ x: -1e9, y: -1e9 }); });
 tela.addEventListener("dblclick", ev => { const s = predio && salaEm(paraMundo(ev.clientX, ev.clientY)); if (s) { fecharFicha(); focarSala(s); } });
-$("zoom-mais").addEventListener("click", () => (maquete3d ? maquete3d.zoom(1.4) : moverCamera({ x: cam.x, y: cam.y, k: cam.k * 1.4 })));
-$("zoom-menos").addEventListener("click", () => { seguir = null; if (maquete3d) maquete3d.zoom(1 / 1.4); else moverCamera({ x: cam.x, y: cam.y, k: cam.k / 1.4 }); });
-$("ver-tudo").addEventListener("click", () => { fecharFicha(); marcarSala(null); if (maquete3d) maquete3d.verTudo(); else verTudo(); });
+$("zoom-mais").addEventListener("click", () => moverCamera({ x: cam.x, y: cam.y, k: cam.k * 1.4 }));
+$("zoom-menos").addEventListener("click", () => { seguir = null; moverCamera({ x: cam.x, y: cam.y, k: cam.k / 1.4 }); });
+$("ver-tudo").addEventListener("click", () => { fecharFicha(); marcarSala(null); verTudo(); });
 function telaCheia(ligar) {
   const c = $("palco-cartao"); if (ligar === c.classList.contains("cheio")) return;
-  if (!ligar && window.innerWidth <= 760) fecharMaquete();   // celular: a maquete só existe em tela cheia; saindo dela, volta o cartão 2D
   c.classList.toggle("cheio", ligar); document.body.classList.toggle("travado", ligar);
   $("tela-cheia").setAttribute("aria-pressed", String(ligar)); $("tela-cheia").setAttribute("aria-label", ligar ? "Sair da tela cheia" : "Mapa em tela cheia");
   $("tela-cheia").querySelector(".ic").replaceChildren(iconeSvg(ligar ? "recolher" : "expandir"));
@@ -1221,86 +1698,36 @@ $("abrir-cheia").addEventListener("click", () => { telaCheia(true); $("tela-chei
 document.addEventListener("keydown", ev => {
   if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && ev.key.toLowerCase() === "k") { ev.preventDefault(); irParaBusca(); return; }
   if (ev.key === "Escape") {
+    if ($("dlg-senha").open) return;   // o próprio <dialog> fecha com o Esc
     if (!$("painel-som").hidden) { fecharPainelSom(true); return; }
     if (gavetaAberta()) { fecharGaveta(true); return; }
-    if (!$("ficha").hidden) { fecharFicha(); (maquete3d ? $("palco").querySelector("canvas.maquete") : tela).focus(); return; }
+    if (!$("conversa").hidden) { fecharConversa(true); return; }
+    if (!$("v-conversas").hidden && convAberta && celularConv()) { fecharConvPagina(); return; }
+    if (!$("ficha").hidden) { fecharFicha(); tela.focus(); return; }
     if ($("palco-cartao").classList.contains("cheio")) { telaCheia(false); return; }
   }
   if (!predio || $("v-escritorio").hidden || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
   if (ev.key === "/" && !ev.ctrlKey && !ev.metaKey) { ev.preventDefault(); irParaBusca(); }
-  else if (ev.key === "+" || ev.key === "=") { if (maquete3d) maquete3d.zoom(1.3); else moverCamera({ x: cam.x, y: cam.y, k: cam.k * 1.3 }); }
-  else if (ev.key === "-") { seguir = null; if (maquete3d) maquete3d.zoom(1 / 1.3); else moverCamera({ x: cam.x, y: cam.y, k: cam.k / 1.3 }); }
-  else if (ev.key === "0") { fecharFicha(); if (maquete3d) maquete3d.verTudo(); else verTudo(); }
+  else if (ev.key === "+" || ev.key === "=") moverCamera({ x: cam.x, y: cam.y, k: cam.k * 1.3 });
+  else if (ev.key === "-") { seguir = null; moverCamera({ x: cam.x, y: cam.y, k: cam.k / 1.3 }); }
+  else if (ev.key === "0") { fecharFicha(); verTudo(); }
 });
 function marcarSala(s) { for (const b of $("salas").querySelectorAll("button")) b.setAttribute("aria-current", String(!!s && b.dataset.sala === s.nome)); }
 
-// ---------- maquete 3D: o mesmo prédio "dobrado" (maquete.js, baixado só quando a pessoa escolhe) ----------
-// Ponte só de leitura: a maquete não enxerga as variáveis daqui; lê o estado por estas funções.
-const ponteMaquete = Object.freeze({
-  predio: () => predio, atlas: () => atlas, config: () => config, calmo: menosMovimento,
-  corDaSala, iconeDaSala, salaEm, marcarSala,
-  falhou: (texto, focado) => { // o foco que estava na maquete volta ao botão do mapa (não cai no body); focado vem da maquete quando o canvas já saiu
-    const tinha = focado ?? (document.activeElement && document.activeElement.classList.contains("maquete"));
-    fecharMaquete(); avisoMaquete(texto);
-    if (tinha) ($("visao-3d").hidden ? tela : $("visao-3d")).focus();
-  },
-  // fatia 2: os agentes (leitura) e as ações que continuam no app.js
-  mundo: () => mundo, estadoDe, visivel, combina,
-  selecionado: () => selecionado, seguindo: () => seguir, pararDeSeguir: () => { seguir = null; },
-  tocarAgente: b => focarAgente(b),
-  abrirPedido: b => { if (esperaVoce(b)) window.open(b.trabalho.url, "_blank", "noopener"); },   // aprovar continua só no agentes.chat
-  cartao: (b, cx, cy) => mostrarCartao(b, cx, cy),
-  desenharPlaca: (c, s) => desenharPlaca(s, c),
-});
-let avisoAte = 0;
-function avisoMaquete(texto, fica) { // aviso em texto no palco (role="status"); o detalhe técnico vai só para o console
-  const a = $("aviso-maquete"); a.textContent = texto || "";
-  clearTimeout(avisoAte); if (texto && !fica) avisoAte = setTimeout(() => { a.textContent = ""; }, 7000);
-}
-function botaoVisao() {
-  const b = $("visao-3d"), em3d = !!maquete3d;
-  b.setAttribute("aria-label", em3d ? "Voltar ao mapa 2D" : "Ver a maquete 3D");
-  b.querySelector(".rotulo-ver").textContent = em3d ? "Mapa 2D" : "Maquete 3D";
-  b.querySelector(".ic").replaceChildren(iconeSvg(em3d ? "mapa" : "cubo"));
-}
-async function abrirMaquete() {
-  const b = $("visao-3d");
-  if (maquete3d || !predio || b.hidden || b.getAttribute("aria-busy") === "true") return;
-  b.setAttribute("aria-busy", "true"); avisoMaquete("Carregando a maquete…", true);
-  const falha = (e, semBotao) => {
-    b.removeAttribute("aria-busy"); if (semBotao) b.hidden = true;   // sem WebGL que funcione: o botão some até o fim da sessão
-    $("palco").dataset.maqueteErro = String((e && e.message) || e); console.warn("Maquete 3D:", e);
-    avisoMaquete("Este navegador não conseguiu abrir a maquete 3D. Seguimos no mapa.");
-  };
-  let mod;
-  try { mod = await import(`./maquete.js?v=${encodeURIComponent(versaoDaPagina)}`); } catch (e) { falha(e, false); return; }   // rede: dá para tentar de novo
-  try { maquete3d = mod.abrir($("palco"), ponteMaquete); } catch (e) { maquete3d = null; falha(e, true); return; }
-  b.removeAttribute("aria-busy"); avisoMaquete("");
-  if (window.innerWidth <= 760) telaCheia(true);   // celular: no cartão de 268 px a maquete prenderia o gesto, sem controles
-  $("palco").classList.add("em-3d"); tela.hidden = true; $("cartao-agente").hidden = true;
-  $("modo-foto").hidden = true;   // o modo foto fotografa o mapa 2D
-  $("girar").hidden = false; maquete3d.girar($("girar").getAttribute("aria-pressed") === "true");
-  botaoVisao(); ajustarEscala();
-}
-function fecharMaquete() {
-  if (!maquete3d) return;
-  maquete3d.fechar(); maquete3d = null;
-  const u = new URL(location.href);   // voltou ao 2D: um ?visao=maquete (digitado ou do simular) não reabre a maquete no F5
-  if (u.searchParams.has("visao")) { u.searchParams.delete("visao"); history.replaceState(history.state, "", u.pathname + u.search + u.hash); }
-  $("palco").classList.remove("em-3d"); tela.hidden = false; $("modo-foto").hidden = false; $("girar").hidden = true;
-  botaoVisao(); ajustarEscala();
-}
-if (window.WebGL2RenderingContext) $("visao-3d").hidden = false;   // sem WebGL 2 o botão nem aparece
-$("visao-3d").addEventListener("click", () => { if (maquete3d) { fecharMaquete(); tela.focus(); } else abrirMaquete(); });
-// Girar: giro lento quando ninguém mexe (WCAG 2.2.2: dá para parar); vem desligado com menos movimento
-$("girar").setAttribute("aria-pressed", String(!menosMovimento.matches));
-$("girar").addEventListener("click", () => {
-  const ligar = $("girar").getAttribute("aria-pressed") !== "true";
-  $("girar").setAttribute("aria-pressed", String(ligar));
-  if (maquete3d) maquete3d.girar(ligar);
-});
-
 // ---------- relógio e atualizações de 1 s -----------------------------------------
+// faixa acima do mapa enquanto o escritório está fechado; segue a hora do mapa (?hora, Simulação, demonstração)
+function mostrarExpediente(h) {
+  const fora = Expediente.fora(h), f = $("faixa-fora");
+  if (f.hidden === !fora) return;
+  f.hidden = !fora;
+  textoSe($("faixa-fora-txt"), `Fora do expediente · abre às ${Expediente.proximaAbertura()}`);
+  $("faixa-fora-mudar").hidden = Brincar.demo;   // na demonstração o Personalizar não abre
+}
+// "Mudar o horário" da faixa e a placa do expediente no mapa (brincar.js): abrem o Personalizar já no campo "Abre às"
+// (o rota() troca a tela no mesmo hashchange, antes)
+function abrirExpediente() { addEventListener("hashchange", () => $("m-abre").focus(), { once: true }); location.hash = "#personalizar"; }
+$("faixa-fora-mudar").addEventListener("click", ev => { ev.preventDefault(); abrirExpediente(); });
+
 setInterval(() => {
   const c = Ceu.agora(), mo = Vida.momento();
   const f = (festa ? ` · ${festa.nome}` : "") + (mo ? ` · ${{ daily: "hora da daily", almoco: "almoço", cafe: "pausa do café" }[mo.nome]}` : "");
@@ -1308,6 +1735,7 @@ setInterval(() => {
   const vivo = falhou ? "Sem conexão" : estado && estado.erro ? "Última leitura" : "Ao vivo";
   $("relogio").textContent = `${vivo} · ${innerWidth <= 760 ? `${c.hora}${curto ? " · " + curto : ""}` : completo}`;
   $("relogio").title = completo;
+  mostrarExpediente(c.h);
   if (!predio || !mundo || document.hidden) return;
   atualizarEstados(); atualizarSalas(); mostrarConexao();
   if (!$("ficha").hidden) renderFicha();
@@ -1382,6 +1810,7 @@ function rota() {
   const valida = TELAS.includes(r) && !(r === "personalizar" && Brincar.demo) ? r : "escritorio";
   for (const v of TELAS) $(`v-${v}`).hidden = v !== valida;
   if (valida === "personalizar" && window.Personalizar) Personalizar.abrir(config);
+  if (valida === "conversas") paginaConversas();
   document.querySelectorAll("[data-rota]").forEach(a => { if (a.dataset.rota === valida) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
   if (valida !== "escritorio") telaCheia(false);
   else ajustarEscala();

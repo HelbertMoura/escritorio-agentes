@@ -6,7 +6,7 @@
 
 ### A live pixel-art office for your [agentes.chat](https://agentes.chat) team
 
-**See who is at their desk, who is playing pool in the lounge and who is waiting for your approval. Read-only, every 15 seconds, no AI and no tokens spent.**
+**See who is at their desk, who is playing pool in the lounge and who is waiting for your approval. Read-only (except for the optional reply mode), every 30 seconds, no AI and no tokens spent.**
 
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](./LICENSE)
 ![Python 3.10+ stdlib only](https://img.shields.io/badge/Python-3.10%2B%20stdlib-3776ab?labelColor=1a1a1d)
@@ -23,9 +23,9 @@
 
 ## What it is
 
-Escritório de agentes ("agents' office") is a small self-hosted web page that turns your agentes.chat workspace into a living office. It reads agentes.chat through the external apps connector (MCP, **read-only** OAuth scope) every 15 seconds and draws your team as pixel-art people in a building that assembles itself from your teams.
+Escritório de agentes ("agents' office") is a small self-hosted web page that turns your agentes.chat workspace into a living office. It reads agentes.chat through the external apps connector (MCP, **read-only** OAuth scope; write only if you turn on the `"responder"` mode) every 30 seconds and draws your team as pixel-art people in a building that assembles itself from your teams.
 
-It **does not call any AI model** and does not spend tokens. Approving and answering always happens in agentes.chat: the office only shows what is going on and links you there.
+It **does not call any AI model** and does not spend tokens. Approving always happens in agentes.chat; answering too, except in the optional `"responder"` mode. Otherwise, the office only shows what is going on and links you there.
 
 **Who it is for:** teams and companies that run agents on [agentes.chat](https://agentes.chat) and want a glanceable, fun view of the team: on a wall screen, a second monitor or a phone. It is white-label: any company can install its own copy and brand it.
 
@@ -39,7 +39,6 @@ It **does not call any AI model** and does not spend tokens. Approving and answe
 - 🎉 **Holidays:** Christmas, New Year (fireworks), Carnival and Easter (calculated), Lunar New Year, Halloween, Festa Junina, Brazilian Independence Day, Programmers' Day, Diwali and more, with decorations, hats and lines.
 - 🎨 **Customization:** company name, accent color and logo from the **Customize** screen; teams, rooms, floors, walls, icons and avatars in `times.json`.
 - 🕹️ **Simulation:** a panel to preview the office on another date, time or weather (Christmas at night in the snow, for example). Nothing is saved: it only changes the URL of that tab, and a "Simulation" banner stays visible with "Back to real".
-- 🧊 **3D diorama (optional):** a voxel view of the same office, built with three.js and loaded only when you open it (needs WebGL 2; without it the button does not show up).
 - 📸 **Photo mode:** hides the interface and saves a PNG of the office.
 - 🧪 **Demo mode:** `?demo=1` shows fictional agents and an accelerated day, with nothing sent to or read from the server. Good for trying it out and for screenshots.
 - 🎥 **Camera:** zoom with the wheel or pinch, drag, double-click to focus a room, "Go to…" an agent (`/` or `Ctrl+K`), and keyboard shortcuts (`+`, `-`, `0`).
@@ -48,16 +47,16 @@ It **does not call any AI model** and does not spend tokens. Approving and answe
 
 ## Screenshots
 
-All screenshots come from **demo mode** (fictional agents and data), never from a real workspace. The full list, with how each one was taken, is in [`docs/screenshots/README.md`](./docs/screenshots/README.md).
+All screenshots come from **demo mode** or from a preview with **fictional data** (made-up agents, tasks and conversations), never from a real workspace. The full list, with how each one was taken, is in [`docs/screenshots/README.md`](./docs/screenshots/README.md).
 
 <table>
   <tr>
     <td width="50%" align="center">
-      <a href="./docs/screenshots/02-esperando-voce.png"><img src="./docs/screenshots/02-esperando-voce.png" alt="Approvals at a glance: a '!' over Bento, who is waiting for approval, and a '?' over Aurora, who has a question; the 'Waiting for you' list shows both requests with Review and Answer buttons" width="100%"></a>
+      <a href="./docs/screenshots/02-esperando-voce.png"><img src="./docs/screenshots/02-esperando-voce.png" alt="Approvals at a glance: a '!' over Hana, who is waiting for approval, and a '?' over Cacau, who has a question; the 'Waiting for you' list shows both requests with Review and Answer buttons" width="100%"></a>
       <p><em>Approvals at a glance: "!" and "?" on the map and the "Waiting for you" list.</em></p>
     </td>
     <td width="50%" align="center">
-      <a href="./docs/screenshots/03-noite-chuva.png"><img src="./docs/screenshots/03-noite-chuva.png" alt="The office at night in the rain: dark, empty team rooms, street lamps on and the whole team chatting and playing in the lounge" width="100%"></a>
+      <a href="./docs/screenshots/03-noite-chuva.png"><img src="./docs/screenshots/03-noite-chuva.png" alt="The office at night in the rain: dark, empty team rooms, street lamps on and most of the team chatting and playing in the lounge and the meeting room" width="100%"></a>
       <p><em>Night and rain: lights go off in empty rooms and the street lamps come on.</em></p>
     </td>
   </tr>
@@ -67,8 +66,8 @@ All screenshots come from **demo mode** (fictional agents and data), never from 
       <p><em>Holidays: Christmas night in the snow, from the Simulation panel.</em></p>
     </td>
     <td width="50%" align="center">
-      <a href="./docs/screenshots/05-maquete-3d.png"><img src="./docs/screenshots/05-maquete-3d.png" alt="The 3D diorama: a voxel version of the same office, rooms, furniture, trees and the street, seen at an angle from above under a blue sky" width="100%"></a>
-      <p><em>The optional 3D diorama, built with three.js.</em></p>
+      <a href="./docs/screenshots/05-conversas.png"><img src="./docs/screenshots/05-conversas.png" alt="The Conversations page with fictional data: today's list grouped into Waiting for you, Working and Finished today; Gaia's open conversation asks which time to offer a client, with a reply typed in the box below, and the 'Reply mode · closes in 59 min' badge with 'Close now' at the top" width="100%"></a>
+      <p><em>Conversations: today's tasks and, in the optional reply mode, a reply box.</em></p>
     </td>
   </tr>
 </table>
@@ -120,14 +119,16 @@ In `times.json` (start by copying `times.exemplo.json`; the installer does that 
 | `times[]` | `nome`, `tipo` (`mesas`, `ops`, `gabinete`), `cor`, `icone` (`codigo`, `megafone`, `servidor`, `coroa`, `grafico`, `pincel`, `estrela`…), `parede` (0–5), `piso` (0–9) and `agentes` (agentes.chat handles) |
 | `aparencia` | per handle: `color`, `eyes`, `accessory`, the same as in agentes.chat. Anyone not listed gets an automatic look of their own |
 | `clima` | `cidade`, `lat`, `lon` for real weather, from Open-Meteo (see the terms in [Third-party](#third-party)). Without `clima`, the weather is off and the sky stays clear |
+| `expediente` | office hours, `{"abre": "07:00", "fecha": "20:00"}` (HH:MM, the default). Outside them, agents without a task go home and a banner says when the office opens. `abre` later than `fecha` is a shift past midnight (`22:00` to `06:00`); the Customize screen overrides it |
+| `conversas` | `"ler"` adds **See conversation** to an agent's card and the **Conversations** page, with the tasks in progress and the ones that ended today: the latest 20 messages of each one's conversation (the task's thread; if no one wrote in it, the conversation's loose messages), read on demand (`read_conversation`, still the `read` scope). Off by default; read the warning in [Security](#security) before turning it on. `"responder"` does the same and lets you **send messages** to the agents in the day's direct conversations, from the Conversations page (`read write` scope; see [Security](#security)) |
 
-To test without waiting, add to the URL: `?hora=21.5`, `?clima=tempestade` (`chuva`, `garoa`, `neve`, `neblina`, `nublado`, `limpo`), `?data=2026-12-25` and `?visao=maquete` (3D). The **Simulation** panel builds these for you.
+To test without waiting, add to the URL: `?hora=21.5`, `?clima=tempestade` (`chuva`, `garoa`, `neve`, `neblina`, `nublado`, `limpo`) and `?data=2026-12-25`. The **Simulation** panel builds these for you.
 
 ## Security
 
 In short: the office is reachable **only on your tailnet**, it **fails closed** when its user file cannot be read, and **no secret ever reaches the browser**: the agentes.chat token stays on the server, and the browser only holds an HttpOnly session cookie.
 
-- **Read-only on agentes.chat:** OAuth scope `read`. A token with more permissions is refused.
+- **Read-only on agentes.chat:** OAuth scope `read`. A token with more permissions is refused. The exception is the `"responder"` mode (below), which asks for `read write`; `manage` is always refused.
 - **Passwords and sessions:**
   - passwords are stored as scrypt hashes (N=2^15, r=8, p=1), and the session travels in a `__Host-esc_sessao` cookie, HttpOnly, SameSite=Lax and Secure;
   - every form submission is checked by origin;
@@ -149,6 +150,12 @@ In short: the office is reachable **only on your tailnet**, it **fails closed** 
   sudo escritorio-codigo
   ```
 - **Unreadable `usuarios.json`:** if the file exists and cannot be read (permissions, empty file or broken JSON), the service does not start and the journal says why (`journalctl -u escritorio`). This way a corrupted file never reopens the first access. To get out: fix the owner and permissions (`escritorio`, 0600) or restore the backup. To start from scratch, delete the file.
+- **Conversations (`"conversas": "ler"`, off by default):** anyone who has the password, or sees a signed-in screen (a TV on the wall, for example), sees the list of the day's tasks, with each one's agent and subject, and reads the conversations of the tasks in progress and of the ones that ended today, until midnight Brasília time. It reads with what the connected agentes.chat account reads: that person's direct and private conversations and, in channels, what other people wrote (without their names). Turn it on only if that audience may read them. The server picks the conversation from the tasks it has seen itself (the browser never chooses a channel); for a task that has ended, it shows only the messages up to its end, cleans the text (no control or invisible characters), never sends people's names or attachments (only how many), caches each conversation for 60 seconds and allows at most 20 reads a minute and 200 a day, within the agentes.chat limit. Nothing from the conversations goes to disk or to the log. The day's list lives only in memory: it is gone at midnight and when the service restarts.
+- **Reply (`"conversas": "responder"`, off by default):** the office is no longer read-only. It asks agentes.chat for the `read write` scope ("Read and send tasks to agents"; switching modes needs a new connection at `/oauth/conectar`), and whoever opens **reply mode** **sends messages to the agents in the day's direct conversations**, as the connected account, and not only answers questions: each message may start a new task for the agent. For now, direct conversations only: for a channel task, reply in agentes.chat. Sensitive actions still ask for approval in agentes.chat, and approving happens only there. Each message lands in the task's thread, inside the direct conversation, marked "via Escritório dos agentes", and shows in the agentes.chat Audit. The Conversations page reads that thread, so the message and the agent's reply show there (use Refresh).
+  - **Reply mode:** the office password, confirmed again, unlocks sending for 1 hour, renewed by each successful message, with an 8-hour cap from the password. It is valid only in that browser and that session (another signed-in device does not inherit it), and it closes with "Close now", on sign-out and when the service restarts. Closing the browser closes it too, but only as best effort: browsers that restore sessions (and mobile browsers, which rarely close) keep the cookie; the server is what guarantees it (1 h, 8 h, sign-out). **Do not open reply mode on a shared screen; close it when you leave.**
+  - **Limits:** at most 5 messages a minute and 50 a day; a pause request from agentes.chat pauses only the sending. Each message's log line keeps the user, the agent, the task and the length, never the text.
+  - **Turn it off right away** (for example, if a message lands in the wrong place): 1) "Close now" on the mode badge; 2) `"ler"` in `times.json`, which applies without a restart; 3) in **Settings › AI apps**, on agentes.chat, disconnect "Escritório dos agentes".
+  - **Back to read-only:** switch to `"ler"` (or `"desligado"`) in `times.json`. The office revokes the write token and asks for a new, read-only connection; until then, reading stops too. An unreadable `times.json` or a typo revokes nothing (it only blocks sending). Then disconnect the old app in **Settings › AI apps**, on agentes.chat.
 - **Branding on the sign-in screen:** the company name, color and logo are shown to anyone who reaches the page on the tailnet, before login. The logo only accepts PNG, JPEG and WEBP, up to 600 KB. Prefer an image without sensitive metadata (EXIF, GPS).
 - **Network:** the service listens only on 127.0.0.1, on a privileged port, and Tailscale publishes it.
 - **System:** runs as its own user with a hardened systemd unit. Tokens, passwords and the logo live in `/var/lib/escritorio` (0700).
@@ -159,7 +166,7 @@ Found a vulnerability? Please read [SECURITY.md](./SECURITY.md) and report it pr
 
 ```
 agentes.chat (MCP, OAuth "read")
-        ▲  every 15 s
+        ▲  every 30 s
         │
 escritorio.py ── 127.0.0.1:737 ── tailscale serve (HTTPS, tailnet only) ──▶ browser
    │  stdlib HTTP server, login, OAuth + PKCE, MCP reader, weather, branding
@@ -167,12 +174,12 @@ escritorio.py ── 127.0.0.1:737 ── tailscale serve (HTTPS, tailnet only) 
 ```
 
 - **Server:** Python 3 standard library only (`escritorio.py`, `acesso.py`). No database: a few files in the data folder.
-- **Front-end:** vanilla JavaScript and canvas, no build step (`static/`). `app.js` (UI, camera, panels), `mapa.js` (procedural building, furniture collision, doors), `vida.js` (agent life), `avatar.js`, `efeitos.js`, `ceu.js`, `clima.js`, `festas.js`, `som.js` (WebAudio), `simular.js`, `brincar.js` (clickable objects, photo mode, demo), `personalizar.js`, `maquete.js` (3D, loaded on demand) and `entrar.*` (sign-in).
+- **Front-end:** vanilla JavaScript and canvas, no build step (`static/`). `app.js` (UI, camera, panels), `mapa.js` (procedural building, furniture collision, doors), `vida.js` (agent life), `avatar.js`, `efeitos.js`, `ceu.js`, `clima.js`, `festas.js`, `som.js` (WebAudio), `simular.js`, `brincar.js` (clickable objects, photo mode, demo), `personalizar.js` and `entrar.*` (sign-in).
 - **Install:** `instalar.sh` sets up the user, files, a hardened systemd unit and `tailscale serve`.
 
 ### Transition log
 
-On every read (15 s), the server compares tasks with the previous read, by `run_id`, and keeps in memory since when each one has been in its current status. That produces the recent events (at most 50): `comecou`, `pediu_aprovacao`, `pediu_resposta`, `voltou_a_trabalhar` and `terminou`, with time, agent handle and `run_id`, without any conversation content. The first read after starting is only the baseline, with no events. Nothing goes to disk: restarting the service clears the log, and "since" starts again at the first read.
+On every read (30 s), the server compares tasks with the previous read, by `run_id`, and keeps in memory since when each one has been in its current status. That produces the recent events (at most 50): `comecou`, `pediu_aprovacao`, `pediu_resposta`, `voltou_a_trabalhar` and `terminou`, with time, agent handle and `run_id`, without any conversation content. The first read after starting is only the baseline, with no events. Nothing goes to disk: restarting the service clears the log, and "since" starts again at the first read.
 
 ## Development
 
@@ -197,15 +204,6 @@ The art (`arte/pixellab` and `static/tema`) is released under the same license a
 
 ## Third-party
 
-- **three.js 0.186.1** (MIT, license in `static/vendor/three-0.186.1/LICENSE`): `three.module.js` and `three.core.js` copied unchanged from `build/` of the npm package `three@0.186.1`, served only after login and with an immutable cache (the version is in the path). No CDN.
-
-  | File | sha256 |
-  |---|---|
-  | `three.module.js` | `9052042d676cb0fdc1ddfefe193053f34b7ac0513a616fdac4535d49987812ea` |
-  | `three.core.js` | `9edde002b066a9a05676a6127f67735b62baf399bdea529f2f7e31657da769e6` |
-  | `LICENSE` | `8b378ebe60e2fe500158cb0ac71cb5e8b7d92953c2abcc63a0eb90499653b5bc` |
-
-  `test_escritorio.py` checks these hashes. To update: `npm pack three@<version>`, compare the tarball `integrity` with the registry's, copy `package/build/three.module.js`, `package/build/three.core.js` and `package/LICENSE` into a new folder `static/vendor/three-<version>/` and change the path in `ARQUIVOS` (escritorio.py), in `instalar.sh`, in the diorama import and in the hashes of the test and of this table.
 - **Fonts** Figtree, Silkscreen, Source Sans 3 and Doto: SIL Open Font License 1.1 (`static/fontes`, licenses in `static/fontes/OFL-*.txt`).
 - **Weather:** [Open-Meteo](https://open-meteo.com) (no key), with data under CC BY 4.0. Its free API is **for non-commercial use only** ([terms](https://open-meteo.com/en/terms)): a company, or a site with subscriptions or ads, needs a paid Open-Meteo plan or its own Open-Meteo server ([open source](https://github.com/open-meteo/open-meteo)). This server calls the free address (`api.open-meteo.com`, in the `Clima` class of `escritorio.py`), so either option means changing that address (and adding the plan's key). Otherwise, turn the weather off: remove `clima` from `times.json` (`/opt/escritorio/times.json` after installing) and restart the service.
 
@@ -220,5 +218,5 @@ Built for [agentes.chat](https://agentes.chat), with permission from its develop
 ## Acknowledgements
 
 - The agentes.chat team, for the read-only MCP connector and for supporting an open-source office.
-- [three.js](https://threejs.org), [Open-Meteo](https://open-meteo.com), [Tailscale](https://tailscale.com) and [PixelLab](https://pixellab.ai).
+- [Open-Meteo](https://open-meteo.com), [Tailscale](https://tailscale.com) and [PixelLab](https://pixellab.ai).
 - The designers of Figtree, Silkscreen, Source Sans 3 and Doto, for releasing them under the OFL.

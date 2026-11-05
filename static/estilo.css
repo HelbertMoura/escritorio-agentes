@@ -276,6 +276,16 @@ h2 { font-size: 15px; margin: 0; font-weight: 600; }
 .faixa-erro.aviso-ambar { background: var(--ambar-fundo); border-color: color-mix(in srgb, var(--ambar) 45%, var(--fundo)); color: var(--ambar-texto); }
 .faixa-erro button { min-height: 40px; padding: 0 12px; border-radius: 8px; border: 0; background: #fca5a5; color: #3b1212; font-weight: 800; flex: none; }
 .faixa-erro.aviso-ambar button { background: var(--ambar); color: var(--ambar-sobre); }
+/* fora do expediente: neutra e fina, acima do mapa (nunca por cima dele); o âmbar fica só para "esperando você" */
+.faixa-fora { margin: 0; display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 4px 8px 4px 14px; background: var(--cartao2); border-bottom: 1px solid var(--borda);
+  color: var(--suave); font-size: 13px; }
+.faixa-fora[hidden] { display: none; }
+.faixa-fora > span { flex: 1; min-width: 0; }
+.faixa-fora strong { color: var(--texto2); font-weight: 650; }
+.faixa-fora a { flex: none; display: inline-flex; align-items: center; min-height: 28px; padding: 0 6px; border-radius: 6px; color: var(--texto2); font-weight: 600; text-underline-offset: 3px; }
+.faixa-fora a:focus-visible { outline: 2px solid var(--destaque); outline-offset: 1px; }
+@media (pointer: coarse) { .faixa-fora a { min-height: 44px; } }
+@media (max-width: 760px) { .faixa-fora .faixa-fora-mais { display: none; } }
 
 /* mapa em tela cheia (funciona também no iPhone, sem a API de tela cheia) */
 .palco-cartao.cheio { margin: 0; position: fixed; inset: 0; z-index: 25; border-radius: 0; border: 0; display: flex; flex-direction: column; }
@@ -440,6 +450,12 @@ button.linha-resolvido:hover { background: rgba(255, 255, 255, .04); }
 .aviso-form.ok { color: var(--verde-texto); } .aviso-form.ruim { color: var(--erro-texto); }
 .acoes { display: flex; gap: 8px; flex-wrap: wrap; }
 .form-marca > .acoes { margin-top: 6px; }
+.expediente { display: flex; flex-wrap: wrap; gap: 12px; }
+.campo-hora { display: flex; flex-direction: column; gap: 6px; flex: 1 1 140px; max-width: 200px; }
+.campo-hora input { height: 46px; border-radius: var(--r-item); border: 1px solid var(--borda-forte); background: var(--campo); color: var(--texto); padding: 0 12px; font: inherit; font-size: 15px;
+  font-variant-numeric: tabular-nums; color-scheme: dark; }
+.campo-hora input:focus { outline: none; border-color: color-mix(in srgb, var(--destaque) 60%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--destaque) 35%, transparent); }
+.campo-hora input[aria-invalid="true"] { border-color: var(--erro-texto); }
 .previa-marca { padding: 16px; position: sticky; top: 76px; display: flex; flex-direction: column; gap: 10px; }
 .previa-marca .olho { margin: 0; }
 .previa-topo { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--lateral); border: 1px solid var(--borda); }
@@ -494,6 +510,149 @@ button.linha-resolvido:hover { background: rgba(255, 255, 255, .04); }
 .atalhos-externos { display: none; flex-direction: column; gap: 6px; max-width: 880px; margin-top: 8px; }
 .atalhos-externos a { min-height: 48px; padding: 0 16px; display: flex; align-items: center; border-radius: var(--raio); background: var(--cartao); border: 1px solid var(--borda); color: var(--texto); text-decoration: none; font-weight: 600; }
 
+/* conversa do trabalho atual: no lugar da ficha, na mesma posição; texto puro com as quebras de linha */
+.conversa { position: absolute; left: 12px; top: 56px; bottom: 12px; z-index: 7; width: min(420px, calc(100% - 24px)); display: flex; flex-direction: column; overflow: hidden;
+  border-radius: 16px; background: var(--cartao); border: 1px solid var(--borda-forte); box-shadow: 0 18px 50px rgba(0,0,0,.6); animation: subir var(--medio); outline: none; }
+.conversa-topo { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; gap: 8px; align-items: center; padding: 10px; border-bottom: 1px solid var(--linha); }
+.conversa-topo h2 { font-size: 15px; }
+.conversa-topo p { margin: 0; font-size: 12.5px; color: var(--suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conversa-estado { margin: 0; padding: 8px 14px; font-size: 13px; color: var(--suave); border-bottom: 1px solid var(--linha); }
+.conversa-estado.ruim { color: var(--erro-texto); }
+.conversa-lista { list-style: none; margin: 0; padding: 12px; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 10px; }
+.conversa-lista:focus-visible { outline-offset: -2px; }
+.msg { max-width: 88%; align-self: flex-start; padding: 8px 12px 10px; border-radius: 12px 12px 12px 4px; background: var(--cartao2); }
+.msg.de-pessoa { align-self: flex-end; border-radius: 12px 12px 4px 12px; background: var(--cartao3); }
+.msg-cabeca { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; font-size: 12.5px; }
+.msg-cabeca strong { font-weight: 700; color: var(--texto); }
+.msg.de-pessoa .msg-cabeca strong { color: var(--texto2); }
+.msg-cabeca time { font-size: 12px; color: var(--suave); }
+.msg-texto { margin: 0; font-size: 14px; line-height: 1.45; color: var(--texto); white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg-texto.vazio { color: var(--suave); font-style: italic; }
+.msg-nota { margin: 4px 0 0; font-size: 12px; color: var(--suave); }
+.conversa-pe { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; border-top: 1px solid var(--linha); }
+.conversa-pe .botao { flex: 1 1 auto; }
+/* página Conversas: a lista do dia à esquerda e a conversa aberta à direita (no celular, uma tela de cada vez) */
+.cp { display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.cp[hidden] { display: none; }
+.cp-lista { padding: 8px; display: flex; flex-direction: column; max-height: calc(100dvh - 190px); overflow-y: auto; overscroll-behavior: contain; }
+.cp-grupo + .cp-grupo { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--linha); }
+.cp-grupo h2 { display: flex; align-items: center; gap: 8px; margin: 4px 8px 6px; font: 650 12px "Source Sans 3", system-ui, sans-serif; text-transform: uppercase; letter-spacing: .5px; color: var(--rotulo); }
+.cp-grupo h2 b { font-weight: 700; color: var(--suave); font-variant-numeric: tabular-nums; }
+.cp-grupo ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.cp-vazio-grupo { margin: 0 8px 4px; font-size: 13px; color: var(--suave); }
+.cp-item { width: 100%; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; min-height: 60px; padding: 8px; border: 0; border-radius: var(--r-item);
+  background: transparent; color: inherit; text-align: left; font: inherit; cursor: pointer; }
+.cp-item:hover { background: rgba(255, 255, 255, .04); }
+.cp-item[aria-current="true"] { background: var(--cartao3); box-shadow: var(--afundado); }
+.cp-item:focus-visible { outline: 2px solid var(--destaque); outline-offset: -2px; }
+.cp-foto { position: relative; grid-row: span 2; width: 34px; height: 34px; }
+.cp-foto .mini { display: block; width: 34px; height: 34px; border-radius: 9px; background: var(--cartao2); }
+.cp-foto .led { position: absolute; right: -2px; bottom: -2px; width: 10px; height: 10px; border-radius: 3px; box-shadow: 0 0 0 2px var(--cartao); }
+.cp-nome { min-width: 0; font-size: 14px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cp-hora { font-size: 12px; color: var(--suave); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cp-rot { grid-column: 2 / 4; display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12.5px; color: var(--suave); }
+.cp-rot span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cp-rot .selo-tipo { flex: none; height: 18px; font-size: 11px; }
+.cp-conversa { display: flex; flex-direction: column; min-height: min(640px, calc(100dvh - 190px)); max-height: calc(100dvh - 190px); overflow: hidden; }
+.cp-conversa:focus-visible { outline: 2px solid var(--destaque); outline-offset: 2px; }
+.cp-topo { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--linha); }
+.cp-topo .mini { flex: none; width: 40px; height: 40px; border-radius: 10px; background: var(--cartao2); }
+.cp-topo > div { flex: 1; min-width: 0; }
+.cp-topo h2 { margin: 0; font-size: 16px; overflow-wrap: anywhere; }
+.cp-topo p { margin: 2px 0 0; font-size: 13px; color: var(--suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cp-voltar { display: none; flex: none; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; border-radius: var(--r-botao); border: 1px solid var(--borda);
+  background: var(--cartao2); color: var(--texto); font-size: 18px; }
+.cp-fim { margin: 10px 14px 0; display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: var(--r-item); border: 1px solid var(--borda-forte);
+  background: var(--cartao2); font-size: 13px; line-height: 1.4; color: var(--texto2); }
+.cp-fim strong { color: var(--texto); }
+.cp-fim .led { margin-top: 5px; }
+/* pausa do agentes.chat: âmbar; teto do dia: neutro; outro erro: vermelho */
+.cp-aviso { margin: 10px 14px 0; padding: 10px 12px; border-radius: var(--r-item); font-size: 13px; line-height: 1.4;
+  background: var(--ambar-fundo); color: var(--ambar-texto); border: 1px solid color-mix(in srgb, var(--ambar) 40%, transparent); }
+.cp-aviso.neutro { background: var(--cartao2); color: var(--texto2); border-color: var(--borda-forte); }
+.cp-aviso.ruim { background: var(--erro-fundo); color: var(--erro-texto); border-color: color-mix(in srgb, var(--erro-texto) 35%, transparent); }
+.cp-aviso[hidden] { display: none; }
+.cp-conversa .conversa-lista { flex: 1; }
+.cp-corte { align-self: stretch; display: flex; align-items: center; gap: 10px; margin: 4px 0; font-size: 12px; color: var(--suave); }
+.cp-corte::before, .cp-corte::after { content: ""; flex: 1; height: 1px; background: var(--borda-forte); }
+.cp-pe { padding: 10px 14px 14px; border-top: 1px solid var(--linha); display: flex; flex-direction: column; gap: 8px; }
+/* modo "responder" sem escrita na conexão: aviso discreto com o caminho para reconectar */
+.conv-reconectar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0 0 14px; padding: 8px 12px; border-radius: var(--r-item); border: 1px solid var(--borda-forte);
+  background: var(--cartao2); color: var(--texto2); font-size: 13.5px; }
+.conv-reconectar[hidden] { display: none; }
+.conv-reconectar a { color: var(--texto); font-weight: 650; text-underline-offset: 3px; display: inline-flex; align-items: center; min-height: 32px; }
+.conv-reconectar a:focus-visible { outline: 2px solid var(--destaque); outline-offset: 2px; border-radius: 4px; }
+@media (pointer: coarse) { .conv-reconectar a { min-height: 44px; } }
+.cp-caixa { display: flex; flex-direction: column; gap: 6px; }
+.cp-resposta { display: flex; gap: 8px; align-items: flex-end; }
+.cp-resposta textarea { flex: 1; min-width: 0; min-height: 44px; max-height: 160px; resize: none; padding: 11px 12px; border-radius: var(--r-item); border: 1px solid var(--borda-forte);
+  background: var(--campo); color: var(--texto); font: inherit; font-size: 15px; line-height: 1.4; }
+.cp-resposta textarea::placeholder { color: var(--suave); opacity: 1; }
+.cp-resposta textarea:focus-visible { outline: 2px solid var(--destaque); outline-offset: 1px; }
+.cp-resposta textarea:disabled { border-color: var(--borda); color: var(--suave); cursor: not-allowed; }
+.cp-resposta textarea[readonly] { opacity: .75; }
+.cp-resposta .botao { flex: none; min-height: 44px; padding: 0 18px; }
+.cp-resposta .botao:disabled { background: var(--cartao2); color: var(--suave); box-shadow: none; opacity: 1; cursor: not-allowed; }
+.cp-resposta .botao[aria-disabled="true"] { opacity: .7; cursor: progress; }
+.cp-linha { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--suave); }
+.cp-linha[hidden], .cp-motivo[hidden], .cp-aviso-envio[hidden], .cp-envio[hidden] { display: none; }
+.cp-contador { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cp-contador.perto { color: var(--ambar-texto); }
+.cp-motivo { margin: 0; font-size: 13px; color: var(--texto2); }
+.cp-aviso-envio { font-size: 12px; line-height: 1.4; }
+.cp-envio { margin: 0; padding: 8px 10px; border-radius: var(--r-item); font-size: 13px; line-height: 1.4; }
+.cp-envio.ok { background: var(--verde-fundo); color: var(--verde-texto); }
+.cp-envio.ruim { background: var(--erro-fundo); color: var(--erro-texto); }
+.cp-envio.neutro { background: var(--cartao2); color: var(--texto2); }
+.cp-envio a { color: var(--texto); font-weight: 650; text-underline-offset: 3px; white-space: nowrap; }
+.cp-envio a:focus-visible { outline: 2px solid var(--destaque); outline-offset: 2px; border-radius: 4px; }
+@media (pointer: coarse) { .cp-envio a { display: inline-flex; align-items: center; min-height: 44px; } }
+@media (pointer: coarse) { .cp-linha .cp-dica { display: none; } }
+/* modo resposta aberto: selo de todas as telas, preso no topo (acima do mapa em tela cheia) */
+.modo-resposta { position: sticky; top: calc(var(--faixa, 0px) + 8px); z-index: 26; display: flex; align-items: center; gap: 10px; margin: -14px 0 14px; padding: 6px 6px 6px 14px;
+  border-radius: var(--r-botao); background: var(--ambar-fundo); color: var(--ambar-texto); border: 1px solid color-mix(in srgb, var(--ambar) 45%, transparent); box-shadow: 0 6px 24px rgba(0, 0, 0, .45); font-size: 13.5px; }
+.modo-resposta[hidden] { display: none; }
+.modo-resposta p { flex: 1; min-width: 0; margin: 0; }
+.modo-resposta strong { color: var(--texto); }
+.modo-resposta #modo-tempo { font-variant-numeric: tabular-nums; }
+.modo-resposta .botao { flex: none; color: var(--texto); border-color: color-mix(in srgb, var(--ambar) 55%, transparent); }
+.modo-resposta .botao[aria-disabled="true"] { opacity: .6; cursor: progress; }
+body.modo-foto .modo-resposta { display: none; }
+body.lateral-recolhida .modo-resposta { top: calc(var(--faixa, 0px) + 60px); }
+/* celular: faixa fixa logo abaixo da barra do topo, com o espaço reservado no conteúdo (nada rola por baixo sem aviso) */
+@media (max-width: 900px) {
+  .modo-resposta { position: fixed; top: 52px; left: 0; right: 0; margin: 0; min-height: 52px; padding: 4px 8px 4px 16px; border-radius: 0; border-width: 0 0 1px; box-shadow: 0 6px 18px rgba(0, 0, 0, .4); }
+  body.modo-aberto main { padding-top: calc(26px + 52px); }
+  body.modo-aberto .cp-conversa { scroll-margin-top: 116px; }
+}
+@media (max-width: 760px) {
+  .modo-resposta .modo-mais { display: none; }
+  body.modo-aberto main { padding-top: calc(18px + 52px); }
+  body.modo-aberto .cp-conversa { height: calc(100dvh - 128px); }   /* a conversa desconta o selo e continua cabendo na tela */
+}
+.cp-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.cp-acoes .botao[hidden] { display: none; }
+.cp-acoes .botao[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }   /* aria-disabled: o botão continua focável */
+.cp-nota { margin: 0; font-size: 12.5px; color: var(--suave); }
+.cp-escolha { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 32px; text-align: center; color: var(--suave); }
+.cp-escolha h2 { margin: 0; font-size: 18px; color: var(--texto); }
+.cp-escolha p { margin: 0; max-width: 360px; font-size: 14px; }
+@media (max-width: 760px) {
+  .cp { grid-template-columns: minmax(0, 1fr); }
+  .cp[data-tela="lista"] .cp-conversa, .cp[data-tela="conversa"] .cp-lista { display: none; }
+  .cp-lista { max-height: none; }
+  .cp-item { min-height: 64px; }
+  /* conversa no celular: o título da página sai, a conversa ocupa a tela e a caixa de resposta fica à vista */
+  #v-conversas[data-tela="conversa"] > .cabeca { display: none; }
+  .cp-conversa { min-height: 0; height: calc(100dvh - 76px); max-height: none; scroll-margin-top: 64px; }   /* livre da barra do topo */
+  .cp-voltar { display: inline-flex; }
+}
+@media (max-width: 760px) {
+  .conversa { left: 8px; right: 8px; top: 48px; bottom: 8px; width: auto; }
+  /* no cartão de 268 px, a conversa entra embaixo do mapa, como a ficha */
+  .palco-cartao:not(.cheio) .conversa { position: static; width: auto; max-height: min(70vh, 560px); border: 0; border-top: 1px solid var(--borda); border-radius: 0; box-shadow: none; background: var(--cartao); }
+}
+
 /* ---------------- movimento */
 @keyframes surgir { from { opacity: 0; transform: translateY(-4px); } }
 @keyframes subir { from { opacity: 0; transform: translateY(8px); } }
@@ -532,7 +691,7 @@ button.linha-resolvido:hover { background: rgba(255, 255, 255, .04); }
 .barra-foto button.primario { background: var(--destaque); color: var(--destaque-texto); font-weight: 700; }
 .barra-foto button.primario:hover { filter: brightness(1.08); }
 .barra-foto button:focus-visible { outline: 2px solid var(--destaque); outline-offset: 2px; }
-body.modo-foto .controles, body.modo-foto .selo-vivo, body.modo-foto .dica-mapa, body.modo-foto .cartao-agente, body.modo-foto .ficha { display: none !important; }
+body.modo-foto .controles, body.modo-foto .selo-vivo, body.modo-foto .dica-mapa, body.modo-foto .cartao-agente, body.modo-foto .ficha, body.modo-foto .conversa { display: none !important; }
 body.moldura .palco::after { content: ""; position: absolute; inset: 0; pointer-events: none; border: 14px solid #f4efe6; border-bottom-width: 40px; }
 .palco.crt::before { content: ""; position: absolute; inset: 0; z-index: 4; pointer-events: none;
   background: repeating-linear-gradient(0deg, rgba(0,0,0,.32) 0 2px, transparent 2px 4px), radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,.55));
@@ -576,7 +735,7 @@ body.demo [data-rota="personalizar"] { display: none; }
   .selo-vivo { left: 10px; top: 10px; max-width: calc(100% - 20px); }
   .dica-mapa { display: none; }
   .ficha { left: 8px; right: 8px; bottom: 8px; width: auto; }
-  /* mapa em cartão de 268 px: só o selo e "Abrir o mapa em tela cheia"; a câmera e a maquete ficam na tela cheia */
+  /* mapa em cartão de 268 px: só o selo e "Abrir o mapa em tela cheia"; a câmera fica na tela cheia */
   .palco-cartao:not(.cheio) { border-radius: var(--r-cartao) var(--r-cartao) var(--r-cartao) 4px; }
   .palco-cartao:not(.cheio) .controles { display: none; }
   .palco-cartao:not(.cheio) #tela { touch-action: pan-y; }   /* no cartão, o gesto vertical rola a página; arrastar para o lado, tocar e pinçar ficam no mapa */
@@ -584,23 +743,12 @@ body.demo [data-rota="personalizar"] { display: none; }
     border-radius: var(--r-botao); background: rgba(15, 15, 14, .86); border: 1px solid rgba(255, 255, 255, .14); color: var(--texto); font-size: 14px; font-weight: 600; }
   /* a ficha do agente entra embaixo do mapa, dentro do cartão, sem cobrir o agente */
   .palco-cartao:not(.cheio) .ficha { position: static; width: auto; border: 0; border-top: 1px solid var(--borda); border-radius: 0; box-shadow: none; background: var(--cartao); }
-  .palco-cartao:not(.cheio) .aviso-maquete { bottom: auto; top: calc(268px - 104px); }
   /* acontecendo agora: a linha inteira já leva ao mapa; o "Ver no mapa" fica só para o leitor de tela e a frase pode quebrar */
   .ver-mapa { position: absolute; width: 1px; height: 1px; min-height: 0; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
   .lista-agrupada .linha-ir .quem { white-space: normal; }
   .so-celular { display: inline; }
   .so-largo { display: none; }
 }
-/* maquete 3D (maquete.js): o canvas do WebGL entra no lugar do #tela, com os mesmos controles */
-.palco canvas.maquete { display: block; touch-action: none; cursor: grab; }
-.palco canvas.maquete:focus-visible { outline: 2px solid var(--destaque); outline-offset: -3px; }
-.palco.em-3d .objetos-mapa { display: none; }
-.palco canvas.maquete-rotulos { position: absolute; left: 0; top: 0; pointer-events: none; }
-.controles #girar, .controles #visao-3d { gap: 8px; }
-.aviso-maquete { position: absolute; left: 10px; bottom: 44px; z-index: 5; max-width: min(440px, calc(100% - 20px)); margin: 0; padding: 8px 12px; border-radius: 10px;
-  background: rgba(15,15,17,.9); color: #f2f2f3; font-size: 14px; line-height: 1.4; pointer-events: none; }
-.aviso-maquete:empty { padding: 0; background: none; }
-@media (max-width: 760px) { .aviso-maquete { left: 8px; bottom: 40px; max-width: calc(100% - 72px); } }
 /* modo foto: a faixa "Simulação" (simular.js) sairia em cima da barra do modo foto; some enquanto ele está aberto */
 body.modo-foto .sim-aviso { display: none; }
 /* com a simulação ativa, a faixa dela (fixa embaixo, simular.js) não cobre o fim da página nem o rodapé */
@@ -626,3 +774,8 @@ body:has(.sim-aviso) main { padding-bottom: calc(96px + env(safe-area-inset-bott
 .bv-logo-linha .suave { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .bv-logo-linha label.botao:has(+ .arquivo:focus-visible) { outline: 2px solid var(--destaque); outline-offset: 2px; }
 .form-bv .acoes { margin-top: 6px; }
+/* senha do modo resposta (app.js): o mesmo diálogo das boas-vindas */
+.dlg-senha { width: min(440px, calc(100vw - 24px)); }
+.form-bv input[name=senha] { height: 46px; border-radius: var(--r-item); border: 1px solid var(--borda-forte); background: var(--campo); color: var(--texto); padding: 0 12px; font-size: 15px; }
+.form-bv input[name=senha]:focus-visible { outline: 2px solid var(--destaque); outline-offset: 1px; }
+.dlg-senha .botao[aria-disabled="true"] { opacity: .7; cursor: progress; }

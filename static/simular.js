@@ -1,13 +1,13 @@
-// Menu de simulação: ver o escritório em outra data (festas), hora e clima, no mapa 2D ou na maquete.
+// Menu de simulação: ver o escritório em outra data (festas), hora e clima.
 // Não guarda nada: a escolha vira parâmetros da URL que a página já entende (?data= do festas.js, ?hora= do
-// ceu.js, ?clima= do clima.js, ?visao=maquete do app.js) e a página recarrega, mantendo ?demo e os demais
+// ceu.js e ?clima= do clima.js) e a página recarrega, mantendo ?demo e os demais
 // parâmetros e a rota (#...). Enquanto houver data, hora ou clima simulados, uma faixa "Simulação" fica
 // sempre à vista, com "Voltar ao real". Simular.abrir() abre o painel (diálogo modal; Esc fecha e o foco
 // volta para quem abriu).
 "use strict";
 
 const Simular = (() => {
-  const PARAMS = ["data", "hora", "clima"];   // o que é simulação; ?visao é só o jeito de ver
+  const PARAMS = ["data", "hora", "clima"];   // o que é simulação
   const HORAS = [["Manhã", 8], ["Almoço", 12.5], ["Pausa do café", 15.5], ["Fim de tarde", 18], ["Noite", 21.5]];
   const CLIMAS = [["limpo", "Sol"], ["nublado", "Nublado"], ["garoa", "Garoa"], ["chuva", "Chuva"], ["tempestade", "Tempestade"],
     ["neblina", "Neblina"], ["neve", "Neve"]];
@@ -91,12 +91,12 @@ const Simular = (() => {
   function lerUrl() {
     const q = new URLSearchParams(location.search), hora = parseFloat(q.get("hora")), data = q.get("data");
     return { data: /^\d{4}-\d{2}-\d{2}$/.test(data || "") ? data : "", hora: hora >= 0 && hora < 24 ? hora : null,
-      clima: Object.hasOwn(NOME_CLIMA, q.get("clima") || "") ? q.get("clima") : "", maquete: q.get("visao") === "maquete" };
+      clima: Object.hasOwn(NOME_CLIMA, q.get("clima") || "") ? q.get("clima") : "" };
   }
   function irPara(e) {   // recarrega com a URL nova; o resto da busca (?demo...) e o hash ficam como estão
     const q = new URLSearchParams(location.search);
     const por = { data: e.data || null, hora: e.hora == null ? null : String(Math.round(e.hora * 100) / 100), clima: e.clima || null,
-      visao: e.maquete ? "maquete" : null };
+      visao: null };   // ?visao= de um link antigo (era a visão 3D, que saiu) some da URL
     for (const [k, v] of Object.entries(por)) if (v === null) q.delete(k); else q.set(k, v);
     const busca = q.toString(), url = location.pathname + (busca ? "?" + busca : "") + location.hash;
     if (url === location.pathname + location.search + location.hash) { fechar(); return; }
@@ -124,7 +124,7 @@ const Simular = (() => {
     const aviso = el("div", { classe: "sim-aviso", role: "region", "aria-label": "Simulação ativa" },
       el("p", { texto: ["Simulação", ...partes].join(" · ") }),
       el("button", { type: "button", classe: "sim-ajustar", texto: "Ajustar", onclick: () => abrir() }),
-      el("button", { type: "button", classe: "sim-real", "aria-label": "Voltar ao real", onclick: () => irPara({ maquete: lerUrl().maquete }) },
+      el("button", { type: "button", classe: "sim-real", "aria-label": "Voltar ao real", onclick: () => irPara({}) },
         el("span", { classe: "sim-longo", texto: "Voltar ao real" }), el("span", { classe: "sim-curto", texto: "Real" })));
     document.body.append(aviso);
   }
@@ -141,7 +141,6 @@ const Simular = (() => {
     const data = el("input", { id: "sim-data", type: "date" });
     const hora = el("input", { id: "sim-hora", type: "range", min: "0", max: "23.75", step: "0.25" });
     const saida = el("output", { for: "sim-hora", id: "sim-hora-valor" });
-    const temWebgl = !!window.WebGL2RenderingContext;
 
     // a festa preenche a data; uma data digitada mostra a festa dela (ou "Outra data")
     festa.addEventListener("change", () => { if (festa.value === "outra") data.focus(); else data.value = festa.value; });
@@ -168,11 +167,8 @@ const Simular = (() => {
         el("label", { classe: "sim-campo", for: "sim-hora" }, "Horário exato", el("div", { classe: "sim-faixa-hora" }, hora, saida))),
       el("fieldset", { classe: "sim-grupo" }, el("legend", { texto: "Clima" }),
         el("div", { classe: "sim-chips" }, chip("clima", "", "Real"), ...CLIMAS.map(([v, n]) => chip("clima", v, n)))),
-      el("fieldset", { classe: "sim-grupo" }, el("legend", { texto: "Visão" }),
-        el("div", { classe: "sim-chips" }, chip("visao", "2d", "Mapa 2D"), chip("visao", "maquete", "Maquete 3D", false, !temWebgl)),
-        temWebgl ? null : el("p", { classe: "sim-nota", texto: "A maquete 3D precisa de WebGL 2, que este navegador não tem." })),
       el("div", { classe: "sim-acoes" },
-        el("button", { type: "button", classe: "botao fantasma", texto: "Voltar ao real", onclick: () => irPara({ maquete: escolha().maquete }) }),
+        el("button", { type: "button", classe: "botao fantasma", texto: "Voltar ao real", onclick: () => irPara({}) }),
         el("button", { type: "submit", classe: "botao", texto: "Ver simulação" })));
     form.addEventListener("submit", ev => { ev.preventDefault(); irPara(escolha()); });
     form.addEventListener("change", ev => { if (ev.target.name === "hora" && ev.target.value) { hora.value = ev.target.value; mostrarHora(); } });
@@ -187,17 +183,16 @@ const Simular = (() => {
   function escolha() {
     const f = campos.form.elements, ritmo = f.hora.value, horaMarcada = [...f.hora].some(r => r.checked);
     return { data: campos.data.value || "", hora: horaMarcada && ritmo === "" ? null : +campos.hora.value,
-      clima: f.clima.value, maquete: f.visao.value === "maquete" };
+      clima: f.clima.value };
   }
   function preencher() {   // o painel abre com o que está valendo agora
-    const e = lerUrl(), f = campos.form.elements, emMaquete = e.maquete || document.getElementById("visao-3d")?.getAttribute("aria-pressed") === "true";
+    const e = lerUrl(), f = campos.form.elements;
     campos.data.value = e.data;
     campos.festa.value = !e.data ? "" : campos.lista.some(x => x.data === e.data) ? e.data : "outra";
     const h = e.hora ?? (window.Ceu ? (() => { const [hh, mm] = Ceu.agora().hora.split(":").map(Number); return hh + Math.floor(mm / 15) / 4; })() : 12);
     campos.hora.value = String(h); campos.mostrarHora();
     for (const r of f.hora) r.checked = e.hora == null ? r.value === "" : r.value === String(e.hora);
     for (const r of f.clima) r.checked = r.value === e.clima;
-    for (const r of f.visao) r.checked = r.value === (emMaquete && !r.disabled ? "maquete" : "2d");
   }
 
   // foco preso no diálogo: Tab e Shift+Tab dão a volta dentro dele

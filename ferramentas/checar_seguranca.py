@@ -1,9 +1,12 @@
 """Confere no servidor de verdade (rotas reais, sem rede) as regras de login, origem, cookie e limite de tentativas.
 Uso: python -B ferramentas/checar_seguranca.py <pasta do projeto>   (sai com 1 se algo falhar)
 """
-import os, sys, tempfile, threading, time, urllib.parse, urllib.request, urllib.error
+import json, os, sys, tempfile, threading, time, urllib.parse, urllib.request, urllib.error
 PROJ = sys.argv[1]
 os.environ["ESCRITORIO_DADOS"] = tempfile.mkdtemp(prefix="esc-verif-")
+os.environ["ESCRITORIO_TIMES"] = os.path.join(os.environ["ESCRITORIO_DADOS"], "times.json")  # nunca o times.json real
+with open(os.environ["ESCRITORIO_TIMES"], "w", encoding="utf-8") as f:
+    f.write('{"conversas": "ler"}')
 sys.path.insert(0, PROJ)
 import escritorio as e
 from acesso import Acesso, LIMITE
@@ -75,6 +78,32 @@ try:
 except PermissionError as x:
     r = str(x)
 confere("primeiro acesso com o codigo certo depois de %d falhas de inexistente" % LIMITE, r, "criado")
+
+print("== Fase R: modo resposta e envio (Origin obrigatorio, JSON exato, senha)")
+class CredEscrita:  # conexao com escrita de mentira: nada sai para o agentes.chat
+    def tem_escrita(self): return True
+    def token(self): return None
+e.TIMES = os.path.join(os.environ["ESCRITORIO_DADOS"], "times.json")
+with open(e.TIMES, "w", encoding="utf-8") as f:
+    f.write('{"conversas": "responder"}')
+srv.cred, srv.respostas = CredEscrita(), e.Respostas(srv.leitor, None)
+sessao = {"Cookie": ck.split(";")[0]}
+js = lambda senha: json.dumps({"senha": senha}).encode()
+for rota in ("/api/conversa/modo", "/api/conversa/responder", "/api/conversa/modo/fechar"):
+    confere("POST %s sem Origin, com Referer valido (aqui o Referer nao conta)" % rota,
+            req(rota, {**sessao, "Referer": base + "/", "Content-Type": "application/json"}, js("x"))[0], 403)
+    confere("POST %s com Origin: null" % rota, req(rota, {**sessao, "Origin": "null", "Content-Type": "application/json"}, js("x"))[0], 403)
+confere("POST /api/conversa/modo em text/plain (formulario de outro site)", req("/api/conversa/modo", {**sessao, "Origin": base, "Content-Type": "text/plain"}, js("senha-bem-grande"))[0], 415)
+confere("POST /api/conversa/modo sem sessao", req("/api/conversa/modo", {"Origin": base, "Content-Type": "application/json"}, js("senha-bem-grande"))[0], 401)
+confere("POST /api/conversa/modo com a senha errada", req("/api/conversa/modo", {**sessao, "Origin": base, "Content-Type": "application/json"}, js("errada-errada"))[0], 403)
+st, h = req("/api/conversa/modo", {**sessao, "Origin": base, "Content-Type": "application/json"}, js("senha-bem-grande"))
+modo = h.get("Set-Cookie") or ""
+confere("POST /api/conversa/modo com a senha certa", st, 200)
+confere("cookie do modo SameSite=Strict, HttpOnly e sem Max-Age/Expires (some ao fechar o navegador)",
+        ("SameSite=Strict" in modo, "HttpOnly" in modo, "Max-Age" in modo or "Expires" in modo), (True, True, False))
+envio = json.dumps({"id": "abcdefghijkl", "run_id": "r1", "texto": "oi", "chave": "0b9c5c55-3b3a-4c7e-9a1e-2f6d1c8b7a10"}).encode()
+st, _ = req("/api/conversa/responder", {**sessao, "Origin": base, "Content-Type": "application/json"}, envio)
+confere("envio da mesma sessao sem o cookie do modo (outro navegador)", st, 403)
 srv.shutdown()
 print("RESULTADO:", "tudo certo" if not falhas else "%d falha(s)" % len(falhas))
 sys.exit(1 if falhas else 0)

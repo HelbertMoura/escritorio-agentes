@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex, nofollow">
   <title>Escritório</title>
   <link rel="icon" href="logo.png">
-  <link rel="stylesheet" href="estilo.css?v=50">
+  <link rel="stylesheet" href="estilo.css?v=66">
 </head>
 <body>
   <a class="pular" href="#principal">Ir para o conteúdo</a>
@@ -90,6 +90,13 @@
       </div>
     </nav>
     <main id="principal" tabindex="-1">
+      <!-- modo resposta aberto (fase R): selo de todas as telas; o tempo vem do servidor (/api/estado.modo_resposta) -->
+      <div id="modo-resposta" class="modo-resposta" role="region" aria-label="Modo resposta" hidden>
+        <i class="led pergunta" aria-hidden="true"></i>
+        <p><strong>Modo resposta</strong> · <span id="modo-tempo">fecha em 60 min</span><span class="modo-mais"> · só neste navegador</span></p>
+        <button id="modo-fechar" class="botao fantasma" type="button">Fechar agora</button>
+      </div>
+      <p id="modo-anuncio" class="oculto" role="status"></p>
       <section id="v-escritorio" class="visao">
         <div class="cabeca cabeca-esc">
           <div>
@@ -107,6 +114,7 @@
         </div>
         <section id="palco-cartao" class="cartao palco-cartao" aria-label="Mapa do escritório">
           <div id="faixa-erro" class="faixa-erro" role="alert" hidden><span id="faixa-erro-txt"></span><button id="tentar" type="button">Tentar agora</button></div>
+          <p id="faixa-fora" class="faixa-fora" role="status" hidden><i class="led fora" aria-hidden="true"></i><span><strong id="faixa-fora-txt"></strong><span class="faixa-fora-mais"> · quem está sem tarefa foi para casa</span></span><a id="faixa-fora-mudar" href="#personalizar">Mudar o horário</a></p>
           <div id="palco" class="palco">
             <canvas id="tela" tabindex="0" aria-label="Mapa do escritório. Arraste para mover, use a roda ou a pinça para dar zoom e toque num agente para ver o que ele está fazendo."></canvas>
             <p class="selo-vivo" aria-hidden="true"><span id="ao-vivo" class="ao-vivo"></span><span id="relogio" class="relogio"></span></p>
@@ -116,14 +124,12 @@
               <button id="ver-tudo" type="button" aria-label="Ver tudo"><span class="ic" data-icone="encaixar" aria-hidden="true"></span><span class="rotulo-ver" aria-hidden="true">Ver tudo</span></button>
               <button id="tela-cheia" type="button" aria-pressed="false" aria-label="Mapa em tela cheia"><span class="ic" data-icone="expandir" aria-hidden="true"></span></button>
               <button id="modo-foto" type="button" aria-label="Modo foto"><span class="ic" data-icone="camera" aria-hidden="true"></span></button>
-              <button id="girar" type="button" aria-pressed="true" aria-label="Girar a maquete sozinha" hidden><span class="ic" data-icone="girar" aria-hidden="true"></span><span class="rotulo-ver" aria-hidden="true">Girar</span></button>
-              <button id="visao-3d" type="button" aria-label="Ver a maquete 3D" hidden><span class="ic" data-icone="cubo" aria-hidden="true"></span><span class="rotulo-ver" aria-hidden="true">Maquete 3D</span></button>
             </div>
             <span class="dica-mapa" aria-hidden="true">Toque num agente</span>
             <button id="abrir-cheia" class="abrir-cheia" type="button"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"></path></svg>Abrir o mapa em tela cheia</button>
-            <p id="aviso-maquete" class="aviso-maquete" role="status"></p>
             <div id="cartao-agente" class="cartao-agente" hidden></div>
             <div id="ficha" class="ficha" role="dialog" aria-labelledby="ficha-nome" hidden></div>
+            <section id="conversa" class="conversa" role="dialog" aria-labelledby="conversa-titulo" tabindex="-1" hidden></section>
           </div>
         </section>
         <div class="widgets">
@@ -142,12 +148,26 @@
         </section>
       </section>
       <section id="v-conversas" class="visao" hidden>
-        <div class="cabeca"><h1>Conversas</h1><p class="resumo">Ler e responder os agentes por aqui ainda não está disponível.</p></div>
-        <div class="vazio-grande cartao">
+        <div class="cabeca"><h1>Conversas</h1><p id="conv-resumo" class="resumo">Ler e responder os agentes por aqui ainda não está disponível.</p></div>
+        <!-- modo "responder" com a conexão só de leitura: o envio fica desligado até reconectar (pode_responder do /api/config) -->
+        <p id="conv-reconectar" class="conv-reconectar" hidden><span>O envio por aqui está desligado: a conexão com o agentes.chat é só de leitura.</span> <a href="/oauth/conectar">Reconecte para liberar o envio</a></p>
+        <!-- desligada (times.json), na demonstração e na Simulação: o "em breve" de antes -->
+        <div id="conv-breve" class="vazio-grande cartao">
           <span class="ic ic-grande" data-icone="balao" aria-hidden="true"></span>
           <h2>Em breve</h2>
           <p>Por enquanto, as conversas ficam no agentes.chat. O escritório mostra quem está trabalhando e quem espera você.</p>
           <a class="botao" data-externo="" target="_blank" rel="noopener">Abrir o agentes.chat</a>
+        </div>
+        <!-- ligada: a lista do dia (/api/estado.conversas) e a conversa aberta (/api/conversa?id=), montadas pelo app.js -->
+        <div id="conv-pagina" class="cp" data-tela="lista" hidden>
+          <nav id="conv-lista" class="cartao cp-lista" aria-label="Conversas de hoje"></nav>
+          <section id="conv-aberta" class="cartao cp-conversa" aria-labelledby="conv-aberta-titulo" tabindex="-1"></section>
+        </div>
+        <div id="conv-vazio" class="vazio-grande cartao" hidden>
+          <span class="ic ic-grande" data-icone="balao" aria-hidden="true"></span>
+          <h2>Nenhuma conversa hoje</h2>
+          <p>Quando um agente pegar uma tarefa, a conversa aparece aqui: primeiro as que esperam você, depois as em andamento e as que terminaram hoje. A lista recomeça à meia-noite.</p>
+          <a class="botao secundario" href="#escritorio">Ir para o mapa</a>
         </div>
       </section>
       <section id="v-personalizar" class="visao" hidden>
@@ -179,6 +199,14 @@
                 </div>
               </div>
             </fieldset>
+            <fieldset>
+              <legend>Expediente</legend>
+              <div class="expediente">
+                <div class="campo-hora"><label for="m-abre">Abre às</label><input id="m-abre" name="abre" type="time" required aria-describedby="m-expediente-ajuda"></div>
+                <div class="campo-hora"><label for="m-fecha">Fecha às</label><input id="m-fecha" name="fecha" type="time" required aria-describedby="m-expediente-ajuda"></div>
+              </div>
+              <p id="m-expediente-ajuda" class="ajuda" aria-live="polite"></p>
+            </fieldset>
             <p id="m-aviso" class="aviso-form" role="status"></p>
             <div class="acoes"><button id="m-salvar" class="botao" type="submit">Salvar</button><button id="m-desfazer" class="botao fantasma" type="button">Desfazer</button></div>
           </form>
@@ -209,10 +237,10 @@
           <div class="cartao faq-lista">
             <details><summary>O que é este escritório?</summary><p>Uma visão ao vivo do seu time de agentes do agentes.chat, desenhada como um escritório em pixel art. Cada agente tem uma mesa na sala do seu time; quando recebe uma tarefa, vai para a mesa e digita; quando fica livre, vai para a sala comunal jogar, conversar ou tomar café.</p></details>
             <details><summary>O que significam o “!” e o “?”?</summary><p>“!” (âmbar, com a mão levantada): o agente espera a sua aprovação. “?” (azul): ele tem uma pergunta para você. Tocar no selo abre o pedido certo no agentes.chat; os mesmos pedidos aparecem em “Esperando você”, com há quanto tempo cada um espera.</p></details>
+            <details><summary>Dá para ler as conversas dos agentes por aqui?</summary><p>Dá, se quem instalou ligou as conversas (<code>"conversas": "ler"</code> no <code>times.json</code>; vem desligado). Aí a página Conversas mostra a lista do dia: primeiro o que espera você, depois as tarefas em andamento e as que terminaram hoje, até a meia-noite de Brasília. A ficha do agente ganha “Ver conversa”. Aparecem as 20 mensagens mais recentes de cada conversa, lidas só quando você abre; numa tarefa que já terminou, só até o fim dela. Os nomes das pessoas e os anexos não aparecem (só a contagem). Quem tem a senha, ou vê uma tela logada, lê o que a conta conectada ao agentes.chat lê. A lista fica só na memória: some à meia-noite e quando o serviço reinicia. Com <code>"conversas": "responder"</code> (e a conexão com o agentes.chat com permissão de escrita), dá também para mandar mensagens nas conversas diretas de hoje que esperam sua resposta ou já terminaram (em canal, por enquanto, responda no agentes.chat): o primeiro envio pede a senha do escritório e abre o modo resposta por 1 hora neste navegador, renovado a cada envio e fechado de vez em 8 horas ou no “Fechar agora” do selo. A mensagem sai como a conta conectada, marcada “via Escritório dos agentes”, e pode começar uma tarefa nova do agente. Imagens e arquivos continuam no agentes.chat. Não abra o modo numa tela que outras pessoas usam. Na demonstração e na Simulação, as conversas não aparecem.</p></details>
             <details><summary>Posso aprovar pedidos por aqui?</summary><p>Não, de propósito: aprovar é sempre no agentes.chat, onde você vê o pedido completo. O botão “Revisar pedido” abre exatamente a conversa do pedido.</p></details>
             <details><summary>Como navego pelo mapa?</summary><p>No computador: arraste para mover, use a roda do mouse para dar zoom onde está o cursor e dê duplo clique numa sala para focar. No celular: arraste com um dedo e use a pinça para o zoom. Em qualquer tela, a lista “Salas” leva a câmera até a sala, “Ver tudo” volta ao prédio inteiro e o botão de tela cheia amplia o mapa. Toque num agente para abrir o cartão dele; com “Seguir”, a câmera acompanha o agente.</p></details>
             <details><summary>Dá para brincar com o mapa?</summary><p>Sim. Clique ou toque em objetos como a TV, o fliperama, a jukebox, a cafeteira, o aquário, o relógio, as luminárias, o gato, o quadro de avisos, a lousa e o sino de vendas; pelo teclado, a tecla Tab passa pelos objetos visíveis do mapa e Enter aciona. O botão de câmera abre o modo foto, que esconde a interface e salva um PNG no seu aparelho (Esc sai). Para mostrar o produto sem dados reais, abra a <a href="?demo=1">demonstração</a>. E tem um segredo para quem conhece videogame.</p></details>
-            <details><summary>O que é a maquete 3D?</summary><p>O mesmo prédio em 3D, como uma maquete flutuando: as paredes do mapa ficam em pé e as salas não têm teto. Abra no botão “Maquete 3D” do mapa e volte no “Mapa 2D”. Arraste para girar, arraste com o botão direito (ou com Shift, ou com dois dedos) para mover e use a roda ou a pinça para aproximar; com a maquete selecionada, as setas giram. Clique numa sala para ir até ela. As paredes que ficam na frente baixam sozinhas. “Girar” liga e desliga o giro lento (com “reduzir movimento” no sistema ele vem desligado). Se o aparelho não der conta, a maquete avisa e volta ao mapa. Os agentes aparecem na maquete com os mesmos nomes, selos e balões do mapa: toque num agente para abrir o cartão, ou no selo para abrir o pedido.</p></details>
             <details><summary>Dá para ver de noite ou na chuva sem esperar?</summary><p>Dá: acrescente ao endereço <code>?hora=21</code> (qualquer hora), <code>?clima=tempestade</code> (chuva, garoa, neve, neblina, nublado, limpo) ou <code>?data=2026-12-25</code>. Pode combinar: <code>?hora=21&amp;clima=neve&amp;data=2026-12-24</code>.</p></details>
           </div>
           <div class="atalhos cartao">
@@ -221,7 +249,6 @@
               <div><dt><kbd>Ctrl</kbd> <kbd>K</kbd> ou <kbd>/</kbd></dt><dd>Ir para um agente</dd></div>
               <div><dt><kbd>+</kbd> <kbd>−</kbd></dt><dd>Aproximar e afastar</dd></div>
               <div><dt><kbd>0</kbd></dt><dd>Ver o prédio inteiro</dd></div>
-              <div><dt><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Girar a maquete 3D (com Shift, mover)</dd></div>
               <div><dt><kbd>Esc</kbd></dt><dd>Fechar o cartão ou a busca</dd></div>
             </dl>
           </div>
@@ -241,11 +268,11 @@
           </div>
           <h2 class="faq-grupo">Segurança e instalação</h2>
           <div class="cartao faq-lista">
-            <details><summary>Isso gasta tokens ou usa IA?</summary><p>Não. O servidor só lê o agentes.chat a cada 15 segundos pelo conector de apps externos (MCP), com permissão apenas de leitura. Tudo o que você vê (animações, conversas, sons) é desenhado no seu navegador, sem modelo de IA.</p></details>
+            <details><summary>Isso gasta tokens ou usa IA?</summary><p>Não. O servidor só lê o agentes.chat a cada 30 segundos pelo conector de apps externos (MCP), com permissão só de leitura (escrita só no modo <code>"responder"</code>, se ligado). Tudo o que você vê (animações, conversas, sons) é desenhado no seu navegador, sem modelo de IA.</p></details>
             <details><summary>Quem consegue abrir o escritório?</summary><p>Só aparelhos da sua rede Tailscale, e mesmo assim com usuário e senha. No celular, basta ligar o app da Tailscale e abrir o endereço.</p></details>
             <details><summary>Esqueci a senha. E agora?</summary><p>No servidor, apague o usuário e as sessões e reinicie o serviço:</p><p class="comandos"><code class="cmd">sudo rm /var/lib/escritorio/usuarios.json /var/lib/escritorio/sessoes.json</code> <code class="cmd">sudo systemctl restart escritorio</code></p><p>Depois leia o novo código e crie o usuário de novo:</p><p class="comandos"><code class="cmd">sudo cat /var/lib/escritorio/codigo-primeiro-acesso.txt</code></p></details>
-            <details><summary>Como conecto (ou reconecto) ao agentes.chat?</summary><p>Abra <code>/oauth/conectar</code> e autorize. O escritório só pede leitura; se o agentes.chat conceder mais que isso, a conexão é recusada.</p></details>
-            <details><summary>O que fica guardado no servidor?</summary><p>Em <code>/var/lib/escritorio</code> (só o serviço lê): o token de leitura do agentes.chat, o hash da sua senha, as sessões (só o hash), a marca e o logo. Nenhuma conversa é gravada; o estado dos agentes fica só na memória.</p></details>
+            <details><summary>Como conecto (ou reconecto) ao agentes.chat?</summary><p>Use <a href="/oauth/conectar">Conectar ao agentes.chat</a> (ou abra <code>/oauth/conectar</code>) e autorize. Com as conversas desligadas ou em <code>"ler"</code>, o escritório só pede leitura; se o agentes.chat conceder mais que isso, a conexão é recusada. Com <code>"responder"</code>, ele pede também escrita (“Lê e manda tarefas”, na tela de autorização), para mandar as mensagens que você escrever na página Conversas; permissão de administrar é recusada sempre. Trocar de modo pede uma conexão nova. Os detalhes estão na seção Segurança do README.</p></details>
+            <details><summary>O que fica guardado no servidor?</summary><p>Em <code>/var/lib/escritorio</code> (só o serviço lê): o token do agentes.chat, o hash da sua senha, as sessões (só o hash), a marca e o logo. Nenhuma conversa é gravada; o estado dos agentes fica só na memória.</p></details>
             <details><summary>É open source? Posso usar na minha empresa?</summary><p>Sim. Cada empresa instala o seu, com a própria marca, times, clima e sons. A arte dos móveis foi gerada para o projeto, os pisos, paredes e avatares são desenhados em código e as fontes são de licença livre. Veja o README para instalar e personalizar.</p></details>
           </div>
         </div>
@@ -303,17 +330,30 @@
       <div class="acoes"><button id="bv-salvar" class="botao" type="submit">Salvar</button><button id="bv-pular" class="botao fantasma" type="button">Pular</button></div>
     </form>
   </dialog>
-  <script src="avatar.js?v=50"></script>
-  <script src="mapa.js?v=50"></script>
-  <script src="vida.js?v=50"></script>
-  <script src="som.js?v=50"></script>
-  <script src="ceu.js?v=50"></script>
-  <script src="clima.js?v=50"></script>
-  <script src="festas.js?v=50"></script>
-  <script src="simular.js?v=50"></script>
-  <script src="efeitos.js?v=50"></script>
-  <script src="brincar.js?v=50"></script>
-  <script src="app.js?v=50"></script>
-  <script src="personalizar.js?v=50"></script>
+  <!-- senha do modo resposta (fase R): confirmada uma vez, abre o modo no servidor; o campo é limpo logo depois do envio -->
+  <dialog id="dlg-senha" class="boas-vindas dlg-senha" aria-labelledby="senha-titulo" aria-describedby="senha-texto">
+    <form id="form-senha" class="form-bv" novalidate>
+      <h2 id="senha-titulo">Abrir o modo resposta</h2>
+      <p id="senha-texto" class="ajuda">Para mandar mensagens pelo escritório, confirme a sua senha. O modo fica aberto 1 hora neste navegador, renova a cada envio e fecha de vez em 8 horas. Não abra numa tela que outras pessoas usam.</p>
+      <input id="senha-usuario" type="text" name="usuario" autocomplete="username" tabindex="-1" aria-hidden="true" readonly hidden>
+      <label for="senha-campo">Senha do escritório</label>
+      <input id="senha-campo" type="password" name="senha" autocomplete="current-password" maxlength="200" aria-describedby="senha-aviso">
+      <p id="senha-aviso" class="aviso-form ruim" role="alert"></p>
+      <div class="acoes"><button id="senha-abrir" class="botao" type="submit">Abrir e enviar</button><button id="senha-cancelar" class="botao fantasma" type="button">Cancelar</button></div>
+    </form>
+  </dialog>
+  <script src="avatar.js?v=66"></script>
+  <script src="mapa.js?v=66"></script>
+  <script src="expediente.js?v=66"></script>
+  <script src="vida.js?v=66"></script>
+  <script src="som.js?v=66"></script>
+  <script src="ceu.js?v=66"></script>
+  <script src="clima.js?v=66"></script>
+  <script src="festas.js?v=66"></script>
+  <script src="simular.js?v=66"></script>
+  <script src="efeitos.js?v=66"></script>
+  <script src="brincar.js?v=66"></script>
+  <script src="app.js?v=66"></script>
+  <script src="personalizar.js?v=66"></script>
 </body>
 </html>

@@ -48,6 +48,7 @@ const Efeitos = (() => {
     const n = ceu.escuro; if (n < 0.15 || !P.externos) return;
     c.globalCompositeOperation = "lighter";
     for (const p of P.externos.postes) brilho(c, p.x, p.y + 2, 40, `rgba(255,214,140,${0.45 * n})`);
+    for (const o of P.objetos) if (o.luz && o.nome === "placa_expediente") brilho(c, o.luz.x, o.luz.y, 14, hexA(o.luz.cor, 0.5 * n));   // luzinha da placa
     for (const car of P.externos.carros) if (car.farol) {
       const g = c.createLinearGradient(car.farol.x, 0, car.farol.x + car.farol.dir * 46, 0);
       g.addColorStop(0, `rgba(255,245,200,${0.45 * n})`); g.addColorStop(1, "rgba(0,0,0,0)");
@@ -148,6 +149,7 @@ const Efeitos = (() => {
       return true;
     }
     if (n === "ring_light") { ringLight(c, o); return true; }
+    if (n === "placa_expediente") { placaExpediente(c, o); return true; }
     const pc = PECAS[n];
     if (pc) { peca(c, o, pc[0], pc[1]); return true; }
     if (!BALANCA.test(n) || !t) return false;
@@ -470,6 +472,24 @@ const Efeitos = (() => {
       c.globalCompositeOperation = "source-over";
     }
   }
+  // placa de loja na entrada: ABERTO com o horário e luz verde, ou FECHADO com a hora de abrir e luz vermelha (o âmbar é
+  // só do "esperando você"). Segue a hora do mapa (?hora, Simulação, demonstração) e o expediente do Personalizar.
+  function placaExpediente(c, o) {
+    const E = window.Expediente, fechado = !!E && E.fora(Ceu.agora().h);
+    const x = o.x + 2, y = o.y, w = o.w - 4, cor = fechado ? "#f87171" : "#4ade80";   // 2 px de folga de cada lado (mapa.js)
+    const t1 = fechado ? "FECHADO" : "ABERTO", t2 = !E ? "07:00-20:00" : fechado ? `ABRE ${E.proximaAbertura()}` : `${E.abre}-${E.fecha}`;
+    px(c, x + 5, y + 32, w - 10, 2, "rgba(0,0,0,.22)");                                     // sombra no gramado
+    px(c, x + 9, y + 25, 2, 8, "#3a3f58"); px(c, x + w - 11, y + 25, 2, 8, "#3a3f58");      // pés
+    px(c, x, y, w, 26, "#1b1a26"); px(c, x + 1, y + 1, w - 2, 24, "#0d1020");
+    px(c, x + 1, y + 1, w - 2, 1, cor);                                                       // filete na cor do estado
+    c.font = "8px Silkscreen, monospace"; c.textAlign = "left"; c.textBaseline = "alphabetic";
+    const l1 = Math.ceil(c.measureText(t1).width), x1 = Math.round(x + (w - l1 - 6) / 2) + 6;
+    o.luz = { x: x1 - 4, y: y + 8, cor };                                                     // para o brilho de noite
+    px(c, x1 - 6, y + 6, 3, 3, cor); px(c, x1 - 6, y + 6, 1, 1, "#ffffff");                   // luzinha
+    c.fillStyle = cor; c.fillText(t1, x1, y + 11);
+    c.fillStyle = "#e5e7eb"; c.fillText(t2, Math.round(x + (w - c.measureText(t2).width) / 2), y + 21);
+  }
+
   function hexA(h, a) { const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
 
   // ---------------- datas comemorativas

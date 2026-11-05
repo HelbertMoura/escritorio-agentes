@@ -46,8 +46,7 @@ if [ -L "$CASA" ]; then echo "ABORTADO: $CASA é link simbólico" >&2; exit 1; f
 install -d -o escritorio -g escritorio -m 0700 "$CASA"
 
 # 2. Código e página, só do root (o serviço não reescreve o que executa nem o que serve)
-install -d -o root -g root -m 0755 /opt/escritorio /opt/escritorio/static /opt/escritorio/static/tema /opt/escritorio/static/fontes \
-  /opt/escritorio/static/vendor /opt/escritorio/static/vendor/three-0.186.1
+install -d -o root -g root -m 0755 /opt/escritorio /opt/escritorio/static /opt/escritorio/static/tema /opt/escritorio/static/fontes
 install -o root -g root -m 0644 escritorio.py acesso.py /opt/escritorio/
 if [ ! -f /opt/escritorio/times.json ]; then
   TIMES=times.json; [ -f "$TIMES" ] || TIMES=times.exemplo.json   # sem times.json, começa pelo exemplo
@@ -56,7 +55,7 @@ fi
 for f in static/*.html static/*.js static/*.css static/*.png; do install -o root -g root -m 0644 "$f" "/opt/escritorio/$f"; done
 install -o root -g root -m 0644 static/tema/atlas.png static/tema/atlas.json /opt/escritorio/static/tema/
 install -o root -g root -m 0644 static/fontes/* /opt/escritorio/static/fontes/
-install -o root -g root -m 0644 static/vendor/three-0.186.1/* /opt/escritorio/static/vendor/three-0.186.1/
+rm -f /opt/escritorio/static/maquete.js; rm -rf /opt/escritorio/static/vendor   # sobras da maquete 3D (removida), caminho fixo
 python3 -I -m py_compile /opt/escritorio/escritorio.py /opt/escritorio/acesso.py && rm -rf /opt/escritorio/__pycache__
 # Comando do administrador: em /usr/sbin, que está no secure_path do sudo (RHEL e Debian; /usr/local/bin não está).
 # Lê o .env como root e roda o Python como o usuário do serviço: só lê o que o próprio serviço já lê.
@@ -81,7 +80,7 @@ umask 077
   echo "AGENTES_ORG=$ORG"
   echo "ESCRITORIO_DADOS=$CASA"
   echo "ESCRITORIO_TIMES=/opt/escritorio/times.json"
-  echo "ESCRITORIO_INTERVALO=15"
+  echo "ESCRITORIO_INTERVALO=30"
   echo "ESCRITORIO_FONTE=$FONTE"
 } > "$ENV"
 chown root:root "$ENV"; chmod 0600 "$ENV"

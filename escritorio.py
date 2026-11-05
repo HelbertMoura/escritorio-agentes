@@ -2,13 +2,14 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Escritório dos agentes: página que mostra quem do time do agentes.chat está trabalhando.
 
-Lê o agentes.chat pelo conector MCP de apps externos (OAuth, escopo só "read"), a cada
-ESCRITORIO_INTERVALO segundos, e guarda um resumo em memória. Não chama modelo de IA nenhum.
-Serve a página em 127.0.0.1; quem publica é a Tailscale (tailscale serve), só na rede privada
-da pessoa, com HTTPS. Na frente de tudo há login com usuário e senha (acesso.py).
+Lê o agentes.chat pelo conector MCP de apps externos (OAuth, escopo "read"; "read write" só com
+"conversas": "responder"), a cada ESCRITORIO_INTERVALO segundos, e guarda um resumo em memória.
+Não chama modelo de IA nenhum. Serve a página em 127.0.0.1; quem publica é a Tailscale (tailscale serve),
+só na rede privada da pessoa, com HTTPS. Na frente de tudo há login com usuário e senha (acesso.py).
 
-Rotas: /entrar /primeiro-acesso /sair /logo  /  /<estático>  /api/estado /api/config /api/marca
-       /api/logo /oauth/conectar /oauth/retorno   (as quatro primeiras e os estáticos do login sem sessão)
+Rotas: /entrar /primeiro-acesso /sair /logo  /  /<estático>  /api/estado /api/config /api/conversa /api/marca
+       /api/logo /api/conversa/modo /api/conversa/modo/fechar /api/conversa/responder /oauth/conectar /oauth/retorno
+       (as quatro primeiras e os estáticos do login sem sessão)
 Uso: python3 -I escritorio.py           serviço (variáveis no /etc/escritorio.env)
      python3 -I escritorio.py codigo    mostra o código de primeiro acesso, só lendo (sudo escritorio-codigo)
 Só biblioteca padrão do Python 3.
@@ -16,6 +17,7 @@ Só biblioteca padrão do Python 3.
 import base64
 import collections
 import datetime
+import email.utils
 import hashlib
 import html
 import json
@@ -25,13 +27,15 @@ import secrets
 import sys
 import threading
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from acesso import ARQ_CODIGO, ARQ_USUARIOS, Acesso, UsuariosIlegiveis, gravar, ler_codigo, ler_usuarios  # noqa: E402
+from acesso import (ARQ_CODIGO, ARQ_USUARIOS, Acesso, TentativasDemais, UsuariosIlegiveis, gravar, ler_codigo,  # noqa: E402
+                    ler_usuarios)
 
 VERSAO = "1.0.0"
 MCP = os.environ.get("AGENTES_MCP", "https://app.agentes.chat/mcp")
@@ -55,7 +59,11 @@ def fonte_codigo(valor):
 
 
 FONTE = fonte_codigo(os.environ.get("ESCRITORIO_FONTE"))
-INTERVALO = max(10, int(os.environ.get("ESCRITORIO_INTERVALO", "15")))
+INTERVALO = max(30, int(os.environ.get("ESCRITORIO_INTERVALO", "30")))
+# Orçamento do agentes.chat: 5.000 pedidos/dia por conexão. A leitura de fundo fica em até 3.000; o resto é folga.
+ORCAMENTO_DIA = 3000
+AGENTES_A_CADA, RECARGA_MINIMA = 600, 120   # list_agents a cada 10 min; agente desconhecido recarrega, no máximo a cada 2 min
+PAUSA_429 = "O agentes.chat pediu uma pausa nas leituras; mostrando a última leitura"
 ARQ_TOKEN = os.path.join(DADOS, "oauth.json")
 URL_APP = re.compile(r"https://app\.agentes\.chat/org/" + re.escape(ORG) + r"/c/[0-9a-f\-]{36}(\?m=[0-9a-f\-]{36})?")
 ARQUIVOS = {  # estáticos servidos (lista fechada)
@@ -69,23 +77,55 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "fontes/source-sans-3.woff2": "font/woff2", "fontes/doto.woff2": "font/woff2",
     "entrar.css": "text/css; charset=utf-8", "entrar.js": "text/javascript; charset=utf-8",
     "personalizar.js": "text/javascript; charset=utf-8", "brincar.js": "text/javascript; charset=utf-8",
-    "simular.js": "text/javascript; charset=utf-8",
-    "maquete.js": "text/javascript; charset=utf-8",   # ES module, carregado por import() só quando a pessoa abre a maquete 3D
-    # three.js sem alteração (cópia do npm, sha256 conferido em teste); a versão no caminho permite cache imutável
-    "vendor/three-0.186.1/three.module.js": "text/javascript; charset=utf-8",
-    "vendor/three-0.186.1/three.core.js": "text/javascript; charset=utf-8",
+    "simular.js": "text/javascript; charset=utf-8", "expediente.js": "text/javascript; charset=utf-8",
 }
 TIMEOUT = 20
 
 
 def log(**campos):
     campos["hora"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
-    print(json.dumps(campos, ensure_ascii=False), flush=True)
+    linha = json.dumps(campos, ensure_ascii=False)   # surrogate sozinho (emoji cortado) vira "?" em vez de derrubar quem loga
+    print(linha.encode("utf-8", "replace").decode("utf-8"), flush=True)
 
 
 # ---------------------------------------------------------------- OAuth (cliente público + PKCE)
 
+def escopo_do_modo(modo):
+    """O escopo que o escritório pede ao agentes.chat: escrita só no modo "responder" (fase R)."""
+    return "read write" if modo == "responder" else "read"
+
+
+def escopo_aceito(tok, pedido):
+    """Escopo efetivo, normalizado, de uma resposta do endpoint de token (R1-b). Sem escopo, vale o pedido
+    (RFC 6749 §5.1). Passa {read} sempre e {read, write} só quando o pedido teve write; manage, escopo desconhecido
+    ou mais que o pedido levantam EscopoRecusado: quem recebe revoga os tokens que vieram."""
+    bruto = tok.get("scope")
+    concedido = set(str(bruto).split()) if bruto else set(pedido.split())
+    if concedido == {"read"}:
+        return "read"
+    if concedido == {"read", "write"} and "write" in pedido.split():
+        return "read write"
+    raise EscopoRecusado("o agentes.chat concedeu um acesso diferente do pedido; conexão recusada")
+
+
+def tokens(tok, escopo, refresh_antes=None):
+    """Os campos gravados de uma resposta de token. Sem access_token ou com expires_in inválido, levanta ValueError."""
+    if not isinstance(tok.get("access_token"), str) or not tok["access_token"]:
+        raise ValueError("o agentes.chat não mandou o token")
+    try:
+        validade = int(tok.get("expires_in", 3600))
+    except (TypeError, ValueError):   # "expires_in": null ou texto
+        raise ValueError("o agentes.chat mandou uma validade inválida para o token") from None
+    return {"access_token": tok["access_token"], "refresh_token": tok.get("refresh_token") or refresh_antes,
+            "expira": time.time() + validade, "escopo": escopo}
+
+
 class Credenciais:
+    """Conexão OAuth com o agentes.chat. O escopo sai do modo do times.json (escopo_do_modo); cada escopo tem o seu
+    cliente registrado. Trocar de escopo deixa o cliente novo PENDENTE, junto do state, até o concluir() dar certo:
+    até lá o token antigo continua valendo (R1-a)."""
+    VALIDADE = 600   # um consentimento precisa voltar em até 10 min
+
     def __init__(self, caminho):
         self.caminho, self.trava, self.pendentes = caminho, threading.Lock(), {}
         self.dados = {}
@@ -102,55 +142,104 @@ class Credenciais:
     def redirect_uri(self):
         return BASE + "/oauth/retorno"
 
-    def registrar(self):
-        if self.dados.get("client_id") and self.dados.get("redirect_uri") == self.redirect_uri():
+    def escopo(self, dados=None):
+        """Escopo do token gravado; arquivo de antes da fase R (sem o campo ou vazio) é leitura."""
+        return (self.dados if dados is None else dados).get("escopo") or "read"
+
+    def tem_escrita(self):
+        # sem a trava: o token() a segura durante a renovação (rede), e a página não pode esperar por isso.
+        # dois .get() num dict, sem iterar, são seguros mesmo com outra thread trocando ou mudando o self.dados
+        dados = self.dados
+        return bool(dados.get("access_token")) and "write" in self.escopo(dados).split()
+
+    def _cliente(self, escopo, agora):
+        """client_id para o escopo: o gravado, se for daquele escopo e retorno; senão um pendente vivo com o mesmo
+        escopo e retorno (abrir o /oauth/conectar várias vezes não registra vários); senão um registro novo."""
+        if self.dados.get("client_id") and self.dados.get("redirect_uri") == self.redirect_uri() \
+                and self.dados.get("escopo_cliente", "read") == escopo:
             return self.dados["client_id"]
-        corpo = {"client_name": "Escritório dos agentes (leitura)", "redirect_uris": [self.redirect_uri()],
+        for p in self.pendentes.values():
+            if agora - p["em"] < self.VALIDADE and p["escopo"] == escopo and p["redirect_uri"] == self.redirect_uri():
+                return p["client_id"]
+        nome = "Escritório dos agentes" if "write" in escopo.split() else "Escritório dos agentes (leitura)"
+        corpo = {"client_name": nome, "redirect_uris": [self.redirect_uri()],
                  "grant_types": ["authorization_code", "refresh_token"], "response_types": ["code"],
-                 "token_endpoint_auth_method": "none", "scope": "read"}
-        resp = post_json(EMISSOR + "/api/oauth/register", corpo)
-        self.dados = {"client_id": resp["client_id"], "redirect_uri": self.redirect_uri()}
-        self.salvar()
-        return resp["client_id"]
+                 "token_endpoint_auth_method": "none", "scope": escopo}
+        return post_json(EMISSOR + "/api/oauth/register", corpo)["client_id"]
 
     def url_autorizacao(self):
+        escopo = escopo_do_modo(carregar_times()["conversas"])
         with self.trava:
-            cliente = self.registrar()
+            agora = time.time()
+            cliente = self._cliente(escopo, agora)
             verificador = secrets.token_urlsafe(64)
             desafio = base64.urlsafe_b64encode(hashlib.sha256(verificador.encode()).digest()).rstrip(b"=").decode()
             estado = secrets.token_urlsafe(24)
-            agora = time.time()
-            vivos = sorted(((k, v) for k, v in self.pendentes.items() if agora - v[1] < 600), key=lambda kv: kv[1][1])
+            vivos = sorted(((k, v) for k, v in self.pendentes.items() if agora - v["em"] < self.VALIDADE), key=lambda kv: kv[1]["em"])
             self.pendentes = dict(vivos[-4:])  # no máximo 5 logins em andamento
-            self.pendentes[estado] = (verificador, agora)
-            q = {"response_type": "code", "client_id": cliente, "redirect_uri": self.redirect_uri(), "scope": "read",
+            self.pendentes[estado] = {"verificador": verificador, "em": agora, "client_id": cliente, "escopo": escopo,
+                                      "redirect_uri": self.redirect_uri()}
+            q = {"response_type": "code", "client_id": cliente, "redirect_uri": self.redirect_uri(), "scope": escopo,
                  "state": estado, "code_challenge": desafio, "code_challenge_method": "S256", "resource": MCP}
             return EMISSOR + "/api/oauth/authorize?" + urllib.parse.urlencode(q)
 
     def concluir(self, codigo, estado):
         with self.trava:
             pend = self.pendentes.pop(estado, None)
-            if not pend or time.time() - pend[1] > 600:
+            if not pend or time.time() - pend["em"] > self.VALIDADE:
                 raise ValueError("estado do login inválido ou expirado; comece de novo em /oauth/conectar")
             tok = post_form(EMISSOR + "/api/oauth/token", {
-                "grant_type": "authorization_code", "code": codigo, "redirect_uri": self.redirect_uri(),
-                "client_id": self.dados["client_id"], "code_verifier": pend[0], "resource": MCP})
-            self._guardar(tok)
+                "grant_type": "authorization_code", "code": codigo, "redirect_uri": pend["redirect_uri"],
+                "client_id": pend["client_id"], "code_verifier": pend["verificador"], "resource": MCP})
+            try:
+                escopo = escopo_aceito(tok, pend["escopo"])
+            except EscopoRecusado:   # tokens válidos com acesso demais: revoga na hora; a conexão antiga continua
+                self._revogar(tok, pend["client_id"])
+                raise
+            antigo = self.dados
+            # o dicionário novo fica pronto antes da troca: uma resposta ruim nunca derruba a conexão antiga
+            try:
+                novo = {"client_id": pend["client_id"], "redirect_uri": pend["redirect_uri"], "escopo_cliente": pend["escopo"],
+                        **tokens(tok, escopo)}
+            except ValueError:   # resposta que não dá para gravar: o que veio de token válido não fica vivo (B3)
+                self._revogar(tok, pend["client_id"])
+                raise
+            self.dados = novo
+            self.salvar()
+            if antigo.get("client_id") and antigo["client_id"] != pend["client_id"] and antigo.get("refresh_token"):
+                self._revogar({"refresh_token": antigo["refresh_token"]}, antigo["client_id"])   # melhor esforço
 
-    def _guardar(self, tok):
-        escopo = set(str(tok.get("scope", "read")).split())
-        if escopo - {"read"}:
-            raise PermissaoNegada("o agentes.chat concedeu mais que leitura; conexão recusada")
-        self.dados["access_token"] = tok["access_token"]
-        if tok.get("refresh_token"):
-            self.dados["refresh_token"] = tok["refresh_token"]
-        self.dados["expira"] = time.time() + int(tok.get("expires_in", 3600))
-        self.dados["escopo"] = tok.get("scope", "")
+    def _gravar_tokens(self, tok, escopo):
+        self.dados.update(tokens(tok, escopo, self.dados.get("refresh_token")))
         self.salvar()
+
+    def _descartar(self):
+        for k in ("access_token", "refresh_token", "expira"):
+            self.dados.pop(k, None)
+        self.salvar()
+
+    def _revogar(self, tok, cliente):
+        """RFC 7009, melhor esforço: nunca levanta exceção e loga só o resultado (nunca token, código nem state)."""
+        for chave in ("access_token", "refresh_token"):
+            if not tok.get(chave):
+                continue
+            try:
+                st, _, _ = _abrir(urllib.request.Request(EMISSOR + "/api/oauth/revoke", urllib.parse.urlencode(
+                    {"token": tok[chave], "token_type_hint": chave, "client_id": cliente}).encode(),
+                    {"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"}))
+                log(evento="oauth", resultado="revogado" if st == 200 else "revogacao_falhou", tipo=chave, http=st)
+            except Exception as x:
+                log(evento="oauth", resultado="revogacao_falhou", tipo=chave, erro=type(x).__name__)
 
     def token(self):
         with self.trava:
             if not self.dados.get("access_token"):
+                return None
+            if "write" in self.escopo().split() and modo_declarado() not in (None, "responder"):
+                # R1-c: só com o times.json lido sem erro e dizendo outro modo; arquivo ilegível não revoga nada
+                log(evento="oauth", resultado="rebaixado")
+                self._revogar(self.dados, self.dados.get("client_id"))
+                self._descartar()
                 return None
             if time.time() > self.dados.get("expira", 0) - 90:
                 if not self.dados.get("refresh_token"):
@@ -159,12 +248,22 @@ class Credenciais:
                     tok = post_form(EMISSOR + "/api/oauth/token", {
                         "grant_type": "refresh_token", "refresh_token": self.dados["refresh_token"],
                         "client_id": self.dados["client_id"], "resource": MCP})
-                    self._guardar(tok)
-                except PermissaoNegada:
-                    for k in ("access_token", "refresh_token", "expira"):  # revogado: pede nova conexão
-                        self.dados.pop(k, None)
-                    self.salvar()
+                except PermissaoNegada as x:
+                    if x.http in (400, 401):   # R1-d: refresh inválido ou cliente desconhecido: pede nova conexão
+                        self._descartar()
+                        return None
+                    raise RuntimeError(f"a renovação do token falhou (HTTP {x.http}); tento de novo") from None
+                try:
+                    escopo = escopo_aceito(tok, self.escopo())   # a renovação nunca amplia
+                except EscopoRecusado:
+                    self._revogar(tok, self.dados.get("client_id"))
+                    self._descartar()
                     return None
+                try:
+                    self._gravar_tokens(tok, escopo)
+                except ValueError:   # renovação com resposta ruim: revoga o que veio e sobe como erro passageiro
+                    self._revogar(tok, self.dados.get("client_id"))
+                    raise RuntimeError("a renovação do token voltou fora do formato; tento de novo") from None
             return self.dados["access_token"]
 
 
@@ -189,12 +288,46 @@ def post_form(url, campos):
                                  {"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"})
     st, _, dados = _abrir(req)
     if st >= 300:
-        raise PermissaoNegada(f"o login do agentes.chat recusou o token (HTTP {st})")
+        raise PermissaoNegada(f"o login do agentes.chat recusou o token (HTTP {st})", st)
     return json.loads(dados)
 
 
 class PermissaoNegada(Exception):
+    def __init__(self, mensagem, http=None):
+        super().__init__(mensagem)
+        self.http = http
+
+
+class EscopoRecusado(PermissaoNegada):
     pass
+
+
+class Limitado(Exception):
+    """HTTP 429 do agentes.chat. Guarda o Retry-After como veio (ou None); quem pausa é o leitor."""
+    def __init__(self, retry_after):
+        super().__init__("o agentes.chat pediu uma pausa (HTTP 429)")
+        self.retry_after = retry_after
+
+
+def espera_429(retry_after, seguidos):
+    """Pausa depois de um 429: o Retry-After (segundos ou data HTTP), entre 60 s e 1 h; sem ele (ou inválido),
+    5 min dobrando a cada 429 seguido, até 1 h."""
+    valor, segundos = (retry_after or "").strip(), None
+    if valor.isdigit():
+        segundos = int(valor)
+    elif valor:
+        try:
+            segundos = email.utils.parsedate_to_datetime(valor).timestamp() - time.time()
+        except (TypeError, ValueError, IndexError, OverflowError):
+            pass
+    if segundos is None:
+        return min(3600, 300 * 2 ** (min(seguidos, 8) - 1))
+    return int(min(3600, max(60, segundos)))
+
+
+def espera_erro(seguidos):
+    """Outras falhas da leitura: 30 s dobrando a cada falha seguida, até 5 min."""
+    return min(300, 30 * 2 ** (min(seguidos, 8) - 1))
 
 
 # ---------------------------------------------------------------- MCP do agentes.chat
@@ -202,6 +335,8 @@ class PermissaoNegada(Exception):
 class ClienteMCP:
     def __init__(self, cred):
         self.cred, self.sessao, self.n = cred, None, 0
+        self.pedidos = 0   # todo POST ao /mcp, inclusive initialize e notificação: é o que conta no limite do agentes.chat
+        self.trava = threading.RLock()   # o leitor e a rota de conversa dividem a sessão: uma chamada por vez
 
     def _post(self, corpo, token):
         cab = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream",
@@ -210,8 +345,12 @@ class ClienteMCP:
             cab["Mcp-Session-Id"] = self.sessao
         req = urllib.request.Request(MCP, json.dumps(corpo).encode(), cab)
         req.add_unredirected_header("Authorization", "Bearer " + token)  # nunca segue para outro host
+        self.pedidos += 1
         st, headers, dados = _abrir(req)
-        sid = {k.lower(): v for k, v in headers.items()}.get("mcp-session-id")
+        headers = {k.lower(): v for k, v in headers.items()}
+        if st == 429:   # a sessão continua valendo: renovar só gastaria mais pedidos
+            raise Limitado(headers.get("retry-after"))
+        sid = headers.get("mcp-session-id")
         if sid:
             self.sessao = sid
         if st == 401:
@@ -224,8 +363,9 @@ class ClienteMCP:
         return _resposta_jsonrpc(dados)
 
     def _rpc(self, metodo, params, token):
-        self.n += 1
-        resp = self._post({"jsonrpc": "2.0", "id": self.n, "method": metodo, "params": params}, token)
+        with self.trava:
+            self.n += 1
+            resp = self._post({"jsonrpc": "2.0", "id": self.n, "method": metodo, "params": params}, token)
         if resp is None:
             raise RuntimeError(f"MCP sem resposta para {metodo}")
         if "error" in resp:
@@ -233,10 +373,11 @@ class ClienteMCP:
         return resp.get("result", {})
 
     def iniciar(self, token):
-        self.sessao = None
-        self._rpc("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
-                                 "clientInfo": {"name": "escritorio-agentes", "version": VERSAO}}, token)
-        self._post({"jsonrpc": "2.0", "method": "notifications/initialized"}, token)
+        with self.trava:   # initialize e notificação juntos: outra chamada no meio usaria a sessão pela metade
+            self.sessao = None
+            self._rpc("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
+                                     "clientInfo": {"name": "escritorio-agentes", "version": VERSAO}}, token)
+            self._post({"jsonrpc": "2.0", "method": "notifications/initialized"}, token)
 
     def ferramenta(self, nome, args, token):
         res = self._rpc("tools/call", {"name": nome, "arguments": args}, token)
@@ -285,28 +426,40 @@ def limpa_rotulo(txt, nomes=None):
     return (txt[:110] + "…") if len(txt) > 110 else txt
 
 
-def resumir(agentes, tarefas):
+def normalizar(agentes, tarefas):
+    """(agentes, tarefas) da leitura bruta: só tarefas de agente conhecido, com rótulo limpo e url conferida.
+    As tarefas completas (com url) ficam no servidor; o que vai ao navegador é escolhido pelo resumir()."""
     lista = [{"id": a["id"], "nome": a.get("name", "")[:60], "handle": a.get("handle", "")[:40],
               "funcao": (a.get("role") or "")[:120]} for a in agentes]
     ids = {a["id"] for a in lista}
     nomes = {a["handle"].lower(): a["nome"] for a in lista}
-    por_agente, todas = {}, []
+    itens = []
     for t in tarefas:
         ag = (t.get("agent") or {}).get("id")
         if ag not in ids:
             continue
         url = str(t.get("url") or "")[:200]
         inicio = str(t.get("started_at", ""))[:40]
-        item = {"agente_id": ag, "run_id": str(t.get("run_id") or f"{ag}:{inicio}")[:80],
-                "status": str(t.get("status", ""))[:30], "rotulo": limpa_rotulo(t.get("label", ""), nomes),
-                "inicio": inicio, "started_at": inicio, "url": url if URL_APP.fullmatch(url) else ""}
-        todas.append({k: item[k] for k in ("agente_id", "run_id", "status", "started_at")})  # sem rótulo nem url
-        atual = por_agente.get(ag)
-        # Se o agente tem várias tarefas, mostra a que pede algo da pessoa; senão a mais recente.
-        peso = {"waiting_approval": 3, "waiting_input": 2}.get(item["status"], 1)
-        if not atual or peso > atual[0] or (peso == atual[0] and item["inicio"] > atual[1]["inicio"]):
-            por_agente[ag] = (peso, item)
-    return {"agentes": lista, "trabalhos": [v[1] for v in por_agente.values()], "tarefas": todas}
+        itens.append({"agente_id": ag, "run_id": str(t.get("run_id") or f"{ag}:{inicio}")[:80],
+                      "status": str(t.get("status", ""))[:30], "rotulo": limpa_rotulo(t.get("label", ""), nomes),
+                      "inicio": inicio, "started_at": inicio, "url": url if URL_APP.fullmatch(url) else ""})
+    return lista, itens
+
+
+def prefere(item, atual):
+    """Entre tarefas do mesmo agente, a que pede algo da pessoa (aprovação antes de pergunta); senão a mais recente."""
+    peso = lambda t: {"waiting_approval": 3, "waiting_input": 2}.get(t["status"], 1)
+    return atual is None or (peso(item), item["inicio"]) > (peso(atual), atual["inicio"])
+
+
+def resumir(agentes, tarefas):
+    lista, itens = normalizar(agentes, tarefas)
+    por_agente = {}
+    for item in itens:
+        if prefere(item, por_agente.get(item["agente_id"])):
+            por_agente[item["agente_id"]] = item
+    todas = [{k: t[k] for k in ("agente_id", "run_id", "status", "started_at")} for t in itens]   # sem rótulo nem url
+    return {"agentes": lista, "trabalhos": list(por_agente.values()), "tarefas": todas}
 
 
 def _iso(t):
@@ -408,6 +561,72 @@ class Diario:
         return [item for _, item in self.resolvidos]
 
 
+def canal_da_url(url):
+    """O id do canal de uma url do agentes.chat já conferida pelo URL_APP, ou None."""
+    canal = url.split("/c/", 1)[1][:36] if URL_APP.fullmatch(url or "") else ""
+    return canal if UUID_MCP.fullmatch(canal) else None
+
+
+class ConversasDoDia:
+    """Página Conversas (contrato P): um item por (canal, agente) das tarefas que o escritório viu hoje, só na memória.
+    Vivo: a tarefa da última leitura, pela regra do prefere(). Terminado: sumiu de uma leitura completa; vale até a
+    meia-noite de Brasília, no máximo 50. O id é aleatório e fica o mesmo enquanto o item existir: depois de um
+    reinício, o id de uma aba velha dá 404 em vez de abrir outra conversa."""
+    TETO = 50
+    VIVO = {"waiting_approval": "aprovacao", "waiting_input": "pergunta"}   # running e still_running são o mesmo estado
+
+    def __init__(self):
+        self.itens = {}   # (canal, agente_id) -> item; nunca alterado no lugar: cada mudança é um dict novo
+        self.mudou = {}   # canal -> instante da última mudança vista nele (o cache da conversa só vale se for mais novo)
+
+    def atualizar(self, itens, desde, completa, agora, publicado=None):
+        """Uma leitura (itens do normalizar(), "desde" por run_id do Diario). Devolve a foto nova, que ninguém altera.
+        A mudança num canal fica marcada com o instante em que a foto é publicada (padrão: agora)."""
+        publicado = agora if publicado is None else publicado
+        vivos = {}
+        for t in itens:
+            canal = canal_da_url(t["url"])
+            if canal and prefere(t, vivos.get((canal, t["agente_id"]))):
+                vivos[(canal, t["agente_id"])] = t
+        for (canal, agente), t in vivos.items():
+            antes = self.itens.get((canal, agente))
+            estado = lambda it: (it["run_id"], self.VIVO.get(it["status"], "trabalhando"), it.get("terminou_em"))
+            if not antes or estado(antes) != estado(t):
+                self.mudou[canal] = publicado
+            self.itens[(canal, agente)] = {"id": antes["id"] if antes else secrets.token_urlsafe(9), "canal": canal,
+                                           "agente_id": agente, "url": t["url"], "run_id": t["run_id"], "status": t["status"],
+                                           "rotulo": t["rotulo"], "desde": desde.get(t["run_id"]), "terminou_em": None}
+        for par, it in list(self.itens.items()) if completa else []:   # leitura incompleta não termina ninguém
+            if par not in vivos and it["terminou_em"] is None:
+                self.itens[par] = {**it, "status": "terminou", "terminou_em": agora}
+                self.mudou[par[0]] = publicado
+        inicio = _meia_noite(agora)
+        terminados = sorted((it["terminou_em"], par) for par, it in self.itens.items() if it["terminou_em"] is not None)
+        for i, (fim, par) in enumerate(terminados):   # o teto vale só para as terminadas: sai a que terminou há mais tempo
+            if fim < inicio or i < len(terminados) - self.TETO:
+                del self.itens[par]
+        canais = {canal for canal, _ in self.itens}
+        self.mudou = {c: t for c, t in self.mudou.items() if c in canais}
+        return {"por_id": {it["id"]: it for it in self.itens.values()}, "mudou": dict(self.mudou)}
+
+
+def conversa_valida(item, agora):
+    """Item vivo, ou terminado hoje (a meia-noite é conferida no pedido: numa pausa, o Leitor fica sem ciclo)."""
+    return item["terminou_em"] is None or item["terminou_em"] >= _meia_noite(agora)
+
+
+def conversas_publicas(foto, agora, aceita=None):
+    """O campo "conversas" do /api/estado: só os 8 campos, montados um a um. Esperando você, trabalhando, terminadas.
+    aceita(item) diz se o item recebe envio agora (fase R); sem ela, nenhum recebe."""
+    grupo = lambda it: 0 if it["status"] in ConversasDoDia.VIVO else 2 if it["terminou_em"] is not None else 1
+    itens = sorted((it for it in foto["por_id"].values() if conversa_valida(it, agora)), key=lambda it: it["desde"] or "", reverse=True)
+    itens.sort(key=lambda it: (grupo(it), -(it["terminou_em"] or 0)))   # no grupo, a mais recente primeiro
+    return [{"id": it["id"], "agente_id": it["agente_id"], "run_id": it["run_id"], "status": it["status"],
+             "rotulo": it["rotulo"], "desde": it["desde"], "terminou_em": _iso(it["terminou_em"]) if it["terminou_em"] else None,
+             "responder": bool(aceita and aceita(it))}
+            for it in itens]
+
+
 class Leitor(threading.Thread):
     def __init__(self, cred):
         super().__init__(daemon=True)
@@ -416,18 +635,29 @@ class Leitor(threading.Thread):
                        "erro": "Carregando…"}
         self.trava = threading.Lock()
         self.diario = Diario()
+        self.agentes, self.agentes_ok, self.agentes_em = None, True, 0.0   # list_agents guardado entre as recargas
+        self.seguidos_429 = self.seguidos_erro = 0
+        self.pausa_ate = 0.0   # fim da pausa pedida por um 429; as rotas que chamam o MCP consultam pausado()
+        # memória da página Conversas: fora do self.estado, que vai inteiro para o navegador
+        self.memoria, self.conversas, self.zerar_conversas = ConversasDoDia(), {"por_id": {}, "mudou": {}}, False
+        self.relogio = time.monotonic   # mede quanto o ciclo levou até publicar
+        self.canais = None   # fase R: (ids do list_channels, completa, em), para saber o que é conversa direta
+        self.respondidos = {}   # fase R (M2): id do item -> meia-noite do dia em que o escritório mandou mensagem nele
 
-    def ler(self):
+    def pausado(self, agora=None):
+        return (time.time() if agora is None else agora) < self.pausa_ate
+
+    def ler(self, agora=None):
         token = self.cred.token()
         if not token:
             raise PermissaoNegada("o escritório ainda não está conectado ao agentes.chat (abra /oauth/conectar)")
         if not self.mcp.sessao:
             self.mcp.iniciar(token)
         try:
-            return self._coletar(token)
+            return self._coletar(token, agora)
         except ConnectionResetError:
             self.mcp.iniciar(token)
-            return self._coletar(token)
+            return self._coletar(token, agora)
 
     def _paginas(self, nome, args, chave, token):
         """Junta até 10 páginas. Devolve (itens, completa); resposta sem a lista é erro (fica a leitura anterior)."""
@@ -442,34 +672,462 @@ class Leitor(threading.Thread):
                 return itens, True
         return itens, False
 
-    def _coletar(self, token):
-        """Devolve (resumo, completa)."""
-        agentes, ok1 = self._paginas("list_agents", {}, "agents", token)
-        tarefas, ok2 = self._paginas("list_recent_tasks", {"scope": "working"}, "tasks", token)
-        return resumir(agentes, tarefas), ok1 and ok2
+    def _carregar_agentes(self, token, agora):
+        self.agentes, self.agentes_ok = self._paginas("list_agents", {}, "agents", token)
+        self.agentes_em = agora
+
+    def _coletar(self, token, agora=None):
+        """Devolve (resumo, completa). Os agentes mudam pouco: a lista vem a cada 10 min, ou antes, se uma tarefa
+        for de um agente desconhecido (sem isso o resumir() descarta a tarefa), no máximo uma vez a cada 2 min."""
+        agora = time.time() if agora is None else agora
+        if self.agentes is None or agora - self.agentes_em >= AGENTES_A_CADA:
+            self._carregar_agentes(token, agora)
+        tarefas, ok = self._paginas("list_recent_tasks", {"scope": "working"}, "tasks", token)
+        desconhecidos = {(t.get("agent") or {}).get("id") for t in tarefas} - {a["id"] for a in self.agentes} - {None, ""}
+        if desconhecidos and agora - self.agentes_em >= RECARGA_MINIMA:
+            self._carregar_agentes(token, agora)
+        self._carregar_canais(token, agora)
+        return resumir(self.agentes, tarefas), self.agentes_ok and ok, normalizar(self.agentes, tarefas)[1]
+
+    def _carregar_canais(self, token, agora):
+        """Fase R (T1): os ids do list_channels, só no modo "responder" e no máximo 1 vez por hora (até ~24 pedidos
+        por dia, dentro da folga). Um erro não derruba a leitura: a lista fica sem envio e tenta de novo em 5 min."""
+        if carregar_times()["conversas"] != "responder" or (self.canais and agora - self.canais[2] < CANAIS_CACHE):
+            return
+        try:
+            itens, completa = self._paginas("list_channels", {}, "channels", token)
+        except (Limitado, ConnectionResetError):   # pausa e sessão vencida seguem o caminho de sempre do ciclo
+            raise
+        except Exception as e:
+            log(evento="leitura", resultado="erro_canais", erro=type(e).__name__)
+            self.canais = (set(), False, agora - CANAIS_CACHE + 300)
+            return
+        self.canais = ({str(c.get("id", "")).lower() for c in itens if isinstance(c, dict)}, completa, agora)
+
+    def ciclo(self, agora=None):
+        """Uma leitura. Devolve quantos segundos esperar até a próxima."""
+        agora = time.time() if agora is None else agora
+        if self.pausado(agora):   # pausa pedida por um 429 que veio de outra chamada (rota de conversa): não chama o MCP
+            with self.trava:
+                self.estado = {**self.estado, "erro": PAUSA_429}
+            return self.pausa_ate - agora
+        antes, inicio = self.mcp.pedidos, self.relogio()
+        try:
+            novo, completa, itens = self.ler(agora)
+            self.diario.aplicar(novo, completa)
+            novo.update(atualizado=_iso(agora), erro=None)
+            with self.trava:
+                if self.zerar_conversas:   # conta nova no OAuth: a lista da conta anterior não fica à vista
+                    self.memoria, self.zerar_conversas = ConversasDoDia(), False
+            # a mudança vale a partir da publicação (no relógio do "agora"): uma leitura de conversa feita durante o
+            # ciclo pode ser de antes da mudança e não pode passar por nova
+            publicado = agora + (self.relogio() - inicio)
+            foto = self.memoria.atualizar(itens, {t["run_id"]: t.get("desde") for t in novo["tarefas"]}, completa, agora,
+                                          publicado)
+            with self.trava:   # o estado e a memória trocam juntos; as rotas só leem as fotos
+                self.estado = novo
+                if not self.zerar_conversas:
+                    self.conversas = foto
+            self.seguidos_429 = self.seguidos_erro = 0
+            # o intervalo cresce com o custo do ciclo (páginas extras, initialize): a leitura de fundo nunca passa do orçamento
+            return max(INTERVALO, (self.mcp.pedidos - antes) * 86400 / ORCAMENTO_DIA)
+        except Limitado as e:   # mantém a sessão MCP e a última leitura; uma linha de log por episódio
+            self.seguidos_429 += 1
+            espera = espera_429(e.retry_after, self.seguidos_429)
+            self.pausa_ate = agora + espera
+            with self.trava:
+                self.estado = {**self.estado, "erro": PAUSA_429}
+            if self.seguidos_429 == 1:
+                log(evento="leitura", resultado="limitado", espera=espera)
+            return espera
+        except PermissaoNegada as e:
+            with self.trava:
+                self.estado = {**self.estado, "erro": str(e)}
+            log(evento="leitura", resultado="sem_acesso", detalhe=str(e)[:200])
+            return INTERVALO
+        except Exception as e:  # rede, MCP fora do ar: mantém o último estado e avisa
+            self.mcp.sessao = None
+            self.seguidos_erro += 1
+            with self.trava:
+                self.estado = {**self.estado, "erro": "agentes.chat não respondeu; mostrando a última leitura"}
+            log(evento="leitura", resultado="erro", detalhe=f"{type(e).__name__}: {str(e)[:200]}")
+            return espera_erro(self.seguidos_erro)
 
     def run(self):
         while True:
-            try:
-                novo, completa = self.ler()
-                self.diario.aplicar(novo, completa)
-                novo.update(atualizado=_iso(time.time()), erro=None)
-                with self.trava:
-                    self.estado = novo
-            except PermissaoNegada as e:
-                with self.trava:
-                    self.estado = {**self.estado, "erro": str(e)}
-                log(evento="leitura", resultado="sem_acesso", detalhe=str(e)[:200])
-            except Exception as e:  # rede, MCP fora do ar: mantém o último estado e avisa
-                self.mcp.sessao = None
-                with self.trava:
-                    self.estado = {**self.estado, "erro": "agentes.chat não respondeu; mostrando a última leitura"}
-                log(evento="leitura", resultado="erro", detalhe=f"{type(e).__name__}: {str(e)[:200]}")
-            time.sleep(INTERVALO)
+            time.sleep(self.ciclo())
 
     def foto(self):
         with self.trava:
             return dict(self.estado)
+
+    def conversas_do_dia(self):
+        """Foto da memória da página Conversas (com canal e url: fica no servidor; o público sai do conversas_publicas)."""
+        with self.trava:
+            return self.conversas
+
+    def zerar_memoria(self):
+        with self.trava:
+            self.conversas, self.zerar_conversas, self.respondidos = {"por_id": {}, "mudou": {}}, True, {}
+
+    def marcar_respondido(self, id_conversa, agora):
+        """Envio que deu certo (M2): até a meia-noite, a leitura desse item sai sem o limite A1. O run de uma resposta
+        curta nem aparece na leitura de 30 s, e o item segue "terminou": sem a marca, o A1 esconderia a própria mensagem
+        enviada e a resposta do agente."""
+        hoje = _meia_noite(agora)
+        with self.trava:
+            self.respondidos = {k: v for k, v in self.respondidos.items() if v == hoje}
+            self.respondidos[id_conversa] = hoje
+
+    def respondido(self, id_conversa, agora):
+        with self.trava:
+            return self.respondidos.get(id_conversa) == _meia_noite(agora)
+
+
+# ---------------------------------------------------------------- conversas (fase 1: ler, só com "conversas": "ler")
+
+UUID_MCP = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}")   # o do esquema
+HORA_OK = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})")
+ID_CONVERSA = re.compile(r"[A-Za-z0-9_-]{12}")   # secrets.token_urlsafe(9)
+TEXTO_MAX, CONVERSA_BYTES_MAX, CONVERSA_CACHE, FIM_MARGEM = 1500, 30_000, 60, 60
+
+
+def limpa_texto(txt, maximo):
+    """Texto de fora em texto puro: tira os caracteres de controle (menos o \\n), os de formato (bidi, zero-width, BOM)
+    e o surrogate sozinho (emoji cortado). Devolve (texto, cortado)."""
+    txt = str(txt).replace("\r\n", "\n")
+    txt = "".join(c for c in txt if c == "\n" or unicodedata.category(c) not in ("Cc", "Cf", "Cs"))
+    return txt[:maximo], len(txt) > maximo
+
+
+def resumir_conversa(bruto, url, agora):
+    """Resposta do read_conversation -> o que a ficha mostra, da mais antiga para a mais nova (a ordem do MCP).
+    Nunca sai id de mensagem, canal, thread, o notice, nome de pessoa nem anexo (só a contagem)."""
+    msgs = bruto.get("messages") if isinstance(bruto, dict) else None
+    if not isinstance(msgs, list):
+        raise ValueError("resposta sem messages")
+    mensagens = []
+    for m in msgs[-20:]:
+        if not isinstance(m, dict):
+            raise ValueError("mensagem fora do formato")
+        autor = m.get("author") if isinstance(m.get("author"), dict) else {}
+        texto, cortado = limpa_texto(m.get("untrusted_text") or "", TEXTO_MAX)
+        hora = str(m.get("sent_at") or "")
+        item = {"autor": "agente" if autor.get("kind") == "agent" else "pessoa", "hora": hora if HORA_OK.fullmatch(hora) else None,
+                "texto": texto, "cortado": cortado or m.get("truncated") is True,
+                "anexos": len(m["attachments"]) if isinstance(m.get("attachments"), list) else 0}
+        if item["autor"] == "agente":
+            item["nome"] = limpa_texto(autor.get("name") or "", 60)[0]
+        mensagens.append(item)
+    resposta = {"mensagens": mensagens, "url": url, "atualizado": _iso(agora)}
+    while mensagens and len(json.dumps(resposta, ensure_ascii=False).encode("utf-8", "replace")) > CONVERSA_BYTES_MAX:
+        mensagens.pop(0)   # passou de 30 KB: saem as mais antigas
+    return resposta
+
+
+def instante(hora):
+    """Hora no formato do HORA_OK -> segundos. O fromisoformat do Python 3.10 não aceita "Z" nem fração que não tenha
+    3 ou 6 dígitos: normaliza para "+00:00" e 6 dígitos antes."""
+    m = re.fullmatch(r"([0-9-]{10}T[0-9:]{8})(?:\.([0-9]{1,9}))?(Z|[+-][0-9]{2}:[0-9]{2})", hora)
+    if not m:
+        raise ValueError("hora fora do formato")
+    fracao = (m.group(2) or "").ljust(6, "0")[:6]
+    return datetime.datetime.fromisoformat(f"{m.group(1)}.{fracao}{'+00:00' if m.group(3) == 'Z' else m.group(3)}").timestamp()
+
+
+def ate_o_fim(resposta, fim):
+    """Tarefa terminada (contrato P, A1): só as mensagens com hora até o fim + 60 s. Sem hora válida, não sai."""
+    def antes_do_fim(m):
+        try:
+            return m["hora"] is not None and instante(m["hora"]) <= fim + FIM_MARGEM
+        except ValueError:
+            return False
+    return {**resposta, "mensagens": [m for m in resposta["mensagens"] if antes_do_fim(m)]}
+
+
+class Conversas:
+    """Lê, só a pedido, a conversa de uma tarefa (read_conversation, escopo read): a atual de um agente (ficha) ou um
+    item da página Conversas. O destino sai só do que o Leitor viu (url já conferida pelo URL_APP); o cliente nunca
+    escolhe canal nem thread. Cache de 60 s por canal e thread, que vale só se for mais novo que a última mudança vista no canal,
+    e tetos próprios (20 por minuto, 200 por dia) para a ficha e a página juntas, dentro do orçamento do agentes.chat."""
+    POR_MINUTO, POR_DIA = 20, 200
+
+    def __init__(self, leitor):
+        self.leitor, self.cache, self.chamadas = leitor, {}, collections.deque()
+        self.trava = threading.Lock()   # uma busca por vez: duas abas pedindo a mesma conversa fazem uma chamada só
+        self.no_teto = False   # o teto do dia já foi para o log neste episódio
+
+    def esquecer(self):
+        """Conta nova no OAuth: nada do que a anterior leu fica no cache."""
+        with self.trava:
+            self.cache = {}
+
+    def destino(self, agente):
+        """(canal, url) do trabalho atual desse agente, ou None."""
+        if not isinstance(agente, str) or not 0 < len(agente) <= 100:
+            return None
+        foto = self.leitor.foto()
+        if agente not in {a["id"] for a in foto.get("agentes", [])}:
+            return None
+        for t in foto.get("trabalhos", []):
+            if t.get("agente_id") == agente:
+                canal = canal_da_url(t.get("url") or "")
+                return (canal, t["url"]) if canal else None
+        return None
+
+    def ler(self, agente, agora=None):
+        """Ficha: a conversa do trabalho atual do agente. Devolve (status HTTP, corpo)."""
+        agora = time.time() if agora is None else agora
+        alvo = self.destino(agente)
+        if not alvo:
+            return 404, {"erro": "não há conversa de tarefa em andamento para este agente"}
+        return self._responder(*alvo, None, agora)
+
+    def ler_id(self, id_conversa, agora=None):
+        """Página Conversas: o item pelo id da memória do dia. Terminado: só até o fim da tarefa."""
+        agora = time.time() if agora is None else agora
+        item = self.leitor.conversas_do_dia()["por_id"].get(id_conversa) \
+            if isinstance(id_conversa, str) and ID_CONVERSA.fullmatch(id_conversa) else None
+        if not item or not conversa_valida(item, agora):
+            return 404, {"erro": "essa conversa não está mais na lista de hoje"}
+        respondido = getattr(self.leitor, "respondido", None)   # o escritório mandou mensagem nele hoje: sem o A1 (M2)
+        fim = None if respondido and respondido(id_conversa, agora) else item["terminou_em"]
+        return self._responder(item["canal"], item["url"], fim, agora)
+
+    def _responder(self, canal, url, fim, agora):
+        st, resposta = self._ler_canal(canal, url, agora)
+        if st != 200:
+            return st, resposta
+        resposta = {**resposta, "url": url, "ate": _iso(fim + FIM_MARGEM) if fim is not None else None}
+        return 200, ate_o_fim(resposta, fim) if fim is not None else resposta
+
+    def _teto(self, agora):
+        """(status, corpo) se a próxima chamada passa dos tetos; None se cabe."""
+        while self.chamadas and agora - self.chamadas[0] >= 86400:
+            self.chamadas.popleft()
+        if len(self.chamadas) >= self.POR_DIA:
+            if not self.no_teto:   # uma linha por episódio: é ela que mede se 200 por dia basta
+                log(evento="conversa", resultado="teto_dia")
+                self.no_teto = True
+            return 429, {"erro": "acabou o limite de leituras de conversa de hoje; ele volta aos poucos"}
+        self.no_teto = False
+        if sum(agora - t < 60 for t in self.chamadas) >= self.POR_MINUTO:
+            return 429, {"erro": "muitas leituras de conversa; tente de novo daqui a pouco"}
+        return None
+
+    def _ler_canal(self, canal, url, agora):
+        """Lê a thread do run (o ?m= da url, provado no R0): é nela que caem os envios do escritório e as respostas a
+        eles. Thread só com a raiz quer dizer conversa solta (o normal de uma conversa direta): lê o canal, se couber
+        nos tetos; senão fica a thread. Url sem ?m=: o canal, como antes."""
+        thread = thread_da_url(url)
+        chave = (canal, thread)
+        with self.trava:
+            em, resposta = self.cache.get(chave, (0, None))
+            mudou = self.leitor.conversas_do_dia()["mudou"].get(canal, 0)
+            if resposta and agora - em < CONVERSA_CACHE and em > mudou:   # mudou depois da leitura: lê de novo
+                return 200, resposta
+            if self.leitor.pausado(agora):
+                return 503, {"erro": "o agentes.chat pediu uma pausa; tente de novo em alguns minutos"}
+            limite = self._teto(agora)
+            if limite:
+                return limite
+            try:
+                token = self.leitor.cred.token()
+            except Exception:   # renovação que falhou de passagem (R1-d): os tokens ficam, tenta na próxima
+                token = None
+            if not token:
+                return 503, {"erro": "o escritório ainda não está conectado ao agentes.chat"}
+            try:
+                bruto = self._buscar({"thread_id": thread} if thread else {"channel_id": canal}, token, agora)
+                so_a_raiz = isinstance(bruto, dict) and isinstance(bruto.get("messages"), list) and len(bruto["messages"]) <= 1
+                if thread and so_a_raiz and not self._teto(agora):
+                    bruto = self._buscar({"channel_id": canal}, token, agora)
+                resposta = resumir_conversa(bruto, url, agora)
+            except Limitado as e:   # o limite é da conexão: o Leitor.ciclo() também espera o fim dessa pausa
+                self.leitor.pausa_ate = max(self.leitor.pausa_ate, agora + espera_429(e.retry_after, 1))
+                log(evento="conversa", resultado="limitado")
+                return 503, {"erro": "o agentes.chat pediu uma pausa; tente de novo em alguns minutos"}
+            except Exception as e:   # no log, só o tipo: a mensagem pode trazer texto da conversa
+                log(evento="conversa", resultado="erro", tipo=type(e).__name__)
+                return 502, {"erro": "não consegui ler a conversa no agentes.chat; tente de novo"}
+            self.cache = {k: v for k, v in self.cache.items() if agora - v[0] < CONVERSA_CACHE}
+            if len(self.cache) >= 20:
+                self.cache.pop(min(self.cache, key=lambda k: self.cache[k][0]))
+            self.cache[chave] = (agora, resposta)
+            return 200, resposta
+
+    def _buscar(self, destino, token, agora):
+        mcp, args = self.leitor.mcp, {**destino, "limit": 20}
+        self.chamadas.append(agora)
+        if not mcp.sessao:
+            mcp.iniciar(token)
+        try:
+            return mcp.ferramenta("read_conversation", args, token)
+        except ConnectionResetError:   # sessão MCP expirou
+            mcp.iniciar(token)
+            return mcp.ferramenta("read_conversation", args, token)
+
+    def esquecer_canal(self, canal):
+        """Depois de um envio: a próxima leitura daquele canal (e das threads dele) vai ao agentes.chat."""
+        with self.trava:
+            self.cache = {k: v for k, v in self.cache.items() if k[0] != canal}
+
+
+# ---------------------------------------------------------------- fase R: responder (só com "conversas": "responder")
+
+CHAVE_OK = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")   # crypto.randomUUID()
+TEXTO_ENVIO_MAX, CORPO_ENVIO_MAX = 2000, 8 * 1024
+# T1 (adendo do R0): só conversa direta nesta entrega; canal só depois de uma prova própria
+TIPOS_LIBERADOS = ("conversa_direta",)
+CANAIS_CACHE = 3600   # list_channels: só os ids, na memória, por 1 h (para o "responder" da lista)
+
+
+def erro(status, codigo, mensagem):
+    return status, {"erro": codigo, "mensagem": mensagem}
+
+
+def thread_da_url(url):
+    """O ?m= de uma url já conferida pelo URL_APP (a mensagem que abriu o run: a thread do envio), ou None."""
+    if not URL_APP.fullmatch(url or "") or "?m=" not in url:
+        return None
+    thread = url.split("?m=", 1)[1]
+    return thread if UUID_MCP.fullmatch(thread) else None
+
+
+def tipo_conversa(canais, canal):
+    """"canal" ou "conversa_direta" pelos ids do list_channels ((ids, completa, em)); lista incompleta que não tem o
+    canal não decide: None (nunca manda como conversa direta o que pode ser canal)."""
+    if not canais:
+        return None
+    ids, completa = canais[0], canais[1]
+    return "canal" if canal.lower() in ids else "conversa_direta" if completa else None
+
+
+class Respostas:
+    """Envia, a pedido de quem abriu o modo resposta, UMA mensagem na thread de um item da página Conversas
+    (send_to_agent). O agente, a thread e o canal saem só do que o Leitor viu; o navegador manda o id do item, o run_id
+    que a tela mostrou, o texto e a chave (idempotency_key). Nesta entrega, só conversa direta (T1): cada envio confere o
+    tipo num list_channels fresco e manda sem channel_id. Tetos próprios (5 por minuto, 50 por dia); um 429 no envio
+    pausa só os envios (pode ser o limite de mensagens da pessoa, e não o da conexão). Sem nova tentativa automática."""
+    POR_MINUTO, POR_DIA = 5, 50
+    VALE = ("waiting_input", "terminou")   # waiting_approval: aprovar é só no agentes.chat; running: o agente trabalha
+
+    def __init__(self, leitor, conversas):
+        self.leitor, self.conversas = leitor, conversas
+        self.trava = threading.Lock()   # um envio por vez: os tetos e a pausa são conferidos e gastos juntos
+        self.chamadas, self.pausa_ate, self.seguidos_429 = collections.deque(), 0.0, 0
+
+    def aceita(self, item, agora):
+        """O campo "responder" de um item, sem chamar o agentes.chat: o tipo sai dos ids que o Leitor guarda por 1 h."""
+        canais = getattr(self.leitor, "canais", None)
+        if item["status"] not in self.VALE or not thread_da_url(item["url"]) or not canais or agora - canais[2] >= CANAIS_CACHE:
+            return False
+        return tipo_conversa(canais, item["canal"]) in TIPOS_LIBERADOS
+
+    def enviar(self, usuario, id_conversa, run_id, texto, chave, agora=None):
+        """Devolve (status HTTP, corpo). Nada chama o MCP antes de todas as conferências passarem."""
+        agora = time.time() if agora is None else agora
+        item = self.leitor.conversas_do_dia()["por_id"].get(id_conversa) if ID_CONVERSA.fullmatch(id_conversa) else None
+        limpo = limpa_texto(texto, len(texto))[0].strip()
+        st, corpo = self._conferir(item, run_id, limpo, agora)
+        extra = {}
+        if st is None:
+            with self.trava:
+                st, corpo, extra = self._mandar(item, limpo, chave, agora)
+        # T4: sem texto, canal nem thread; o task_id casa com o Audit pelo horário
+        resultado = "ok" if st == 200 else "limitado" if corpo["erro"] in ("limite", "pausa") else \
+            "erro" if st == 502 else "recusado"
+        log(evento="conversa_envio", resultado=resultado, usuario=usuario, agente_id=item and item["agente_id"],
+            run_id=item and item["run_id"], task_id=extra.get("task_id"), tamanho=len(limpo), tipo=extra.get("tipo"))
+        return st, corpo
+
+    def _conferir(self, item, run_id, texto, agora):
+        if not item or not conversa_valida(item, agora):
+            return erro(404, "sem_conversa", "Essa conversa não está mais na lista de hoje.")
+        if run_id != item["run_id"]:
+            return erro(409, "mudou", "A conversa mudou desde que a tela leu; recarregue antes de responder.")
+        if item["status"] == "waiting_approval":
+            return erro(409, "aprovacao", "Aprovar é só no agentes.chat.")
+        if item["status"] not in self.VALE:
+            return erro(409, "trabalhando", "O agente está trabalhando; espere terminar ou mande no agentes.chat.")
+        if not thread_da_url(item["url"]):
+            return erro(409, "sem_thread", "Esta tarefa não tem a thread da conversa; mande no agentes.chat.")
+        if not 1 <= len(texto) <= TEXTO_ENVIO_MAX:
+            return erro(400, "texto", f"Escreva de 1 a {TEXTO_ENVIO_MAX} caracteres.")
+        return None, None
+
+    def _mandar(self, item, texto, chave, agora):
+        """Devolve (status, corpo, extra do log). Pausa e tetos vêm antes de qualquer chamada ao agentes.chat."""
+        if self.leitor.pausado(agora) or agora < self.pausa_ate:
+            return (*erro(503, "pausa", "O agentes.chat pediu uma pausa; tente de novo em alguns minutos."), {})
+        while self.chamadas and agora - self.chamadas[0] >= 86400:
+            self.chamadas.popleft()
+        if len(self.chamadas) >= self.POR_DIA or sum(agora - t < 60 for t in self.chamadas) >= self.POR_MINUTO:
+            return (*erro(429, "limite", f"Limite de envios ({self.POR_MINUTO} por minuto, {self.POR_DIA} por dia); "
+                                         "tente de novo daqui a pouco."), {})
+        try:
+            token = self.leitor.cred.token()
+        except Exception:   # renovação que falhou de passagem (R1-d)
+            token = None
+        if not token:
+            return (*erro(503, "sem_conexao", "O escritório não está conectado ao agentes.chat agora."), {})
+        try:   # T1: o tipo num list_channels fresco, a cada envio; erro na classificação não envia (falha fechada)
+            canais = self._canais(token, agora)
+        except Limitado as e:   # o list_channels é leitura: o limite é da conexão, como no Conversas
+            self.leitor.pausa_ate = max(self.leitor.pausa_ate, agora + espera_429(e.retry_after, 1))
+            return (*erro(503, "pausa", "O agentes.chat pediu uma pausa; tente de novo em alguns minutos."), {})
+        except Exception as e:
+            log(evento="conversa_envio", resultado="erro_canais", erro=type(e).__name__)
+            canais = None
+        tipo = tipo_conversa(canais, item["canal"])
+        if tipo is None:
+            return (*erro(409, "tipo_nao_liberado", "Não deu para conferir se esta conversa é direta; "
+                                                    "mande no agentes.chat."), {})
+        if tipo not in TIPOS_LIBERADOS:
+            return (*erro(409, "tipo_nao_liberado", "Em canal, por enquanto, responda no agentes.chat."), {})
+        args = {"agent": item["agente_id"], "message": texto, "thread_id": thread_da_url(item["url"]),
+                "idempotency_key": chave, "wait_seconds": 0}   # sem channel_id: só conversa direta (T1)
+        self.chamadas.append(agora)
+        try:
+            res = self._chamar("send_to_agent", args, token)
+        except Limitado as e:
+            self.seguidos_429 += 1
+            self.pausa_ate = agora + espera_429(e.retry_after, self.seguidos_429)
+            return (*erro(503, "pausa", "O agentes.chat pediu uma pausa nos envios; tente de novo em alguns minutos."),
+                    {"tipo": "dm"})
+        except Exception as e:   # no log, só o tipo: a mensagem pode trazer texto da conversa
+            log(evento="conversa_envio", resultado="erro_mcp", erro=type(e).__name__)
+            return (*erro(502, "erro_agentes", "O agentes.chat não confirmou o envio; ela pode ter saído: confira a conversa antes de mandar de novo."), {"tipo": "dm"})
+        self.seguidos_429 = 0
+        self.conversas.esquecer_canal(item["canal"])
+        self.leitor.marcar_respondido(item["id"], agora)
+        res = res if isinstance(res, dict) else {}
+        task_id = limpa_texto(res.get("task_id") or "", 64)[0] or None
+        return 200, {"status": limpa_texto(res.get("status") or "", 30)[0]}, {"tipo": "dm", "task_id": task_id}
+
+    def _canais(self, token, agora):
+        """list_channels fresco (até 10 páginas), só os ids; guarda no Leitor para o "responder" da lista."""
+        ids, cursor = set(), None
+        for _ in range(10):
+            r = self._chamar("list_channels", {"limit": 50, **({"cursor": cursor} if cursor else {})}, token)
+            if not isinstance(r.get("channels"), list):
+                raise RuntimeError("list_channels: resposta sem a lista channels")
+            ids |= {str(c.get("id", "")).lower() for c in r["channels"] if isinstance(c, dict)}
+            cursor = r.get("next_cursor")
+            if not cursor:
+                break
+        self.leitor.canais = (ids, not cursor, agora)
+        return self.leitor.canais
+
+    def _chamar(self, nome, args, token):
+        mcp = self.leitor.mcp
+        if not mcp.sessao:
+            mcp.iniciar(token)
+        try:
+            return mcp.ferramenta(nome, args, token)
+        except ConnectionResetError:   # sessão MCP expirou (HTTP 404): o pedido não chegou a valer
+            mcp.iniciar(token)
+            return mcp.ferramenta(nome, args, token)
 
 
 # ---------------------------------------------------------------- clima real (Open-Meteo, sem chave)
@@ -530,6 +1188,24 @@ ICONES_OK = {"codigo", "megafone", "servidor", "coroa", "sino", "controle", "xic
 
 
 EMPRESA_PADRAO = "Minha empresa"
+EXPEDIENTE_PADRAO = {"abre": "07:00", "fecha": "20:00"}
+HHMM_OK = re.compile(r"([01]?[0-9]|2[0-3]):([0-5][0-9])")   # [0-9]: o \d aceita dígitos de outras escritas ("٥")
+
+
+def validar_expediente(valor):
+    """{"abre": "HH:MM", "fecha": "HH:MM"} normalizado ("7:00" vira "07:00"). abre > fecha é o turno que vira a
+    meia-noite (22:00 a 06:00); abre == fecha não diz quando o escritório fecha e é recusado."""
+    if not isinstance(valor, dict):
+        raise ValueError("expediente: horário no formato HH:MM, de 00:00 a 23:59")
+    horas = []
+    for chave in ("abre", "fecha"):
+        m = HHMM_OK.fullmatch(valor.get(chave)) if isinstance(valor.get(chave), str) else None
+        if not m:
+            raise ValueError("expediente: horário no formato HH:MM, de 00:00 a 23:59")
+        horas.append(f"{int(m.group(1)):02d}:{m.group(2)}")
+    if horas[0] == horas[1]:
+        raise ValueError("o expediente precisa abrir e fechar em horários diferentes")
+    return {"abre": horas[0], "fecha": horas[1]}
 
 
 def carregar_times(caminho=None):
@@ -573,10 +1249,35 @@ def _validar_times(bruto):
         clima = {"cidade": str(cl.get("cidade", ""))[:40], "lat": max(-90.0, min(90.0, float(cl["lat"]))), "lon": max(-180.0, min(180.0, float(cl["lon"])))}
     except (KeyError, TypeError, ValueError):
         clima = None
+    expediente = dict(EXPEDIENTE_PADRAO)
+    if "expediente" in bruto:   # valor ruim vale o padrão, sem levar o resto do times.json junto
+        try:
+            expediente = validar_expediente(bruto["expediente"])
+        except ValueError as x:
+            log(evento="times", resultado="expediente_invalido", detalhe=str(x))
     cor = str(bruto.get("cor", "#f5b83d"))
     return {"empresa": empresa[:40] if ROTULO_OK.fullmatch(empresa[:40]) else EMPRESA_PADRAO, "times": times, "aparencia": aparencia,
             "cor": cor if re.fullmatch(r"#[0-9a-fA-F]{6}", cor) else "#f5b83d",
-            "app_url": f"https://app.agentes.chat/org/{ORG}", "clima": clima}
+            "app_url": f"https://app.agentes.chat/org/{ORG}", "clima": clima, "expediente": expediente,
+            "conversas": bruto.get("conversas") if bruto.get("conversas") in MODOS_CONVERSA else "desligado"}
+
+
+MODOS_CONVERSA = ("ler", "responder")   # "responder" (fase R) também lê; qualquer outro valor é desligado
+
+
+def modo_declarado(caminho=None):
+    """O modo de conversas que o times.json DIZ, lido sem erro: "ler", "responder" ou "desligado" (escrito, ou sem a
+    chave: um pedaço de objeto JSON nunca é JSON válido, então um salvamento pela metade não parece "sem a chave").
+    Arquivo ausente, ilegível, fora do formato ou com outro valor dá None: com None nada é rebaixado (R1-c), porque um
+    erro passageiro de configuração não pode virar uma revogação."""
+    try:
+        with open(caminho or TIMES, encoding="utf-8") as f:
+            bruto = json.load(f)
+        _validar_times(bruto)
+    except Exception:   # o mesmo que o carregar_times() recusa, e qualquer outra surpresa: na dúvida, não rebaixa
+        return None
+    valor = bruto.get("conversas", "desligado")
+    return valor if valor in (*MODOS_CONVERSA, "desligado") else None
 
 
 # ---------------------------------------------------------------- marca (personalização salva pela tela "Personalizar")
@@ -604,20 +1305,29 @@ def _versao_logo(caminho):
         return None
 
 
-def config_publica():
-    """times.json + o que a pessoa personalizou (nome, cor, logo)."""
-    cfg = carregar_times()
+def _ler_marca():
+    """marca.json como objeto; ausente, ilegível ou fora do formato vale como vazio."""
     try:
         with open(ARQ_MARCA, encoding="utf-8") as f:
             m = json.load(f)
     except (OSError, ValueError, RecursionError):
-        m = {}
-    if not isinstance(m, dict):
-        m = {}
+        return {}
+    return m if isinstance(m, dict) else {}
+
+
+def config_publica():
+    """times.json + o que a pessoa personalizou (nome, cor, expediente, logo)."""
+    cfg = carregar_times()
+    m = _ler_marca()
     if isinstance(m.get("empresa"), str) and ROTULO_OK.fullmatch(m["empresa"]):
         cfg["empresa"] = m["empresa"]
     if isinstance(m.get("cor"), str) and re.fullmatch(r"#[0-9a-fA-F]{6}", m["cor"]):
         cfg["cor"] = m["cor"]
+    if "expediente" in m:   # Personalizar > times.json > 07:00-20:00
+        try:
+            cfg["expediente"] = validar_expediente(m["expediente"])
+        except ValueError:
+            log(evento="marca", resultado="expediente_invalido")
     # hash do conteúdo: muda a cada logo novo, até dois no mesmo segundo (o mtime não garante isso). Sem logo enviado,
     # vale o do logo padrão (static/logo.png, com cache público de 1 h): trocar a arte também fura o cache
     versao = _versao_logo(ARQ_LOGO) or _versao_logo(os.path.join(ESTATICO, "logo.png")) or 0
@@ -628,18 +1338,29 @@ def config_publica():
     return cfg
 
 
-def salvar_marca(empresa, cor):
+def salvar_marca(empresa, cor, expediente=None):
+    """expediente None mantém o que já estava salvo (a tela antiga não manda o campo)."""
     if not ROTULO_OK.fullmatch(empresa or ""):
         raise ValueError("nome da empresa: até 40 letras, números e . ' & -")
     if not re.fullmatch(r"#[0-9a-fA-F]{6}", cor or ""):
         raise ValueError("cor inválida")
-    gravar(ARQ_MARCA, json.dumps({"empresa": empresa, "cor": cor}).encode("utf-8"))
+    novo = {"empresa": empresa, "cor": cor}
+    if expediente is not None:
+        novo["expediente"] = validar_expediente(expediente)
+    elif "expediente" in (anterior := _ler_marca()):
+        novo["expediente"] = anterior["expediente"]
+    gravar(ARQ_MARCA, json.dumps(novo).encode("utf-8"))
 
 
 # ---------------------------------------------------------------- HTTP
 
 def nome_cookie():
     return "__Host-esc_sessao" if BASE.startswith("https://") else "esc_sessao"
+
+
+def nome_cookie_modo():
+    """2º cookie, o do modo resposta (R2a): de sessão do navegador, SameSite=Strict."""
+    return "__Host-esc_resposta" if BASE.startswith("https://") else "esc_resposta"
 
 
 PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "fontes/figtree.ttf", "fontes/silkscreen.ttf", "fontes/source-sans-3.woff2",
@@ -699,28 +1420,50 @@ class Pagina(BaseHTTPRequestHandler):
                 self.send_header(k, v)
         try:
             self.end_headers()
-            if self.command != "HEAD":  # em blocos: o timeout vale por sendall, e o three.core.js tem 1,4 MB
+            if self.command != "HEAD":  # em blocos: o timeout vale por sendall, não pela resposta inteira
                 pedacos = memoryview(corpo)
                 for i in range(0, len(pedacos), 65536):
                     self.wfile.write(pedacos[i:i + 65536])
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):   # fecharam a aba antes ou no meio: sem traceback
             self.close_connection = True
 
-    def _json(self, status, obj):
-        return self._envia(status, json.dumps(obj, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+    def _json(self, status, obj, extra=None):
+        # "replace": um rótulo cortado no meio de um emoji (surrogate sozinho) vira "?" em vez de derrubar a resposta
+        return self._envia(status, json.dumps(obj, ensure_ascii=False).encode("utf-8", "replace"), "application/json; charset=utf-8",
+                           extra)
 
-    def _token(self):
-        nome = nome_cookie()  # em https só vale o __Host-: outro host da tailnet não consegue criá-lo
+    def _valor_cookie(self, nome):
         for parte in (self.headers.get("Cookie") or "").split(";"):
             k, _, v = parte.strip().partition("=")
             if k == nome:
                 return v
         return None
 
+    def _token(self):
+        return self._valor_cookie(nome_cookie())  # em https só vale o __Host-: outro host da tailnet não consegue criá-lo
+
+    def _previa(self):
+        return getattr(self.server, "previa_sem_login", False)  # só a prévia local (ferramentas/previa.py)
+
     def _usuario(self):
-        if getattr(self.server, "previa_sem_login", False):  # só a prévia local (ferramentas/previa.py)
+        if self._previa():
             return "previa"
         return self.server.acesso.sessao(self._token())
+
+    def _pode_responder(self):
+        """Fase R: modo "responder" no times.json, conexão com escrita e fora da prévia (calculado aqui, nunca no cliente)."""
+        cred = getattr(self.server, "cred", None)
+        return not self._previa() and getattr(self.server, "respostas", None) is not None and cred is not None \
+            and carregar_times()["conversas"] == "responder" and cred.tem_escrita()
+
+    def _modo_resposta(self):
+        """(resta_s, teto_s) do modo resposta desta sessão neste navegador, ou None."""
+        return self.server.acesso.modo(self._token(), self._valor_cookie(nome_cookie_modo())) if self._pode_responder() else None
+
+    def _cookie_modo(self, valor):
+        # sem Max-Age nem Expires: o navegador apaga ao fechar (melhor esforço; quem garante é o servidor: 1 h e 8 h)
+        seguro = "; Secure" if BASE.startswith("https://") else ""
+        return f"{nome_cookie_modo()}={valor}; Path=/; HttpOnly; SameSite=Strict{seguro}" + ("" if valor else "; Max-Age=0")
 
     def _mesma_origem(self):
         """POST só vale vindo do próprio site. Origin "null" é recusado; o Referer só conta sem Origin."""
@@ -770,13 +1513,28 @@ class Pagina(BaseHTTPRequestHandler):
                 return self._json(401, {"erro": "entre de novo"})
             return self._envia(302, b"", extra={"Location": "/entrar"})
         if rota == "/api/estado":
-            clima = getattr(self.server, "clima", None)
-            return self._json(200, {**self.server.leitor.foto(), "clima": clima.foto() if clima else None, "usuario": usuario})
+            clima, leitor = getattr(self.server, "clima", None), self.server.leitor
+            do_dia = getattr(leitor, "conversas_do_dia", None)   # modo e meia-noite conferidos aqui, a cada pedido
+            agora, pode = time.time(), self._pode_responder()
+            aceita = (lambda it: self.server.respostas.aceita(it, agora)) if pode else None
+            conversas = conversas_publicas(do_dia(), agora, aceita) if do_dia and carregar_times()["conversas"] in MODOS_CONVERSA else []
+            modo = self._modo_resposta() if pode else None   # só o da própria sessão, neste navegador
+            return self._json(200, {**leitor.foto(), "conversas": conversas, "clima": clima.foto() if clima else None,
+                                    "usuario": usuario, "modo_resposta": {"resta_s": modo[0], "teto_s": modo[1]} if modo else None})
         if rota == "/api/config":
             cfg = config_publica()
-            if getattr(self.server, "previa_sem_login", False):  # o front mostra a faixa "Prévia de desenvolvimento · dados fixos"
+            if self._previa():  # o front mostra a faixa "Prévia de desenvolvimento · dados fixos"
                 cfg["previa"] = True
+            cfg["pode_responder"] = self._pode_responder()
             return self._json(200, cfg)
+        if rota == "/api/conversa":   # só o "id" ou o "agente" da query contam: o canal sai do que o servidor viu
+            conversas = getattr(self.server, "conversas", None)
+            if not conversas or carregar_times()["conversas"] not in MODOS_CONVERSA:
+                return self._json(404, {"erro": "conversas desligadas neste escritório"})
+            q = urllib.parse.parse_qs(caminho.query, keep_blank_values=True)   # "?id=" vazio é id inválido, não a ficha
+            if "id" in q:   # página Conversas
+                return self._json(*conversas.ler_id(q["id"][0]))
+            return self._json(*conversas.ler(q.get("agente", [""])[0]))   # ficha do agente
         if rota == "/oauth/conectar":
             try:
                 return self._envia(302, b"", extra={"Location": self.server.cred.url_autorizacao()})
@@ -792,6 +1550,10 @@ class Pagina(BaseHTTPRequestHandler):
             except Exception as e:
                 log(evento="oauth", resultado="erro", detalhe=str(e)[:200])
                 return self._envia(400, f"Não deu para conectar: {str(e)[:160]}".encode())
+            if hasattr(self.server.leitor, "zerar_memoria"):   # outra conta: a lista do dia da anterior não fica à vista
+                self.server.leitor.zerar_memoria()
+            if getattr(self.server, "conversas", None):   # nem as conversas que ela leu (cache de 60 s)
+                self.server.conversas.esquecer()
             log(evento="oauth", resultado="conectado", usuario=usuario)
             return self._envia(302, b"", extra={"Location": "/"})
         return self._estatico("index.html" if rota in ("/", "") else nome)
@@ -801,15 +1563,66 @@ class Pagina(BaseHTTPRequestHandler):
             return self._envia(404, b"")
         with open(os.path.join(ESTATICO, nome), "rb") as f:
             corpo = f.read()
-        if nome.startswith("vendor/"):
-            cache = "private, max-age=31536000, immutable"
-        else:
-            cache = "public, max-age=3600" if nome.endswith((".png", ".ttf", ".woff2")) else "no-cache"
+        cache = "public, max-age=3600" if nome.endswith((".png", ".ttf", ".woff2")) else "no-cache"
         return self._envia(200, corpo, ARQUIVOS[nome], cache=cache)
+
+    def _post_resposta(self, rota):
+        """Fase R (R2 e R2a): Origin obrigatório e igual à BASE (sem a volta para o Referer), sessão e JSON exato."""
+        acesso, token = self.server.acesso, self._token()
+        if self.headers.get("Origin") != BASE:
+            log(evento="http", rota=rota[:40], resultado="origem_recusada")
+            return self._json(*erro(403, "origem", "Origem não permitida."))
+        desligado = erro(403, "responder_desligado", "Responder pelo escritório não está ligado.")
+        if self._previa():   # a prévia não tem sessão de verdade nem conexão: nunca abre modo nem envia
+            return self._json(200, {"ok": True}) if rota == "/api/conversa/modo/fechar" else self._json(*desligado)
+        usuario = acesso.sessao(token)
+        if not usuario:
+            return self._json(401, {"erro": "entre de novo"})
+        if rota == "/api/conversa/modo/fechar":   # "Fechar agora": vale sempre, até com o modo já vencido
+            if acesso.fechar_modo(token):
+                log(evento="modo_resposta", resultado="fechado", usuario=usuario)
+            return self._json(200, {"ok": True}, {"Set-Cookie": self._cookie_modo("")})
+        if rota == "/api/conversa/modo" and not self._pode_responder():   # modo "ler" ou conexão sem escrita
+            return self._json(*desligado)
+        if (self.headers.get("Content-Type") or "").split(";")[0].strip().lower() != "application/json":
+            return self._json(*erro(415, "formato", "Envie JSON (application/json)."))
+        try:
+            dados = json.loads(self._corpo(1024 if rota == "/api/conversa/modo" else CORPO_ENVIO_MAX))
+        except (ValueError, RecursionError):   # tamanho, UTF-8 ou JSON inválido
+            dados = None
+        if rota == "/api/conversa/modo":
+            senha = dados.get("senha") if isinstance(dados, dict) else None
+            if not isinstance(senha, str) or not 0 < len(senha) <= 256:
+                return self._json(*erro(400, "pedido", "Pedido inválido."))
+            try:
+                cookie = acesso.abrir_modo(token, senha)
+            except PermissionError as x:   # conta no balde do login: 8 erros em 15 min travam também o login
+                log(evento="modo_resposta", resultado="recusado", usuario=usuario)
+                if isinstance(x, TentativasDemais):
+                    return self._json(*erro(429, "tentativas_demais", "Tentativas demais; espere alguns minutos."))
+                return self._json(*erro(403, "senha_incorreta", "Senha incorreta."))
+            resta, teto = acesso.modo(token, cookie) or (0, 0)   # a sessão pode ter vencido nesse instante
+            log(evento="modo_resposta", resultado="aberto", usuario=usuario)
+            return self._json(200, {"resta_s": resta, "teto_s": teto}, {"Set-Cookie": self._cookie_modo(cookie)})
+        campos = {"id", "run_id", "texto", "chave"}   # o agente e o destino saem do servidor: nada mais é aceito
+        if not isinstance(dados, dict) or set(dados) != campos or not all(isinstance(dados[k], str) for k in campos) \
+                or len(dados["id"]) > 20 or len(dados["run_id"]) > 80 or not CHAVE_OK.fullmatch(dados["chave"]):
+            return self._json(*erro(400, "pedido", "Pedido inválido."))
+        if not acesso.modo(token, self._valor_cookie(nome_cookie_modo())):   # sessão + registro + cookie deste navegador
+            return self._json(*erro(403, "modo_fechado", "O modo resposta está fechado; confirme a senha para abrir."))
+        if not self._pode_responder():
+            return self._json(*desligado)
+        st, corpo = self.server.respostas.enviar(usuario, dados["id"], dados["run_id"], dados["texto"], dados["chave"])
+        if st == 200:   # só envio que deu certo renova o modo
+            resta, teto = acesso.renovar_modo(token) or (0, 0)
+            corpo = {**corpo, "resta_s": resta, "teto_s": teto}
+        return self._json(st, corpo)
 
     def do_POST(self):
         rota = urllib.parse.urlsplit(self.path).path
         acesso = self.server.acesso
+        if rota in ("/api/conversa/modo", "/api/conversa/modo/fechar", "/api/conversa/responder"):
+            return self._post_resposta(rota)
         if not self._mesma_origem():
             log(evento="http", rota=rota[:40], resultado="origem_recusada")
             return self._envia(403, "Origem não permitida.".encode())
@@ -831,15 +1644,15 @@ class Pagina(BaseHTTPRequestHandler):
                 return self._envia(200, pagina_login(str(e), primeiro=acesso.precisa_configurar()), "text/html; charset=utf-8")
             log(evento="acesso", resultado="entrou")
             return self._envia(303, b"", extra={"Location": "/", "Set-Cookie": self._cookie(token, 30 * 86400)})
-        if rota == "/sair":
+        if rota == "/sair":   # fecha também o modo resposta e apaga os dois cookies
             acesso.sair(self._token())
-            return self._envia(303, b"", extra={"Location": "/entrar", "Set-Cookie": self._cookie("", 0)})
+            return self._envia(303, b"", extra={"Location": "/entrar", "Set-Cookie": [self._cookie("", 0), self._cookie_modo("")]})
         if not self._usuario():
             return self._json(401, {"erro": "entre de novo"})
         if rota == "/api/marca":
             try:
                 dados = json.loads(self._corpo(2048))
-                salvar_marca(str(dados.get("empresa", "")), str(dados.get("cor", "")))
+                salvar_marca(str(dados.get("empresa", "")), str(dados.get("cor", "")), dados.get("expediente"))
             except (ValueError, AttributeError) as e:
                 return self._json(400, {"erro": str(e)[:120]})
             return self._json(200, config_publica())
@@ -882,6 +1695,8 @@ def main():
     leitor.start()
     srv = Servidor(("127.0.0.1", PORTA), Pagina)  # a Tailscale (serve) publica só na rede privada
     srv.cred, srv.leitor, srv.acesso = cred, leitor, contas
+    srv.conversas = Conversas(leitor)
+    srv.respostas = Respostas(leitor, srv.conversas)
     if contas.precisa_configurar():
         log(evento="acesso", resultado="aguardando_primeiro_usuario", ver_codigo="sudo escritorio-codigo")
     cl = carregar_times().get("clima")

@@ -295,15 +295,12 @@ const KITS = {
 const PEQUENOS = ["lixeira", "planta", "planta2", "extintor", "planta_fina"];
 // peças desenhadas em código (efeitos.js): tamanho do quadro [w, h]
 const PROCEDURAIS = { ventilador: [14, 22], hidrante: [7, 10], ring_light: [16, 36], quadro_avisos: [24, 24], lixeiras: [26, 16],
-  estante_livros: [30, 42], luminaria_arco: [24, 40], poltrona_tecido: [22, 24], aparador_baixo: [34, 22] };
+  estante_livros: [30, 42], luminaria_arco: [24, 40], poltrona_tecido: [22, 24], aparador_baixo: [34, 22], placa_expediente: [70, 34] };   // a placa tem 2 px de folga de cada lado
 
 // pisos e paredes que são da cara das salas comuns ficam fora das salas de time
 const pisoDoTime = n => { n = Number.isInteger(n) ? ((n % 10) + 10) % 10 : 3; return n === 6 ? 3 : n === 7 ? 5 : n; };
 const paredeDoTime = n => { n = Number.isInteger(n) ? ((n % 7) + 7) % 7 : 2; return n === 6 ? 5 : n; };
 
-// Contrato com a maquete 3D (maquete.js, só leitura): ela lê W, H, fundo, predioRet, salas, baixo, objetos, animados,
-// janelas, portas, corredorTopo e corredorAlt; da sala, px/py/pw/ph/chao/porta; as faixas [s.py, s.chao) viram as paredes.
-// Mudou um desses campos? Confira a maquete (?visao=maquete).
 function montarPredio(atlas, config, grupos) {
   const tem = n => !!sprite(atlas, n);
   const marca = semente(config.empresa || "escritorio");   // cada empresa ganha seu próprio sorteio
@@ -976,8 +973,11 @@ function montarExterior(atlas, obj0, W, H, p, marca, portaY) {
   const tem = n => !!sprite(atlas, n), alto = n => sprite(atlas, n)[3], larg = n => sprite(atlas, n)[2];
   // planta e árvore saem espelhadas metade das vezes (pixel art não escala sem borrar: a variação vem do espelho e do deslocamento)
   const obj = (n, x, y) => { const o = obj0(n, x, y); if (o && /^(arvore|arbusto|palmeira|planta)/.test(n) && r() < 0.5) o.espelho = true; return o; };
-  // entrada lateral: vaso ao lado da porta e bicicletário no gramado, junto do caminho até a calçada
-  obj("planta2", p.x - 14, portaY - 12); obj("bicicletario", p.x + 14, p.y + p.h + 40);
+  // entrada lateral: vaso ao lado da porta; no gramado, à direita do caminho de pedra e perto da rua, a placa de loja com o
+  // expediente (aberto/fechado, desenhada no efeitos.js) e, depois dela, o bicicletário. A placa vem antes de tudo do gramado
+  // (os outros desviam dela) e fica fora da rota de quem sai: pelo caminho até a calçada e de lá para a esquerda (vida.js)
+  obj("planta2", p.x - 14, portaY - 12);
+  obj("placa_expediente", p.x + 26, p.y + p.h + 59); obj("bicicletario", p.x + 84, p.y + p.h + 40);
   // cada empresa ganha sua rua: 3 espécies de árvore sorteadas (as outras aparecem de vez em quando) e seu ritmo
   const especies = ["arvore1", "arvore2", "arvore3", "arvore_ipe", "arvore_jacaranda"].filter(tem);
   for (let i = especies.length - 1; i > 0; i--) { const k = Math.floor(r() * (i + 1)); [especies[i], especies[k]] = [especies[k], especies[i]]; }

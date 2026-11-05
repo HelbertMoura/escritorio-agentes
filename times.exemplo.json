@@ -1,5 +1,9 @@
 {
   "cor": "#4f8cff",
+  "expediente": {
+    "abre": "07:00",
+    "fecha": "20:00"
+  },
   "times": [
     {
       "nome": "Diretoria",

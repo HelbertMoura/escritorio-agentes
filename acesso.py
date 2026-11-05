@@ -16,6 +16,9 @@
 - Tentativas erradas: no máximo 8 a cada 15 minutos por balde (cada usuário existente tem o seu;
   todos os inexistentes dividem um; o primeiro acesso tem outro), com atraso de 1 s em cada erro.
   O contador fica só na memória: reiniciar o serviço o zera.
+- Modo resposta (fase R): a senha confirmada de novo numa sessão libera os envios naquela sessão e naquele
+  navegador (2º cookie, de sessão do navegador) por 1 h, renovada a cada envio que deu certo, com teto de 8 h
+  desde a senha. Fica só na memória (sha256 da sessão -> sha256 do cookie do modo): reiniciar fecha todos.
 """
 import hashlib
 import hmac
@@ -33,9 +36,14 @@ SENHA_MIN = 10
 N, R, P = 2 ** 15, 8, 1
 TAM_CODIGO = 16                 # código de primeiro acesso: 8 bytes em hexadecimal
 LIMITE, JANELA, ATRASO = 8, 900, 1
+MODO_INATIVO, MODO_TETO = 3600, 8 * 3600   # modo resposta: 1 h sem envio que deu certo fecha; 8 h desde a senha fecha sempre
 INEXISTENTES, PRIMEIRO = "*inexistentes", "*primeiro-acesso"  # baldes que não colidem com nome válido
 CALCULOS = threading.BoundedSemaphore(2)  # scrypt usa 32 MiB; dois juntos cabem folgados no MemoryMax
 ARQ_USUARIOS, ARQ_CODIGO = "usuarios.json", "codigo-primeiro-acesso.txt"   # dentro da pasta de dados
+
+
+class TentativasDemais(PermissionError):
+    """O balde de tentativas encheu: nem a senha certa entra até a janela passar."""
 
 
 class UsuariosIlegiveis(Exception):
@@ -111,6 +119,7 @@ class Acesso:
         self.usuarios = ler_usuarios(self.arq_usuarios)   # antes de tudo: ilegível não cria nem apaga nada
         self.sessoes = {k: v for k, v in _ler(self.arq_sessoes, {}).items() if v.get("expira", 0) > time.time()}
         self.falhas = {}  # balde -> horários das tentativas que contam
+        self.modos = {}   # sha256(token da sessão) -> {"cookie": sha256(token do modo), "inicio", "ate"}; nunca no disco
         if not self.usuarios and self._codigo_gravado() is None:
             if os.path.exists(self.arq_codigo):
                 os.unlink(self.arq_codigo)  # vazio ou cortado (gravação que falhou): troca por um novo
@@ -130,7 +139,7 @@ class Acesso:
         vivas = [t for t in self.falhas.get(balde, []) if agora - t < JANELA]
         self.falhas[balde] = vivas
         if len(vivas) >= LIMITE:
-            raise PermissionError("tentativas demais; espere alguns minutos")
+            raise TentativasDemais("tentativas demais; espere alguns minutos")
         vivas.append(agora)
         return agora
 
@@ -157,7 +166,7 @@ class Acesso:
                 self._devolver(PRIMEIRO, marca)
                 # recomeço do zero: nenhuma sessão de antes vale para o usuário novo (zera antes de criar,
                 # para uma falha no meio nunca deixar usuário novo com sessão velha)
-                self.sessoes = {}
+                self.sessoes, self.modos = {}, {}
                 _gravar(self.arq_sessoes, self.sessoes)
                 self._criar(usuario, senha)
                 os.unlink(self.arq_codigo)
@@ -177,8 +186,9 @@ class Acesso:
         _gravar(self.arq_usuarios, self.usuarios)
 
     # --- login
-    def entrar(self, usuario, senha):
-        """Devolve o token da sessão ou levanta PermissionError."""
+    def conferir(self, usuario, senha):
+        """Confere a senha no balde de tentativas do login, sem criar sessão. Devolve o nome normalizado ou levanta
+        PermissionError (errar conta no mesmo balde: 8 erros travam também o login)."""
         nome = (usuario or "").strip().lower()
         with self.trava:
             u = self.usuarios.get(nome)
@@ -192,23 +202,81 @@ class Acesso:
         if not valido or not hmac.compare_digest(calculado, bytes.fromhex(u["hash"])):
             time.sleep(ATRASO)
             raise PermissionError("usuário ou senha incorretos")
-        token = secrets.token_urlsafe(32)
         with self.trava:
             self._devolver(balde, marca)
-            self.sessoes[hashlib.sha256(token.encode()).hexdigest()] = {"usuario": nome, "expira": time.time() + DURACAO}
+        return nome
+
+    def entrar(self, usuario, senha):
+        """Devolve o token da sessão ou levanta PermissionError."""
+        nome = self.conferir(usuario, senha)
+        token = secrets.token_urlsafe(32)
+        with self.trava:
+            self.sessoes[_sha(token)] = {"usuario": nome, "expira": time.time() + DURACAO}
             _gravar(self.arq_sessoes, self.sessoes)
         return token
 
     def sessao(self, token):
         if not token or len(token) > 100:
             return None
-        chave = hashlib.sha256(token.encode()).hexdigest()
-        s = self.sessoes.get(chave)
+        s = self.sessoes.get(_sha(token))
         if not s or s["expira"] < time.time() or s["usuario"] not in self.usuarios:
             return None
         return s["usuario"]
 
     def sair(self, token):
         with self.trava:
-            if token and self.sessoes.pop(hashlib.sha256(token.encode()).hexdigest(), None):
+            if token:
+                self.modos.pop(_sha(token), None)
+            if token and self.sessoes.pop(_sha(token), None):
                 _gravar(self.arq_sessoes, self.sessoes)
+
+    # --- modo resposta (fase R): por sessão e por navegador, só na memória
+    def abrir_modo(self, token, senha, agora=None):
+        """Confere a senha do usuário da sessão e abre um modo novo (inicio e ate zerados). Devolve o token do cookie
+        do modo; no servidor fica só o hash. Sem sessão ou com a senha errada, levanta PermissionError."""
+        usuario = self.sessao(token)
+        if not usuario:
+            raise PermissionError("entre de novo")
+        self.conferir(usuario, senha)
+        agora = time.time() if agora is None else agora
+        cookie = secrets.token_urlsafe(32)
+        with self.trava:
+            self.modos[_sha(token)] = {"cookie": _sha(cookie), "inicio": agora, "ate": agora + MODO_INATIVO}
+        return cookie
+
+    def modo(self, token, cookie, agora=None):
+        """(resta_s, teto_s) do modo aberto nesta sessão com este cookie, ou None. Vencido sai na consulta."""
+        if not token or not cookie or len(cookie) > 100 or not self.sessao(token):
+            return None
+        agora = time.time() if agora is None else agora
+        with self.trava:
+            m = self.modos.get(_sha(token))
+            if m and agora >= min(m["ate"], m["inicio"] + MODO_TETO):
+                del self.modos[_sha(token)]
+                return None
+            if not m or not hmac.compare_digest(m["cookie"], _sha(cookie)):
+                return None
+            return _segundos(m["ate"] - agora), _segundos(m["inicio"] + MODO_TETO - agora)
+
+    def renovar_modo(self, token, agora=None):
+        """Depois de um envio que deu certo: mais 1 h, nunca além de inicio + 8 h. Devolve (resta_s, teto_s) ou None."""
+        agora = time.time() if agora is None else agora
+        with self.trava:
+            m = self.modos.get(_sha(token)) if token else None
+            if not m:
+                return None
+            m["ate"] = min(agora + MODO_INATIVO, m["inicio"] + MODO_TETO)
+            return _segundos(m["ate"] - agora), _segundos(m["inicio"] + MODO_TETO - agora)
+
+    def fechar_modo(self, token):
+        with self.trava:
+            return bool(token) and self.modos.pop(_sha(token), None) is not None
+
+
+def _segundos(x):
+    """Segundos que faltam, arredondados para cima (a tela mostra "fecha em"; quem decide é o servidor)."""
+    return -int(-x // 1)
+
+
+def _sha(token):
+    return hashlib.sha256(token.encode()).hexdigest()

@@ -200,7 +200,8 @@ const Som = (() => {
       const agora = ctx.currentTime;
       if (agora > proxHora) { proxHora = agora + 1; hora = window.Ceu ? Ceu.agora().h : 12; }
       if (!zumbido) { zumbido = laço(220, "lowpass"); vento = laço(380, "lowpass"); }
-      aproxima(zumbido, hora >= 20 || hora < 7 ? 0.025 : 0.045, 0.02);
+      const fechado = window.Expediente ? Expediente.fora(hora) : hora >= 20 || hora < 7;   // escritório fechado: zumbido mais baixo
+      aproxima(zumbido, fechado ? 0.025 : 0.045, 0.02);
       const tipo = window.Clima ? Clima.tipo() : "limpo", ventando = cfg.clima && (tipo === "neve" || tipo === "tempestade");
       aproxima(vento, ventando ? 0.05 + Math.sin(agora * 0.4) * 0.025 : 0, 0.02);
       bichos(agora);

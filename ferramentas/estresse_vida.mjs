@@ -216,6 +216,8 @@ if (ACOES) {
   const temLivre = () => js(`mundo.lista.some(${LIVRE})`);
 
   // clique em café, TV, fliperama ou jukebox: o livre mais perto vai até a vaga livre daquele tipo (testa o primeiro que tiver vaga)
+  // prazo pelo tamanho do caminho (a 40 px/s, no prédio grande o café pode ficar a mais de 1000 px), com folga
+  const prazoRota = quem => js(`(() => { const b = ${quem}; let d = 0, x = b.x, y = b.y; for (const [px, py] of b.rota) { d += Math.hypot(px - x, py - y); x = px; y = py; } return Math.ceil(d / 40) + 10; })()`);
   const livre = await temLivre();
   let clicou = false;
   if (!livre) console.log("(ninguém livre parado numa vaga: clique em café, TV, fliperama e jukebox não testado)");
@@ -226,8 +228,7 @@ if (ACOES) {
     await js(`Vida.objetoClicado(mundo, { tipo: "${tipo}", x: ${v.x}, y: ${v.y}, sala: null })`);
     const indo = await ate(`(() => { const b = mundo.lista.find(b => b.destino && b.destino.vaga && b.destino.vaga.x === ${v.x} && b.destino.vaga.y === ${v.y}); return b ? b.id : null; })()`, 3);
     const quem = `mundo.bonecos.get(${JSON.stringify(indo)})`;
-    // prazo pelo tamanho do caminho (a 40 px/s, no prédio grande o café pode ficar a mais de 1000 px), com folga
-    const prazo = indo && await js(`(() => { const b = ${quem}; let d = 0, x = b.x, y = b.y; for (const [px, py] of b.rota) { d += Math.hypot(px - x, py - y); x = px; y = py; } return Math.ceil(d / 40) + 10; })()`);
+    const prazo = indo && await prazoRota(quem);
     const chegou = indo && await ate(`(() => { const b = ${quem}; return b && !b.rota.length && b.lugar && b.lugar.vaga && b.lugar.vaga.x === ${v.x} && b.lugar.vaga.y === ${v.y} ? [b.x, b.y] : null; })()`, prazo);
     const onde = indo && !chegou && await js(`(() => { const b = ${quem}, d = b.destino || b.lugar; return d ? (d.vaga ? d.vaga.tipo : d.tipo) + (b.rota.length ? " (a caminho)" : "") : "sem lugar"; })()`);
     ok(!!chegou, `clique em ${tipo}: o livre mais perto vai até lá`, indo ? (chegou ? "" : `não chegou em ${prazo} s; está em/indo para ${onde}`) : "ninguém foi");
@@ -240,8 +241,13 @@ if (ACOES) {
   if (aq && !await temLivre()) console.log("(ninguém livre parado numa vaga: clique no aquário não testado)");
   else if (aq) {
     await js(`Vida.objetoClicado(mundo, { tipo: "aquario", x: ${aq.x}, y: ${aq.y}, sala: null })`);
-    const olha = await ate(`(() => { const b = mundo.lista.find(b => !b.rota.length && b.lugar && b.lugar.vaga && b.lugar.vaga.tipo === "aquario"); return b ? [b.x, b.y, mundo.predio.livre(b.x, b.y)] : null; })()`, 30);
-    ok(!!olha && olha[2], "clique no aquário: alguém vai olhar, em chão livre", JSON.stringify(olha));
+    // o único livre pode estar do outro lado do prédio: como no café, o prazo sai do caminho de quem foi
+    const noAquario = b => `(${b}.destino && ${b}.destino.vaga && ${b}.destino.vaga.tipo === "aquario") || (${b}.lugar && ${b}.lugar.vaga && ${b}.lugar.vaga.tipo === "aquario")`;
+    const indo = await ate(`(() => { const b = mundo.lista.find(b => ${noAquario("b")}); return b ? b.id : null; })()`, 3);
+    const quem = `mundo.bonecos.get(${JSON.stringify(indo)})`;
+    const prazo = indo && await prazoRota(quem);
+    const olha = indo && await ate(`(() => { const b = ${quem}; return b && !b.rota.length && b.lugar && b.lugar.vaga && b.lugar.vaga.tipo === "aquario" ? [b.x, b.y, mundo.predio.livre(b.x, b.y)] : null; })()`, prazo);
+    ok(!!olha && olha[2], "clique no aquário: alguém vai olhar, em chão livre", indo ? (olha ? JSON.stringify(olha) : `não chegou em ${prazo} s`) : "ninguém foi");
     if (olha) await fotografar("clique_aquario", olha[0], olha[1] - 10);
   } else console.log("(sem aquário neste prédio: clique não testado)");
 

@@ -6,7 +6,7 @@
 
 ### Um escritório em pixel art, ao vivo, para o seu time do [agentes.chat](https://agentes.chat)
 
-**Veja quem está na mesa, quem joga sinuca na sala comunal e quem espera a sua aprovação. Só leitura, a cada 15 segundos, sem IA e sem gastar tokens.**
+**Veja quem está na mesa, quem joga sinuca na sala comunal e quem espera a sua aprovação. Só leitura (fora do modo opcional de responder), a cada 30 segundos, sem IA e sem gastar tokens.**
 
 [![Licença: AGPL-3.0](https://img.shields.io/badge/licen%C3%A7a-AGPL--3.0-blue)](./LICENSE)
 ![Python 3.10+ só biblioteca padrão](https://img.shields.io/badge/Python-3.10%2B%20stdlib-3776ab?labelColor=1a1a1d)
@@ -23,9 +23,9 @@
 
 ## O que é
 
-O Escritório de agentes é uma página web pequena, que você mesmo hospeda, e que transforma o seu workspace do agentes.chat num escritório vivo. Ele lê o agentes.chat pelo conector de apps externos (MCP, escopo OAuth **só de leitura**) a cada 15 segundos e desenha o seu time como pessoas em pixel art, num prédio que se monta sozinho a partir dos seus times.
+O Escritório de agentes é uma página web pequena, que você mesmo hospeda, e que transforma o seu workspace do agentes.chat num escritório vivo. Ele lê o agentes.chat pelo conector de apps externos (MCP, escopo OAuth **só de leitura**; escrita só se você ligar o modo `"responder"`) a cada 30 segundos e desenha o seu time como pessoas em pixel art, num prédio que se monta sozinho a partir dos seus times.
 
-Ele **não chama nenhum modelo de IA** e não gasta tokens. Aprovar e responder é sempre no agentes.chat: o escritório só mostra o que está acontecendo e leva você até lá.
+Ele **não chama nenhum modelo de IA** e não gasta tokens. Aprovar é sempre no agentes.chat; responder também, fora do modo opcional `"responder"`. No resto, o escritório só mostra o que está acontecendo e leva você até lá.
 
 **Para quem é:** times e empresas que rodam agentes no [agentes.chat](https://agentes.chat) e querem uma visão rápida e divertida do time: numa TV na parede, num segundo monitor ou no celular. É white-label: qualquer empresa instala a sua cópia e põe a própria marca.
 
@@ -39,7 +39,6 @@ Ele **não chama nenhum modelo de IA** e não gasta tokens. Aprovar e responder 
 - 🎉 **Datas comemorativas:** Natal, Ano Novo (fogos), Carnaval e Páscoa (calculados), Ano Novo Chinês, Halloween, Festa Junina, Independência, Dia do Programador, Diwali e mais, com enfeites, chapéus e falas.
 - 🎨 **Personalização:** nome da empresa, cor de destaque e logo pela tela **Personalizar**; times, salas, pisos, paredes, ícones e avatares no `times.json`.
 - 🕹️ **Simulação:** um painel para ver o escritório em outra data, hora ou clima (Natal à noite na neve, por exemplo). Nada é salvo: muda só o endereço daquela aba, e a faixa "Simulação" fica à vista, com "Voltar ao real".
-- 🧊 **Maquete 3D (opcional):** uma visão em voxel do mesmo escritório, feita com three.js e carregada só quando você abre (precisa de WebGL 2; sem ele, o botão nem aparece).
 - 📸 **Modo foto:** esconde a interface e salva um PNG do escritório.
 - 🧪 **Modo demonstração:** `?demo=1` mostra agentes fictícios e um dia acelerado, sem mandar nem ler nada do servidor. Bom para experimentar e para capturas de tela.
 - 🎥 **Câmera:** zoom com a roda ou a pinça, arrastar, duplo clique para focar uma sala, "Ir para…" um agente (`/` ou `Ctrl+K`) e atalhos (`+`, `-`, `0`).
@@ -48,16 +47,16 @@ Ele **não chama nenhum modelo de IA** e não gasta tokens. Aprovar e responder 
 
 ## Capturas
 
-Todas as capturas saem do **modo demonstração** (agentes e dados fictícios), nunca de um workspace real. A lista completa, com o jeito de tirar cada uma, está em [`docs/screenshots/README.md`](./docs/screenshots/README.md).
+Todas as capturas saem do **modo demonstração** ou de uma prévia com **dados fictícios** (agentes, tarefas e conversas inventados), nunca de um workspace real. A lista completa, com o jeito de tirar cada uma, está em [`docs/screenshots/README.md`](./docs/screenshots/README.md).
 
 <table>
   <tr>
     <td width="50%" align="center">
-      <a href="./docs/screenshots/02-esperando-voce.png"><img src="./docs/screenshots/02-esperando-voce.png" alt="Aprovações num relance: um '!' sobre o Bento, que espera aprovação, e um '?' sobre a Aurora, que tem uma pergunta; a lista 'Esperando você' mostra os dois pedidos com os botões Revisar e Responder" width="100%"></a>
+      <a href="./docs/screenshots/02-esperando-voce.png"><img src="./docs/screenshots/02-esperando-voce.png" alt="Aprovações num relance: um '!' sobre a Hana, que espera aprovação, e um '?' sobre a Cacau, que tem uma pergunta; a lista 'Esperando você' mostra os dois pedidos com os botões Revisar e Responder" width="100%"></a>
       <p><em>Aprovações num relance: "!" e "?" no mapa e a lista "Esperando você".</em></p>
     </td>
     <td width="50%" align="center">
-      <a href="./docs/screenshots/03-noite-chuva.png"><img src="./docs/screenshots/03-noite-chuva.png" alt="O escritório à noite na chuva: salas de time escuras e vazias, postes acesos e o time inteiro conversando e jogando na sala comunal" width="100%"></a>
+      <a href="./docs/screenshots/03-noite-chuva.png"><img src="./docs/screenshots/03-noite-chuva.png" alt="O escritório à noite na chuva: salas de time escuras e vazias, postes acesos e quase todo o time conversando e jogando na sala comunal e na sala de reunião" width="100%"></a>
       <p><em>Noite e chuva: as luzes apagam nas salas vazias e os postes acendem.</em></p>
     </td>
   </tr>
@@ -67,8 +66,8 @@ Todas as capturas saem do **modo demonstração** (agentes e dados fictícios), 
       <p><em>Datas comemorativas: noite de Natal na neve, pelo painel de Simulação.</em></p>
     </td>
     <td width="50%" align="center">
-      <a href="./docs/screenshots/05-maquete-3d.png"><img src="./docs/screenshots/05-maquete-3d.png" alt="A maquete 3D: uma versão em voxel do mesmo escritório, com salas, móveis, árvores e a rua, vista de cima e de lado sob um céu azul" width="100%"></a>
-      <p><em>A maquete 3D opcional, feita com three.js.</em></p>
+      <a href="./docs/screenshots/05-conversas.png"><img src="./docs/screenshots/05-conversas.png" alt="A página Conversas com dados fictícios: a lista do dia em Esperando você, Trabalhando e Terminadas hoje; a conversa aberta da Gaia pergunta qual horário oferecer a um cliente, com uma resposta escrita na caixa embaixo, e o selo 'Modo resposta · fecha em 59 min' com 'Fechar agora' no topo" width="100%"></a>
+      <p><em>Conversas: as tarefas do dia e, no modo resposta opcional, a caixa de resposta.</em></p>
     </td>
   </tr>
 </table>
@@ -120,14 +119,16 @@ No arquivo `times.json` (comece copiando o `times.exemplo.json`; o instalador fa
 | `times[]` | `nome`, `tipo` (`mesas`, `ops`, `gabinete`), `cor`, `icone` (`codigo`, `megafone`, `servidor`, `coroa`, `grafico`, `pincel`, `estrela`…), `parede` (0–5), `piso` (0–9) e `agentes` (handles do agentes.chat) |
 | `aparencia` | por handle: `color`, `eyes`, `accessory`, iguais aos do agentes.chat. Quem não está aqui ganha uma aparência própria automática |
 | `clima` | `cidade`, `lat`, `lon` para o clima real, do Open-Meteo (veja os termos em [Terceiros](#terceiros)). Sem `clima`, o clima fica desligado e o céu, limpo |
+| `expediente` | horário do escritório, `{"abre": "07:00", "fecha": "20:00"}` (HH:MM, o padrão). Fora dele, quem está sem tarefa vai para casa e uma faixa avisa quando o escritório abre. `abre` depois de `fecha` é um turno que vira a meia-noite (`22:00` às `06:00`); a tela Personalizar sobrepõe |
+| `conversas` | `"ler"` acrescenta **Ver conversa** à ficha do agente e a página **Conversas**, com as tarefas em andamento e as que terminaram hoje: as 20 mensagens mais recentes da conversa de cada uma (a thread da tarefa; se ninguém escreveu nela, as mensagens soltas da conversa), lidas só a pedido (`read_conversation`, ainda com o escopo `read`). Vem desligado; leia o aviso em [Segurança](#segurança) antes de ligar. `"responder"` faz o mesmo e deixa **mandar mensagens** aos agentes nas conversas diretas do dia, pela página Conversas (escopo `read write`; veja [Segurança](#segurança)) |
 
-Para testar sem esperar, use na URL: `?hora=21.5`, `?clima=tempestade` (`chuva`, `garoa`, `neve`, `neblina`, `nublado`, `limpo`), `?data=2026-12-25` e `?visao=maquete` (3D). O painel de **Simulação** monta isso para você.
+Para testar sem esperar, use na URL: `?hora=21.5`, `?clima=tempestade` (`chuva`, `garoa`, `neve`, `neblina`, `nublado`, `limpo`) e `?data=2026-12-25`. O painel de **Simulação** monta isso para você.
 
 ## Segurança
 
 Em resumo: o escritório só é alcançável **na sua tailnet**, **falha fechado** quando o arquivo de usuários não pode ser lido, e **nenhum segredo chega ao navegador**: o token do agentes.chat fica no servidor, e o navegador só guarda um cookie de sessão HttpOnly.
 
-- **Só leitura no agentes.chat:** escopo OAuth `read`. Um token com mais permissões é recusado.
+- **Só leitura no agentes.chat:** escopo OAuth `read`. Um token com mais permissões é recusado. A exceção é o modo `"responder"` (abaixo), que pede `read write`; `manage` é recusado sempre.
 - **Senhas e sessões:**
   - a senha fica guardada como hash scrypt (N=2^15, r=8, p=1), e a sessão vai num cookie `__Host-esc_sessao`, HttpOnly, SameSite=Lax e Secure;
   - todo envio de formulário é conferido pela origem;
@@ -149,6 +150,12 @@ Em resumo: o escritório só é alcançável **na sua tailnet**, **falha fechado
   sudo escritorio-codigo
   ```
 - **`usuarios.json` ilegível:** se o arquivo existir e não puder ser lido (permissão, arquivo vazio ou JSON quebrado), o serviço não sobe e o journal diz o motivo (`journalctl -u escritorio`). Assim um arquivo corrompido nunca reabre o primeiro acesso. Para sair: conserte o dono e a permissão (`escritorio`, 0600) ou restaure o backup. Para recomeçar do zero, apague o arquivo.
+- **Conversas (`"conversas": "ler"`, desligado por padrão):** quem tem a senha, ou vê uma tela logada (por exemplo, uma TV na parede), vê a lista das tarefas do dia, com o agente e o assunto de cada uma, e lê as conversas das tarefas em andamento e das que terminaram hoje, até a meia-noite de Brasília. Lê com o que a conta conectada ao agentes.chat lê: as conversas diretas e privadas dessa pessoa e, nos canais, o que outras pessoas escreveram (sem o nome delas). Ligue só se esse público pode ler isso. O servidor escolhe a conversa pelas tarefas que ele mesmo viu (o navegador nunca escolhe o canal); numa tarefa que já terminou, mostra só as mensagens até o fim dela, limpa o texto (sem caracteres de controle nem invisíveis), nunca manda nome de pessoa nem anexo (só a contagem), guarda cada conversa por 60 segundos e faz no máximo 20 leituras por minuto e 200 por dia, dentro do limite do agentes.chat. Nada das conversas vai para o disco nem para o log. A lista do dia fica só na memória: some à meia-noite e quando o serviço reinicia.
+- **Responder (`"conversas": "responder"`, desligado por padrão):** o escritório deixa de ser só leitura. Ele pede ao agentes.chat o escopo `read write` ("Lê e manda tarefas"; trocar de modo pede uma nova conexão em `/oauth/conectar`), e quem abre o **modo resposta** **manda mensagens aos agentes nas conversas diretas do dia**, como a conta conectada, e não só responde perguntas: cada mensagem pode começar uma tarefa nova do agente. Por enquanto, só conversa direta: numa tarefa de canal, responda no agentes.chat. O que é sensível continua pedindo aprovação no agentes.chat, e aprovar é só lá. Cada envio cai na thread da tarefa, dentro da conversa direta, marcado "via Escritório dos agentes", e aparece no Audit do agentes.chat. A página Conversas lê essa thread, então a mensagem e a resposta do agente aparecem ali (use Atualizar).
+  - **Modo resposta:** a senha do escritório, confirmada de novo, libera os envios por 1 hora, renovada a cada envio que deu certo, com teto de 8 horas desde a senha. Vale só naquele navegador e naquela sessão (outro aparelho logado não herda), e fecha com "Fechar agora", ao sair e quando o serviço reinicia. Fechar o navegador também fecha, mas é melhor esforço: navegadores que restauram a sessão (e os de celular, que quase nunca fecham) guardam o cookie; quem garante é o servidor (1 h, 8 h, Sair). **Não abra o modo numa tela compartilhada; feche ao sair.**
+  - **Limites:** no máximo 5 envios por minuto e 50 por dia; um pedido de pausa do agentes.chat pausa só os envios. O log de cada envio guarda o usuário, o agente, a tarefa e o tamanho, nunca o texto.
+  - **Desligar na hora** (por exemplo, se uma mensagem cair no lugar errado): 1) "Fechar agora" no selo do modo; 2) `"ler"` no `times.json`, que vale sem reiniciar; 3) em **Settings › AI apps**, no agentes.chat, desconecte o "Escritório dos agentes".
+  - **Voltar ao só leitura:** troque para `"ler"` (ou `"desligado"`) no `times.json`. O escritório revoga o token de escrita e pede uma nova conexão, só de leitura; até lá, a leitura também para. Um `times.json` ilegível ou com erro de digitação não revoga nada (só bloqueia os envios). Depois, desconecte o app antigo em **Settings › AI apps**, no agentes.chat.
 - **Marca na tela de entrar:** o nome, a cor e o logo da empresa aparecem para quem alcança a página na tailnet, antes do login. O logo aceita só PNG, JPEG e WEBP, de até 600 KB. Prefira uma imagem sem metadados sensíveis (EXIF, GPS).
 - **Rede:** o serviço escuta só em 127.0.0.1, numa porta privilegiada, e quem o publica é a Tailscale.
 - **Sistema:** roda com usuário próprio e unit systemd endurecida. Tokens, senhas e logo ficam em `/var/lib/escritorio` (0700).
@@ -159,7 +166,7 @@ Achou uma vulnerabilidade? Leia o [SECURITY.md](./SECURITY.md) e reporte em part
 
 ```
 agentes.chat (MCP, OAuth "read")
-        ▲  a cada 15 s
+        ▲  a cada 30 s
         │
 escritorio.py ── 127.0.0.1:737 ── tailscale serve (HTTPS, só na tailnet) ──▶ navegador
    │  servidor HTTP da stdlib, login, OAuth + PKCE, leitor MCP, clima, marca
@@ -167,12 +174,12 @@ escritorio.py ── 127.0.0.1:737 ── tailscale serve (HTTPS, só na tailnet
 ```
 
 - **Servidor:** só a biblioteca padrão do Python 3 (`escritorio.py`, `acesso.py`). Sem banco de dados: poucos arquivos na pasta de dados.
-- **Front-end:** JavaScript puro e canvas, sem build (`static/`). `app.js` (interface, câmera, painéis), `mapa.js` (prédio procedural, colisão de móveis, portas), `vida.js` (vida dos agentes), `avatar.js`, `efeitos.js`, `ceu.js`, `clima.js`, `festas.js`, `som.js` (WebAudio), `simular.js`, `brincar.js` (objetos clicáveis, modo foto, demonstração), `personalizar.js`, `maquete.js` (3D, carregado sob demanda) e `entrar.*` (login).
+- **Front-end:** JavaScript puro e canvas, sem build (`static/`). `app.js` (interface, câmera, painéis), `mapa.js` (prédio procedural, colisão de móveis, portas), `vida.js` (vida dos agentes), `avatar.js`, `efeitos.js`, `ceu.js`, `clima.js`, `festas.js`, `som.js` (WebAudio), `simular.js`, `brincar.js` (objetos clicáveis, modo foto, demonstração), `personalizar.js` e `entrar.*` (login).
 - **Instalação:** o `instalar.sh` cria o usuário, os arquivos, uma unit systemd endurecida e o `tailscale serve`.
 
 ### Diário de transições
 
-A cada leitura (15 s), o servidor compara as tarefas com a leitura anterior, pelo `run_id`, e guarda na memória desde quando cada uma está no status atual. Daí saem os eventos recentes (no máximo 50): `comecou`, `pediu_aprovacao`, `pediu_resposta`, `voltou_a_trabalhar` e `terminou`, com horário, handle do agente e `run_id`, sem nenhum conteúdo das conversas. A primeira leitura depois de subir é só a base, sem eventos. Nada vai para o disco: reiniciar o serviço zera o diário e o "desde" recomeça na hora da primeira leitura.
+A cada leitura (30 s), o servidor compara as tarefas com a leitura anterior, pelo `run_id`, e guarda na memória desde quando cada uma está no status atual. Daí saem os eventos recentes (no máximo 50): `comecou`, `pediu_aprovacao`, `pediu_resposta`, `voltou_a_trabalhar` e `terminou`, com horário, handle do agente e `run_id`, sem nenhum conteúdo das conversas. A primeira leitura depois de subir é só a base, sem eventos. Nada vai para o disco: reiniciar o serviço zera o diário e o "desde" recomeça na hora da primeira leitura.
 
 ## Desenvolvimento
 
@@ -197,15 +204,6 @@ A arte (`arte/pixellab` e `static/tema`) sai sob a mesma licença do projeto, a 
 
 ## Terceiros
 
-- **three.js 0.186.1** (MIT, licença em `static/vendor/three-0.186.1/LICENSE`): `three.module.js` e `three.core.js` copiados sem alteração de `build/` do pacote `three@0.186.1` do npm, servidos só com login e com cache imutável (a versão vai no caminho). Sem CDN.
-
-  | Arquivo | sha256 |
-  |---|---|
-  | `three.module.js` | `9052042d676cb0fdc1ddfefe193053f34b7ac0513a616fdac4535d49987812ea` |
-  | `three.core.js` | `9edde002b066a9a05676a6127f67735b62baf399bdea529f2f7e31657da769e6` |
-  | `LICENSE` | `8b378ebe60e2fe500158cb0ac71cb5e8b7d92953c2abcc63a0eb90499653b5bc` |
-
-  O `test_escritorio.py` confere esses hashes. Para atualizar: `npm pack three@<versão>`, confira a `integrity` do tarball com a do registry, copie `package/build/three.module.js`, `package/build/three.core.js` e `package/LICENSE` para uma pasta nova `static/vendor/three-<versão>/` e troque o caminho em `ARQUIVOS` (escritorio.py), no `instalar.sh`, no import da maquete e nos hashes do teste e desta tabela.
 - **Fontes** Figtree, Silkscreen, Source Sans 3 e Doto: SIL Open Font License 1.1 (`static/fontes`, licenças em `static/fontes/OFL-*.txt`).
 - **Clima:** [Open-Meteo](https://open-meteo.com) (sem chave), com dados sob CC BY 4.0. A API gratuita é **só para uso não comercial** ([termos](https://open-meteo.com/en/terms)): uma empresa, ou um site com assinatura ou anúncios, precisa de um plano pago do Open-Meteo ou de um servidor Open-Meteo próprio ([código aberto](https://github.com/open-meteo/open-meteo)). Este servidor chama o endereço gratuito (`api.open-meteo.com`, na classe `Clima` do `escritorio.py`), então qualquer das duas opções pede trocar esse endereço (e acrescentar a chave do plano). Senão, desligue o clima: tire o `clima` do `times.json` (`/opt/escritorio/times.json` depois de instalar) e reinicie o serviço.
 
@@ -220,5 +218,5 @@ Feito para o [agentes.chat](https://agentes.chat), com autorização dos desenvo
 ## Agradecimentos
 
 - Ao time do agentes.chat, pelo conector MCP só de leitura e pelo apoio a um escritório open source.
-- Ao [three.js](https://threejs.org), ao [Open-Meteo](https://open-meteo.com), à [Tailscale](https://tailscale.com) e ao [PixelLab](https://pixellab.ai).
+- Ao [Open-Meteo](https://open-meteo.com), à [Tailscale](https://tailscale.com) e ao [PixelLab](https://pixellab.ai).
 - A quem desenhou as fontes Figtree, Silkscreen, Source Sans 3 e Doto, por liberá-las sob a OFL.

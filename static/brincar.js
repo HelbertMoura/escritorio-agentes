@@ -18,6 +18,7 @@ const Brincar = (() => {
     [/^(balcao|cafeteira)$/, "cafe", "Cafeteira", "passar um café"], [/^aquario$/, "aquario", "Aquário", "chamar os peixes"],
     [/^(luminaria|luminaria_chao|luminaria_arco|ring_light)$/, "luminaria", "Luminária", "ligar ou desligar"],
     [/^quadro_avisos$/, "quadro_avisos", "Quadro de avisos", "ler os recados"], [/^planta/, "planta", "Planta", "balançar"],
+    [/^placa_expediente$/, "expediente", "Placa do expediente", demo ? "ver o horário" : "ver e mudar o horário"],
   ];
   const DO_QUADRO = { relogio: ["relogio", "Relógio", "ver a hora e o tempo"], assinatura_dev: ["lousa", "Lousa de código", "ler a lousa"],
     assinatura_vendas: ["sino", "Sino das vendas", "tocar o sino"], assinatura_produto: ["lousa", "Kanban", "ver o kanban"], assinatura_marketing: ["lousa", "Moodboard", "ver o moodboard"] };
@@ -109,6 +110,13 @@ const Brincar = (() => {
     lousa: it => { const t = it.rotulo === "Lousa de código" ? PIADAS[Math.floor(Math.random() * PIADAS.length)] : it.rotulo === "Kanban" ? "3 FEITOS HOJE" : "INSPIRAÇÃO DO DIA"; reagir(it, "bolha", 3000, t.toUpperCase()); return `${it.rotulo}: ${t}`; },
     sino: it => { som("sino"); reagir(it, "ding", 1800, "DING!"); return "Sino tocado: venda fechada!"; },
     planta: it => { it.ref.agita = agora(); return "A planta balançou"; },
+    expediente: it => { // fora da demonstração, abre o Personalizar no "Abre às" (app.js); na demonstração, só mostra o horário
+      const E = window.Expediente; if (!E) return "";
+      const fechado = E.fora(Ceu.agora().h), t = fechado ? `Fechado. Abre às ${E.proximaAbertura()}` : `Aberto, das ${E.abre} às ${E.fecha}`;
+      if (demo) reagir(it, "bolha", 3000, (fechado ? `ABRE ÀS ${E.proximaAbertura()}` : `${E.abre} ÀS ${E.fecha}`));
+      else abrirExpediente();
+      return t;
+    },
   };
   function acionar(it) {
     const texto = ACOES[it.tipo](it);

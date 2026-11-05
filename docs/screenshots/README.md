@@ -1,6 +1,6 @@
 # Screenshots · Capturas
 
-Captured images for the README, taken after the UI v2. · Imagens capturadas para o README, feitas depois da UI v2.
+Captured images for the README, retaken on 2026-11-05 (2D map, Conversations page and opening hours). · Imagens capturadas para o README, refeitas em 05/11/2026 (mapa 2D, página Conversas e expediente).
 
 `docs/social-preview.png` (1280×640) is the repository's social preview. · É a prévia social do repositório.
 
@@ -10,13 +10,13 @@ PNG, 1440×900 for desktop and 390×844 for phone. · PNG, 1440×900 no computad
 
 | File · Arquivo | What it shows · O que mostra | How · Como |
 |---|---|---|
-| `01-escritorio-dia.png` | The whole office by day · O escritório inteiro de dia | `?demo=1&hora=10` |
-| `02-esperando-voce.png` | "!" and "?" on the map and the "Waiting for you" list · "!" e "?" no mapa e a lista "Esperando você" | `?demo=1` |
-| `03-noite-chuva.png` | Night with rain, lights and windows · Noite com chuva, luzes e janelas | `?demo=1&hora=21.5&clima=chuva` |
+| `01-escritorio-dia.png` | The whole office by day · O escritório inteiro de dia | `?demo=1&hora=10`; wait until a request and a question show up, and hide the Simulation strip · espere aparecer um pedido e uma pergunta e esconda a faixa da Simulação |
+| `02-esperando-voce.png` | "!" and "?" on the map and the "Waiting for you" list · "!" e "?" no mapa e a lista "Esperando você" | the same as 01, scrolled to the map · o mesmo do 01, rolado até o mapa |
+| `03-noite-chuva.png` | Night with rain, lights and windows · Noite com chuva, luzes e janelas | `?demo=1&hora=19.5&clima=chuva` (still within opening hours: after closing, whoever has no task goes home · ainda no expediente: depois de fechar, quem está sem tarefa vai para casa) |
 | `04-natal-neve.png` | Christmas decorations in the snow · Enfeites de Natal na neve | `?demo=1&data=2026-12-25&hora=19&clima=neve` |
-| `05-maquete-3d.png` | The 3D diorama · A maquete 3D | `?demo=1&visao=maquete` |
+| `05-conversas.png` | The Conversations page with a conversation open, the reply box and the reply-mode badge · A página Conversas com uma conversa aberta, a caixa de resposta e o selo do modo resposta | fictional preview with `ferramentas/previa.exemplo.json` (made-up org id and links), `"conversas": "responder"` and a fictional conversation; demo mode hides this page · prévia fictícia com `ferramentas/previa.exemplo.json` (id de organização e links inventados), `"conversas": "responder"` e uma conversa fictícia; o modo demonstração esconde esta página |
 | `06-simulacao.png` | The Simulation panel open · O painel de Simulação aberto | `?demo=1`, then the sun-and-cloud button · depois o botão de sol e nuvem |
-| `07-personalizar.png` | The Customize screen · A tela Personalizar | fictional preview · prévia fictícia (`ESCRITORIO_TIMES=times.exemplo.json`); demo mode blocks this screen · o modo demonstração bloqueia esta tela |
+| `07-personalizar.png` | The Customize screen, with accent color, logo and opening hours · A tela Personalizar, com cor de destaque, logo e expediente | fictional preview · prévia fictícia (`ESCRITORIO_TIMES=times.exemplo.json`); demo mode blocks this screen · o modo demonstração bloqueia esta tela |
 | `08-entrar.png` | The sign-in / first-access screen · A tela de entrar / primeiro acesso | fictional preview, `/entrar` · prévia fictícia, `/entrar` |
 | `09-celular.png` | The office on a phone · O escritório no celular | `?demo=1`, 390×844 |
 | `10-modo-foto.png` | A photo-mode PNG · Um PNG do modo foto | `?demo=1`, photo mode · modo foto |

@@ -198,7 +198,7 @@ const Avatar = (() => {
 
   // Como o boneco b está no instante t (ms): pose, direção (com a olhadela para os lados), o quadro f do RITMO
   // (com o gole do café), o piscar e oy, quanto o corpo sobe em px (passo, pulinhos, dança, digitando, dormindo,
-  // respiração; tudo zerado com reduzir movimento). O 2D (boneco) e a maquete 3D usam a mesma conta.
+  // respiração; tudo zerado com reduzir movimento).
   // Não muda nada: devolve sempre o mesmo objeto, reaproveitado, para ler na hora (nada é alocado por quadro).
   const atual = { pose: "parado", olha: "baixo", f: 0, oy: 0, piscando: false };
   function estado(b, t) {
@@ -243,127 +243,7 @@ const Avatar = (() => {
     return { color: cores[h % cores.length], eyes: olhosTipos[(h >> 3) % olhosTipos.length], accessory: acess[(h >> 6) % acess.length] };
   }
 
-  // ---- Maquete 3D: o mesmo bichinho em caixas (contrato D do gate da maquete) ----
-  // Caixas do boneco para a maquete 3D, com o mesmo desenho do 2D (bichinho de feltro quadrado). Só dados: sem Three.js, sem DOM.
-  // Unidade: 1 px do avatar = 1 px do mapa. Origem no chão, no meio dos pés; x para a direita, y para cima,
-  // z para a frente ("frente" = olhando "baixo"). Quem gira o boneco pelo b.olha é a maquete: por isso não há variante
-  // por direção (nem a costura de costas do 2D; no 3D as costas são as costas).
-  // Cada caixa: [x, y, z, w, h, d, "#rrggbb"] (canto mínimo), com as cores da paleta CORES, os olhos e o acessório.
-  // f = 0/1, o mesmo passo do 2D; piscando = true fecha os olhos (a linha do dormindo), como no 2D, menos no "happy".
-  // Cache por aparência + pose + f + piscando: a lista e as caixas são congeladas e reaproveitadas, nada é alocado
-  // por quadro; quando o piscar não muda o rosto (olhos já fechados ou "happy"), volta a mesma lista de olhos abertos.
-  // No máximo 16 caixas (o ferramentas/checar_voxels.js confere todas as combinações).
-  // pose, f, piscando e o balanço do 2D (oy: pulinho, respiração, o passo que sobe e desce) saem do Avatar.estado(b, t).
-  // As 19 poses do 2D têm caixas próprias; pose desconhecida cai em "parado".
-  // Do quadro 2D de 22x22: x = coluna - 11 e y = 21 - linha (a base do corpo no chão).
-  const FRENTE = 6;   // a face da frente do corpo fica em z = 6
-  const olhosVox = (ap, pose, f) => pose === "comemorando" ? "happy" : pose === "dormindo" || (pose === "cafe" && f) ? "fechados" : ap.eyes;
-  function voxelsNovos(ap, pose, f, piscando) {
-    const p = CORES[ap.color] || CORES.graphite, cx = [];
-    const caixa = (x, y, z, w, h, d, cor) => { cx.push(Object.freeze([x, y, z, w, h, d, cor])); };
-    const doQuadro = (col, lin, w, h, z, d, cor) => caixa(col - 11, 21 - lin - h, z, w, h, d, cor);   // retângulo do 2D, com profundidade
-    const naFrente = (col, lin, w, h, cor, sobre = 0, d = 1) => doQuadro(col, lin, w, h, FRENTE + sobre, d, cor);
-    // mão 3x3 do 2D vira um cubo: diante do corpo (à frente dos olhos) quando está diante dele, do lado quando está fora
-    const mao = (col, lin, dz = 0) => doQuadro(col, lin, 3, 3, (Math.abs(col - 9.5) < 7 ? FRENTE + 1.5 : -1.5) + dz, 3, p.escuro);
-
-    caixa(-7, 1, -6, 14, 11, 12, p.base);   // corpo em dois blocos: os cantos chanfrados do contorno do 2D
-    caixa(-6, 0, -5, 12, 13, 10, p.base);
-
-    const BRANCO = "#ffffff", PRETO = "#1b1b22";
-    const tipo = piscando ? "fechados" : olhosVox(ap, pose, f);
-    for (const e of [8, 12]) switch (tipo) {
-      case "fechados": naFrente(e, 15, 2, 1, PRETO); break;
-      case "happy": naFrente(e, 15, 3, 1, BRANCO); naFrente(e + 1, 14, 1, 1, BRANCO); break;   // o ^ do 2D em duas caixas
-      case "sleepy": naFrente(e, 15, 3, 1, BRANCO); naFrente(e, 14, 3, 1, PRETO); break;
-      case "wide": naFrente(e, 13, 3, 3, BRANCO); naFrente(e + 1, 14, 2, 2, PRETO, 1, 0.5); break;
-      case "dots": naFrente(e + 1, 14, 1, 2, PRETO); break;
-      default: naFrente(e, 13, 2, 3, BRANCO); naFrente(e + 1, 14, 1, 2, PRETO, 1, 0.5);   // round
-    }
-
-    switch (ap.accessory) {   // em cima da cabeça (y = 13), no máximo 5 caixas
-      case "crown":
-        caixa(-4, 13, -4, 8, 2, 8, "#ffd34d"); caixa(-4, 15, -4, 1, 2, 8, "#ffd34d"); caixa(3, 15, -4, 1, 2, 8, "#ffd34d");
-        caixa(-1, 15, 2, 2, 3, 2, "#ffd34d"); caixa(-1, 14, 4, 1, 1, 0.5, "#e8476a"); break;
-      case "hat":
-        caixa(-8, 13, -8, 16, 1, 16, "#1f1f26"); caixa(-4, 14, -4, 8, 1, 8, "#c0392b"); caixa(-4, 15, -4, 8, 4, 8, "#2b2b34"); break;
-      case "headphones":
-        caixa(-9, 13, -1, 18, 1, 2, "#2b2b34"); caixa(-9, 8, -2, 2, 5, 4, "#2b2b34"); caixa(7, 8, -2, 2, 5, 4, "#2b2b34");   // conchas na orelha,
-        caixa(-10, 9, -1, 1, 3, 2, "#ff6b8b"); caixa(9, 9, -1, 1, 3, 2, "#ff6b8b"); break;                                    // acima das mãos
-      case "headset":
-        caixa(-9, 13, -1, 18, 1, 2, "#1f1f26"); caixa(-9, 8, -2, 2, 5, 4, "#1f1f26"); caixa(7, 8, -2, 2, 5, 4, "#1f1f26");
-        caixa(-9, 9, 2, 1, 1, 6, "#1f1f26"); caixa(-8, 9, 7, 1, 1, 1, "#4ade80"); break;   // haste do microfone para a frente
-      case "flower":
-        caixa(3, 13, -1, 3, 3, 3, "#ffffff"); caixa(2, 14, 0, 5, 1, 1, "#ffffff"); caixa(4, 12, -0.5, 1, 5, 2, "#ffffff");
-        caixa(4, 14, 2, 1, 1, 0.5, "#ff7a59"); break;
-      case "antenna":
-        caixa(0, 13, -0.5, 1, 4, 1, "#2b2b34"); caixa(-1, 17, -1.5, 3, 2, 3, "#ff5a5a"); break;
-      case "cap":
-        caixa(-5, 13, -5, 10, 3, 10, "#1e3a8a"); caixa(-4, 13, 5, 8, 1, 4, "#1e3a8a"); caixa(-1, 16, -1, 2, 1, 2, "#1e3a8a"); break;
-      case "bow":
-        caixa(1, 13, -1, 3, 3, 2, "#ff5fa2"); caixa(5, 13, -1, 3, 3, 2, "#ff5fa2"); caixa(4, 14, -1, 1, 1, 2, "#c2185b"); break;
-    }
-
-    const E = 1, D = 18, Y = 14;   // as mesmas mãos do maos() do 2D (coluna, linha do quadro)
-    switch (pose) {
-      case "andando":   // no 3D o passo vai para a frente e para trás: pé e mão do mesmo lado em oposição
-        mao(E, Y - 1 + f, f ? 2 : -2); mao(D, Y - f, f ? -2 : 2);
-        caixa(-4, 0, f ? -8 : 3, 3, 1, 5, p.contorno); caixa(1, 0, f ? 3 : -8, 3, 1, 5, p.contorno); break;
-      case "digitando": case "tocando": case "pebolim":
-        mao(5, 17 - f); mao(14, 16 + f);
-        if (pose === "pebolim") { caixa(-11, 3, 10.5, 22, 1, 1, "#b8bcc6"); caixa(-11, 2, 10.5, 22, 1, 1, "#7d828c"); }   // as barras, à frente das mãos
-        break;
-      case "cafe":
-        if (f) {   // gole: a xícara na frente da boca
-          mao(13, 12); doQuadro(14, 10, 4, 3, 7, 3, "#f4f4f6"); doQuadro(14, 9, 4, 1, 7, 3, "#6b4a2e"); doQuadro(18, 10, 1, 2, 8, 1, "#f4f4f6");
-        } else {
-          mao(E, Y); mao(16, 15); doQuadro(18, 13, 3, 3, 6.5, 3, "#f4f4f6"); doQuadro(18, 12, 3, 1, 6.5, 3, "#6b4a2e"); doQuadro(21, 13, 1, 2, 7.5, 1, "#f4f4f6");
-        }
-        break;
-      case "jogando":
-        caixa(-4, 2.5, 8, 8, 3, 2, ESCURO);   // o controle, entre as mãos
-        doQuadro(8, 17, 1, 1, 10, 0.5, f ? "#ff5a5a" : "#4ade80"); doQuadro(13, 17, 1, 1, 10, 0.5, f ? "#60a5fa" : "#ffd34d");
-        mao(5, 16 - f); mao(14, 15 + f); break;
-      case "fliperama": mao(E + 2, Y - 1 + f); mao(D - 2, Y - f); break;   // de frente para a máquina: mãos nos botões
-      case "raquete":
-        mao(E, Y); mao(17, f ? 11 : 15, 3.5);   // o braço da raquete um pouco à frente (livre dos fones)
-        caixa(7, f ? 11 : 7, 3, 4, 4, 1, "#e04848"); caixa(8.5, f ? 9 : 5, 3, 1, 2, 1, MADEIRA); break;
-      case "taco":   // no 3D o taco aponta para a frente, nas duas mãos, e empurra de leve com o f
-        caixa(-1, 4, 7 + f, 1, 1, 9, MADEIRA); caixa(-1, 4, 16 + f, 1, 1, 2, "#f4f4f6");
-        caixa(-2, 3, 7.5 + f, 3, 3, 3, p.escuro); caixa(-2, 3, 12 + f, 3, 3, 3, p.escuro); break;
-      case "comemorando": mao(E, 4 - f); mao(D, 4 - f); break;
-      case "acenando": mao(E, Y); mao(D + (f ? 1 : -1), f ? 4 : 3); break;   // acima do 2D: livre da aba do chapéu e dos fones
-      case "carinho": mao(E, Y); mao(D + 1, 16 + f); break;
-      case "dancando": mao(E, f ? 16 : 4); mao(D, f ? 4 : 16); break;
-      case "violao":   // corpo com a boca, braço e as duas mãos (a que dedilha e a que faz o acorde)
-        caixa(-6, 1, 7, 7, 3.5, 2, "#c98b4b"); caixa(-1, 2, 9, 1, 1, 0.25, "#2b1d12"); caixa(1, 3, 7.5, 9, 1, 1, "#6b4423");
-        mao(6, 15 + f); caixa(6, 2, 7, 3, 3, 3, p.escuro); break;
-      case "arremesso":
-        mao(E, Y);
-        if (f) mao(17, 10, 3.5); else { mao(D, 4); caixa(8, 17, -1, 2, 2, 2, "#f4f4f6"); }
-        break;
-      case "esperando": case "sentado": case "dormindo": mao(5, 17); mao(14, 17); break;
-      default: mao(E, Y); mao(D, Y);
-    }
-    return Object.freeze(cx);
-  }
-
-  const voxPorAparencia = new Map(), voxPorObjeto = new WeakMap();
-  function voxels(ap, pose, f, piscando = false) {
-    let mapa = voxPorObjeto.get(ap);
-    if (!mapa) {
-      const chave = `${ap.color}|${ap.eyes}|${ap.accessory}`;
-      mapa = voxPorAparencia.get(chave) || new Map();
-      voxPorAparencia.set(chave, mapa); voxPorObjeto.set(ap, mapa);
-    }
-    const n = Object.hasOwn(NUM_POSE, pose) ? pose : "parado", f1 = f ? 1 : 0, olho = olhosVox(ap, n, f1);
-    const pisca = piscando && olho !== "happy" && olho !== "fechados" ? 1 : 0;   // piscar sem mudar o rosto: a mesma lista
-    const k = (NUM_POSE[n] * 2 + f1) * 2 + pisca;
-    let lista = mapa.get(k);
-    if (!lista) { lista = voxelsNovos(ap, n, f1, pisca); mapa.set(k, lista); }
-    return lista;
-  }
-
-  return { desenhar: desenharAvatar, boneco, estado, padrao: aparenciaPadrao, voxels, TAM, CORES, POSES };
+  return { desenhar: desenharAvatar, boneco, padrao: aparenciaPadrao, TAM, CORES, POSES };
 })();
 
 window.Avatar = Avatar;

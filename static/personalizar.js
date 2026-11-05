@@ -1,12 +1,12 @@
 // Tela "Personalizar": nome, cor e logo da empresa (salvos no servidor), com prévia ao vivo
 // e checagem de contraste da cor escolhida (WCAG). A prévia mostra a placa da recepção e o painel
-// da sala comunal desenhados como no mapa. Tudo (nome, cor e logo) só vale ao clicar em "Salvar".
+// da sala comunal desenhados como no mapa. Tudo (nome, cor, logo e expediente) só vale ao clicar em "Salvar".
 "use strict";
 const Personalizar = (() => {
   const $ = id => document.getElementById(id);
   const PALETA = [["#f5b83d", "Âmbar"], ["#f97316", "Laranja"], ["#e8587a", "Rosa"], ["#a855f7", "Roxo"], ["#3b82f6", "Azul"], ["#14b8a6", "Turquesa"], ["#22c55e", "Verde"], ["#e5e7eb", "Gelo"]];
   const FUNDO = "#0f0f11", LOGO_PADRAO = "logo.png", ESCALA = 3;
-  let salvo = null;          // { empresa, cor, logo } como estão no servidor
+  let salvo = null;          // { empresa, cor, logo, abre, fecha } como estão no servidor
   let logoNovo = null;       // arquivo escolhido, enviado só no "Salvar"
   let tirarLogo = false;     // "voltar ao logo padrão", também só no "Salvar"
   let urlLocal = null;       // endereço temporário do arquivo escolhido, para a prévia
@@ -96,7 +96,22 @@ const Personalizar = (() => {
   }
 
   function mostrarLogo(src) { $("m-previa").src = $("p-logo").src = src; }
-  function alterado() { return !!salvo && ($("m-empresa").value.trim() !== salvo.empresa || $("m-cor").value.toLowerCase() !== salvo.cor.toLowerCase() || !!logoNovo || tirarLogo); }
+  function alterado() {
+    return !!salvo && ($("m-empresa").value.trim() !== salvo.empresa || $("m-cor").value.toLowerCase() !== salvo.cor.toLowerCase() || !!logoNovo || tirarLogo ||
+      $("m-abre").value !== salvo.abre || $("m-fecha").value !== salvo.fecha);
+  }
+
+  // expediente: abre == fecha não vale (o servidor recusa também); abre > fecha é o turno que vira a meia-noite
+  function conferirExpediente() {
+    const abre = $("m-abre").value, fecha = $("m-fecha").value, igual = !!abre && abre === fecha;
+    for (const id of ["m-abre", "m-fecha"]) $(id).setAttribute("aria-invalid", String(igual));
+    const ajuda = $("m-expediente-ajuda"), min = Math.round(Expediente.duracao(abre, fecha) * 60);
+    ajuda.classList.toggle("ruim", igual);
+    ajuda.textContent = !abre || !fecha ? "Escolha a hora de abrir e a de fechar."
+      : igual ? "Abre e fecha no mesmo horário: escolha horários diferentes."
+      : `Das ${abre} às ${fecha}${abre > fecha ? " do dia seguinte" : ""} (${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ""}). Fora desse horário, quem está sem tarefa vai para casa e o mapa avisa que o escritório está fechado.`;
+    return !igual;
+  }
 
   function mudou() {
     const cor = $("m-cor").value, nome = $("m-empresa").value.trim();
@@ -108,7 +123,10 @@ const Personalizar = (() => {
     $("m-contraste").textContent = `Contraste com o fundo: ${noFundo.toFixed(1).replace(".", ",")}:1${ok ? "" : " (baixo: links e destaques ficam apagados; escolha uma cor mais clara)"} · texto do botão: ${noBotao.toFixed(1).replace(".", ",")}:1.`;
     $("m-contraste").classList.toggle("ruim", !ok);
     $("m-desfazer").hidden = !alterado();
-    if (alterado()) aviso("Alterações ainda não salvas. Nome, cor e logo valem juntos ao clicar em Salvar.");
+    conferirExpediente();
+    const pendente = "Alterações ainda não salvas. Nome, cor, logo e expediente valem juntos ao clicar em Salvar.";
+    if (alterado()) aviso(pendente);
+    else if ($("m-aviso").textContent === pendente) aviso("");   // desfez à mão até o valor salvo
     desenharMiniaturas();
   }
 
@@ -120,8 +138,8 @@ const Personalizar = (() => {
     $("m-salvar").textContent = "Salvar";
     $("m-logo-ajuda").textContent = "PNG, JPEG ou WEBP, até 600 KB. Também dá para arrastar a imagem para cá. O logo novo aparece na prévia e só vale ao clicar em Salvar, junto com o nome e a cor.";
     esquecerLogo(); configApp = cfg;
-    salvo = { empresa: cfg.empresa || "", cor: cfg.cor || "#f5b83d", logo: cfg.logo || LOGO_PADRAO };
-    $("m-empresa").value = salvo.empresa; $("m-cor").value = salvo.cor;
+    salvo = { empresa: cfg.empresa || "", cor: cfg.cor || "#f5b83d", logo: cfg.logo || LOGO_PADRAO, abre: Expediente.abre, fecha: Expediente.fecha };
+    $("m-empresa").value = salvo.empresa; $("m-cor").value = salvo.cor; $("m-abre").value = salvo.abre; $("m-fecha").value = salvo.fecha;
     mostrarLogo(salvo.logo);
     aviso(""); mudou();
   }
@@ -131,14 +149,18 @@ const Personalizar = (() => {
 
   $("m-empresa").addEventListener("input", mudou);
   $("m-cor").addEventListener("input", mudou);
+  $("m-abre").addEventListener("input", mudou);
+  $("m-fecha").addEventListener("input", mudou);
   $("m-desfazer").addEventListener("click", () => {
-    $("m-empresa").value = salvo.empresa; $("m-cor").value = salvo.cor; esquecerLogo(); mostrarLogo(salvo.logo);
+    $("m-empresa").value = salvo.empresa; $("m-cor").value = salvo.cor; $("m-abre").value = salvo.abre; $("m-fecha").value = salvo.fecha;
+    esquecerLogo(); mostrarLogo(salvo.logo);
     mudou(); aviso("Voltou ao que estava salvo.");
   });
   $("form-marca").addEventListener("submit", async ev => {
     ev.preventDefault();
     if (window.Brincar && Brincar.demo) { aviso("Na demonstração nada é salvo.", "ruim"); return; }   // dados fictícios: nenhum POST
     if (!$("m-empresa").reportValidity()) return;
+    if (!conferirExpediente()) { aviso("Não salvou: o expediente precisa abrir e fechar em horários diferentes.", "ruim"); $("m-fecha").focus(); return; }
     const bt = $("m-salvar"); bt.disabled = true; bt.textContent = "Salvando…";
     let logoFoi = false;
     try {
@@ -146,13 +168,14 @@ const Personalizar = (() => {
         const d = logoNovo ? await enviar("/api/logo", logoNovo, logoNovo.type) : await enviar("/api/logo/remover", "{}", "application/json");
         logoFoi = true; salvo.logo = configApp.logo = d.logo || LOGO_PADRAO;   // endereço do servidor, não o blob local
       }
-      await enviar("/api/marca", JSON.stringify({ empresa: $("m-empresa").value.trim(), cor: $("m-cor").value }), "application/json");
+      await enviar("/api/marca", JSON.stringify({ empresa: $("m-empresa").value.trim(), cor: $("m-cor").value,
+        expediente: { abre: $("m-abre").value, fecha: $("m-fecha").value } }), "application/json");
       esquecerLogo();
       aviso("Salvo. Recarregando para aplicar no mapa…", "ok"); setTimeout(() => location.reload(), 700);
     } catch (e) {
       if (logoFoi) { esquecerLogo(); mostrarLogo(salvo.logo); }   // o logo já foi; só o nome e a cor ficaram para trás
       bt.disabled = false; bt.textContent = "Salvar"; mudou();
-      aviso(`Não salvou${logoFoi ? " o nome e a cor (o logo já foi salvo)" : ""}: ${e.message}`, "ruim");   // depois do mudou(), que reescreve o aviso
+      aviso(`Não salvou${logoFoi ? " o nome, a cor e o expediente (o logo já foi salvo)" : ""}: ${e.message}`, "ruim");   // depois do mudou(), que reescreve o aviso
     }
   });
 

@@ -5,6 +5,9 @@ os eventos, edite o status das tarefas (ou tire/ponha tarefas) com a prévia abe
 Só para desenvolvimento; não vai para a VPS.
 Uso: python ferramentas/previa.py dados_brutos.json [--resolvidos]  ->  http://127.0.0.1:7372 (outra porta: PREVIA_PORTA=7373)
 --resolvidos: na subida, passa o diário por leituras no passado para mostrar pedidos "resolvidos hoje" (os 3 desfechos).
+Página Conversas: a lista do dia sai da mesma memória do servidor (com --resolvidos, também as terminadas) e cada
+conversa aberta é uma conversa fictícia, sempre a mesma, com horários relativos a agora (a última mensagem fica
+depois do fim das terminadas, para o corte do fim da tarefa aparecer). Liga com "conversas": "ler" no times.json.
 """
 import json, os, sys, threading, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -15,11 +18,32 @@ PORTA = int(os.environ.get("PREVIA_PORTA", "7372"))
 os.environ["ESCRITORIO_BASE"] = f"http://127.0.0.1:{PORTA}"
 import escritorio as e
 
+class Token:
+    def token(self):
+        return "previa"
+
+
 class Falso:
     def __init__(self, arquivo):
         self.arquivo, self.marca = arquivo, None
         self.estado = {"agentes": [], "trabalhos": [], "tarefas": [], "eventos": [], "resolvidos": []}
         self.diario, self.trava = e.Diario(), threading.Lock()
+        self.memoria, self.conversas, self.cred = e.ConversasDoDia(), {"por_id": {}, "mudou": {}}, Token()
+
+    def _ler(self, bruto, tarefas, agora=None):
+        """Uma "leitura": o Diario e a memória da página Conversas, como no Leitor.ciclo()."""
+        estado = self.diario.aplicar(e.resumir(bruto["agents"], tarefas), agora=agora)
+        self.conversas = self.memoria.atualizar(e.normalizar(bruto["agents"], tarefas)[1],
+                                                {t["run_id"]: t.get("desde") for t in estado["tarefas"]}, True,
+                                                time.time() if agora is None else agora)
+        return estado
+
+    def pausado(self, agora=None):
+        return False
+
+    def conversas_do_dia(self):
+        self.foto()   # o arquivo pode ter mudado
+        return self.conversas
 
     def semear_resolvidos(self):
         """--resolvidos: o Diario de verdade passa por 4 leituras no passado (sem lista inventada). Até 3 tarefas em
@@ -45,7 +69,7 @@ class Falso:
         leituras = ((40, bruto["tasks"]), (30, outros + pedidos + [extra]),   # minutos atrás
                     (15, outros + pedidos[:2] + [dict(pedidos[2], status="waiting_input")] + [extra]), (5, bruto["tasks"]))
         for minutos, tarefas in leituras:
-            self.diario.aplicar(e.resumir(bruto["agents"], tarefas), agora=agora - minutos * 60)
+            self._ler(bruto, tarefas, agora - minutos * 60)
 
     def foto(self):
         with self.trava:
@@ -55,14 +79,30 @@ class Falso:
                 if marca != self.marca:  # arquivo mudou: é uma "leitura" nova
                     with open(self.arquivo, encoding="utf-8") as f:
                         bruto = json.load(f)
-                    self.estado = self.diario.aplicar(e.resumir(bruto["agents"], bruto["tasks"]))
+                    self.estado = self._ler(bruto, bruto["tasks"])
                     self.marca = marca
             except (OSError, ValueError, KeyError, TypeError) as x:  # salvo pela metade, renomeado ou sem as listas
                 erro = f"prévia: não consegui ler {os.path.basename(self.arquivo)} ({type(x).__name__}); mostrando a leitura anterior"
             return {**self.estado, "atualizado": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "erro": erro}
 
+class ConversasFicticias(e.Conversas):
+    """O Conversas do servidor (cache, tetos, corte do fim), com a conversa vinda daqui em vez do agentes.chat."""
+    FALAS = ((40, "person", "Bom dia! Consegue revisar o rascunho de hoje e me dizer o que falta?", 0),
+             (38, "agent", "Bom dia! Revisei: faltam a conclusão e duas fontes. Quer que eu complete?", 0),
+             (12, "person", "Pode completar, por favor. Mandei a planilha de apoio.", 1),
+             (11, "agent", "Feito. Deixei as fontes no fim e marquei o que mudou.", 0),
+             (1, "person", "Obrigado! Depois vejo com calma.", 0))   # minutos atrás; texto fictício
+
+    def _buscar(self, destino, token, agora):   # a mesma assinatura do servidor: thread ou canal, conta nos tetos
+        self.chamadas.append(agora)
+        return {"messages": [{"author": {"kind": quem, "name": "Agente da prévia" if quem == "agent" else "Pessoa fictícia"},
+                              "sent_at": e._iso(agora - minutos * 60), "untrusted_text": texto,
+                              "attachments": [{"name": "anexo"}] * anexos} for minutos, quem, texto, anexos in self.FALAS]}
+
+
 srv = e.Servidor(("127.0.0.1", PORTA), e.Pagina)
 srv.leitor, srv.cred = Falso([a for a in sys.argv[1:] if not a.startswith("--")][0]), None
+srv.conversas = ConversasFicticias(srv.leitor)
 if "--resolvidos" in sys.argv[1:]:
     srv.leitor.semear_resolvidos()
 srv.acesso = e.Acesso(os.environ["ESCRITORIO_DADOS"])

@@ -101,7 +101,8 @@ const Vida = (() => {
     musica: "tocando", cafe: "cafe", lanche: "cafe", roda: "cafe", gato: "carinho" };
   const VIZ = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
-  const foraDoExpediente = () => { const h = Ceu.agora().h; return h >= 20 || h < 7; };
+  // expediente.js traz o horário do Personalizar (inclusive o turno que vira a meia-noite); sem ele, 07:00-20:00
+  const foraDoExpediente = (h = Ceu.agora().h) => window.Expediente ? Expediente.fora(h) : h >= 20 || h < 7;
   const sorteia = lista => lista[Math.floor(Math.random() * lista.length)];
   const entre = (a, b) => a + Math.random() * (b - a);
   const esperando = b => !!b.trabalho && /^waiting/.test(b.trabalho.status);
@@ -342,9 +343,10 @@ const Vida = (() => {
 
   function soltarVaga(b) { if (b && b.lugar && b.lugar.vaga && b.lugar.vaga.ocupante === b.id) b.lugar.vaga.ocupante = null; }
 
-  // rotina do dia (horário real): daily, almoço e pausa do café puxam todo mundo que está livre
+  // rotina do dia (horário real): daily, almoço e pausa do café puxam todo mundo que está livre; fora do expediente, nada
   function momento() {
     const h = Ceu.agora().h;
+    if (foraDoExpediente(h)) return null;
     if (h >= 9.5 && h < 9.84) return { nome: "daily", tipos: { reuniao: 60 } };
     if (h >= 12 && h < 13) return { nome: "almoco", tipos: { lanche: 12, cozinha: 10, cafe: 4 } };
     if (h >= 15.5 && h < 15.84) return { nome: "cafe", tipos: { cafe: 14, lanche: 6, roda: 1 } };
@@ -534,7 +536,7 @@ const Vida = (() => {
   // --- passo de simulação ----------------------------------------------------------------
   function passo(m, dt) {
     const agora = performance.now() / 1000, ceu = Ceu.agora();
-    m.fora = ceu.h >= 20 || ceu.h < 7; m.noite = ceu.escuro; m.mo = momento();   // lidos uma vez por quadro
+    m.fora = foraDoExpediente(ceu.h); m.noite = ceu.escuro; m.mo = momento();   // lidos uma vez por quadro
     for (const b of m.lista) {
       if (b.fala && agora > b.ate) b.fala = null;
       if (b.responde && agora >= b.responde.em) {

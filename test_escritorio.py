@@ -1,20 +1,29 @@
+import collections
+import contextlib
 import hashlib
+import io
 import json
 import os
-import posixpath
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.parse
 import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PASTA = tempfile.mkdtemp(prefix="escritorio-teste-")
 os.environ["ESCRITORIO_DADOS"] = PASTA
+# nunca o times.json de quem roda a suíte (o modo dele muda o custo do Leitor); vale também para os subprocessos
+os.environ["ESCRITORIO_TIMES"] = os.path.join(PASTA, "times.json")
+with open(os.environ["ESCRITORIO_TIMES"], "w", encoding="utf-8") as _f:
+    json.dump({"conversas": "ler"}, _f)
 os.environ["AGENTES_ORG"] = "00000000-0000-4000-8000-000000000000"  # org fictícia
 import acesso  # noqa: E402
 import escritorio as e  # noqa: E402
@@ -234,12 +243,12 @@ class Coleta(unittest.TestCase):
         l = self.leitor({"list_agents": {"": {"agents": AG}},
                          "list_recent_tasks": {"": {"tasks": [{"run_id": "r1", "agent": {"id": "a1"}}], "next_cursor": "p2"},
                                                "p2": {"tasks": [{"run_id": "r2", "agent": {"id": "a2"}}]}}})
-        r, completa = l._coletar("t")
+        r, completa, _ = l._coletar("t")
         self.assertEqual(([t["run_id"] for t in r["tarefas"]], completa), (["r1", "r2"], True))
 
     def test_teto_de_paginas_marca_leitura_incompleta(self):
         sem_fim = {"": {"tasks": [], "next_cursor": "p"}, "p": {"tasks": [], "next_cursor": "p"}}
-        _, completa = self.leitor({"list_agents": {"": {"agents": AG}}, "list_recent_tasks": sem_fim})._coletar("t")
+        _, completa, _ = self.leitor({"list_agents": {"": {"agents": AG}}, "list_recent_tasks": sem_fim})._coletar("t")
         self.assertFalse(completa)
 
     def test_resposta_sem_lista_e_erro_e_lista_vazia_vale(self):
@@ -247,7 +256,7 @@ class Coleta(unittest.TestCase):
             self.leitor({"list_agents": {"": {"agents": AG}}, "list_recent_tasks": {"": {}}})._coletar("t")
         with self.assertRaises(RuntimeError):
             self.leitor({"list_agents": {"": {}}, "list_recent_tasks": {"": {"tasks": []}}})._coletar("t")
-        r, completa = self.leitor({"list_agents": {"": {"agents": AG}}, "list_recent_tasks": {"": {"tasks": []}}})._coletar("t")
+        r, completa, _ = self.leitor({"list_agents": {"": {"agents": AG}}, "list_recent_tasks": {"": {"tasks": []}}})._coletar("t")
         self.assertEqual((r["tarefas"], completa), ([], True))
 
 
@@ -432,6 +441,134 @@ class Http(unittest.TestCase):
         self.assertEqual(self.req("/entrar")[0], 200)
         self.assertEqual(self.req("/logo.png")[0], 200)
 
+    def test_estado_com_rotulo_cortado_no_meio_do_emoji_responde_200(self):
+        antes = self.srv.leitor
+
+        class Leitor:   # "\ud83d" sozinho é JSON válido e passa pelo resumir(): derrubava o _json com UnicodeEncodeError
+            def foto(self):
+                tarefas = [{"run_id": "r1", "agent": {"id": "a1"}, "status": "running", "label": "Lendo \ud83d"}]
+                return {**e.resumir(AG, tarefas), "atualizado": None, "erro": None}
+        self.srv.leitor = Leitor()
+        try:
+            st, corpo, _ = self.req("/api/estado", self.entrar())
+        finally:
+            self.srv.leitor = antes
+        self.assertEqual(st, 200)
+        self.assertEqual(json.loads(corpo)["trabalhos"][0]["rotulo"], "Lendo ?")
+
+    def test_conversa_sem_sessao_desligada_e_ligada(self):
+        class Mcp:
+            chamadas = []
+            sessao = "s"
+
+            def ferramenta(self, nome, args, token):
+                self.chamadas.append(args)
+                return CONVERSA
+
+        class Cred:
+            def token(self):
+                return "t"
+        l = e.Leitor(Cred())
+        l.mcp = Mcp()
+        l.estado = {**l.estado, **e.resumir(AG, [{"run_id": "r1", "agent": {"id": "a1"}, "status": "waiting_input", "url": ORG_URL}])}
+        antes = self.srv.leitor, getattr(self.srv, "conversas", None), e.TIMES
+        pasta = tempfile.mkdtemp(prefix="escritorio-conversa-")
+        self.srv.conversas, e.TIMES = e.Conversas(l), os.path.join(pasta, "times.json")
+        try:
+            self.assertEqual(self.req("/api/conversa?agente=a1")[0], 401)
+            cab = self.entrar()
+            for times in ({}, {"conversas": "sim"}, {"conversas": "Responder"}):   # só "ler" e "responder" ligam
+                with open(e.TIMES, "w", encoding="utf-8") as f:
+                    json.dump(times, f)
+                self.assertEqual(self.req("/api/conversa?agente=a1", cab)[0], 404, times)
+                self.assertEqual(json.loads(self.req("/api/config", cab)[1])["conversas"], "desligado")
+            self.assertEqual(l.mcp.chamadas, [])   # desligado: nenhuma chamada ao agentes.chat
+            with open(e.TIMES, "w", encoding="utf-8") as f:
+                json.dump({"conversas": "ler"}, f)
+            self.assertEqual(json.loads(self.req("/api/config", cab)[1])["conversas"], "ler")
+            outro = "99999999-8888-4777-8666-555555555555"
+            st, corpo, h = self.req(f"/api/conversa?agente=a1&channel_id={outro}&thread_id={outro}", cab)
+            self.assertEqual((st, h["Cache-Control"]), (200, "no-store"))
+            self.assertEqual(len(json.loads(corpo)["mensagens"]), 2)
+            self.assertEqual(l.mcp.chamadas, [{"channel_id": CANAL, "limit": 20}])   # canal e thread da query: ignorados
+        finally:
+            self.srv.leitor, self.srv.conversas, e.TIMES = antes
+            shutil.rmtree(pasta, ignore_errors=True)
+
+    def test_pagina_conversas_no_estado_sem_canal_e_so_com_o_modo(self):
+        # contrato P, A4: o /api/estado não leva o canal de uma terminada nem o de uma viva que não é o trabalho atual
+        atual, outra, fim = (f"{n}1111111-2222-4333-8444-555555555555" for n in "abc")
+        url = lambda canal: f"https://app.agentes.chat/org/{e.ORG}/c/{canal}"
+        tarefas = [{"run_id": "r1", "agent": {"id": "a1"}, "status": "waiting_approval", "url": url(atual), "started_at": "2026-01-15T10:00:00Z"},
+                   {"run_id": "r2", "agent": {"id": "a1"}, "status": "running", "url": url(outra), "started_at": "2026-01-15T11:00:00Z"},
+                   {"run_id": "r3", "agent": {"id": "a2"}, "status": "running", "url": url(fim), "label": "Relatório"}]
+        l, agora = e.Leitor(None), time.time()
+        l.memoria.atualizar(e.normalizar(AG, tarefas)[1], {}, True, agora)
+        l.conversas = l.memoria.atualizar(e.normalizar(AG, tarefas[:2])[1], {}, True, agora)   # a r3 terminou
+        l.estado = {**l.estado, **e.resumir(AG, tarefas[:2])}
+        antes = self.srv.leitor, getattr(self.srv, "conversas", None), e.TIMES
+        pasta = tempfile.mkdtemp(prefix="escritorio-pagina-")
+        self.srv.leitor, self.srv.conversas, e.TIMES = l, e.Conversas(l), os.path.join(pasta, "times.json")
+        try:
+            cab = self.entrar()
+            with open(e.TIMES, "w", encoding="utf-8") as f:
+                json.dump({"conversas": "ler"}, f)
+            st, corpo, _ = self.req("/api/estado", cab)
+            lista = json.loads(corpo)["conversas"]
+            self.assertEqual(st, 200)
+            self.assertEqual(sorted((c["run_id"], c["status"]) for c in lista), [("r1", "waiting_approval"), ("r2", "running"), ("r3", "terminou")])
+            for c in lista:
+                self.assertEqual(set(c), {"id", "agente_id", "run_id", "status", "rotulo", "desde", "terminou_em", "responder"})
+                self.assertIs(c["responder"], False)   # modo "ler": nenhum item recebe envio
+            self.assertNotIn(outra, corpo.decode()); self.assertNotIn(fim, corpo.decode())
+            self.assertIn(atual, corpo.decode())   # o trabalho atual já saía antes (trabalhos.url)
+            with open(e.TIMES, "w", encoding="utf-8") as f:   # A7: modo desligado com a memória cheia
+                json.dump({}, f)
+            self.assertEqual(json.loads(self.req("/api/estado", cab)[1])["conversas"], [])
+            self.assertEqual(self.req(f"/api/conversa?id={lista[0]['id']}", cab)[0], 404)
+        finally:
+            self.srv.leitor, self.srv.conversas, e.TIMES = antes
+            shutil.rmtree(pasta, ignore_errors=True)
+
+    def test_id_vazio_e_conta_nova_no_oauth(self):
+        class Mcp:
+            sessao, chamadas = "s", []
+
+            def ferramenta(self, nome, args, token):
+                self.chamadas.append(nome)
+                return CONVERSA
+
+        class Cred:
+            def token(self):
+                return "t"
+
+            def concluir(self, code, state):
+                pass
+        l = e.Leitor(Cred())
+        l.mcp = Mcp()
+        l.estado = {**l.estado, **e.resumir(AG, [{"run_id": "r1", "agent": {"id": "a1"}, "status": "waiting_input", "url": ORG_URL}])}
+        l.conversas = l.memoria.atualizar(e.normalizar(AG, [{"run_id": "r1", "agent": {"id": "a1"}, "status": "waiting_input",
+                                                             "url": ORG_URL}])[1], {}, True, time.time())
+        antes = self.srv.leitor, getattr(self.srv, "conversas", None), self.srv.cred, e.TIMES
+        pasta = tempfile.mkdtemp(prefix="escritorio-oauth-")
+        self.srv.leitor, self.srv.conversas, self.srv.cred, e.TIMES = l, e.Conversas(l), Cred(), os.path.join(pasta, "times.json")
+        try:
+            cab = self.entrar()
+            with open(e.TIMES, "w", encoding="utf-8") as f:
+                json.dump({"conversas": "ler"}, f)
+            for q in ("id=", "id", "id=&agente=a1"):   # o "?id=" vazio é id inválido da página, não a ficha
+                st, corpo, _ = self.req(f"/api/conversa?{q}", cab)
+                self.assertEqual((st, json.loads(corpo)), (404, {"erro": "essa conversa não está mais na lista de hoje"}), q)
+            self.assertEqual(l.mcp.chamadas, [])
+            self.assertEqual(self.req("/api/conversa?agente=a1", cab)[0], 200)   # a ficha enche o cache
+            self.assertEqual(len(self.srv.conversas.cache), 1)
+            self.assertEqual(self.req("/oauth/retorno?code=c&state=s", cab)[0], 302)   # conta nova: memória e cache zerados
+            self.assertEqual((self.srv.conversas.cache, l.conversas_do_dia()["por_id"]), ({}, {}))
+            self.assertEqual(json.loads(self.req("/api/estado", cab)[1])["conversas"], [])
+        finally:
+            self.srv.leitor, self.srv.conversas, self.srv.cred, e.TIMES = antes
+            shutil.rmtree(pasta, ignore_errors=True)
+
     def test_login_errado_nao_cria_sessao(self):
         corpo = urllib.parse.urlencode({"usuario": "dono", "senha": "errada-errada"}).encode()
         st, html, h = self.req("/entrar", {"Origin": self.base}, corpo)
@@ -485,6 +622,24 @@ class Http(unittest.TestCase):
         self.assertEqual((st, h["Content-Type"]), (200, "image/png")); self.assertTrue(dados.startswith(b"\x89PNG"))
         self.assertEqual(self.req("/api/logo", {"Origin": self.base, "Content-Type": "image/png"}, png)[0], 401)  # sem sessão
 
+    def test_expediente_pelo_personalizar(self):
+        cab = {**self.entrar(), "Origin": self.base, "Content-Type": "application/json"}
+        salvar = lambda **campos: self.req("/api/marca", cab, json.dumps({"empresa": "Acme", "cor": "#112233", **campos}).encode())
+        st, corpo, _ = salvar(expediente={"abre": "22:00", "fecha": "6:00"})
+        self.assertEqual((st, json.loads(corpo)["expediente"]), (200, {"abre": "22:00", "fecha": "06:00"}))
+        for exp, erro in (({"abre": "08:00", "fecha": "08:00"}, "o expediente precisa abrir e fechar em horários diferentes"),
+                          ({"abre": "25:00", "fecha": "08:00"}, "expediente: horário no formato HH:MM, de 00:00 a 23:59"),
+                          ({"abre": "07:0٥", "fecha": "20:00"}, "expediente: horário no formato HH:MM, de 00:00 a 23:59"),   # dígito arábico
+                          ("22:00-06:00", "expediente: horário no formato HH:MM, de 00:00 a 23:59")):
+            with self.subTest(exp=exp):
+                st, corpo, _ = salvar(expediente=exp)
+                self.assertEqual((st, json.loads(corpo)), (400, {"erro": erro}))
+        # recusado não grava nada; o Salvar sem o campo (a tela antiga) mantém o expediente salvo e troca o resto
+        st, corpo, _ = salvar(cor="#445566")
+        self.assertEqual((st, json.loads(corpo)["cor"], json.loads(corpo)["expediente"]), (200, "#445566", {"abre": "22:00", "fecha": "06:00"}))
+        cfg = json.loads(self.req("/api/config", self.entrar())[1])
+        self.assertEqual(cfg["expediente"], {"abre": "22:00", "fecha": "06:00"})
+
     def test_versao_do_logo_muda_a_cada_troca(self):
         cab = {**self.entrar(), "Origin": self.base, "Content-Type": "image/png"}
         logo = lambda dados: json.loads(self.req("/api/logo", cab, b"\x89PNG\r\n\x1a\n" + dados)[1])["logo"]
@@ -537,24 +692,23 @@ class Http(unittest.TestCase):
         finally:
             del self.srv.previa_sem_login
 
-    def test_scripts_e_vendor_com_login_tipo_e_cache(self):
+    def test_scripts_com_login_tipo_e_cache(self):
         cab = self.entrar()
         for nome, tipo in e.ARQUIVOS.items():
             if not nome.endswith(".js"):
                 continue
             st, corpo, h = self.req("/" + nome, cab)
             self.assertEqual((st, h["Content-Type"]), (200, "text/javascript; charset=utf-8"), nome)
-            cache = "private, max-age=31536000, immutable" if nome.startswith("vendor/") else "no-cache"
-            self.assertEqual(h["Cache-Control"], cache, nome)
+            self.assertEqual(h["Cache-Control"], "no-cache", nome)
             with open(os.path.join(e.ESTATICO, nome), "rb") as f:
                 self.assertEqual(corpo, f.read(), nome)   # inteiro, mesmo com a escrita em blocos
-        for rota in ("/vendor/three-0.186.1/LICENSE", "/vendor/", "/vendor/three-0.186.1/", "/vendor/three-0.186.1/../../app.js"):
+        for rota in ("/fontes/OFL-figtree-silkscreen.txt", "/tema/", "/tema/../app.js"):   # fora da lista fechada
             self.assertEqual(self.req(rota, cab)[0], 404, rota)
 
-    def test_vendor_sem_login_vai_para_entrar(self):
-        for nome in VENDOR:
-            if nome.endswith(".js"):
-                st, _, h = self.req("/vendor/three-0.186.1/" + nome)
+    def test_scripts_sem_login_vao_para_entrar(self):
+        for nome in e.ARQUIVOS:
+            if nome.endswith(".js") and nome not in e.PUBLICOS:
+                st, _, h = self.req("/" + nome)
                 self.assertEqual((st, h["Location"]), (302, "/entrar"), nome)
 
     def test_csp_so_scripts_da_propria_origem(self):
@@ -575,55 +729,25 @@ class Http(unittest.TestCase):
         self.assertEqual(self.req("/api/estado", cab)[0], 401)
 
 
-VENDOR = {  # three@0.186.1 do npm (tarball sha512-blFeqb49...), sem alteração
-    "three.module.js": "9052042d676cb0fdc1ddfefe193053f34b7ac0513a616fdac4535d49987812ea",
-    "three.core.js": "9edde002b066a9a05676a6127f67735b62baf399bdea529f2f7e31657da769e6",
-    "LICENSE": "8b378ebe60e2fe500158cb0ac71cb5e8b7d92953c2abcc63a0eb90499653b5bc",
-}
-# Especificadores de módulo em qualquer posição (minificado, depois de ";", nome importado entre aspas): todo
-# from "x" (import e export), import "x" e import("x"). Sem parser: um texto 'from "x"' dentro de string também
-# conta, e o teste reprova; é o lado seguro.
-ESTATICO_DE = re.compile(r"\bfrom\s*(['\"])([^'\"\n]+)\1|\bimport\s*(['\"])([^'\"\n]+)\3")
-VAO = r"(?:\s|/\*.*?\*/|//[^\n]*\n)*"   # espaço, quebra de linha, comentário /* */ ou // (até o fim da linha) entre as partes do import( )
-DINAMICO = re.compile(r"\bimport" + VAO + r"\((?!\s*\))", re.S)   # "import()" vazio só aparece em comentário
-DINAMICO_LITERAL = re.compile(r"\bimport" + VAO + r"\(" + VAO + r"(['\"`])([^'\"`\n]+)\1", re.S)
-
-
-class Vendor(unittest.TestCase):
-    def test_sha256_igual_ao_do_npm(self):
-        for nome, sha in VENDOR.items():
-            with open(os.path.join(e.ESTATICO, "vendor", "three-0.186.1", nome), "rb") as f:
-                self.assertEqual(hashlib.sha256(f.read()).hexdigest(), sha, nome)
-
-    def importados(self, nome):
-        with open(os.path.join(e.ESTATICO, nome), encoding="utf-8") as f:
-            js = f.read()
-        literais = DINAMICO_LITERAL.findall(js)
-        self.assertEqual(len(DINAMICO.findall(js)), len(literais), f"{nome}: import() sem caminho literal")
-        return [m[1] or m[3] for m in ESTATICO_DE.findall(js)] + [m[1] for m in literais]
-
-    def test_extrator_pega_import_fora_do_comeco_da_linha(self):
-        js = ('const a=1;import{b}from"./um.js";export*from"./dois.js"\n'
-              'import { "nome com aspas" as c } from "./tres.js"; import "./quatro.js";\n'
-              'export {\n  d,\n} from "three"; const m = await import(`./cinco.js?v=${v}`);\n'
-              'import\n  ("./seis.js"); import /* x */ ( /* y */ "./sete.js"); import(\n  caminho)\n'
-              'import // comentário (com parêntese)\n  ("./oito.js"); import( // o caminho\n  "./nove.js")')
-        self.assertEqual([m[1] or m[3] for m in ESTATICO_DE.findall(js)], ["./um.js", "./dois.js", "./tres.js", "./quatro.js", "three"])
-        self.assertEqual([m[1] for m in DINAMICO_LITERAL.findall(js)], ["./cinco.js?v=${v}", "./seis.js", "./sete.js", "./oito.js", "./nove.js"])
-        self.assertEqual(len(DINAMICO.findall(js)), 6)   # o import(caminho) não é literal: o teste do grafo reprova
-
-    def test_grafo_de_modulos_fechado(self):
+class Estaticos(unittest.TestCase):
+    def test_scripts_classicos_sem_modulos_nem_workers(self):
+        # as páginas carregam só <script src> clássico: import/export ou Worker trariam código que os testes daqui não leem
         for nome in e.ARQUIVOS:
-            if not nome.endswith(".js"):
-                continue
-            with open(os.path.join(e.ESTATICO, nome), encoding="utf-8") as f:
-                self.assertNotRegex(f.read(), r"Worker\b|importScripts", f"{nome}: Worker ou importScripts carregam código fora do grafo")
-            for spec in self.importados(nome):
-                self.assertRegex(spec, r"^\.{1,2}/", f"{nome}: '{spec}' não é caminho relativo (especificador nu ou outra origem)")
-                alvo = posixpath.normpath(posixpath.join(posixpath.dirname(nome), spec.split("?")[0]))
-                self.assertIn(alvo, e.ARQUIVOS, f"{nome} importa {spec}, que o servidor não serve")
-        self.assertEqual(self.importados("vendor/three-0.186.1/three.module.js"), ["./three.core.js", "./three.core.js"])
-        self.assertEqual(self.importados("vendor/three-0.186.1/three.core.js"), [])
+            if nome.endswith(".js"):
+                with open(os.path.join(e.ESTATICO, nome), encoding="utf-8") as f:
+                    self.assertNotRegex(f.read(), r"\bimport\s*[({'\"*]|\bexport\s|\bWorker\b|importScripts", nome)
+
+    def test_scripts_sem_atalhos_perigosos(self):
+        # texto virando código; o CSP sem unsafe-eval já barra no navegador, isto barra antes, no código
+        proibidos = (r"\beval\s*\(", r"\bnew\s+Function\b", r"\bdocument\.write", r"\bset(?:Timeout|Interval)\s*\(\s*['\"`]")
+        for rx, exemplo in zip(proibidos, ("eval (x)", "new Function('a')", "document.writeln(x)", "setTimeout( `go()`, 9)")):
+            self.assertRegex(exemplo, rx)
+        for nome in e.ARQUIVOS:
+            if nome.endswith(".js"):
+                with open(os.path.join(e.ESTATICO, nome), encoding="utf-8") as f:
+                    js = f.read()
+                for rx in proibidos:
+                    self.assertNotRegex(js, rx, nome)
 
     def test_paginas_so_carregam_o_que_o_servidor_serve(self):
         # todo <script src>, <link href> e <img src> local das páginas tem que estar em ARQUIVOS e existir no disco;
@@ -662,25 +786,6 @@ class Vendor(unittest.TestCase):
                 self.assertTrue(os.path.isfile(os.path.join(e.ESTATICO, nome)), f"{folha}: {nome} não existe")
                 if publico:
                     self.assertIn(nome, e.PUBLICOS, f"{folha} carrega {u}, que exige login")
-
-    def test_vendor_sem_execucao_dinamica(self):
-        for nome in VENDOR:
-            if nome.endswith(".js"):
-                with open(os.path.join(e.ESTATICO, "vendor", "three-0.186.1", nome), encoding="utf-8") as f:
-                    js = f.read()
-                self.assertNotRegex(js, r"\beval\s*\(|new\s+Function\b", nome)
-
-    def test_maquete_sem_atalhos_perigosos(self):
-        caminho = os.path.join(e.ESTATICO, "maquete.js")
-        if not os.path.exists(caminho):
-            self.skipTest("static/maquete.js ainda não existe (fatia 1)")
-        with open(caminho, encoding="utf-8") as f:
-            js = f.read()
-        for proibido in (r"innerHTML", r"outerHTML", r"insertAdjacentHTML", r"document\.write", r"\beval\s*\(",
-                         r"new\s+Function\b", r"importmap", r"setAttribute\(\s*['\"]style", r"Worker\b", r"importScripts",
-                         r"\bURL\s*\(", r"createObjectURL", r"blob:"):
-            self.assertNotRegex(js, proibido)
-
 
 class Envio(unittest.TestCase):
     class Saida:   # o socket do navegador: aceita os cabeçalhos e o 1º bloco, depois falha
@@ -858,7 +963,8 @@ class MarcaNoLogin(unittest.TestCase):
         # /api/config estourava (o app recarregava a cada 10 s): agora vale o padrão, com um evento no log.
         # O padrão tem os mesmos campos do válido: sem app_url os links "No agentes.chat" viravam "undefined/agents"
         vazio = {"empresa": e.EMPRESA_PADRAO, "times": [], "aparencia": {}, "cor": "#f5b83d",
-                 "app_url": f"https://app.agentes.chat/org/{e.ORG}", "clima": None}
+                 "app_url": f"https://app.agentes.chat/org/{e.ORG}", "clima": None, "expediente": {"abre": "07:00", "fecha": "20:00"},
+                 "conversas": "desligado"}
         self.assertEqual(e.carregar_times(os.path.join(self.pasta, "nao-existe.json")), vazio)
         for bruto in (["lista"], {"times": ["Dev"]}, {"times": {"Dev": 1}}, {"times": [{"nome": "Dev", "parede": "x"}]},
                       {"aparencia": ["x"]}):
@@ -868,6 +974,35 @@ class MarcaNoLogin(unittest.TestCase):
                 self.assertEqual(e.config_publica()["times"], [])
         self.times({"empresa": "Acme", "times": [{"nome": "Dev", "parede": 2, "agentes": ["pixel"]}]})   # o válido segue igual
         self.assertEqual([(t["nome"], t["parede"], t["agentes"]) for t in e.carregar_times()["times"]], [("Dev", 2, ["pixel"])])
+
+    def test_expediente_do_times_e_do_personalizar(self):
+        # sem a chave: 07:00-20:00, o de antes. Valor ruim vale o padrão com um evento no log, sem derrubar o resto do times.json
+        self.assertEqual(e.carregar_times()["expediente"], {"abre": "07:00", "fecha": "20:00"})
+        for exp, esperado in (({"abre": "8:30", "fecha": "18:00"}, ("08:30", "18:00")),   # normaliza a hora de 1 dígito
+                              ({"abre": "22:00", "fecha": "06:00"}, ("22:00", "06:00")),   # turno que vira a meia-noite
+                              ({"abre": "00:00", "fecha": "23:59", "x": 1}, ("00:00", "23:59"))):
+            with self.subTest(exp=exp):
+                self.times({"empresa": "Acme", "expediente": exp})
+                self.assertEqual(e.carregar_times()["expediente"], dict(zip(("abre", "fecha"), esperado)))
+        for exp in ({"abre": "09:00", "fecha": "09:00"}, {"abre": "9:00", "fecha": "09:00"}, {"abre": "24:00", "fecha": "06:00"},
+                    {"abre": "07:60", "fecha": "20:00"}, {"abre": "7h", "fecha": "20h"}, {"abre": 7, "fecha": 20}, {"abre": "07:00"},
+                    {"abre": " 07:00", "fecha": "20:00"}, {"abre": "07:00\n", "fecha": "20:00"}, {"abre": "0٧:00", "fecha": "20:00"}, ["07:00", "20:00"], "07:00-20:00", None):
+            with self.subTest(exp=exp):
+                self.times({"empresa": "Acme", "expediente": exp})
+                saida = io.StringIO()
+                with contextlib.redirect_stdout(saida):
+                    cfg = e.carregar_times()
+                self.assertEqual((cfg["empresa"], cfg["expediente"]), ("Acme", {"abre": "07:00", "fecha": "20:00"}))
+                self.assertIn('"resultado": "expediente_invalido"', saida.getvalue())
+        # Personalizar > times.json > padrão; um marca.json com expediente estragado cai no do times.json
+        self.times({"expediente": {"abre": "06:00", "fecha": "14:00"}})
+        for marca, esperado in (({"expediente": {"abre": "14:00", "fecha": "22:00"}}, "14:00"), ({"expediente": {"abre": "1", "fecha": "2"}}, "06:00"),
+                                ({"empresa": "Acme"}, "06:00")):
+            with self.subTest(marca=marca):
+                with open(e.ARQ_MARCA, "w", encoding="utf-8") as f:
+                    json.dump(marca, f)
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(e.config_publica()["expediente"]["abre"], esperado)
 
     def test_times_e_marca_absurdos_valem_como_padrao(self):
         # "parede": 1e400 (int(inf) dá OverflowError) e JSON aninhado demais (RecursionError): /api/config sem 500
@@ -923,17 +1058,6 @@ class MarcaNoLogin(unittest.TestCase):
         self.assertEqual(e.carregar_times(exemplo)["empresa"], e.EMPRESA_PADRAO)
 
 
-class Voxels(unittest.TestCase):
-    def test_avatar_voxels_em_todas_as_combinacoes(self):
-        node = shutil.which("node")
-        if not node:
-            self.skipTest("sem node nesta máquina (o ferramentas/checar_voxels.js roda o avatar.js)")
-        r = subprocess.run([node, os.path.join(os.path.dirname(os.path.abspath(__file__)), "ferramentas", "checar_voxels.js")],
-                           capture_output=True, text=True, encoding="utf-8", timeout=120)
-        self.assertEqual(r.returncode, 0, r.stdout[-3000:] + r.stderr[-1000:])
-        self.assertIn("RESULTADO: tudo certo", r.stdout)
-
-
 class Configuracao(unittest.TestCase):
     def setUp(self):
         self.antes = e.BASE, e.PORTA, e.ORG
@@ -959,6 +1083,603 @@ class Configuracao(unittest.TestCase):
         self.assertIn("AGENTES_ORG", str(c.exception.code))
 
 
+class Orcamento(unittest.TestCase):
+    """Contrato O: a leitura de fundo cabe em 3.000 pedidos/dia dos 5.000 que o agentes.chat dá por conexão."""
+    class Mcp:   # MCP falso que conta os pedidos como o ClienteMCP (1 por página)
+        def __init__(self, agentes, tarefas):
+            self.agentes, self.tarefas, self.chamadas, self.pedidos, self.sessao, self.falha = agentes, tarefas, [], 0, "s", None
+            self.paginas = 1
+
+        def iniciar(self, token):
+            self.sessao = "s"
+
+        def ferramenta(self, nome, args, token):
+            self.pedidos += 1
+            self.chamadas.append(nome)
+            if self.falha:
+                raise self.falha
+            if nome == "list_agents":
+                return {"agents": self.agentes}
+            pagina = int(args.get("cursor") or 1)
+            return {"tasks": self.tarefas, **({"next_cursor": str(pagina + 1)} if pagina < self.paginas else {})}
+
+    def leitor(self, tarefas=()):
+        class Cred:
+            def token(self):
+                return "t"
+        l = e.Leitor(Cred())
+        l.mcp = self.Mcp(AG, list(tarefas))
+        return l
+
+    def test_intervalo_tem_piso_de_30(self):
+        cod = "import escritorio; print(escritorio.INTERVALO)"
+        amb = {**os.environ, "ESCRITORIO_INTERVALO": "15"}
+        r = subprocess.run([sys.executable, "-c", cod], cwd=os.path.dirname(os.path.abspath(e.__file__)),
+                           env=amb, capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.stdout.strip(), "30", r.stderr)
+
+    def test_esperas(self):
+        self.assertEqual(e.espera_429("120", 1), 120)
+        self.assertEqual((e.espera_429("5", 1), e.espera_429("999999", 1)), (60, 3600))   # entre 60 s e 1 h
+        daqui_10min = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime(time.time() + 600))
+        self.assertAlmostEqual(e.espera_429(daqui_10min, 1), 600, delta=5)
+        self.assertEqual([e.espera_429(None, n) for n in (1, 2, 3, 4, 5, 40)], [300, 600, 1200, 2400, 3600, 3600])
+        self.assertEqual(e.espera_429("lixo", 2), 600)
+        self.assertEqual([e.espera_erro(n) for n in (1, 2, 3, 4, 5, 40)], [30, 60, 120, 240, 300, 300])
+
+    def test_429_levanta_limitado_sem_zerar_a_sessao(self):
+        antes = e._abrir
+        e._abrir = lambda req: (429, {"Retry-After": "120"}, b"")
+        try:
+            c = e.ClienteMCP(None)
+            c.sessao = "sessao-viva"
+            with self.assertRaises(e.Limitado) as x:
+                c._post({"jsonrpc": "2.0", "id": 1, "method": "tools/call"}, "t")
+        finally:
+            e._abrir = antes
+        self.assertEqual((x.exception.retry_after, c.sessao, c.pedidos), ("120", "sessao-viva", 1))
+
+    def test_agentes_a_cada_10_min_e_ciclo_dorme_conforme_o_custo(self):
+        l = self.leitor([{"run_id": "r1", "agent": {"id": "a1"}, "status": "running"}])
+        t0 = 1_000_000.0
+        self.assertAlmostEqual(l.ciclo(t0), 2 * 86400 / 3000)            # 1ª leitura: agentes + tarefas
+        self.assertEqual(l.ciclo(t0 + 60), e.INTERVALO)                  # só tarefas: 28,8 s vira o piso de 30
+        self.assertEqual(l.mcp.chamadas, ["list_agents", "list_recent_tasks", "list_recent_tasks"])
+        l.ciclo(t0 + 599)
+        self.assertEqual(l.mcp.chamadas.count("list_agents"), 1)
+        l.ciclo(t0 + 600)
+        self.assertEqual(l.mcp.chamadas.count("list_agents"), 2)
+        self.assertEqual(l.foto()["agentes"][0]["id"], "a1")   # entre as recargas, a lista anterior vale
+
+    def test_um_dia_simulado_cabe_no_orcamento(self):
+        for paginas in (1, 2, 5):   # mais tarefas que uma página: o intervalo cresce e o teto continua valendo
+            l = self.leitor([{"run_id": "r1", "agent": {"id": "a1"}, "status": "running"}])
+            l.mcp.paginas = paginas
+            agora = 1_000_000.0
+            while agora < 1_000_000.0 + 86400:
+                agora += l.ciclo(agora)
+            # tolerância de um ciclo: o último começa antes do fim do dia e termina depois
+            self.assertLessEqual(l.mcp.pedidos, e.ORCAMENTO_DIA + paginas + 1, paginas)
+            self.assertLessEqual(l.mcp.chamadas.count("list_agents"), 144)   # no máximo 1 a cada 10 min
+        self.assertGreater(l.mcp.pedidos, 2900)   # e não fica parado: usa o orçamento
+
+    def test_ciclo_de_3_pedidos_dorme_86_s(self):
+        l = self.leitor()
+        orig = l.mcp.ferramenta
+
+        def com_initialize(nome, args, token):
+            if nome == "list_agents":
+                l.mcp.pedidos += 1   # a sessão foi renovada antes: initialize + notificação viram 1 a mais aqui
+            return orig(nome, args, token)
+        l.mcp.ferramenta = com_initialize
+        self.assertAlmostEqual(l.ciclo(1_000_000.0), 86.4)
+
+    def test_agente_desconhecido_recarrega_a_lista_no_maximo_a_cada_2_min(self):
+        l = self.leitor([{"run_id": "r1", "agent": {"id": "a1"}, "status": "running"}])
+        t0 = 1_000_000.0
+        l.ciclo(t0)
+        novo = {"id": "a3", "name": "Nova", "handle": "nova", "role": ""}
+        l.mcp.agentes = AG + [novo]
+        l.mcp.tarefas.append({"run_id": "r3", "agent": {"id": "a3"}, "status": "waiting_input"})
+        l.ciclo(t0 + 60)   # menos de 2 min da última lista: espera
+        self.assertEqual(l.mcp.chamadas.count("list_agents"), 1)
+        self.assertNotIn("a3", [t["agente_id"] for t in l.foto()["trabalhos"]])
+        l.ciclo(t0 + 120)  # 2 min: recarrega no mesmo ciclo e o pedido aparece
+        self.assertEqual(l.mcp.chamadas.count("list_agents"), 2)
+        self.assertIn("a3", [t["agente_id"] for t in l.foto()["trabalhos"]])
+        l.mcp.tarefas.append({"run_id": "r4", "agent": {"id": "fantasma"}, "status": "running"})
+        l.ciclo(t0 + 180)  # outro desconhecido 1 min depois: não recarrega de novo
+        self.assertEqual(l.mcp.chamadas.count("list_agents"), 2)
+
+    def test_429_pausa_mantem_a_ultima_leitura_e_registra_uma_linha(self):
+        l = self.leitor([{"run_id": "r1", "agent": {"id": "a1"}, "status": "running"}])
+        l.ciclo(1_000_000.0)
+        l.mcp.falha = e.Limitado(None)
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            esperas = [l.ciclo(1_000_100.0), l.ciclo(1_000_500.0)]
+        self.assertEqual(esperas, [300, 600])
+        self.assertEqual(l.mcp.sessao, "s")   # 429 não zera a sessão MCP
+        self.assertEqual(saida.getvalue().count('"limitado"'), 1)   # uma linha por episódio
+        foto = l.foto()
+        self.assertEqual((foto["erro"], len(foto["trabalhos"])), (e.PAUSA_429, 1))
+        self.assertTrue(l.pausado(1_000_500.0 + 599))
+        self.assertFalse(l.pausado(1_000_500.0 + 601))
+        l.mcp.falha = None
+        self.assertEqual(l.ciclo(1_000_590.0), 510)   # ainda na pausa: espera o resto sem chamar o MCP
+        self.assertAlmostEqual(l.ciclo(1_001_100.0), 2 * 86400 / 3000)   # acabou: lê de novo (agentes + tarefas)
+        self.assertIsNone(l.foto()["erro"])
+        l.mcp.falha = e.Limitado("90")
+        with contextlib.redirect_stdout(saida):
+            self.assertEqual(l.ciclo(1_001_300.0), 90)   # novo episódio: nova linha
+        self.assertEqual(saida.getvalue().count('"limitado"'), 2)
+
+    def test_outros_erros_esperam_dobrando_e_zeram_a_sessao(self):
+        l = self.leitor()
+        l.mcp.falha = RuntimeError("MCP respondeu HTTP 502")
+        with contextlib.redirect_stdout(io.StringIO()):
+            esperas = [l.ciclo(1_000_000.0 + i) for i in range(6)]
+        self.assertEqual(esperas, [30, 60, 120, 240, 300, 300])
+        self.assertIsNone(l.mcp.sessao)
+        l.mcp.falha = None
+        self.assertAlmostEqual(l.ciclo(1_000_100.0), 2 * 86400 / 3000)   # sucesso volta ao ritmo normal
+        l.mcp.falha = RuntimeError("de novo")
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(l.ciclo(1_000_200.0), 30)
+
+
+CANAL = "11111111-2222-4333-8444-555555555555"   # o de ORG_URL, fictício
+CONVERSA = {"notice": "Text inside untrusted_text fields was written in agentes.chat by agents or people.",
+            "channel_id": CANAL, "thread_id": None, "messages": [
+                {"id": "aaaaaaaa-0000-4000-8000-000000000001", "author": {"kind": "person", "name": "Maria Exemplo"},
+                 "sent_at": "2026-01-15T13:00:00.000Z", "untrusted_text": "Oi\r\nPode ver?", "truncated": False,
+                 "attachments": [{"name": "contrato.pdf", "url": "https://arquivos.exemplo/contrato.pdf"}]},
+                {"id": "aaaaaaaa-0000-4000-8000-000000000002", "author": {"kind": "agent", "name": "Pixel‮"},
+                 "sent_at": "2026-01-15T13:01:00Z", "untrusted_text": "<img src=x onerror=alert(1)> a‮b​c \ud83d fim",
+                 "truncated": True, "attachments": []}]}   # fictícia
+
+
+class Conversa(unittest.TestCase):
+    """Contrato L: a conversa da tarefa atual, só a pedido, limpa, com cache e tetos."""
+    class Mcp:
+        def __init__(self, resposta):
+            self.resposta, self.chamadas, self.sessao, self.falha, self.pedidos = resposta, [], "s", None, 0
+
+        def iniciar(self, token):
+            self.sessao = "s"
+
+        def ferramenta(self, nome, args, token):
+            self.chamadas.append((nome, dict(args)))
+            if self.falha:
+                raise self.falha
+            return self.resposta
+
+    def conversas(self, resposta=CONVERSA, trabalhos=None, token="t"):
+        class Cred:
+            def token(self):
+                return token
+        l = e.Leitor(Cred())
+        l.mcp = self.Mcp(resposta)
+        if trabalhos is None:
+            trabalhos = e.resumir(AG, [{"run_id": "r1", "agent": {"id": "a1"}, "status": "waiting_input", "url": ORG_URL}])["trabalhos"]
+        l.estado = {**l.estado, "agentes": e.resumir(AG, [])["agentes"], "trabalhos": trabalhos}
+        return e.Conversas(l), l.mcp
+
+    def test_sem_destino_valido_e_404_sem_chamar(self):
+        url_ruim = f"https://app.agentes.chat/org/{e.ORG}/c/" + "-" * 36   # passa no URL_APP, não é UUID
+        trabalhos = [{"agente_id": "a1", "url": url_ruim}, {"agente_id": "a2", "url": ""}]
+        c, mcp = self.conversas(trabalhos=trabalhos)
+        for agente in ("a1", "a2", "a9", "", "a" * 101, None):   # id ruim, sem url, desconhecido, vazio, longo demais
+            self.assertEqual(c.ler(agente)[0], 404, agente)
+        c, mcp2 = self.conversas(trabalhos=[])   # agente conhecido, sem trabalho
+        self.assertEqual(c.ler("a1")[0], 404)
+        self.assertEqual(mcp.chamadas + mcp2.chamadas, [])
+
+    def test_le_o_canal_do_trabalho_limpa_e_nao_vaza_nada(self):
+        c, mcp = self.conversas()
+        st, r = c.ler("a1", agora=1_000_000.0)
+        self.assertEqual(st, 200)
+        self.assertEqual(mcp.chamadas, [("read_conversation", {"channel_id": CANAL, "limit": 20})])
+        pessoa, agente = r["mensagens"]   # da mais antiga para a mais nova, como vem do MCP
+        self.assertEqual(pessoa, {"autor": "pessoa", "hora": "2026-01-15T13:00:00.000Z", "texto": "Oi\nPode ver?",
+                                  "cortado": False, "anexos": 1})   # sem nome de pessoa; anexo só como contagem
+        self.assertEqual(agente, {"autor": "agente", "nome": "Pixel", "hora": "2026-01-15T13:01:00Z",
+                                  "texto": "<img src=x onerror=alert(1)> abc  fim", "cortado": True, "anexos": 0})
+        self.assertEqual((r["url"], r["atualizado"]), (ORG_URL, e._iso(1_000_000.0)))
+        corpo = json.dumps(r, ensure_ascii=False)
+        for vazou in ("aaaaaaaa", "notice", "untrusted", CANAL, "Maria", "contrato", "arquivos.exemplo", "‮", "​", "\r"):
+            self.assertNotIn(vazou, corpo.replace(ORG_URL, ""), vazou)
+
+    def test_limpeza_por_categoria_e_corte(self):
+        self.assertEqual(e.limpa_texto("a‮b⁦c​d﻿e‏f\x00g\x1bh\ud83di\r\nj\tk\n", 100),
+                         ("abcdefghi\njk\n", False))   # Cf, Cc (o \t também) e Cs saem; o \n fica
+        self.assertEqual(e.limpa_texto("x" * 1501, 1500), ("x" * 1500, True))
+        longa = {"messages": [{"author": {"kind": "agent", "name": "Pixel"}, "untrusted_text": "x" * 5000}]}
+        m = e.resumir_conversa(longa, ORG_URL, 0)["mensagens"][0]
+        self.assertEqual((len(m["texto"]), m["cortado"], m["hora"]), (1500, True, None))
+
+    def test_resposta_tem_teto_de_30_kb_e_guarda_as_mais_novas(self):
+        msgs = [{"author": {"kind": "agent", "name": "Pixel"}, "untrusted_text": str(i) + "😀" * 1500} for i in range(20)]
+        r = e.resumir_conversa({"messages": msgs}, ORG_URL, 0)
+        self.assertLessEqual(len(json.dumps(r, ensure_ascii=False).encode()), 30_000)
+        self.assertTrue(r["mensagens"][-1]["texto"].startswith("19"))   # a mais nova ficou
+        self.assertLess(len(r["mensagens"]), 20)
+
+    def test_cache_de_60_s(self):
+        c, mcp = self.conversas()
+        c.ler("a1", agora=1_000_000.0)
+        c.ler("a1", agora=1_000_059.0)
+        self.assertEqual(len(mcp.chamadas), 1)
+        c.ler("a1", agora=1_000_060.0)
+        self.assertEqual(len(mcp.chamadas), 2)
+
+    def test_tetos_por_minuto_e_por_dia_sem_chamar(self):
+        c, mcp = self.conversas()
+        t0 = 1_000_000.0
+        for i in range(20):
+            c.cache.clear()   # cada leitura vai ao MCP
+            self.assertEqual(c.ler("a1", agora=t0 + i)[0], 200)
+        c.cache.clear()
+        self.assertEqual(c.ler("a1", agora=t0 + 30)[0], 429)   # a 21ª no minuto
+        self.assertEqual(len(mcp.chamadas), 20)
+        self.assertEqual(c.ler("a1", agora=t0 + 61)[0], 200)   # a janela andou
+        c, mcp = self.conversas()
+        c.chamadas.extend(t0 - 86000 + i * 400 for i in range(200))   # 200 no último dia, nenhuma no último minuto
+        self.assertEqual(c.ler("a1", agora=t0)[0], 429)   # a 201ª no dia
+        self.assertEqual(mcp.chamadas, [])
+
+    def test_pausa_do_429_da_503_sem_chamar(self):
+        c, mcp = self.conversas()
+        c.leitor.pausa_ate = 1_000_100.0
+        self.assertEqual(c.ler("a1", agora=1_000_000.0)[0], 503)
+        self.assertEqual(mcp.chamadas, [])
+
+    def test_429_do_agentes_chat_pausa_tambem_o_leitor(self):
+        c, mcp = self.conversas()
+        mcp.falha = e.Limitado("120")
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(c.ler("a1", agora=1_000_000.0)[0], 503)
+        self.assertTrue(c.leitor.pausado(1_000_119.0))
+        leitor_mcp = Orcamento.Mcp(AG, [])   # o leitor de fundo respeita a pausa: não chama o MCP até ela acabar
+        c.leitor.mcp = leitor_mcp
+        self.assertEqual(c.leitor.ciclo(1_000_030.0), 90)
+        self.assertEqual((leitor_mcp.chamadas, c.leitor.foto()["erro"]), ([], e.PAUSA_429))
+        self.assertAlmostEqual(c.leitor.ciclo(1_000_120.0), 2 * 86400 / 3000)   # acabou: lê de novo
+        self.assertEqual(leitor_mcp.chamadas, ["list_agents", "list_recent_tasks"])
+
+    def test_sem_token_e_erro_do_mcp(self):
+        c, mcp = self.conversas(token=None)
+        self.assertEqual(c.ler("a1")[0], 503)
+        self.assertEqual(mcp.chamadas, [])
+        for resposta in ({"sem": "messages"}, {"messages": ["texto solto"]}):   # formato inesperado
+            c, mcp = self.conversas(resposta=resposta)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(c.ler("a1")[0], 502)
+
+    def test_log_nunca_leva_texto_da_conversa(self):
+        c, mcp = self.conversas()
+        mcp.falha = RuntimeError("read_conversation: Maria Exemplo disse o segredo")
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            self.assertEqual(c.ler("a1")[0], 502)
+        self.assertIn('"conversa"', saida.getvalue())
+        self.assertNotIn("segredo", saida.getvalue())
+        self.assertNotIn("Maria", saida.getvalue())
+
+    def test_cliente_mcp_faz_uma_chamada_por_vez(self):
+        dentro, maximo, trava = [0], [0], threading.Lock()
+
+        def abrir(req):
+            with trava:
+                dentro[0] += 1
+                maximo[0] = max(maximo[0], dentro[0])
+            time.sleep(0.02)
+            with trava:
+                dentro[0] -= 1
+            return 200, {}, b'{"jsonrpc":"2.0","id":1,"result":{}}'
+        antes, e._abrir = e._abrir, abrir
+        try:
+            c = e.ClienteMCP(None)
+            fios = [threading.Thread(target=c._rpc, args=("tools/list", {}, "t")) for _ in range(6)]
+            fios += [threading.Thread(target=c.iniciar, args=("t",)) for _ in range(2)]
+            for f in fios:
+                f.start()
+            for f in fios:
+                f.join()
+        finally:
+            e._abrir = antes
+        self.assertEqual((maximo[0], c.pedidos), (1, 10))
+
+
+class PaginaConversas(unittest.TestCase):
+    """Contrato P: a lista do dia sai da memória do servidor; a conversa, pelo id, com o corte do fim (A1)."""
+    T = 1768482000.0   # 2026-01-15T13:00:00Z (10:00 em Brasília)
+    OUTRO = "99999999-8888-4777-8666-555555555555"
+    MSGS = {"messages": [{"author": {"kind": "person", "name": "X"}, "sent_at": "2026-01-15T13:00:00.000Z", "untrusted_text": "antes"},
+                         {"author": {"kind": "agent", "name": "Pixel"}, "sent_at": "2026-01-15T13:01:29.999999999Z", "untrusted_text": "quase"},
+                         {"author": {"kind": "agent", "name": "Pixel"}, "sent_at": "2026-01-15T10:01:30-03:00", "untrusted_text": "no limite"},
+                         {"author": {"kind": "person", "name": "X"}, "sent_at": "2026-01-15T13:01:31Z", "untrusted_text": "depois"},
+                         {"author": {"kind": "person", "name": "X"}, "untrusted_text": "sem hora"},
+                         {"author": {"kind": "person", "name": "X"}, "sent_at": "٢٠٢٦-01-15T13:00:00Z", "untrusted_text": "hora árabe"}]}
+
+    @staticmethod
+    def tarefa(rid, status, ag="a1", canal=CANAL, inicio="2026-01-15T12:00:00Z"):
+        return {"run_id": rid, "agent": {"id": ag}, "status": status, "url": f"https://app.agentes.chat/org/{e.ORG}/c/{canal}",
+                "started_at": inicio, "label": "Post do dia"}
+
+    @staticmethod
+    def leitura(mem, tarefas, agora, completa=True):
+        return mem.atualizar(e.normalizar(AG, tarefas)[1], {}, completa, agora)
+
+    def conversas(self, foto, resposta=None):
+        class Cred:
+            def token(self):
+                return "t"
+        l = e.Leitor(Cred())
+        l.mcp, l.conversas = Conversa.Mcp(resposta or self.MSGS), foto
+        return e.Conversas(l), l.mcp
+
+    def id_de(self, foto, agente):
+        return next(it["id"] for it in foto["por_id"].values() if it["agente_id"] == agente)
+
+    def test_a1_terminada_so_ate_o_fim_e_viva_do_mesmo_canal_tudo(self):
+        mem = e.ConversasDoDia()
+        self.leitura(mem, [self.tarefa("r1", "running"), self.tarefa("r2", "running", "a2")], self.T)
+        foto = self.leitura(mem, [self.tarefa("r2", "running", "a2")], self.T + 30)   # a r1 terminou às 13:00:30
+        c, mcp = self.conversas(foto)
+        st, r = c.ler_id(self.id_de(foto, "a1"), agora=self.T + 100)
+        self.assertEqual((st, [m["texto"] for m in r["mensagens"]], r["ate"]),
+                         (200, ["antes", "quase", "no limite"], "2026-01-15T13:01:30Z"))
+        st, r = c.ler_id(self.id_de(foto, "a2"), agora=self.T + 101)   # viva, mesmo canal: tudo, do mesmo cache
+        self.assertEqual((st, len(r["mensagens"]), r["ate"]), (200, 6, None))
+        self.assertEqual(len(mcp.chamadas), 1)
+        self.assertIsNone(e.HORA_OK.fullmatch("٢٠٢٦-01-15T13:00:00Z"))   # A9: dígito de outra escrita não é hora
+
+    class McpPorDestino(Conversa.Mcp):
+        """Uma resposta para a thread e outra para o canal, como no agentes.chat."""
+        def ferramenta(self, nome, args, token):
+            self.chamadas.append((nome, dict(args)))
+            return self.resposta["thread_id" if "thread_id" in args else "channel_id"]
+
+    def item_com_thread(self, terminou):
+        url = f"https://app.agentes.chat/org/{e.ORG}/c/{CANAL}?m={M}"
+        mem = e.ConversasDoDia()
+        foto = mem.atualizar(e.normalizar(AG, [{**self.tarefa("r1", "running"), "url": url}])[1], {}, True, self.T)
+        if terminou:
+            foto = mem.atualizar([], {}, True, self.T + 30)
+        return foto, self.id_de(foto, "a1")
+
+    def msg(self, autor, seg, texto):
+        return {"author": {"kind": autor, "name": "Pixel" if autor == "agent" else "X"}, "sent_at": e._iso(self.T + seg),
+                "untrusted_text": texto}
+
+    def test_r0_le_pela_thread_do_run_com_a1_e_m2(self):
+        # o R0 mostrou que o envio cai na thread do run (?m=) e o agente responde nela: a leitura do canal não via
+        foto, item = self.item_com_thread(terminou=True)   # terminou em T + 30: o A1 corta em T + 90
+        thread = {"messages": [self.msg("agent", 0, "raiz"), self.msg("person", 300, "enviada"), self.msg("agent", 304, "resposta")]}
+        c, _ = self.conversas(foto)
+        c.leitor.mcp = mcp = self.McpPorDestino({"thread_id": thread, "channel_id": self.MSGS})
+        st, r = c.ler_id(item, agora=self.T + 400)
+        self.assertEqual((st, [m["texto"] for m in r["mensagens"]]), (200, ["raiz"]))   # terminada sem envio: A1
+        self.assertEqual(mcp.chamadas, [("read_conversation", {"thread_id": M, "limit": 20})])   # só a thread
+        c.leitor.marcar_respondido(item, self.T + 400)   # M2: o escritório mandou nela
+        self.assertEqual([m["texto"] for m in c.ler_id(item, agora=self.T + 401)[1]["mensagens"]], ["raiz", "enviada", "resposta"])
+        self.assertEqual(len(mcp.chamadas), 1)   # do cache
+        self.assertNotIn(M, json.dumps(r).replace(r["url"], ""))   # a thread só sai dentro da url do item
+
+    def test_r0_thread_so_com_a_raiz_le_o_canal_se_couber_no_teto(self):
+        # conversa direta sem envio pelo escritório: tudo solto no canal, e a thread do run só tem a raiz
+        foto, item = self.item_com_thread(terminou=False)
+        respostas = {"thread_id": {"messages": [self.msg("agent", 0, "raiz")]}, "channel_id": self.MSGS}
+        c, _ = self.conversas(foto)
+        c.leitor.mcp = mcp = self.McpPorDestino(respostas)
+        st, r = c.ler_id(item, agora=self.T + 100)
+        self.assertEqual((st, len(r["mensagens"]), r["mensagens"][0]["texto"]), (200, 6, "antes"))
+        self.assertEqual([list(a)[0] for _, a in mcp.chamadas], ["thread_id", "channel_id"])
+        self.assertEqual(len(c.chamadas), 2)   # as duas contam nos tetos
+        c.cache.clear(); c.chamadas.clear(); mcp.chamadas.clear()
+        c.chamadas.extend([self.T + 100] * 19)   # a thread é a 20ª do minuto: o canal não cabe
+        st, r = c.ler_id(item, agora=self.T + 101)
+        self.assertEqual((st, [m["texto"] for m in r["mensagens"]]), (200, ["raiz"]))
+        self.assertEqual([list(a)[0] for _, a in mcp.chamadas], ["thread_id"])
+        for vazia in ([], ["só a raiz"]):   # sem nenhuma mensagem também vai ao canal
+            c, _ = self.conversas(foto)
+            c.leitor.mcp = mcp = self.McpPorDestino({**respostas, "thread_id": {"messages": [self.msg("agent", 0, t) for t in vazia]}})
+            self.assertEqual(len(c.ler_id(item, agora=self.T + 200)[1]["mensagens"]), 6)
+            self.assertEqual(len(mcp.chamadas), 2)
+
+    def test_instante_no_python_310(self):
+        # o README pede Python 3.10+, cujo fromisoformat recusa "Z" e fração que não tenha 3 ou 6 dígitos: emulado aqui
+        class Estrito310(e.datetime.datetime):
+            @classmethod
+            def fromisoformat(cls, txt):
+                if not re.fullmatch(r"[0-9-]{10}T[0-9:]{8}(\.([0-9]{3}|[0-9]{6}))?([+-][0-9]{2}:[0-9]{2})?", txt):
+                    raise ValueError(f"Invalid isoformat string: {txt!r}")
+                return super().fromisoformat(txt)
+        antes = e.datetime
+        e.datetime = type("datetime310", (), {"datetime": Estrito310, "timezone": antes.timezone, "timedelta": antes.timedelta})
+        try:
+            for hora, esperado in (("2026-01-15T13:00:00Z", self.T), ("2026-01-15T13:00:00.000Z", self.T),
+                                   ("2026-01-15T13:00:00.123456789Z", self.T + 0.123456), ("2026-01-15T13:00:00.5Z", self.T + 0.5),
+                                   ("2026-01-15T10:00:00-03:00", self.T), ("2026-01-15T13:00:00.250000+00:00", self.T + 0.25)):
+                self.assertAlmostEqual(e.instante(hora), esperado, places=5, msg=hora)
+            for ruim in ("2026-01-15 13:00:00Z", "2026-01-15T13:00:00", "٢٠٢٦-01-15T13:00:00Z"):
+                with self.assertRaises(ValueError):
+                    e.instante(ruim)
+        finally:
+            e.datetime = antes
+
+    def test_mudanca_vale_a_partir_da_publicacao_e_foto_nao_muda_depois(self):
+        tarefas = [self.tarefa("r1", "running")]
+
+        class Mcp:
+            sessao, pedidos = "s", 0
+
+            def ferramenta(self, nome, args, token):
+                self.pedidos += 1
+                return {"agents": AG} if nome == "list_agents" else {"tasks": list(tarefas)}
+
+        class Cred:
+            def token(self):
+                return "t"
+        l = e.Leitor(Cred())
+        l.mcp = Mcp()
+        relogio = iter([100.0, 107.0])   # o ciclo levou 7 s entre o começo e a publicação
+        l.relogio = lambda: next(relogio)
+        l.ciclo(self.T)
+        l.relogio = time.monotonic
+        self.assertEqual(l.conversas_do_dia()["mudou"][CANAL], self.T + 7)   # BAIXO 1: o instante da publicação
+        c, mcp = e.Conversas(l), Conversa.Mcp(self.MSGS)
+        l.mcp, item = mcp, self.id_de(l.conversas_do_dia(), "a1")
+        c.ler_id(item, agora=self.T + 3)   # lida durante o ciclo: pode ser de antes da mudança
+        c.ler_id(item, agora=self.T + 20)
+        self.assertEqual(len(mcp.chamadas), 2)
+        foto = l.conversas_do_dia()
+        copia = json.dumps(foto, sort_keys=True)
+        l.mcp = Mcp()   # A6: os ciclos seguintes publicam fotos novas, sem tocar na que já saiu
+        for leitura in ([self.tarefa("r1", "waiting_input")], [], [self.tarefa("r2", "running", "a2")]):
+            tarefas[:] = leitura
+            l.ciclo(self.T + 30)
+        self.assertEqual(json.dumps(foto, sort_keys=True), copia)
+        self.assertIsNot(l.conversas_do_dia(), foto)
+
+    def test_a2_um_item_por_canal_e_agente_com_a_regra_de_peso(self):
+        foto = self.leitura(e.ConversasDoDia(), [self.tarefa("r1", "waiting_input", inicio="2026-01-15T10:00:00Z"),
+                                                 self.tarefa("r2", "running", "a2", inicio="2026-01-15T11:00:00Z")], self.T)
+        lista = e.conversas_publicas(foto, self.T)
+        self.assertEqual([(c["agente_id"], c["status"]) for c in lista], [("a1", "waiting_input"), ("a2", "running")])
+        foto = self.leitura(e.ConversasDoDia(), [self.tarefa("r1", "waiting_input", inicio="2026-01-15T10:00:00Z"),
+                                                 self.tarefa("r2", "running", inicio="2026-01-15T11:00:00Z")], self.T)
+        self.assertEqual([(c["run_id"], c["status"]) for c in e.conversas_publicas(foto, self.T)], [("r1", "waiting_input")])
+
+    def test_a3_id_estavel_aleatorio_e_404_sem_chamar(self):
+        mem = e.ConversasDoDia()
+        ids = [self.id_de(self.leitura(mem, tarefas, self.T + i * 30), "a1")
+               for i, tarefas in enumerate(([self.tarefa("r1", "running")], [self.tarefa("r2", "running")], []))]
+        foto = self.leitura(mem, [self.tarefa("r3", "waiting_input")], self.T + 90)   # a terminada volta a viva
+        ids.append(self.id_de(foto, "a1"))
+        self.assertEqual(len(set(ids)), 1)
+        self.assertTrue(e.ID_CONVERSA.fullmatch(ids[0]))
+        self.assertEqual([(c["run_id"], c["status"], c["terminou_em"]) for c in e.conversas_publicas(foto, self.T + 90)],
+                         [("r3", "waiting_input", None)])
+        reinicio = self.leitura(e.ConversasDoDia(), [self.tarefa("r3", "waiting_input")], self.T + 120)   # Leitor novo
+        c, mcp = self.conversas(reinicio)
+        for ruim in (ids[0], "curto", "a" * 11 + "!", "../../etc/pa", "A" * 12, "", None, 12, ["x"]):
+            self.assertEqual(c.ler_id(ruim, agora=self.T + 130)[0], 404, ruim)
+        self.assertEqual(mcp.chamadas, [])
+        self.assertEqual(c.ler_id(self.id_de(reinicio, "a1"), agora=self.T + 130)[0], 200)
+
+    def test_a5_cache_vale_so_se_mais_novo_que_a_mudanca_no_canal(self):
+        mem = e.ConversasDoDia()
+        tarefas = [self.tarefa("r1", "running"), self.tarefa("r2", "running", "a2", self.OUTRO)]
+        foto = self.leitura(mem, tarefas, self.T)
+        c, mcp = self.conversas(foto)
+        um, dois = self.id_de(foto, "a1"), self.id_de(foto, "a2")
+        c.ler_id(um, agora=self.T + 100); c.ler_id(dois, agora=self.T + 100)
+        c.leitor.conversas = self.leitura(mem, [self.tarefa("r1", "waiting_input"), tarefas[1]], self.T + 110)   # mudou o canal 1
+        c.ler_id(um, agora=self.T + 120)    # cache de antes da mudança: lê de novo
+        c.ler_id(dois, agora=self.T + 120)  # o outro canal não mudou: cache
+        c.ler_id(um, agora=self.T + 125)    # sem mudança nova: cache
+        self.assertEqual([a["channel_id"] for _, a in mcp.chamadas], [CANAL, self.OUTRO, CANAL])
+
+    def test_a7_virada_do_dia_conferida_no_pedido(self):
+        fim = 1768531800.0   # 2026-01-15 23:50 em Brasília
+        mem = e.ConversasDoDia()
+        self.leitura(mem, [self.tarefa("r1", "running")], fim - 60)
+        foto = self.leitura(mem, [], fim)   # e o Leitor para (pausa): nenhum ciclo depois
+        c, mcp = self.conversas(foto)
+        self.assertEqual(len(e.conversas_publicas(foto, fim + 300)), 1)   # 23:55
+        self.assertEqual(e.conversas_publicas(foto, fim + 900), [])        # 00:05
+        self.assertEqual(c.ler_id(self.id_de(foto, "a1"), agora=fim + 900)[0], 404)
+        self.assertEqual(mcp.chamadas, [])
+
+    def test_a8_teto_so_nas_terminadas_e_leitura_incompleta(self):
+        canal = lambda i: f"{i:08x}-2222-4333-8444-555555555555"
+        mem = e.ConversasDoDia()
+        for i in range(51):
+            self.leitura(mem, [self.tarefa(f"r{i}", "running", canal=canal(i))], self.T + i * 2)
+            foto = self.leitura(mem, [], self.T + i * 2 + 1)
+        self.assertEqual(sorted(it["run_id"] for it in foto["por_id"].values()), sorted(f"r{i}" for i in range(1, 51)))   # saiu a r0
+        mem = e.ConversasDoDia()
+        vivas = [self.tarefa(f"r{i}", "running", canal=canal(i)) for i in range(60)]
+        self.leitura(mem, vivas, self.T)
+        foto = self.leitura(mem, [], self.T + 30, completa=False)   # parou no teto de páginas: ninguém termina
+        self.assertEqual([it["terminou_em"] for it in foto["por_id"].values()], [None] * 60)
+        foto = self.leitura(mem, [self.tarefa("r9", "running", canal="x" * 36)], self.T + 60, completa=False)   # canal fora do UUID
+        self.assertEqual(len(foto["por_id"]), 60)
+
+    def test_a9_teto_do_dia_vai_ao_log_uma_vez_por_episodio(self):
+        foto = self.leitura(e.ConversasDoDia(), [self.tarefa("r1", "running")], self.T)
+        c, mcp = self.conversas(foto)
+        item, saida = self.id_de(foto, "a1"), io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            c.chamadas.extend(self.T - 86000 + i * 400 for i in range(200))
+            r1, r2 = c.ler_id(item, agora=self.T), c.ler_id(item, agora=self.T + 1)
+            self.assertEqual(c.ler_id(item, agora=self.T + 86400)[0], 200)   # a janela andou: o episódio acabou
+            c.cache.clear()
+            c.chamadas.extend([self.T + 86401] * 199)
+            r3 = c.ler_id(item, agora=self.T + 86402)
+        self.assertEqual([r1[0], r2[0], r3[0]], [429, 429, 429])
+        self.assertEqual(r1[1], {"erro": "acabou o limite de leituras de conversa de hoje; ele volta aos poucos"})
+        self.assertEqual(saida.getvalue().count('"resultado": "teto_dia"'), 2)
+        self.assertNotIn("Post", saida.getvalue())
+
+    def test_um_dia_de_pagina_aberta_cabe_no_orcamento(self):
+        # das 9h às 19h, uma tarefa por hora no mesmo canal (começa, pergunta, volta, termina); a página fica aberta
+        # nela, relê a cada mudança vista no /api/estado (10 s) e a pessoa clica em "Atualizar" a cada 5 min
+        T0 = 1768446000.0   # 2026-01-15 00:00 em Brasília
+        sim = self
+
+        class Mcp:
+            sessao, pedidos, por_nome = "s", 0, collections.Counter()
+
+            def iniciar(self, token):
+                pass
+
+            def ferramenta(self, nome, args, token):
+                self.pedidos += 1; self.por_nome[nome] += 1
+                if nome == "list_agents":
+                    return {"agents": AG}
+                if nome == "read_conversation":
+                    return sim.MSGS
+                h, m = divmod(int(agora - T0) // 60, 60)
+                status = "running" if m < 20 or 35 <= m < 50 else "waiting_input" if m < 35 else None
+                return {"tasks": [sim.tarefa(f"r{h}", status)] if 9 <= h < 19 and status else []}
+
+        class Cred:
+            def token(self):
+                return "t"
+        l = e.Leitor(Cred())
+        l.mcp, c = Mcp(), e.Conversas(l)
+        visto, aberto, proximo, respostas = None, None, T0, collections.Counter()
+        with contextlib.redirect_stdout(io.StringIO()):
+            for passo in range(8640):
+                agora = T0 + passo * 10
+                if agora >= proximo:
+                    proximo = agora + l.ciclo(agora)
+                lista = e.conversas_publicas(l.conversas_do_dia(), agora)
+                if lista and 9 * 3600 <= agora - T0 < 19 * 3600:
+                    aberto = aberto or lista[0]["id"]
+                    item = next(x for x in lista if x["id"] == aberto)
+                    agora_visto = (item["run_id"], item["status"])
+                    if agora_visto != visto or passo % 30 == 7:   # releitura na mudança ou "Atualizar" (5 min, fora do compasso)
+                        respostas[c.ler_id(aberto, agora=agora)[0]] += 1
+                        visto = agora_visto
+        self.assertEqual(set(respostas), {200})   # nenhum 429 num dia normal
+        self.assertLessEqual(l.mcp.por_nome["read_conversation"], 200)
+        self.assertLessEqual(l.mcp.por_nome["list_recent_tasks"] + l.mcp.por_nome["list_agents"], e.ORCAMENTO_DIA)
+
+
+class Surrogate(unittest.TestCase):
+    """Um rótulo cortado no meio de um emoji ("\\ud83d") é JSON válido e não pode derrubar a página nem o log."""
+    def test_log_com_surrogate_nao_quebra(self):
+        saida = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")   # como o stdout do serviço: UTF-8 estrito
+        with contextlib.redirect_stdout(saida):
+            e.log(evento="leitura", resultado="erro", detalhe="Lendo \ud83d")
+        saida.flush()
+        self.assertIn(b'"Lendo ?"', saida.buffer.getvalue())
+
+
 class Credenciais(unittest.TestCase):
     def test_estado_desconhecido_e_recusado(self):
         with tempfile.TemporaryDirectory() as d:
@@ -967,11 +1688,756 @@ class Credenciais(unittest.TestCase):
             with self.assertRaises(ValueError):
                 c.concluir("codigo", "estado-que-nao-existe")
 
-    def test_escopo_maior_que_leitura_e_recusado(self):
-        with tempfile.TemporaryDirectory() as d:
-            c = e.Credenciais(os.path.join(d, "oauth.json"))
-            with self.assertRaises(e.PermissaoNegada):
-                c._guardar({"access_token": "t", "scope": "read write"})
+    def test_escopo_aceito_pelo_pedido(self):   # R1-b
+        ok = [("read", "read", "read"), ("read", "read write", "read"), ("read write", "read write", "read write"),
+              ("write read", "read write", "read write"), (None, "read", "read"), ("", "read write", "read write")]
+        for concedido, pedido, esperado in ok:   # sem escopo na resposta, vale o pedido (RFC 6749 §5.1)
+            tok = {} if concedido is None else {"scope": concedido}
+            self.assertEqual(e.escopo_aceito(tok, pedido), esperado, (concedido, pedido))
+        for concedido, pedido in (("read write", "read"), ("read manage", "read write"), ("read write manage", "read write"),
+                                  ("read admin", "read"), ("write", "read write"), ("manage", "read")):
+            with self.assertRaises(e.EscopoRecusado, msg=(concedido, pedido)):
+                e.escopo_aceito({"scope": concedido}, pedido)
+
+
+class OAuthFalso(ThreadingHTTPServer):
+    """Login do agentes.chat de mentira: registro, token e revogação, com respostas configuráveis."""
+    daemon_threads = True
+
+    def __init__(self):
+        super().__init__(("127.0.0.1", 0), PaginaOAuth)
+        self.registros, self.trocas, self.revogados = [], [], []
+        self.token = (200, {"access_token": "AC-novo", "refresh_token": "RF-novo", "expires_in": 3600, "scope": "read write"})
+        self.revoga = 200
+
+
+class PaginaOAuth(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def do_POST(self):
+        corpo = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        srv = self.server
+        if self.path == "/api/oauth/register":
+            srv.registros.append(json.loads(corpo))
+            st, obj = 201, {"client_id": f"cliente-{len(srv.registros)}"}
+        elif self.path == "/api/oauth/token":
+            srv.trocas.append({k: v[0] for k, v in urllib.parse.parse_qs(corpo.decode()).items()})
+            st, obj = srv.token
+        elif self.path == "/api/oauth/revoke":
+            f = {k: v[0] for k, v in urllib.parse.parse_qs(corpo.decode()).items()}
+            srv.revogados.append((f.get("token"), f.get("token_type_hint"), f.get("client_id")))
+            st, obj = srv.revoga, {}
+        else:
+            st, obj = 404, {}
+        dados = json.dumps(obj).encode()
+        self.send_response(st)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(dados)))
+        self.end_headers()
+        self.wfile.write(dados)
+
+
+class R1(unittest.TestCase):
+    """R1: escopo pelo modo, cliente pendente, rebaixamento (R1-c), renovação (R1-d) e revogação, contra um OAuth falso."""
+    LEITURA = {"client_id": "cliente-leitura", "redirect_uri": None, "access_token": "AC-leitura", "refresh_token": "RF-leitura",
+               "expira": 0, "escopo": "read"}
+
+    def setUp(self):
+        self.oauth = OAuthFalso()
+        threading.Thread(target=self.oauth.serve_forever, daemon=True).start()
+        self.antes = e.EMISSOR, e.TIMES
+        self.pasta = tempfile.mkdtemp(prefix="escritorio-r1-")
+        e.EMISSOR, e.TIMES = "http://127.0.0.1:%d" % self.oauth.server_address[1], os.path.join(self.pasta, "times.json")
+        self.saida = io.StringIO()
+        self.log = contextlib.redirect_stdout(self.saida)
+        self.log.__enter__()
+
+    def tearDown(self):
+        self.log.__exit__(None, None, None)
+        for segredo in ("AC-", "RF-", "codigo-secreto"):   # o log nunca leva token nem código
+            self.assertNotIn(segredo, self.saida.getvalue())
+        e.EMISSOR, e.TIMES = self.antes
+        self.oauth.shutdown()
+        shutil.rmtree(self.pasta, ignore_errors=True)
+
+    def times(self, conteudo):
+        with open(e.TIMES, "w", encoding="utf-8") as f:
+            f.write(conteudo if isinstance(conteudo, str) else json.dumps(conteudo))
+
+    def cred(self, dados=None, vence_em=3600):
+        c = e.Credenciais(os.path.join(self.pasta, "oauth.json"))
+        if dados is not None:
+            c.dados = {**dados, "redirect_uri": c.redirect_uri(), "expira": time.time() + vence_em}
+        return c
+
+    def estado_de(self, url):
+        q = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
+        return q["state"][0], q["client_id"][0], q["scope"][0]
+
+    def test_registro_e_url_pelo_modo(self):
+        self.times({"conversas": "responder"})
+        estado, cliente, escopo = self.estado_de(self.cred().url_autorizacao())
+        self.assertEqual((escopo, self.oauth.registros[0]["scope"], self.oauth.registros[0]["client_name"]),
+                         ("read write", "read write", "Escritório dos agentes"))   # sem "(leitura)" na tela de consentimento
+        self.times({"conversas": "ler"})
+        c = self.cred()
+        self.assertEqual(self.estado_de(c.url_autorizacao())[2], "read")
+        self.assertEqual((self.oauth.registros[1]["scope"], self.oauth.registros[1]["client_name"]),
+                         ("read", "Escritório dos agentes (leitura)"))
+        self.times({"conversas": "responder"})   # o escopo mudou: registro novo
+        c.url_autorizacao()
+        self.assertEqual(len(self.oauth.registros), 3)
+
+    def test_pendente_nao_mexe_na_leitura_e_reaproveita_o_cliente(self):   # R1-a
+        self.times({"conversas": "responder"})
+        c = self.cred(self.LEITURA)
+        e1, cliente1, _ = self.estado_de(c.url_autorizacao())
+        e2, cliente2, _ = self.estado_de(c.url_autorizacao())   # dois /oauth/conectar em 10 min: um registro só
+        self.assertEqual((len(self.oauth.registros), cliente1, cliente2), (1, "cliente-1", "cliente-1"))
+        self.assertEqual((c.token(), c.dados["client_id"]), ("AC-leitura", "cliente-leitura"))   # a leitura continua
+        c.pendentes[e1]["em"] -= 601   # consentimento abandonado: o state venceu
+        with self.assertRaises(ValueError):
+            c.concluir("codigo-secreto", e1)
+        self.assertEqual((c.token(), self.oauth.trocas), ("AC-leitura", []))
+
+    def test_manage_concedido_revoga_os_recebidos_e_mantem_a_leitura(self):
+        self.times({"conversas": "responder"})
+        c = self.cred(self.LEITURA)
+        estado, cliente, _ = self.estado_de(c.url_autorizacao())
+        self.oauth.token = (200, {"access_token": "AC-demais", "refresh_token": "RF-demais", "scope": "read write manage"})
+        with self.assertRaises(e.EscopoRecusado):
+            c.concluir("codigo-secreto", estado)
+        self.assertEqual(sorted(self.oauth.revogados), [("AC-demais", "access_token", cliente), ("RF-demais", "refresh_token", cliente)])
+        self.assertEqual((c.token(), c.escopo()), ("AC-leitura", "read"))
+        self.assertEqual(self.oauth.trocas[0]["client_id"], cliente)   # a troca usa o cliente do state, não o gravado
+
+    def test_troca_certa_substitui_tudo_e_revoga_o_refresh_antigo(self):
+        self.times({"conversas": "responder"})
+        for revoga in (200, 503):   # uma falha na revogação não desfaz a conexão nova
+            with self.subTest(revoga=revoga):
+                self.oauth.revoga, self.oauth.revogados = revoga, []
+                c = self.cred(self.LEITURA)
+                estado, cliente, _ = self.estado_de(c.url_autorizacao())
+                c.concluir("codigo-secreto", estado)
+                self.assertEqual((c.dados["client_id"], c.dados["escopo_cliente"], c.escopo(), c.token()),
+                                 (cliente, "read write", "read write", "AC-novo"))
+                self.assertEqual(self.oauth.revogados, [("RF-leitura", "refresh_token", "cliente-leitura")])
+                self.assertTrue(c.tem_escrita())
+                with open(c.caminho, encoding="utf-8") as f:
+                    self.assertEqual(json.load(f)["escopo"], "read write")
+
+    def test_resposta_sem_token_nao_derruba_a_leitura(self):
+        self.times({"conversas": "responder"})
+        c = self.cred(self.LEITURA)
+        estado, _, _ = self.estado_de(c.url_autorizacao())
+        self.oauth.token = (200, {"scope": "read write"})
+        with self.assertRaises(ValueError):
+            c.concluir("codigo-secreto", estado)
+        self.assertEqual(c.token(), "AC-leitura")
+        estado, cliente, _ = self.estado_de(c.url_autorizacao())   # B3: tokens válidos numa resposta que não dá para gravar
+        self.oauth.token = (200, {"access_token": "AC-ruim", "refresh_token": "RF-ruim", "expires_in": None, "scope": "read write"})
+        with self.assertRaises(ValueError):
+            c.concluir("codigo-secreto", estado)
+        self.assertEqual(sorted(self.oauth.revogados), [("AC-ruim", "access_token", cliente), ("RF-ruim", "refresh_token", cliente)])
+        self.assertEqual(c.token(), "AC-leitura")
+        self.oauth.revogados = []   # na renovação: revoga o que veio e o erro é passageiro
+        self.oauth.token = (200, {"access_token": "AC-ruim", "refresh_token": "RF-ruim", "expires_in": None, "scope": "read"})
+        c = self.cred(self.LEITURA, vence_em=0)
+        with self.assertRaises(RuntimeError):
+            c.token()
+        self.assertEqual(sorted(t for t, _, _ in self.oauth.revogados), ["AC-ruim", "RF-ruim"])
+        self.assertEqual(c.dados["refresh_token"], "RF-leitura")
+
+    def test_rebaixamento_so_com_o_modo_lido_sem_erro(self):   # R1-c
+        escrita = {**self.LEITURA, "access_token": "AC-escrita", "refresh_token": "RF-escrita", "escopo": "read write"}
+        for conteudo in (None, "{", '{"conversas": "ler"', "[]", '{"conversas": "sim"}', '{"times": 3}'):
+            with self.subTest(times=conteudo):
+                if os.path.exists(e.TIMES):
+                    os.unlink(e.TIMES)
+                if conteudo is not None:
+                    self.times(conteudo)
+                c = self.cred(escrita)
+                self.assertEqual((c.token(), self.oauth.revogados), ("AC-escrita", []))   # ausente, inválido ou truncado
+                self.assertFalse(e.carregar_times()["conversas"] == "responder")   # e o envio fica barrado de qualquer forma
+        for modo in ({"conversas": "ler"}, {"conversas": "desligado"}, {}, {"times": []}):   # B2: válido sem a chave
+            with self.subTest(modo=modo):
+                self.oauth.revogados = []
+                self.times(modo)
+                c = self.cred(escrita)
+                self.assertIsNone(c.token())
+                self.assertEqual(sorted(self.oauth.revogados), [("AC-escrita", "access_token", "cliente-leitura"),
+                                                                ("RF-escrita", "refresh_token", "cliente-leitura")])
+                self.assertNotIn("access_token", c.dados)
+        self.assertEqual(self.saida.getvalue().count('"resultado": "rebaixado"'), 4)
+        self.times({"conversas": "responder"})
+        self.assertEqual(self.cred(escrita).token(), "AC-escrita")
+
+    def test_renovacao_so_400_ou_401_desconecta(self):   # R1-d
+        self.times({"conversas": "ler"})
+        for st in (400, 401):
+            with self.subTest(http=st):
+                self.oauth.token = (st, {"error": "invalid_grant"})
+                c = self.cred(self.LEITURA, vence_em=0)
+                self.assertIsNone(c.token())
+                self.assertNotIn("refresh_token", c.dados)
+        for st in (429, 500, 503):
+            with self.subTest(http=st):
+                self.oauth.token = (st, {})
+                c = self.cred(self.LEITURA, vence_em=0)
+                with self.assertRaises(RuntimeError):
+                    c.token()
+                self.assertEqual(c.dados["refresh_token"], "RF-leitura")   # passageiro: os tokens ficam
+        c = self.cred(self.LEITURA, vence_em=0)
+        e.EMISSOR = "http://127.0.0.1:%d" % porta_livre()   # erro de rede
+        with self.assertRaises(OSError):
+            c.token()
+        self.assertEqual(c.dados["refresh_token"], "RF-leitura")
+
+    def test_renovacao_nunca_amplia(self):
+        self.times({"conversas": "responder"})
+        self.oauth.token = (200, {"access_token": "AC-maior", "refresh_token": "RF-maior", "scope": "read write"})
+        c = self.cred(self.LEITURA, vence_em=0)   # gravado: só leitura
+        self.assertIsNone(c.token())
+        self.assertEqual(sorted(t for t, _, _ in self.oauth.revogados), ["AC-maior", "RF-maior"])
+        self.assertNotIn("access_token", c.dados)
+        self.oauth.token = (200, {"access_token": "AC-igual", "expires_in": 3600})   # sem escopo: vale o gravado
+        c = self.cred(self.LEITURA, vence_em=0)
+        self.assertEqual((c.token(), c.escopo(), c.dados["refresh_token"]), ("AC-igual", "read", "RF-leitura"))
+
+
+def porta_livre():
+    with socket.socket() as k:
+        k.bind(("127.0.0.1", 0))
+        return k.getsockname()[1]
+
+
+class ModoResposta(unittest.TestCase):
+    """R2a no acesso.py: por sessão e navegador, 1 h renovada por envio, teto de 8 h, só na memória (relógio falso)."""
+    T = 1_800_000_000.0
+
+    def setUp(self):
+        self.pasta = tempfile.mkdtemp(prefix="escritorio-modo-")
+        self.a = Acesso(self.pasta)
+        with open(os.path.join(self.pasta, "codigo-primeiro-acesso.txt")) as f:
+            codigo = f.read().strip()
+        self.a.criar_primeiro(codigo, "dono", "senha-bem-grande")
+        self.sessao = self.a.entrar("dono", "senha-bem-grande")
+
+    def tearDown(self):
+        shutil.rmtree(self.pasta, ignore_errors=True)
+
+    def test_abrir_conferir_inatividade_e_renovar(self):
+        cookie = self.a.abrir_modo(self.sessao, "senha-bem-grande", agora=self.T)
+        self.assertEqual(self.a.modo(self.sessao, cookie, self.T), (3600, 8 * 3600))
+        self.assertNotIn(cookie, json.dumps(self.a.modos))   # no servidor, só o hash
+        self.assertNotIn(self.sessao, json.dumps(self.a.modos))
+        self.assertIsNotNone(self.a.modo(self.sessao, cookie, self.T + 59 * 60))
+        self.assertEqual(self.a.renovar_modo(self.sessao, self.T + 59 * 60)[0], 3600)   # envio que deu certo: mais 1 h
+        self.assertIsNotNone(self.a.modo(self.sessao, cookie, self.T + 59 * 60 + 3599))
+        self.assertIsNone(self.a.modo(self.sessao, cookie, self.T + 59 * 60 + 61 * 60))   # 61 min depois do último envio
+        self.assertEqual(self.a.modos, {})   # vencido sai na consulta
+        self.assertIsNone(self.a.renovar_modo(self.sessao, self.T))   # sem modo, nada a renovar
+
+    def test_teto_de_8_horas(self):
+        cookie = self.a.abrir_modo(self.sessao, "senha-bem-grande", agora=self.T)
+        for minuto in range(50, 8 * 60, 50):   # um envio a cada 50 min
+            resta, teto = self.a.renovar_modo(self.sessao, self.T + minuto * 60)
+            self.assertLessEqual(self.T + minuto * 60 + resta, self.T + 8 * 3600)
+            self.assertEqual(teto, 8 * 3600 - minuto * 60)
+        self.assertIsNotNone(self.a.modo(self.sessao, cookie, self.T + 8 * 3600 - 1))
+        self.assertIsNone(self.a.modo(self.sessao, cookie, self.T + 8 * 3600 + 1))   # mesmo com envio recente
+        novo = self.a.abrir_modo(self.sessao, "senha-bem-grande", agora=self.T + 8 * 3600 + 2)   # só a senha passa das 8 h
+        self.assertEqual(self.a.modo(self.sessao, novo, self.T + 8 * 3600 + 2), (3600, 8 * 3600))
+
+    def test_por_sessao_e_por_navegador(self):
+        cookie = self.a.abrir_modo(self.sessao, "senha-bem-grande", agora=self.T)
+        outra = self.a.entrar("dono", "senha-bem-grande")   # outro navegador, mesmo usuário: não herda
+        self.assertIsNone(self.a.modo(outra, cookie, self.T))   # o cookie do modo copiado para outra sessão não vale
+        self.assertIsNone(self.a.modo(self.sessao, None, self.T))   # a sessão sem o cookie do modo
+        self.assertIsNone(self.a.modo(self.sessao, "x" + cookie[1:], self.T))
+        self.assertIsNone(self.a.modo("sessao-que-nao-existe", cookie, self.T))
+        self.assertIsNone(Acesso(self.pasta).modo(self.sessao, cookie, self.T))   # reinício: começa sem modo nenhum
+        segundo = self.a.abrir_modo(self.sessao, "senha-bem-grande", agora=self.T + 10)   # de novo: registro novo
+        self.assertIsNone(self.a.modo(self.sessao, cookie, self.T + 10))
+        self.assertIsNotNone(self.a.modo(self.sessao, segundo, self.T + 10))
+
+    def test_fechar_e_sair_apagam(self):
+        cookie = self.a.abrir_modo(self.sessao, "senha-bem-grande", agora=self.T)
+        self.assertTrue(self.a.fechar_modo(self.sessao))
+        self.assertIsNone(self.a.modo(self.sessao, cookie, self.T))
+        self.assertFalse(self.a.fechar_modo(self.sessao))
+        cookie = self.a.abrir_modo(self.sessao, "senha-bem-grande", agora=self.T)
+        self.a.sair(self.sessao)
+        self.assertEqual(self.a.modos, {})
+
+    def test_senha_errada_conta_no_balde_do_login(self):
+        antes, acesso.ATRASO = acesso.ATRASO, 0
+        try:
+            for _ in range(acesso.LIMITE):
+                with self.assertRaises(PermissionError):
+                    self.a.abrir_modo(self.sessao, "senha-errada-errada")
+            with self.assertRaises(acesso.TentativasDemais):   # o 9º trava o modo, mesmo com a senha certa...
+                self.a.abrir_modo(self.sessao, "senha-bem-grande")
+            with self.assertRaises(acesso.TentativasDemais):   # ...e o login
+                self.a.entrar("dono", "senha-bem-grande")
+        finally:
+            acesso.ATRASO = antes
+        self.assertEqual(self.a.modos, {})
+        with self.assertRaises(PermissionError):
+            self.a.abrir_modo("sem-sessao", "senha-bem-grande")
+
+
+M = "77777777-6666-4555-8444-333333333333"   # ?m= da thread
+DM, DM2 = "12345678-1234-4234-8234-123456789012", "22345678-1234-4234-8234-123456789012"   # conversas diretas (fora do list_channels)
+CHAVE = "0b9c5c55-3b3a-4c7e-9a1e-2f6d1c8b7a10"
+
+
+class Responder(unittest.TestCase):
+    """R2 de ponta a ponta pelo HTTP: modo resposta, conferências e envio (só conversa direta, T1), com MCP e
+    credenciais falsos. CANAL está no list_channels; DM e DM2 são conversas diretas."""
+    @staticmethod
+    def tarefa(rid, status, ag="a1", canal=DM, m=M):
+        url = f"https://app.agentes.chat/org/{e.ORG}/c/{canal}" + (f"?m={m}" if m else "")
+        return {"run_id": rid, "agent": {"id": ag}, "status": status, "url": url, "started_at": "2026-01-15T12:00:00Z",
+                "label": "Post"}
+
+    class Mcp:
+        def __init__(self):
+            self.chamadas, self.sessao, self.falha, self.falha_canais = [], "s", None, None
+            self.canais = [{"id": CANAL, "is_member": True}]
+            self.leitura = {"messages": []}
+
+        def iniciar(self, token):
+            self.sessao = "s"
+
+        def ferramenta(self, nome, args, token):
+            self.chamadas.append((nome, dict(args)))
+            if nome == "read_conversation":
+                return self.leitura
+            if nome == "list_channels":
+                if self.falha_canais:
+                    raise self.falha_canais
+                return {"channels": self.canais, "next_cursor": None}
+            if self.falha:
+                raise self.falha
+            return {"status": "still_running", "task_id": "tarefa-nova", "reply": "TEXTO-DO-AGENTE"}
+
+    class Cred:
+        escrita = True
+
+        def tem_escrita(self):
+            return self.escrita
+
+        def token(self):
+            return "t"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.pasta = tempfile.mkdtemp(prefix="escritorio-responder-")
+        cls.acesso = Acesso(cls.pasta)
+        with open(os.path.join(cls.pasta, "codigo-primeiro-acesso.txt")) as f:
+            codigo = f.read().strip()
+        cls.acesso.criar_primeiro(codigo, "dono", "senha-bem-grande")
+        cls.srv = e.Servidor(("127.0.0.1", 0), e.Pagina)
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        cls.base = "http://127.0.0.1:%d" % cls.srv.server_address[1]
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+        shutil.rmtree(cls.pasta, ignore_errors=True)
+
+    def setUp(self):
+        self.antes = e.BASE, e.TIMES
+        e.BASE, e.TIMES = self.base, os.path.join(self.pasta, "times.json")
+        self.modo_times("responder")
+        self.cred = self.Cred()
+        self.leitor = e.Leitor(self.cred)
+        self.leitor.mcp = self.Mcp()
+        self.leitor.estado = {**self.leitor.estado, **e.resumir(AG, [])}
+        self.leitor.canais = ({CANAL}, True, time.time())   # o que o Leitor guardou do list_channels
+        self.foto([self.tarefa("r1", "waiting_input"), self.tarefa("r2", "waiting_approval", "a2"),
+                   self.tarefa("r3", "running", "a1", CANAL), self.tarefa("r4", "waiting_input", "a2", DM2, None),
+                   self.tarefa("r8", "waiting_input", "a2", CANAL)])
+        self.srv.leitor, self.srv.cred, self.srv.acesso = self.leitor, self.cred, self.acesso
+        self.srv.conversas = e.Conversas(self.leitor)
+        self.srv.respostas = e.Respostas(self.leitor, self.srv.conversas)
+        self.acesso.modos, self.acesso.falhas = {}, {}
+
+    def tearDown(self):
+        e.BASE, e.TIMES = self.antes
+        self.srv.previa_sem_login = False
+
+    def modo_times(self, modo):
+        with open(e.TIMES, "w", encoding="utf-8") as f:
+            json.dump({"conversas": modo}, f)
+
+    def foto(self, tarefas, mem=None, agora=None):
+        mem = mem or e.ConversasDoDia()
+        self.leitor.memoria = mem
+        self.leitor.conversas = mem.atualizar(e.normalizar(AG, tarefas)[1], {}, True, agora or time.time())
+
+    def item(self, agente, canal=DM):
+        return next(it for it in self.leitor.conversas["por_id"].values() if it["agente_id"] == agente and it["canal"] == canal)
+
+    def req(self, rota, cab=None, dados=None, metodo=None):
+        return Http.req(self, rota, cab, dados, metodo)
+
+    def entrar(self):
+        return {"Cookie": "esc_sessao=" + self.acesso.entrar("dono", "senha-bem-grande")}
+
+    def post(self, rota, obj, cab, tipo="application/json", origem=True):
+        corpo = obj if isinstance(obj, bytes) else json.dumps(obj).encode()
+        h = {**cab, "Content-Type": tipo, **({"Origin": self.base} if origem is True else {"Origin": origem} if origem else {})}
+        st, resp, headers = self.req(rota, h, corpo, "POST")
+        return st, json.loads(resp) if resp else None, headers
+
+    def abrir(self, cab=None):
+        cab = cab or self.entrar()
+        st, corpo, h = self.post("/api/conversa/modo", {"senha": "senha-bem-grande"}, cab)
+        self.assertEqual(st, 200, corpo)
+        return {"Cookie": cab["Cookie"] + "; " + h["Set-Cookie"].split(";")[0]}, h["Set-Cookie"], corpo
+
+    def envio(self, agente="a1", canal=DM, **mudar):
+        it = self.item(agente, canal)
+        return {"id": it["id"], "run_id": it["run_id"], "texto": "Leve, por favor.", "chave": CHAVE, **mudar}
+
+    def enviados(self):
+        return [a for n, a in self.leitor.mcp.chamadas if n == "send_to_agent"]
+
+    def flags(self, cab):
+        return {c["run_id"]: c["responder"] for c in json.loads(self.req("/api/estado", cab)[1])["conversas"]}
+
+    def test_origem_obrigatoria_e_exata(self):
+        cab = self.entrar()
+        for rota, corpo in (("/api/conversa/modo", {"senha": "senha-bem-grande"}), ("/api/conversa/responder", self.envio()),
+                            ("/api/conversa/modo/fechar", {})):
+            with self.subTest(rota=rota):
+                self.assertEqual(self.post(rota, corpo, {**cab, "Referer": self.base + "/"}, origem=False)[:2],
+                                 (403, {"erro": "origem", "mensagem": "Origem não permitida."}))   # sem Origin, mesmo com Referer bom
+                self.assertEqual(self.post(rota, corpo, cab, origem="http://outro.exemplo")[0], 403)
+                self.assertEqual(self.post(rota, corpo, cab, origem="null")[0], 403)
+        self.assertEqual(self.acesso.modos, {})
+        self.assertEqual(self.leitor.mcp.chamadas, [])
+
+    def test_formato(self):
+        cab, _, _ = self.abrir()
+        self.assertEqual(self.post("/api/conversa/responder", self.envio(), cab, tipo="text/plain")[0], 415)
+        self.assertEqual(self.post("/api/conversa/modo", {"senha": "x"}, cab, tipo="application/x-www-form-urlencoded")[0], 415)
+        self.assertEqual(self.post("/api/conversa/responder", self.envio(), cab, tipo="application/json; charset=utf-8")[0], 200)
+        ruins = [b"{", b"[]", json.dumps({**self.envio(), "texto": "x" * 8200}).encode(),   # JSON inválido e corpo acima de 8 KB
+                 json.dumps({**self.envio(), "chave": "nao-e-uuid"}).encode(),
+                 json.dumps({**self.envio(), "chave": CHAVE.upper()}).encode(),
+                 json.dumps({**self.envio(), "agente": "a2"}).encode(),   # o cliente não escolhe agente
+                 json.dumps({k: v for k, v in self.envio().items() if k != "run_id"}).encode(),
+                 json.dumps({**self.envio(), "texto": 3}).encode()]
+        for corpo in ruins:
+            with self.subTest(corpo=corpo[:60]):
+                self.assertEqual(self.post("/api/conversa/responder", corpo, cab)[:2],
+                                 (400, {"erro": "pedido", "mensagem": "Pedido inválido."}))
+        self.assertEqual(self.post("/api/conversa/modo", b'{"senha": ""}', cab)[0], 400)
+        self.assertEqual(self.post("/api/conversa/modo", json.dumps({"senha": "x" * 2000}).encode(), cab)[0], 400)   # > 1 KB
+        self.assertEqual(len(self.enviados()), 1)
+
+    def test_desligado_sem_escrita_ou_previa_da_403(self):
+        cab, _, _ = self.abrir()
+        for caso in ("ler", "desligado", "sem_escrita", "previa"):
+            with self.subTest(caso=caso):
+                self.modo_times(caso if caso in ("ler", "desligado") else "responder")
+                self.cred.escrita = caso != "sem_escrita"
+                self.srv.previa_sem_login = caso == "previa"
+                for rota, corpo in (("/api/conversa/modo", {"senha": "senha-bem-grande"}), ("/api/conversa/responder", self.envio())):
+                    self.assertEqual(self.post(rota, corpo, cab)[:2][1]["erro"], "responder_desligado", rota)
+                self.assertIs(json.loads(self.req("/api/config", cab)[1])["pode_responder"], False)
+                estado = json.loads(self.req("/api/estado", cab)[1])
+                self.assertIsNone(estado["modo_resposta"])
+                self.assertFalse(any(c["responder"] for c in estado["conversas"]))
+        self.srv.previa_sem_login, self.cred.escrita = False, True
+        self.modo_times("responder")
+        self.assertIs(json.loads(self.req("/api/config", cab)[1])["pode_responder"], True)
+        self.assertEqual(self.leitor.mcp.chamadas, [])
+
+    def test_abrir_certo_cookie_e_estado(self):
+        cab, ck, corpo = self.abrir()
+        self.assertEqual(corpo, {"resta_s": 3600, "teto_s": 28800})
+        self.assertIn("HttpOnly", ck); self.assertIn("SameSite=Strict", ck)
+        self.assertNotIn("Max-Age", ck); self.assertNotIn("Expires", ck)   # cookie de sessão do navegador
+        self.assertTrue(ck.startswith("esc_resposta="))
+        self.assertNotIn(ck.split(";")[0].split("=")[1], json.dumps(self.acesso.modos))   # no servidor, só o hash
+        self.assertEqual(json.loads(self.req("/api/estado", cab)[1])["modo_resposta"], {"resta_s": 3600, "teto_s": 28800})
+        outra = self.entrar()   # outra sessão (outro navegador) vê null, mesmo com o cookie do modo copiado
+        copiado = {"Cookie": outra["Cookie"] + "; " + ck.split(";")[0]}
+        self.assertIsNone(json.loads(self.req("/api/estado", copiado)[1])["modo_resposta"])
+        h = e.Pagina.__new__(e.Pagina)
+        antes, e.BASE = e.BASE, "https://escritorio.exemplo.ts.net"
+        try:
+            seguro = h._cookie_modo("abc")
+        finally:
+            e.BASE = antes
+        self.assertTrue(seguro.startswith("__Host-esc_resposta=abc; Path=/;"))
+        self.assertIn("; Secure", seguro); self.assertNotIn("Max-Age", seguro)
+
+    def test_senha_errada_403_e_trava_com_o_login(self):
+        antes, acesso.ATRASO = acesso.ATRASO, 0
+        cab = self.entrar()
+        try:
+            for _ in range(acesso.LIMITE):
+                st, corpo, h = self.post("/api/conversa/modo", {"senha": "senha-errada-errada"}, cab)
+                self.assertEqual((st, corpo["erro"], h["Set-Cookie"]), (403, "senha_incorreta", None))
+            self.assertEqual(self.post("/api/conversa/modo", {"senha": "senha-bem-grande"}, cab)[:2],
+                             (429, {"erro": "tentativas_demais", "mensagem": "Tentativas demais; espere alguns minutos."}))
+            with self.assertRaises(acesso.TentativasDemais):
+                self.acesso.entrar("dono", "senha-bem-grande")
+        finally:
+            acesso.ATRASO = antes
+            self.acesso.falhas = {}
+
+    def test_envio_sem_modo_nao_chama_o_mcp(self):
+        cab = self.entrar()
+        self.assertEqual(self.post("/api/conversa/responder", self.envio(), cab)[:2][1]["erro"], "modo_fechado")
+        aberto, ck, _ = self.abrir()
+        outra = self.entrar()   # outro navegador com o cookie do modo copiado
+        self.assertEqual(self.post("/api/conversa/responder", self.envio(), {"Cookie": outra["Cookie"] + "; " + ck.split(";")[0]})[0], 403)
+        sem_cookie = {"Cookie": aberto["Cookie"].split(";")[0]}   # a sessão que abriu, sem o cookie do modo
+        self.assertEqual(self.post("/api/conversa/responder", self.envio(), sem_cookie)[:2][1]["erro"], "modo_fechado")
+        self.assertEqual(self.leitor.mcp.chamadas, [])
+        self.assertEqual(self.post("/api/conversa/responder", self.envio(), {})[0], 401)
+
+    def test_inatividade_e_teto_pelo_http(self):
+        cab, _, _ = self.abrir()
+        m = next(iter(self.acesso.modos.values()))
+        m["ate"] = time.time() + 60   # 59 min depois de abrir: passa e renova
+        st, corpo, _ = self.post("/api/conversa/responder", self.envio(), cab)
+        self.assertEqual((st, corpo["resta_s"] >= 3599), (200, True))
+        m["ate"] = time.time() - 1   # 61 min sem envio
+        self.assertEqual(self.post("/api/conversa/responder", self.envio(), cab)[:2][1]["erro"], "modo_fechado")
+        cab, _, _ = self.abrir(self.entrar())
+        m = next(iter(self.acesso.modos.values()))
+        m["inicio"] = time.time() - 8 * 3600 - 1   # teto: 8 h e 1 s desde a senha, mesmo com o ate no futuro
+        self.assertEqual(self.post("/api/conversa/responder", self.envio(), cab)[:2][1]["erro"], "modo_fechado")
+        self.assertEqual(len(self.enviados()), 1)
+
+    def test_fechar_agora_e_sair(self):
+        cab, _, _ = self.abrir()
+        st, corpo, h = self.post("/api/conversa/modo/fechar", {}, cab)
+        self.assertEqual((st, corpo), (200, {"ok": True}))
+        self.assertIn("esc_resposta=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0", h["Set-Cookie"])
+        self.assertEqual(self.post("/api/conversa/responder", self.envio(), cab)[:2][1]["erro"], "modo_fechado")
+        cab, _, _ = self.abrir()
+        st, _, h = self.req("/sair", {**cab, "Origin": self.base}, b"", "POST")
+        self.assertEqual(st, 303)
+        cookies = h.get_all("Set-Cookie")
+        self.assertEqual(sorted(c.split("=")[0] for c in cookies), ["esc_resposta", "esc_sessao"])
+        self.assertTrue(all("Max-Age=0" in c for c in cookies))
+        self.assertEqual(self.acesso.modos, {})
+        self.assertEqual(self.post("/api/conversa/responder", self.envio(), cab)[0], 401)
+        self.assertEqual(self.enviados(), [])
+
+    def test_estado_do_item_sem_chamar_o_mcp(self):
+        cab, _, _ = self.abrir()
+        casos = ((self.envio("a2"), 409, "aprovacao"), (self.envio("a1", CANAL), 409, "trabalhando"),
+                 (self.envio(run_id="r-velho"), 409, "mudou"), (self.envio("a2", DM2), 409, "sem_thread"),
+                 ({**self.envio(), "id": "naoexiste123"}, 404, "sem_conversa"), ({**self.envio(), "id": "x"}, 404, "sem_conversa"),
+                 (self.envio(texto="​‮ \n"), 400, "texto"), (self.envio(texto="x" * 2001), 400, "texto"))
+        for corpo, st, codigo in casos:
+            with self.subTest(codigo=codigo, corpo=corpo):
+                obtido = self.post("/api/conversa/responder", corpo, cab)[:2]
+                self.assertEqual((obtido[0], obtido[1]["erro"]), (st, codigo))
+                self.assertTrue(obtido[1]["mensagem"])
+        self.assertEqual(self.leitor.mcp.chamadas, [])   # nenhuma recusa chama o agentes.chat
+        self.assertEqual(self.post("/api/conversa/responder", self.envio(texto="x" * 2000), cab)[0], 200)
+
+    def test_flags_da_lista_e_terminada_hoje(self):
+        cab, _, _ = self.abrir()
+        self.assertEqual(self.flags(cab), {"r1": True, "r2": False, "r3": False, "r4": False, "r8": False})   # r8: canal (T1)
+        mem, agora = e.ConversasDoDia(), time.time()
+        self.foto([self.tarefa("r1", "running"), self.tarefa("r5", "running", "a2", DM2)], mem, agora)
+        self.foto([self.tarefa("r5", "running", "a2", DM2)], mem, agora + 30)   # r1 terminou
+        self.assertEqual(self.flags(cab), {"r1": True, "r5": False})
+        self.assertEqual(self.post("/api/conversa/responder", self.envio(), cab)[0], 200)
+        self.leitor.canais = None   # sem a lista de canais guardada, nada vira "responder"
+        self.assertEqual(self.flags(cab), {"r1": False, "r5": False})
+        self.leitor.canais = ({CANAL}, True, time.time() - e.CANAIS_CACHE)   # nem com a lista vencida
+        self.assertEqual(self.flags(cab), {"r1": False, "r5": False})
+        self.leitor.canais = ({CANAL}, False, time.time())   # lista incompleta não decide
+        self.assertEqual(self.flags(cab), {"r1": False, "r5": False})
+
+    def test_envio_certo_destino_e_auditoria(self):
+        cab, _, _ = self.abrir()
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            st, corpo, _ = self.post("/api/conversa/responder", self.envio(texto="  Leve‮, por​ favor.\r\n"), cab)
+            st2, corpo2, _ = self.post("/api/conversa/responder", self.envio(), cab)
+        self.assertEqual((st, st2), (200, 200))
+        self.assertEqual((corpo["status"], corpo["resta_s"], corpo["teto_s"] <= 28800), ("still_running", 3600, True))
+        for enviado in self.enviados():   # conversa direta: sem channel_id, na thread do ?m=, sem prefixo
+            self.assertEqual(enviado, {"agent": "a1", "message": "Leve, por favor.", "thread_id": M,
+                                       "idempotency_key": CHAVE, "wait_seconds": 0})
+        nomes = [n for n, _ in self.leitor.mcp.chamadas]
+        self.assertEqual(nomes, ["list_channels", "send_to_agent"] * 2)   # T1: lista de canais fresca a cada envio
+        linhas = [json.loads(l) for l in saida.getvalue().splitlines() if '"conversa_envio"' in l]
+        self.assertEqual([(l["resultado"], l["usuario"], l["agente_id"], l["run_id"], l["task_id"], l["tamanho"], l["tipo"])
+                          for l in linhas], [("ok", "dono", "a1", "r1", "tarefa-nova", 16, "dm")] * 2)
+        self.assertEqual(set(linhas[0]), {"evento", "resultado", "usuario", "agente_id", "run_id", "task_id", "tamanho", "tipo", "hora"})
+        for vazou in ("Leve", DM, M, "TEXTO-DO-AGENTE"):   # T4: nem texto, nem canal, nem thread
+            self.assertNotIn(vazou, saida.getvalue())
+        self.assertNotIn("TEXTO-DO-AGENTE", json.dumps([corpo, corpo2]))
+
+    def test_canal_e_classificacao_que_falha_dao_409_sem_enviar(self):   # T1
+        cab, _, _ = self.abrir()
+        self.assertEqual(self.post("/api/conversa/responder", self.envio("a2", CANAL), cab)[:2],
+                         (409, {"erro": "tipo_nao_liberado", "mensagem": "Em canal, por enquanto, responda no agentes.chat."}))
+        self.leitor.canais = None   # a lista guardada não vale para o envio: a fresca acha o canal mesmo assim
+        self.assertEqual(self.post("/api/conversa/responder", self.envio("a2", CANAL), cab)[0], 409)
+        guardada = lambda: ({CANAL}, True, time.time())   # o que o Leitor guardou: a conversa do r1 é direta
+        self.leitor.canais, self.leitor.mcp.canais = guardada(), [{"id": DM}]   # só a lista fresca, do envio, vê que é canal
+        self.assertEqual(self.post("/api/conversa/responder", self.envio(), cab)[1]["erro"], "tipo_nao_liberado")
+        self.leitor.mcp.canais = [{"id": CANAL}]
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.leitor.canais, self.leitor.mcp.falha_canais = guardada(), RuntimeError("fora do ar")   # falha fechada:
+            self.assertEqual(self.post("/api/conversa/responder", self.envio(), cab)[:2][1]["erro"], "tipo_nao_liberado")   # nem a guardada vale
+            self.leitor.mcp.falha_canais = None
+            self.leitor.canais = guardada()
+            self.leitor.mcp.ferramenta = lambda nome, args, token: {"channels": [], "next_cursor": "mais"}   # 10 páginas sem fim
+            self.assertEqual(self.post("/api/conversa/responder", self.envio(), cab)[:2][1]["erro"], "tipo_nao_liberado")
+        self.assertEqual(self.enviados(), [])
+
+    def test_m2_depois_do_envio_a_terminada_mostra_a_mensagem_e_a_resposta(self):
+        t, mem = time.time(), e.ConversasDoDia()
+        self.foto([self.tarefa("r1", "running"), self.tarefa("r5", "running", "a2", DM2)], mem, t - 100)
+        self.foto([], mem, t - 70)   # as duas terminaram há 70 s: o A1 corta em t - 10
+        hora = lambda s: e._iso(t + s)
+        self.leitor.mcp.leitura = {"messages": [
+            {"author": {"kind": "agent", "name": "Pixel"}, "sent_at": hora(-100), "untrusted_text": "pergunta"},
+            {"author": {"kind": "person"}, "sent_at": hora(-5), "untrusted_text": "enviada"},
+            {"author": {"kind": "agent", "name": "Pixel"}, "sent_at": hora(-2), "untrusted_text": "resposta"}]}
+        c, um, outro = self.srv.conversas, self.item("a1")["id"], self.item("a2", DM2)["id"]
+        textos = lambda id_conversa: [m["texto"] for m in c.ler_id(id_conversa, agora=time.time())[1]["mensagens"]]
+        self.assertEqual(textos(um), ["pergunta"])   # antes do envio: o A1 vale
+        cab, _, _ = self.abrir()
+        self.assertEqual(self.post("/api/conversa/responder", self.envio(), cab)[0], 200)
+        self.assertEqual(textos(um), ["pergunta", "enviada", "resposta"])   # o que o escritório mandou não some
+        st, corpo, _ = self.req(f"/api/conversa?id={um}", cab)
+        self.assertEqual((st, json.loads(corpo)["ate"], len(json.loads(corpo)["mensagens"])), (200, None, 3))
+        self.assertEqual(textos(outro), ["pergunta"])   # outra terminada continua limitada
+        self.assertFalse(self.leitor.respondido(um, t + 2 * 86400))   # a marca vale só até a meia-noite
+        self.leitor.zerar_memoria()   # conta nova no OAuth: a marca sai junto
+        self.assertFalse(self.leitor.respondido(um, time.time()))
+
+    def test_b4_modo_que_venceu_no_mesmo_instante_nao_da_500(self):
+        cab = self.entrar()
+        self.acesso.modo = lambda *a, **k: None   # a sessão venceu entre abrir e ler o tempo
+        try:
+            st, corpo, _ = self.post("/api/conversa/modo", {"senha": "senha-bem-grande"}, cab)
+        finally:
+            del self.acesso.modo
+        self.assertEqual((st, corpo), (200, {"resta_s": 0, "teto_s": 0}))
+
+    def test_envio_invalida_o_cache_da_conversa(self):
+        cab, _, _ = self.abrir()
+        conv = self.srv.conversas
+        conv.cache[(DM, M)] = conv.cache[(DM, None)] = conv.cache[(DM2, M)] = (time.time(), {"mensagens": []})
+        self.assertEqual(self.post("/api/conversa/responder", self.envio(), cab)[0], 200)
+        self.assertEqual(list(conv.cache), [(DM2, M)])   # a thread e o canal da conversa saem; os outros ficam
+
+    def test_tetos_e_pausas(self):
+        r, it = self.srv.respostas, self.item("a1")
+        enviar = lambda agora: r.enviar("dono", it["id"], it["run_id"], "oi", CHAVE, agora)
+        t = time.time()
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual([enviar(t + i)[0] for i in range(6)], [200] * 5 + [429])   # o 6º no minuto
+            for hora in range(1, 10):   # 50 no dia (janela móvel)
+                for i in range(5):
+                    enviar(t + hora * 120 + i)
+            self.assertEqual(len(self.enviados()), 50)
+            chamadas = len(self.leitor.mcp.chamadas)
+            self.assertEqual(enviar(t + 20 * 120)[1]["erro"], "limite")   # o 51º no dia, sem chamar o MCP
+            self.assertEqual(len(self.leitor.mcp.chamadas), chamadas)
+            r.chamadas.clear()
+            self.leitor.mcp.falha = e.Limitado("120")   # 429 no envio: pausa só os envios
+            self.assertEqual(enviar(t + 90_000)[1]["erro"], "pausa")
+            self.assertFalse(self.leitor.pausado(t + 90_000))
+            self.leitor.mcp.falha = None
+            chamadas = len(self.leitor.mcp.chamadas)
+            self.assertEqual(enviar(t + 90_100)[1]["erro"], "pausa")   # ainda na pausa: sem chamar nada
+            self.assertEqual(len(self.leitor.mcp.chamadas), chamadas)
+            self.assertEqual(enviar(t + 90_200)[0], 200)
+            self.leitor.pausa_ate = t + 100_000   # pausa do Leitor (O4): 503 sem chamar
+            chamadas = len(self.leitor.mcp.chamadas)
+            self.assertEqual(enviar(t + 99_000)[1]["erro"], "pausa")
+            self.assertEqual(len(self.leitor.mcp.chamadas), chamadas)
+            self.leitor.pausa_ate = 0
+            self.leitor.mcp.falha = RuntimeError("send_to_agent: texto vindo de fora")
+            self.assertEqual(enviar(t + 100_100)[1], {"erro": "erro_agentes", "mensagem": "O agentes.chat não confirmou o envio; ela pode ter saído: confira a conversa antes de mandar de novo."})
+            self.leitor.mcp.falha = None
+            self.cred.token = lambda: None
+            self.assertEqual(enviar(t + 100_200)[1]["erro"], "sem_conexao")
+
+    def test_leitor_guarda_os_canais_so_no_modo_responder(self):
+        class Mcp:
+            sessao, pedidos, nomes, falha = "s", 0, [], False
+
+            def ferramenta(self, nome, args, token):
+                self.pedidos += 1
+                self.nomes.append(nome)
+                if nome == "list_channels" and self.falha:
+                    raise RuntimeError("fora do ar")
+                return {"agents": AG} if nome == "list_agents" else {"channels": [{"id": CANAL.upper()}]} \
+                    if nome == "list_channels" else {"tasks": []}
+        l = e.Leitor(self.cred)
+        l.mcp = Mcp()
+        t = 1_800_000_000.0
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.modo_times("ler")
+            l.ciclo(t)
+            self.assertEqual((l.canais, l.mcp.nomes.count("list_channels")), (None, 0))
+            self.modo_times("responder")
+            l.ciclo(t + 30); l.ciclo(t + 60)   # uma vez por hora
+            self.assertEqual((l.canais, l.mcp.nomes.count("list_channels")), (({CANAL}, True, t + 30), 1))
+            l.ciclo(t + 30 + 3600)
+            self.assertEqual(l.mcp.nomes.count("list_channels"), 2)
+            l.mcp.falha = True   # erro: a leitura segue, a lista fica sem envio e tenta de novo em 5 min
+            l.ciclo(t + 30 + 7200)
+            self.assertIsNone(l.estado["erro"])
+            self.assertEqual((l.canais[0], l.canais[1]), (set(), False))
+            l.ciclo(t + 30 + 7200 + 60)
+            self.assertEqual(l.mcp.nomes.count("list_channels"), 3)
+            l.mcp.falha = False
+            l.ciclo(t + 30 + 7200 + 301)
+            self.assertEqual((l.canais[0], l.mcp.nomes.count("list_channels")), ({CANAL}, 4))
+
+
+class Previa(unittest.TestCase):
+    """A ferramentas/previa.py sobe de verdade e lê uma conversa pelo caminho do servidor (thread e canal): uma
+    mudança no Conversas que a quebre aparece aqui, e não só quando alguém abre a prévia."""
+    def test_previa_le_conversa_pela_thread_e_pelo_canal(self):
+        pasta = tempfile.mkdtemp(prefix="escritorio-previa-teste-")
+        bruto = os.path.join(pasta, "bruto.json")
+        url = f"https://app.agentes.chat/org/{e.ORG}/c/"
+        with open(bruto, "w", encoding="utf-8") as f:
+            json.dump({"agents": AG, "tasks": [
+                {"run_id": "r1", "agent": {"id": "a1"}, "status": "running", "url": f"{url}{CANAL}?m={M}", "label": "Post"},
+                {"run_id": "r2", "agent": {"id": "a2"}, "status": "waiting_input", "url": url + DM, "label": "QA"}]}, f)
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            porta = s.getsockname()[1]
+        raiz = os.path.dirname(os.path.abspath(e.__file__))
+        p = subprocess.Popen([sys.executable, "-B", os.path.join("ferramentas", "previa.py"), bruto], cwd=raiz,
+                             env={**os.environ, "PREVIA_PORTA": str(porta), "PYTHONUTF8": "1"},
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            self.assertEqual(p.stdout.readline().strip(), f"http://127.0.0.1:{porta}")   # o servidor já escuta
+            ler = lambda rota: json.loads(urllib.request.urlopen(f"http://127.0.0.1:{porta}{rota}", timeout=10).read())
+            itens = {c["agente_id"]: c["id"] for c in ler("/api/estado")["conversas"]}
+            self.assertEqual(set(itens), {"a1", "a2"})
+            for agente in ("a1", "a2"):   # a1 tem ?m= (thread), a2 não (canal)
+                r = ler(f"/api/conversa?id={itens[agente]}")   # erro na leitura (o TypeError de antes) vira HTTP 502
+                self.assertEqual({m["autor"] for m in r["mensagens"]}, {"pessoa", "agente"}, agente)
+        finally:
+            p.kill()
+            p.communicate(timeout=10)
+            shutil.rmtree(pasta, ignore_errors=True)
 
 
 if __name__ == "__main__":
