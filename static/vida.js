@@ -94,6 +94,23 @@ const Vida = (() => {
       esbarrao: [["Opa, foi mal!", "Olha o café!"], ["Ei, cuidado!", "Desculpa, desculpa!"]],
       grampeador: [["Quem pegou meu grampeador?!", "Não fui eu!"], ["Cadê meu grampeador?", "Nem sei do que você tá falando"]],
       pazes: [["Foi mal pelo ringue", "Tranquilo. Café?"], ["Sem ressentimentos?", "Que nada, toca aqui ✋"]],
+      // fatia 2: reclamação, sugestão e fofoca (balões), greve (plaquinhas curtas, em maiúsculas) e os gritos dela
+      reclamacao: ["O ar-condicionado tá um gelo!", "Quem mexeu no termostato?", "A impressora travou de novo…", "Acabou o café. DE NOVO.",
+        "Esse Wi-Fi tá de brincadeira", "Essa reunião podia ser um e-mail…", "Cadê a caneta que funciona?", "Tá calor ou é impressão minha?",
+        "Quem deixou a louça na pia?", "Minha cadeira range a cada clique"],
+      sugestao: ["E se a gente tivesse pufe novo?", "Proposta: sexta do bolo!", "Bora um happy hour?", "Que tal uma playlist do time?",
+        "Ideia: planta em toda mesa", "Sugiro café especial na copa", "Podia ter mais tomada aqui", "Campeonato de dardos, quem topa?"],
+      fofoca: [["Psiu… cê viu aquilo?", "Não acredito!"], ["Psiu… fiquei sabendo de uma…", "Conta tudo!"], ["Psiu… mas não espalha, hein", "Sou um túmulo"],
+        ["Psiu… adivinha quem chegou atrasado", "Sério?!"], ["Psiu… o bolo de sexta é surpresa", "Boca de siri!"]],
+      greve: ["MAIS CAFÉ", "SEXTA LIVRE", "PUFE JÁ!", "WI-FI DIGNO", "MENOS REUNIÃO", "BOLO NA SEXTA", "ABAIXO O BUG", "QUEREMOS PIZZA", "SONECA LIVRE", "AR NO 23"],
+      grito: ["Queremos café!", "Sem café, sem código!", "Greve! Greve!", "A luta continua!", "Ô, ô, ô, mais pufe pro escritório!", "Daqui ninguém levanta!"],
+      greveFim: ["Por hoje chega…", "Amanhã tem mais", "Cansei, vou pra mesa"],
+      atendida: ["Obrigado, chefe!", "Conquista histórica!", "Valeu, chefe!", "Vitória do escritório!"],
+      // a entrega do pedido: o entregador anuncia e a turma reage conforme o item
+      entrega: { chegou: ["Entrega pro escritório!", "Chegou o pedido!"], cafe: ["Café novo!", "Cheirinho de café!"],
+        pizza: ["Pizza!!", "Eu fico com a de calabresa"], ar: ["Ahh, agora sim", "23 graus, que paz"], faixa: ["Eeee!", "Vitória!"],
+        pufe: ["Pufe novo!", "Que macio!"], roteador: ["Wi-Fi voando!", "Agora sim, 5 barrinhas"], bolo: ["Bolo!", "Quem corta?"],
+        travesseiro: ["Zzz…", "Só 5 minutinhos"] },
     },
   };
   // função do agente (texto livre do agentes.chat) -> grupo de balões de trabalho
@@ -113,7 +130,7 @@ const Vida = (() => {
   const SENTA = new Set(["tv", "poltrona", "pufe", "recepcao", "reuniao", "lanche", "videogame"]);
   const OLHA = { arcade: "cima", pc: "cima", videogame: "cima", musica: "cima", cozinha: "cima", cafe: "cima" };
   const POSE = { videogame: "jogando", arcade: "fliperama", pc: "fliperama", pingpong: "raquete", sinuca: "taco", pebolim: "pebolim",
-    musica: "tocando", cafe: "cafe", lanche: "cafe", roda: "cafe", gato: "carinho" };
+    musica: "tocando", cafe: "cafe", lanche: "cafe", roda: "cafe", gato: "carinho", greve: "sentado_chao" };
   const VIZ = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
   // expediente.js traz o horário do Personalizar (inclusive o turno que vira a meia-noite); sem ele, 07:00-20:00
@@ -571,6 +588,7 @@ const Vida = (() => {
     duplas(m, dt, agora);
     cuidarDaRoda(m, dt, agora);
     cuidarDaCena(m, dt, agora);
+    cuidarDaEntrega(m, dt, agora);
     if (!m.fora) {
       if ((m.proxVisita -= dt) <= 0) { m.proxVisita = entre(25, 50); visitar(m, agora); }
       if ((m.proxGato -= dt) <= 0) { m.proxGato = entre(45, 90); verGato(m, agora); }
@@ -617,10 +635,15 @@ const Vida = (() => {
     }
     const v = l.vaga;
     if (b.emReuniao) { b.emReuniao = false; b.fica = 0; }
-    if (v.tipo === "luta" || v.tipo === "ringue") {   // vida social: fica enquanto a cena dura; depois, o lutador volta um tempo para a mesa
+    if (v.tipo === "luta" || v.tipo === "ringue" || v.tipo === "greve") {   // vida social: fica enquanto a cena dura; depois, o lutador volta um tempo para a mesa
       if (cenaAtiva(m, v.dono)) return;
+      if (v.tipo === "greve") { b.fica = Math.min(b.fica, agora - b.desde + entre(0.5, 2.5)); }   // a greve acabou: cada um levanta no seu tempo
       if (v.tipo === "luta" && b.mesa) { irPara(m, b, { tipo: "mesa", mesa: b.mesa }); b.espera = agora + entre(20, 35); return; }
       b.fica = Math.min(b.fica, agora - b.desde + (v.tipo === "ringue" ? entre(1, 3) : 0));   // a plateia aplaude e sai
+    }
+    if (v.tipo === "entrega") {   // a turma fica até a entrega acabar; depois, cada um volta para o seu canto no seu tempo
+      if (m.entrega && m.entrega.id === v.dono && m.entrega.fase !== "fim") return;
+      b.fica = Math.min(b.fica, agora - b.desde + entre(0.5, 2.5));
     }
     if (v.tipo === "visita") { const o = m.bonecos.get(b.visita); if (!o || !o.lugar || o.lugar.mesa !== v.mesa || !o.trabalho) b.fica = Math.min(b.fica, agora - b.desde); }
     if (v.dono) {   // torcida e plateia: acabou o jogo (ou a música), vão embora logo
@@ -717,6 +740,7 @@ const Vida = (() => {
     else if (b.violao > agora) b.pose = "violao";
     else if (b.aceno > agora) b.pose = v.senta ? "sentado" : "acenando";
     else if (b.danca > agora && !v.senta && v.tipo !== "luta") b.pose = "dancando";
+    else if (v.pose && m.entrega && m.entrega.id === v.dono && m.entrega.fase === "entregue") b.pose = v.pose;   // come ou cochila depois que chegou
     else if (POSE[v.tipo]) b.pose = POSE[v.tipo];
     else if (v.senta) b.pose = m.noite > 0.6 && v.tipo !== "reuniao" ? "dormindo" : "sentado";
     else b.pose = "parado";
@@ -888,16 +912,19 @@ const Vida = (() => {
   const livreSocial = b => !!b && !b.trabalho && !b.reuniao && noPredio(b);
   const cenaAtiva = (m, id) => !!m.cena && m.cena.id === id && m.cena.fase !== "fim";
   const donoDe = b => (b.lugar && b.lugar.vaga && b.lugar.vaga.dono) || (b.destino && b.destino.vaga && b.destino.vaga.dono) || null;
-  const naCena = (m, b) => !!m.cena && m.cena.fase !== "fim" && (m.cena.lutadores.includes(b.id) || donoDe(b) === m.cena.id);
+  const naCena = (m, b) => !!m.cena && m.cena.fase !== "fim" && (m.cena.lutadores.includes(b.id) || m.cena.participantes.includes(b.id)
+    || donoDe(b) === m.cena.id);
 
   function social(m, s) {
     if (!m) return;
     const agora = performance.now() / 1000;
     if (s && typeof s.agora === "string" && Number.isFinite(Date.parse(s.agora))) m.desvio = agora - Date.parse(s.agora) / 1000;
     // sem o "agora" (a resposta do "Mandar pro ringue"), vale o desvio da última leitura
-    const c = s && !s.serio && m.desvio !== undefined && s.cena && s.cena.tipo === "briga" ? s.cena : null;
+    const c = s && !s.serio && m.desvio !== undefined && s.cena && (s.cena.tipo === "briga" || s.cena.tipo === "greve") ? s.cena : null;
+    if (!s || s.serio) encerrarEntrega(m);   // modo sério e Simulação: a entrega some na hora
     if (!c) { encerrarCena(m); m.cena = null; }
     else if (!m.cena || m.cena.id !== c.id) { encerrarCena(m); m.cena = novaCena(m, c); }
+    else if (c.tipo === "greve" && Array.isArray(c.participantes)) m.cena.participantes = c.participantes.filter(x => typeof x === "string");   // quem pegou tarefa saiu
     if (!s || s.serio || m.desvio === undefined || !Array.isArray(s.eventos)) return;
     const servidor = agora - m.desvio;
     for (const ev of s.eventos) {
@@ -910,14 +937,25 @@ const Vida = (() => {
   }
 
   function novaCena(m, c) {
-    const local = t => Date.parse(t) / 1000 + m.desvio, inicio = local(c.inicio), fim = local(c.fim);
+    const local = t => Date.parse(t) / 1000 + m.desvio, inicio = local(c.inicio);
+    if (c.tipo === "greve") {   // a greve acaba no "ate"; o fim dela é o mesmo campo "fim" da briga
+      const fim = local(c.ate), ps = Array.isArray(c.participantes) ? c.participantes.filter(x => typeof x === "string") : [];
+      const ok = typeof c.id === "string" && ps.length > 0 && Number.isInteger(c.motivo) && Number.isFinite(inicio) && Number.isFinite(fim) && fim > inicio;
+      return { id: c.id, tipo: "greve", participantes: ps, motivo: ok ? c.motivo : 0, inicio, fim, lutadores: [], fase: ok ? "chamado" : "fim", prox: 0 };
+    }
+    const fim = local(c.fim);
     const ok = typeof c.id === "string" && typeof c.a === "string" && typeof c.b === "string" && c.a !== c.b && [c.a, c.b].includes(c.vencedor)
       && Number.isFinite(inicio) && Number.isFinite(fim) && fim > inicio;
-    return { id: c.id, a: c.a, b: c.b, vencedor: c.vencedor, inicio, fim, lutadores: [c.a, c.b], fase: ok ? "espera" : "fim" };
+    return { id: c.id, tipo: "briga", a: c.a, b: c.b, vencedor: c.vencedor, inicio, fim, lutadores: [c.a, c.b], participantes: [], fase: ok ? "espera" : "fim" };
   }
 
-  // a cena acaba nesta tela: quem está no ringue ou na plateia segue pelo decidir (a vaga sem cena ativa manda embora)
-  function encerrarCena(m) { if (m.cena) m.cena.fase = "fim"; m.cenaSocial = null; }
+  // a cena acaba nesta tela: quem está no ringue, na plateia ou na greve segue pelo decidir (a vaga sem cena ativa manda
+  // embora); as plaquinhas saem na hora
+  function encerrarCena(m) {
+    if (m.cena) m.cena.fase = "fim";
+    m.cenaSocial = null;
+    for (const b of m.lista) b.placa = null;
+  }
 
   // onde é o ringue: o cantinho do mapa.js (predio.ringue) ou, sem ele, o meio da sala comunal, sem cordas
   function ringue(m) {
@@ -990,9 +1028,182 @@ const Vida = (() => {
 
   const plateiaDe = (m, c) => m.lista.filter(o => !o.rota.length && o.lugar && o.lugar.vaga && o.lugar.vaga.tipo === "ringue" && o.lugar.vaga.dono === c.id);
 
+  // greve (fatia 2): os participantes livres e no prédio nesta tela andam (sem correr) até pontos em volta do ringue e
+  // sentam no chão, com plaquinha. Quem pega tarefa vai para a mesa pelo alvoDe de sempre; quem fica livre durante a
+  // greve vem depois (a cada 1 s). No "ate", "Por hoje chega…"; atendida, o servidor tira a cena e o evento agradece.
+  // Para o efeitos.js: m.cenaSocial = { id, tipo: "greve", fase ("chamado" ou "greve"), participantes, x, y, motivo, ate }
+  // e b.placa (o texto) em quem está sentado. Sons: protesto (quando o primeiro senta) e atendida.
+  const textoGreve = motivo => { const g = FRASES.social.greve, n = Number.isInteger(motivo) ? motivo : 0; return g[((n % g.length) + g.length) % g.length]; };
+  const sentadoNaGreve = (b, c) => !b.rota.length && b.lugar && b.lugar.vaga && b.lugar.vaga.tipo === "greve" && b.lugar.vaga.dono === c.id;
+
+  function cuidarDaGreve(m, dt, agora) {
+    const c = m.cena;
+    if (agora >= c.fim) {
+      for (const b of m.lista) if (sentadoNaGreve(b, c) && Math.random() < 0.7) falar(b, sorteia(FRASES.social.greveFim), 3);
+      encerrarCena(m); return;
+    }
+    if (!c.r && !(c.r = ringue(m))) { m.cenaSocial = null; return; }
+    if ((c.prox -= dt) <= 0) { c.prox = 1; chamarGrevistas(m, c); }
+    const vem = m.lista.filter(b => c.participantes.includes(b.id) && donoDe(b) === c.id);
+    const sentados = vem.filter(b => sentadoNaGreve(b, c));
+    for (const b of m.lista) b.placa = null;
+    // o 1º sentado (na ordem dos participantes) sempre ergue o pedido do aviso; os outros, os pedidos seguintes
+    sentados.sort((x, y) => c.participantes.indexOf(x.id) - c.participantes.indexOf(y.id)).forEach((b, k) => { b.placa = textoGreve(c.motivo + k); });
+    if (sentados.length && c.fase === "chamado") { c.fase = "greve"; c.proxGrito = entre(1, 3); m.eventos.push({ nome: "protesto" }); }
+    if (c.fase === "greve" && (c.proxGrito -= dt) <= 0) {
+      c.proxGrito = entre(4, 8);
+      const quem = sentados.filter(o => !o.fala);
+      if (quem.length) falar(sorteia(quem), sorteia(FRASES.social.grito), 2.6);
+    }
+    if (!vem.length) { m.cenaSocial = null; return; }
+    const pts = vem.map(b => (b.destino && b.destino.vaga) || b.lugar.vaga);
+    const cs = m.cenaSocial && m.cenaSocial.id === c.id ? m.cenaSocial : (m.cenaSocial = { id: c.id, tipo: "greve" });
+    cs.fase = c.fase; cs.participantes = vem.map(b => b.id); cs.motivo = c.motivo; cs.ate = c.fim;
+    cs.x = pts.reduce((s, v) => s + v.x, 0) / pts.length; cs.y = pts.reduce((s, v) => s + v.y, 0) / pts.length;
+  }
+
+  // os participantes livres, parados e no prédio sentam em fileiras na frente do ringue (nunca entre a parede e as cordas:
+  // ficariam escondidos e a plaquinha subiria no quadro), do meio para os lados, longe de quem já está por ali. Ninguém corre
+  function chamarGrevistas(m, c) {
+    const quem = m.lista.filter(o => c.participantes.includes(o.id) && donoDe(o) !== c.id && !o.trabalho && !o.reuniao
+      && !o.rota.length && o.lugar && o.lugar.tipo !== "fora" && noPredio(o));
+    if (quem.length) distribuir(m, quem, pontosNaFrente(m, c.r, quem.length, { tipo: "greve", dono: c.id }));
+  }
+
+  // até n vagas temporárias em fileiras na frente do ringue (do meio para os lados, 14 px entre elas), longe de quem já
+  // está ou vai estar por ali; "modelo" vira os campos da vaga (tipo, dono, pose)
+  function pontosNaFrente(m, r, n, modelo, evitar = []) {
+    const s = r.sala, perto = [...m.lista.map(o => (o.destino && o.destino.vaga) || (o.lugar && o.lugar.vaga)).filter(v => v && v.sala === s),
+      ...m.vagas.filter(v => v.ocupante && v.sala === s), ...evitar];
+    const pr = m.predio.ringue, topo = pr ? pr.y + pr.h + 12 : Math.round(r.cy) + 30, pts = [];
+    for (let fila = 0; fila < 4 && pts.length < n; fila++) for (let k = 0; k < 12 && pts.length < n; k++) {   // 0, +14, −14, +28, −28…
+      const x = Math.round(r.cx + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 14), y = topo + fila * 14;
+      if (!(x > s.px + 6 && x < s.px + s.pw - 6 && y > s.chao + 6 && y < s.py + s.ph - 4)) continue;
+      if (perto.some(o => Math.hypot(o.x - x, o.y - y) < 14) || pts.some(o => Math.hypot(o.x - x, o.y - y) < 14)) continue;
+      const v = { sala: s, x, y, olha: "baixo", chave: y + 0.5, temp: true, ...modelo };
+      if ((!m.predio.livre || m.predio.livre(x, y)) && alcanca(m, v)) pts.push(v);
+    }
+    return pts;
+  }
+
+  // cada um vai para o ponto mais perto dele, sem correr
+  function distribuir(m, quem, pts) {
+    for (const o of quem) {
+      if (!pts.length) break;
+      const v = pts.reduce((x, y) => (Math.hypot(y.x - o.x, y.y - o.y) < Math.hypot(x.x - o.x, x.y - o.y) ? y : x));
+      pts.splice(pts.indexOf(v), 1);
+      irPara(m, o, { tipo: "vaga", vaga: v });
+    }
+  }
+
+  // --- entrega do pedido (greve atendida): igual para todas as telas pelo evento "atendida" {motivo, participantes}; cada
+  // tela encena com os próprios bonecos. Um entregador figurante (fora do m.lista) vem da rua com o item até a frente do
+  // ringue (o motoboy da pizza para no balcão da recepção); a turma livre vai até lá (no café, em roda em volta das
+  // garrafas), comemora, come, toma café ou cochila, e uns 20 s depois volta para o seu canto. Sem entregador (ar, faixa),
+  // o pedido "chega" quando o primeiro da turma alcança o ponto. Quem trabalha ou espera não sai da mesa. Para o
+  // efeitos.js: m.entrega = { id, motivo, pedido, item, faixa, fase ("chegando" ou "entregue"), x, y, entregador } ou null.
+  // Sons: campainha e eba
+  const ENTREGAS = {   // pedido (o texto da plaquinha) -> o que chega; o resto vira uma faixa "<pedido> aprovado!"
+    "MAIS CAFÉ": { item: "cafe", entregador: true, roda: true, pose: "cafe" },
+    "QUEREMOS PIZZA": { item: "pizza", entregador: true, recepcao: true, pose: "cafe" },
+    "AR NO 23": { item: "ar", primeira: "Ahh, agora sim" }, "SEXTA LIVRE": { item: "faixa", faixa: "Sexta livre aprovada!", festa: true },
+    "MENOS REUNIÃO": { item: "faixa", faixa: "Menos reunião aprovado!", festa: true }, "ABAIXO O BUG": { item: "faixa", faixa: "Bug esmagado!", festa: true },
+    "PUFE JÁ!": { item: "pufe", entregador: true, festa: true }, "WI-FI DIGNO": { item: "roteador", entregador: true, festa: true },
+    "BOLO NA SEXTA": { item: "bolo", entregador: true, pose: "cafe" }, "SONECA LIVRE": { item: "travesseiro", entregador: true, pose: "dormindo" },
+  };
+  const ENTREGA_CHEGAR = 40, ENTREGA_DURA = 20, ENTREGADOR_FICA = 3;
+  const AP_ENTREGADOR = { color: "amber", eyes: "round", accessory: "cap" };
+
+  function novaEntrega(m, ev, agora) {
+    const r = ringue(m), pedido = textoGreve(ev.motivo), tipo = ENTREGAS[pedido] || { item: "faixa", faixa: pedido + " aprovado!", festa: true };
+    if (!r) return;
+    encerrarEntrega(m);
+    const id = "entrega-" + ev.id, [ponto] = pontosNaFrente(m, r, 1, { tipo: "entrega", dono: id });
+    if (!ponto) return;
+    ponto.ocupante = "entregador";   // o lugar do item: ninguém da turma senta em cima
+    const e = { id, motivo: ev.motivo, pedido, tipo, item: tipo.item, faixa: tipo.faixa || null, fase: "chegando", x: ponto.x, y: ponto.y, ponto,
+      r, participantes: (Array.isArray(ev.participantes) ? ev.participantes : []).filter(x => typeof x === "string"), desde: agora, prox: 0, entregador: null };
+    if (tipo.entregador) {   // da calçada, pela recepção e pelo corredor, como quem chega para trabalhar
+      const p = m.predio, parada = (tipo.recepcao && balcao(m)) || ponto, rota = caminho(m, { tipo: "fora" }, { tipo: "vaga", vaga: parada });
+      e.entregador = { id: "entregador", x: -24, y: p.entrada.calcadaY, rota, destino: { tipo: "vaga", vaga: parada }, parada, pose: "andando", olha: "dir",
+        ap: AP_ENTREGADOR, semente: 7, sentado: false, chave: 0, passos: 0, carrega: true, fala: null, ate: 0 };
+    }
+    m.entrega = e;
+  }
+
+  function encerrarEntrega(m) { m.entrega = null; }
+
+  // onde o motoboy espera: na frente do balcão da recepção (o ponto mais baixo em volta dele), olhando para o balcão
+  function balcao(m) {
+    const s = m.predio.salas.find(x => x.tipo === "recepcao");
+    if (!s) return null;
+    const pts = pontosEmVolta(m, s, s.px + s.pw / 2, s.chao + 34, 16, 14, "balcao").filter(v => alcanca(m, v));
+    return pts.length ? pts.reduce((a, b) => (b.y > a.y ? b : a)) : null;
+  }
+
+  const naEntrega = (b, e) => !b.rota.length && b.lugar && b.lugar.vaga && b.lugar.vaga.dono === e.id;
+
+  function cuidarDaEntrega(m, dt, agora) {
+    const e = m.entrega;
+    if (!e) return;
+    const g = e.entregador;
+    if (g) {   // o figurante anda com o mesmo passo dos agentes e fala pelo mesmo balão
+      if (g.fala && agora > g.ate) g.fala = null;
+      if (g.rota.length) andar(m, g, dt, agora);
+      g.pose = g.rota.length ? "andando" : "parado"; g.chave = g.y + 0.5;
+      if (!g.rota.length && e.fase === "chegando") entregar(m, e, agora);
+      if (e.fase !== "chegando" && !g.rota.length && agora > e.entregueEm + ENTREGADOR_FICA && g.destino) {   // entregou: volta para a rua
+        g.rota = caminho(m, { tipo: "vaga", vaga: g.parada }, { tipo: "fora" }); g.destino = null; g.olha = "esq";
+      }
+      if (!g.destino && !g.rota.length) e.entregador = null;   // sumiu na calçada
+    }
+    if (e.fase === "chegando" && !g && (m.lista.some(b => naEntrega(b, e)) || agora - e.desde > ENTREGA_CHEGAR)) entregar(m, e, agora);
+    if (e.fase === "chegando" && g && agora - e.desde > ENTREGA_CHEGAR) { entregar(m, e, agora); e.entregador = null; }   // caminho travado: não espera para sempre
+    if (e.fase === "fim") { if (!e.entregador) encerrarEntrega(m); return; }
+    if (e.fase === "entregue" && agora > e.entregueEm + ENTREGA_DURA) {   // cada um volta para o seu canto (o decidir solta a vaga)
+      e.fase = "fim"; e.ponto.ocupante = null;
+      if (!e.entregador) encerrarEntrega(m);
+      return;
+    }
+    if ((e.prox -= dt) <= 0) { e.prox = 1; chamarTurma(m, e); }
+  }
+
+  // a entrega chegou: campainha, o entregador anuncia, a turma comemora (ou come, toma café, cochila)
+  function entregar(m, e, agora) {
+    e.fase = "entregue"; e.entregueEm = agora;
+    if (e.entregador) { e.entregador.carrega = false; e.entregador.fala = sorteia(FRASES.social.entrega.chegou); e.entregador.ate = agora + 3; }
+    m.eventos.push({ nome: "campainha" });
+    const turma = m.lista.filter(b => naEntrega(b, e) || (b.destino && b.destino.vaga && b.destino.vaga.dono === e.id));
+    const frases = FRASES.social.entrega[e.item] || FRASES.social.entrega.faixa;
+    turma.forEach((b, i) => { b.responde = { em: agora + 0.8 + i * 0.5, texto: (i === 0 && e.tipo.primeira) || sorteia(frases), aceno: !e.tipo.pose }; });
+    if (e.tipo.festa) for (const b of turma) b.festa = agora + 5;
+    if (turma.length) m.eventos.push({ nome: "eba" });
+  }
+
+  // os participantes livres, parados e no prédio vão até a entrega: em fileiras em volta do item ou, no café, em roda
+  function chamarTurma(m, e) {
+    const quem = m.lista.filter(o => e.participantes.includes(o.id) && donoDe(o) !== e.id && !o.trabalho && !o.reuniao
+      && !o.rota.length && o.lugar && o.lugar.tipo !== "fora" && noPredio(o));
+    if (!quem.length) return;
+    const modelo = { tipo: "entrega", dono: e.id, pose: e.tipo.pose };
+    distribuir(m, quem, e.tipo.roda ? rodaDaEntrega(m, e, quem.length, modelo) : pontosNaFrente(m, e.r, quem.length, modelo, [e.ponto]));
+  }
+
+  // roda de café em volta das garrafas: pontos na elipse, 14 px entre eles, longe de quem já está ou vai estar por ali
+  function rodaDaEntrega(m, e, n, modelo) {
+    const s = e.ponto.sala, perto = [e.ponto, ...m.lista.map(o => (o.destino && o.destino.vaga) || (o.lugar && o.lugar.vaga)).filter(v => v && v.sala === s),
+      ...m.vagas.filter(v => v.ocupante && v.sala === s)], pts = [];
+    for (const v of pontosEmVolta(m, s, e.ponto.x, e.ponto.y, 30, 18, "entrega", perto)) {
+      if (pts.length >= n) break;
+      if (!pts.some(o => Math.hypot(o.x - v.x, o.y - v.y) < 14) && alcanca(m, v)) pts.push(Object.assign(v, modelo));
+    }
+    return pts;
+  }
+
   function cuidarDaCena(m, dt, agora) {
     const c = m.cena;
     if (!c || c.fase === "fim") { m.cenaSocial = null; return; }
+    if (c.tipo === "greve") { cuidarDaGreve(m, dt, agora); return; }
     if (agora >= c.fim + RESULTADO) { encerrarCena(m); return; }
     const a = m.bonecos.get(c.a), b = m.bonecos.get(c.b);
     if (c.fase === "espera") {   // só encena com os dois livres e no prédio nesta tela; ninguém é teletransportado
@@ -1039,15 +1250,30 @@ const Vida = (() => {
     cs.x = c.cx; cs.y = c.cy; cs.fase = c.fase; cs.ate = ate;
   }
 
-  // evento do servidor: café junto (vaga irmã), os outros num balão onde estão. Sem os dois livres e no prédio, é ignorado
+  // evento do servidor: café junto e fofoca no bebedouro (vaga irmã), os outros num balão onde estão. Sem os envolvidos
+  // livres e no prédio, é ignorado. "atendida": os grevistas desta tela agradecem de onde estiverem (quem trabalha, não)
   function encenarEvento(m, ev, agora) {
-    const a = m.bonecos.get(ev.a), b = m.bonecos.get(ev.b), falas = Object.hasOwn(FRASES.social, ev.tipo) && FRASES.social[ev.tipo];
-    if (!Array.isArray(falas) || !Array.isArray(falas[0]) || !a || !b || a === b || ![a, b].every(o => livreSocial(o) && !naCena(m, o))) return;
+    if (ev.tipo === "atendida") {
+      const ps = (Array.isArray(ev.participantes) ? ev.participantes : []).map(id => m.bonecos.get(id)).filter(o => o && !o.trabalho && noPredio(o));
+      ps.forEach((o, i) => { o.responde = { em: agora + 0.3 + i * 0.4, texto: sorteia(FRASES.social.atendida), aceno: true }; });
+      if (ps.length) m.eventos.push({ nome: "atendida" });
+      if (Number.isInteger(ev.motivo)) novaEntrega(m, ev, agora);   // e o pedido chega
+      return;
+    }
+    const a = m.bonecos.get(ev.a), falas = Object.hasOwn(FRASES.social, ev.tipo) && FRASES.social[ev.tipo];
+    if (!Array.isArray(falas) || !a || !livreSocial(a) || naCena(m, a)) return;
+    if (ev.tipo === "reclamacao" || ev.tipo === "sugestao") {   // balão de um só, onde ele estiver
+      falar(a, sorteia(falas), 3.5); m.eventos.push({ nome: "conversa", voz: a.handle });
+      return;
+    }
+    const b = m.bonecos.get(ev.b);
+    if (!Array.isArray(falas[0]) || !b || a === b || !livreSocial(b) || naCena(m, b)) return;
     const [fala, volta] = sorteia(falas);
     falar(a, fala, 3); m.eventos.push({ nome: "conversa", voz: a.handle });
     const parados = [a, b].every(o => !o.rota.length && o.lugar && !(o.lugar.vaga && o.lugar.vaga.temp));
-    if (ev.tipo === "cafe" && parados) {
-      const v = m.vagas.filter(x => x.tipo === "cafe" && !x.ocupante && !x.fechada).sort((x, y) => Math.hypot(x.x - a.x, x.y - a.y) - Math.hypot(y.x - a.x, y.y - a.y))[0];
+    if ((ev.tipo === "cafe" || ev.tipo === "fofoca") && parados) {   // a fofoca é no bebedouro: café, lanche ou papo, o mais perto
+      const serve = ev.tipo === "cafe" ? x => x.tipo === "cafe" : x => BEBIDA.includes(x.tipo);
+      const v = m.vagas.filter(x => serve(x) && !x.ocupante && !x.fechada && vagaIrma(m, x)).sort((x, y) => Math.hypot(x.x - a.x, x.y - a.y) - Math.hypot(y.x - a.x, y.y - a.y))[0];
       const irma = v && vagaIrma(m, v);
       if (irma) {
         falar(b, volta, 3);
@@ -1164,7 +1390,7 @@ const Vida = (() => {
     return n;
   }
 
-  return { criarMundo, sincronizar, passo, digitando, momento, objetoClicado, festaGeral, social, FRASES };
+  return { criarMundo, sincronizar, passo, digitando, momento, objetoClicado, festaGeral, social, textoGreve, FRASES };
 })();
 
 window.Vida = Vida;

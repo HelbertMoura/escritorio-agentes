@@ -134,7 +134,7 @@ async function buscar() {
     falhou = false;
     desenharPainel(); desenharEventos(); mostrarConexao(); paginaConversas();
     if (!$("ficha").hidden) renderFicha();
-    vigiarSocial();
+    vigiarSocial(); vigiarGreve();
   } catch (e) {
     falhou = true; mostrarConexao();
   }
@@ -146,7 +146,7 @@ function ajustarEscala() {
   dpr = Math.min(2, window.devicePixelRatio || 1);   // acima de 2x o celular só gasta bateria
   const palco = $("palco"), cheio = $("palco-cartao").classList.contains("cheio");
   vw = palco.clientWidth;
-  if (cheio) vh = Math.max(240, window.innerHeight);
+  if (cheio) vh = Math.max(240, window.innerHeight - (parseFloat(getComputedStyle($("palco-cartao")).top) || 0));   // sem a faixa de prévia ou demonstração do topo
   else if (window.innerWidth <= 760) vh = 268;   // celular: cartão de 268 px; a câmera completa fica na tela cheia
   else vh = Math.round(Math.max(380, Math.min(window.innerHeight * 0.72, vw * predio.H / predio.W)));
   tela.width = Math.round(vw * dpr); tela.height = Math.round(vh * dpr);
@@ -235,6 +235,13 @@ function desenharCena(t) {
   for (const o of predio.objetos) cena.push({ chave: o.chave, desenha: () => desenharObjeto(o, ta) });
   for (const a of predio.animados) if (!a.parede) cena.push({ chave: a.chave, desenha: () => desenharAnimado(a, ta) });
   for (const s of [...predio.salas, ...predio.baixo]) if (s.placa) cena.push({ chave: s.placa.y + Mapa.PLACA_H, desenha: () => { desenharPlaca(s); } });
+  const ent = mundo.entrega;   // entrega da greve atendida (vida.js): o item no ponto e o entregador, na ordem da cena
+  if (ent && ent.fase === "entregue") cena.push({ chave: ent.y, desenha: () => Efeitos.entrega(ctx, ent, t) });
+  if (ent && ent.entregador) cena.push({ chave: ent.entregador.chave ?? ent.entregador.y + 0.5, desenha: () => desenharEntregador(ent, t) });
+  if (ent && ent.entregador && ent.item === "pizza" && predio.entrada) { // a moto fica na calçada cinza, à direita do caminho da entrada, até o motoboy ir embora
+    const mx = predio.entrada.x + 12, my = predio.entrada.calcadaY - 6;
+    cena.push({ chave: my, desenha: () => Efeitos.moto(ctx, mx, my) });
+  }
   const cs = mundo.cenaSocial, naNuvem = b => !!cs && cs.fase === "luta" && (b.id === cs.a || b.id === cs.b);   // na luta, a nuvem cobre os dois (Efeitos.cena)
   for (const b of mundo.bonecos.values()) if (visivel(b) && !naNuvem(b)) cena.push({ chave: b.chave ?? b.y + 0.5, desenha: () => desenharBoneco(b, t) });
   cena.sort((a, b) => a.chave - b.chave).forEach(c => c.desenha());
@@ -245,12 +252,13 @@ function desenharCena(t) {
   Efeitos.festaAr(ctx, festa, t, dtQuadro, ceu);
   Efeitos.particulas(ctx, dtQuadro, mundo, t);
   Efeitos.cena(ctx, mundo, t);   // nuvem da briga e estrelinhas de quem perdeu, embaixo dos nomes e dos balões
-  anunciarVencedor();
+  anunciarVencedor(); anunciarEntrega();
   const visiveis = [...mundo.bonecos.values()].filter(visivel);
-  const ocupadas = [];
+  const ocupadas = Efeitos.placas(ctx, mundo, t);   // plaquinhas da greve: os nomes e os balões desviam delas
   visiveis.sort((a, b) => b.y - a.y || a.x - b.x).forEach(b => desenharEtiqueta(b, t, ocupadas));
   for (const b of visiveis) Efeitos.emote(ctx, b, t, ceu.escuro);
   const faixa = Efeitos.faixaVencedor(ctx, mundo, t); if (faixa) ocupadas.push(faixa);   // os balões desviam da faixa do vencedor
+  const faixaEntrega = Efeitos.entregaAr(ctx, mundo.entrega, t); if (faixaEntrega) ocupadas.push(faixaEntrega);   // e da faixa do pedido atendido
   for (const b of visiveis.filter(b => b.fala).sort((a, b) => b.y - a.y || a.x - b.x)) desenharBalao(b, ocupadas);
   Brincar.desenhar(ctx);   // realce, reações dos objetos e a festa do Konami
 }
@@ -383,6 +391,13 @@ function desenharBoneco(b, t) {
   if (est && est.classe === "aprovacao") maoLevantada(b, x, y, t);
   if (selecionado === b.id || realce === b.id) { ctx.strokeStyle = Mapa.cor("destaque"); ctx.lineWidth = Math.max(2, escala); ctx.strokeRect((x + 3) * escala, (y + 6) * escala, 16 * escala, 16 * escala); }
   ctx.globalAlpha = 1;
+}
+
+// o entregador da greve atendida é um figurante (não está no mundo.bonecos): o mesmo avatar, com o item nas mãos enquanto traz
+function desenharEntregador(e, t) {
+  const g = e.entregador, { x, y } = Avatar.boneco(ctx, g, t, escala);
+  Efeitos.uniforme(ctx, e.item, x, y, g.olha);   // o capacete e a bag do motoboy da pizza
+  if (g.carrega) Efeitos.itemNaMao(ctx, e.item, x, y, t);
 }
 
 function desenharLuzes(dt, ceu) {
@@ -942,7 +957,7 @@ function motivoRingue(b) { // por que o botão está desabilitado agora ("" = po
   if (Expediente.fora(Ceu.agora().h)) return "Fora do expediente: o ringue está fechado.";
   if (b.trabalho) return /^waiting_/.test(b.trabalho.status) ? `${b.nome} está esperando você agora.` : `${b.nome} está trabalhando agora.`;
   if (situacao(b) === "fora") return `${b.nome} não está no escritório agora.`;
-  if (estado.social.cena) return "Já tem briga no ringue; espere acabar.";
+  if (estado.social.cena) return estado.social.cena.tipo === "greve" ? "Tem greve na Sala comunal; o ringue espera." : "Já tem briga no ringue; espere acabar.";
   return "";
 }
 // seletor do par: só quem está livre e no escritório (o servidor confere de novo); Esc fecha e o foco volta ao botão
@@ -999,6 +1014,15 @@ function anunciarVencedor() { // um aviso educado por cena, só quando o resulta
   vencedorDito = cs.id;
   textoSe($("social-anuncio"), `${nomeAgente(cs.vencedor)} venceu ${nomeAgente(cs.vencedor === cs.a ? cs.b : cs.a)} no ringue.`);
 }
+let entregaDita = null, motoOuvida = null;
+function anunciarEntrega() { // um aviso e um som por entrega, quando o pedido chega nesta tela (a campainha é do vida.js)
+  const e = mundo.entrega;
+  if (e && e.item === "pizza" && e.entregador && e.id !== motoOuvida) { motoOuvida = e.id; Som.evento("moto"); }   // o motoboy estacionou
+  if (!e || e.fase !== "entregue" || e.id === entregaDita) return;
+  entregaDita = e.id;
+  setTimeout(() => Som.evento(`entrega_${e.item}`), 900);   // depois do "dim-dom"
+  textoSe($("social-anuncio"), `Chegou o pedido da greve${typeof e.pedido === "string" && e.pedido ? `: ${paraLer(e.pedido)}` : ""}!`);
+}
 let placarOrigem = null, placarVez = 0, placarTimer = 0;
 const semanaDe = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ""); return m ? `${Number(m[3])}/${Number(m[2])}` : ""; };
 function abrirPlacar() {
@@ -1041,6 +1065,58 @@ async function carregarPlacar() {
     $("placar-anterior").replaceChildren(coroa, `Campeão da semana passada: ${nomeAgente(ant.id)} (${num(ant.v)} ${num(ant.v) === 1 ? "vitória" : "vitórias"}, ${num(ant.d)} ${num(ant.d) === 1 ? "derrota" : "derrotas"}).`);
   }
 }
+// ---------- greve (fatia 2): o aviso em cima do mapa diz o motivo e atende o pedido pelo POST /api/social/greve/atender; no
+// mapa, o clique nas plaquinhas faz o mesmo (brincar.js). Some sem social, no modo sério e na Simulação
+let greveVista = null;
+const salaDaGreve = () => (predio && predio.ringue && predio.ringue.sala && predio.ringue.sala.nome) || "Sala comunal";
+const motivoGreve = g => (window.Vida && Vida.textoGreve ? String(Vida.textoGreve(Math.max(0, Math.round(Number(g.motivo) || 0))) || "") : "");
+// "MAIS CAFÉ" -> "Mais café": o leitor de tela não soletra; sem a pontuação do fim ("PUFE JÁ!"), que a frase já põe a dela
+const paraLer = t => (t.charAt(0) + t.slice(1).toLowerCase()).replace(/[!.]+$/, "");
+function vigiarGreve() {
+  const c = socialLigada() && estado.social.cena, g = c && c.tipo === "greve" && typeof c.id === "string" ? c : null, caixa = $("aviso-greve");
+  if (!g) {
+    if (!caixa.hidden && caixa.contains(document.activeElement)) tela.focus({ preventScroll: true });   // o foco não some com o aviso
+    caixa.hidden = true; $("pular-greve").hidden = true; greveVista = null; return;
+  }
+  const motivo = motivoGreve(g), n = Array.isArray(g.participantes) ? g.participantes.length : 0;
+  textoSe($("greve-motivo"), motivo ? `“${motivo}”` : "");
+  if (motivo) $("greve-motivo").setAttribute("aria-label", paraLer(motivo)); else $("greve-motivo").removeAttribute("aria-label");   // em maiúsculas, alguns leitores soletram
+  textoSe($("greve-texto"), `Greve na ${salaDaGreve()}`);
+  caixa.hidden = false; $("pular-greve").hidden = false;
+  if (g.id !== greveVista) { // um aviso por greve
+    greveVista = g.id;
+    textoSe($("social-anuncio"), `Greve na ${salaDaGreve()}! ${n > 1 ? `${n} agentes cruzaram os braços` : "Um agente cruzou os braços"}${motivo ? ` e ${n > 1 ? "pedem" : "pede"}: ${paraLer(motivo)}` : ""}.`);
+  }
+}
+async function atenderGreve() {
+  const c = socialLigada() && estado.social.cena, bt = $("greve-atender");
+  if (!c || c.tipo !== "greve" || bt.getAttribute("aria-disabled") === "true") return;   // sem envio duplo
+  bt.setAttribute("aria-disabled", "true");
+  const r = Brincar.demo ? Brincar.atenderDemo(c.id) : await postarResposta("api/social/greve/atender", { id: c.id });   // demonstração: local
+  bt.removeAttribute("aria-disabled");
+  if (r.status === 401) { location.href = "/entrar"; return; }
+  if (r.status === 200 || r.status === 404) { // 404: outra tela já atendeu, ou deu a hora; os grevistas se dispersam na hora
+    if (estado.social && estado.social.cena && estado.social.cena.id === c.id) estado.social = { ...estado.social, cena: null };
+    Vida.social(mundo, { v: 1, cena: null, eventos: [] });   // sem o "agora": o vida.js usa o desvio de relógio da última leitura
+    vigiarGreve();
+    textoSe($("social-anuncio"), r.status === 200 ? "Pedido atendido! A greve acabou." : "Essa greve já tinha acabado.");
+    return;
+  }
+  if (r.d && r.d.erro === "modo_serio") { // o modo sério foi ligado em outra tela: os grevistas levantam já, e o leitor de tela sabe por quê
+    if (estado.social) estado.social = { ...estado.social, serio: true, cena: null };
+    Vida.social(mundo, { v: 1, serio: true, cena: null, eventos: [] });
+    vigiarGreve();
+    textoSe($("social-anuncio"), mensagemDe(r, "O modo sério está ligado: a vida social está pausada."));
+    return;
+  }
+  textoSe($("social-anuncio"), r.status === 0 ? "Sem conexão com o escritório. Tente de novo." : mensagemDe(r, "Não deu para atender o pedido agora. Tente de novo."));
+}
+$("greve-atender").addEventListener("click", atenderGreve);
+$("pular-greve").addEventListener("click", ev => { // atalho do topo (logo depois do "Ir para o conteúdo"): leva o foco direto ao botão
+  ev.preventDefault();
+  if ($("aviso-greve").hidden) return;
+  $("greve-atender").scrollIntoView({ block: "nearest" }); $("greve-atender").focus();
+});
 $("placar-fechar").addEventListener("click", () => $("dlg-placar").close());
 $("dlg-placar").addEventListener("click", ev => { if (ev.target === $("dlg-placar")) $("dlg-placar").close(); });   // clique no fundo escurecido
 $("dlg-placar").addEventListener("close", () => { // Esc ou Fechar: para de reler e o foco volta para quem abriu

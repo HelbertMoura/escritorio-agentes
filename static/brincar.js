@@ -79,11 +79,25 @@ const Brincar = (() => {
     }
   }
 
+  // greve da vida social (o vida.js encena e põe b.placa em quem senta): as plaquinhas são um alvo de clique e toque; o
+  // teclado e o leitor de tela usam o aviso "Atender o pedido" do app.js, sempre à vista enquanto a greve durar
+  const greve = { tipo: "greve", rotulo: "Greve", dica: "atender o pedido", teclado: false };
+  function itemGreve() {
+    const cs = typeof mundo !== "undefined" && mundo && mundo.cenaSocial;
+    if (!cs || cs.tipo !== "greve" || cs.fase !== "greve") return null;
+    const qs = (cs.participantes || []).map(id => mundo.bonecos.get(id)).filter(b => b && b.placa && b.x > -20);
+    if (!qs.length) return null;
+    const xs = qs.map(b => b.x), ys = qs.map(b => b.y);
+    greve.x = Math.min(...xs) - 22; greve.w = Math.max(...xs) + 22 - greve.x; greve.y = Math.min(...ys) - 54; greve.h = Math.max(...ys) - 20 - greve.y;   // a faixa das placas, acima das cabeças
+    greve.sala = salaEm(cs.x, cs.y);
+    return greve;
+  }
   // objeto sob o ponto do mundo; no toque, o alvo tem pelo menos 44 px de tela
   function itemEm(p, toque) {
     const minimo = toque ? 44 * dpr / cam.k : 0;   // 44 px de tela, em unidades do mundo
     let melhor = null, dist = Infinity;
-    for (const it of itens) {
+    const g = itemGreve();
+    for (const it of g ? [g, ...itens] : itens) {
       const fx = Math.max(1, (minimo - it.w) / 2), fy = Math.max(1, (minimo - it.h) / 2);
       if (p.x < it.x - fx || p.x > it.x + it.w + fx || p.y < it.y - fy || p.y > it.y + it.h + fy) continue;
       const d = Math.hypot(p.x - (it.x + it.w / 2), p.y - (it.y + it.h / 2));
@@ -110,6 +124,7 @@ const Brincar = (() => {
     quadro_avisos: it => { abrirRecados(it); return "Quadro de avisos aberto"; },
     lousa: it => { const t = it.rotulo === "Lousa de código" ? PIADAS[Math.floor(Math.random() * PIADAS.length)] : it.rotulo === "Kanban" ? "3 FEITOS HOJE" : "INSPIRAÇÃO DO DIA"; reagir(it, "bolha", 3000, t.toUpperCase()); return `${it.rotulo}: ${t}`; },
     placar: () => { abrirPlacar(); return "Placar do ringue aberto"; },   // diálogo do ranking (app.js)
+    greve: () => { atenderGreve(); return ""; },   // o app.js atende e anuncia
     sino: it => { som("sino"); reagir(it, "ding", 1800, "DING!"); return "Sino tocado: venda fechada!"; },
     planta: it => { it.ref.agita = agora(); return "A planta balançou"; },
     expediente: it => { // fora da demonstração, abre o Personalizar no "Abre às" (app.js); na demonstração, só mostra o horário
@@ -123,7 +138,7 @@ const Brincar = (() => {
   function acionar(it) {
     const texto = ACOES[it.tipo](it);
     if (aviso && texto) { aviso.textContent = ""; aviso.textContent = texto; }
-    if (window.Vida && Vida.objetoClicado && mundo) Vida.objetoClicado(mundo, { tipo: it.tipo, x: it.x + it.w / 2, y: it.y + it.h, sala: it.sala });
+    if (it.tipo !== "greve" && window.Vida && Vida.objetoClicado && mundo) Vida.objetoClicado(mundo, { tipo: it.tipo, x: it.x + it.w / 2, y: it.y + it.h, sala: it.sala });
   }
   function reagir(it, tipo, dur, texto) {
     for (let i = reacoes.length - 1; i >= 0; i--) if (reacoes[i].it === it) reacoes.splice(i, 1);
@@ -163,7 +178,7 @@ const Brincar = (() => {
   function desenhar(c) {
     if (!P) return;
     posicionar();
-    const marca = focado || hover;
+    const marca = focado || (hover === greve ? itemGreve() : hover);   // a greve anda com quem está sentado (e some quando acaba)
     if (marca) { // contorno do objeto em foco ou sob o mouse
       const k = Mapa.cor("destaque");
       px(c, marca.x - 2, marca.y - 2, marca.w + 4, 1, k); px(c, marca.x - 2, marca.y + marca.h + 1, marca.w + 4, 1, k);
@@ -278,7 +293,7 @@ const Brincar = (() => {
   const demoEstado = new Map();   // handle -> trabalho atual (ou null)
   function estadoDemo() {
     const h = Ceu.agora().h, expediente = h >= 8.5 && h < 19, almoco = h >= 12 && h < 13;
-    const trabalhos = [], noRingue = SOC.cena ? [SOC.cena.a, SOC.cena.b] : [];
+    const trabalhos = [], noRingue = !SOC.cena ? [] : SOC.cena.tipo === "greve" ? SOC.cena.participantes : [SOC.cena.a, SOC.cena.b];
     NOMES.forEach(([handle], i) => {
       let t = demoEstado.get(handle) || null;
       if (!expediente) t = null;
@@ -296,7 +311,7 @@ const Brincar = (() => {
   }
   // vida social da demonstração: o mesmo bloco do /api/estado (contrato S2), montado aqui; uma briga a cada uns 2 min
   // e uns cafés e papos. Sem servidor, o sorteio é local; o vida.js encena do mesmo jeito
-  const SOC = { cena: null, eventos: [], proxima: Date.now() + 40000,   // o placar começa com umas lutas de mentira, para o quadro não nascer vazio
+  const SOC = { cena: null, eventos: [], proxima: Date.now() + 40000, proximaGreve: Date.now() + 100000,   // a greve vem depois da primeira briga   // o placar começa com umas lutas de mentira, para o quadro não nascer vazio
     placar: { "demo-aurora": { v: 3, d: 1, seq: 2 }, "demo-gael": { v: 2, d: 0, seq: 2 }, "demo-jade": { v: 1, d: 2, seq: -1 } }, anterior: { id: "demo-hana", v: 6, d: 1 } };
   const iso = ms => new Date(ms).toISOString().replace(/\.\d+Z$/, "Z");
   const idDemo = () => Math.random().toString(36).slice(2, 10);
@@ -309,7 +324,8 @@ const Brincar = (() => {
   }
   function socialDemo(trabalhos) {
     const agora = Date.now(), livres = livresDemo(trabalhos), c = SOC.cena;
-    if (c && (agora > Date.parse(c.fim) + 10000 || (agora < Date.parse(c.inicio) && !(livres.includes(c.a) && livres.includes(c.b))))) { // acabou, ou um lutador pegou tarefa antes do gongo
+    if (c && c.tipo === "greve" && agora > Date.parse(c.ate)) { SOC.cena = null; SOC.proximaGreve = agora + 300000; }   // deu a hora: "Por hoje chega…"
+    else if (c && c.tipo === "briga" && (agora > Date.parse(c.fim) + 10000 || (agora < Date.parse(c.inicio) && !(livres.includes(c.a) && livres.includes(c.b))))) { // acabou, ou um lutador pegou tarefa antes do gongo
       if (agora > Date.parse(c.fim)) contarDemo(c);   // só a briga que chegou ao fim entra no placar
       SOC.cena = null; SOC.proxima = agora + 120000;
     }
@@ -317,9 +333,18 @@ const Brincar = (() => {
       const a = livres[Math.floor(Math.random() * livres.length)], resto = livres.filter(x => x !== a);
       marcarDemo(a, resto[Math.floor(Math.random() * resto.length)], "auto");
     }
-    if (livres.length >= 2 && Math.random() < 0.15) {
-      const a = livres[Math.floor(Math.random() * livres.length)], resto = livres.filter(x => x !== a);
-      SOC.eventos.unshift({ id: idDemo(), tipo: Math.random() < 0.5 ? "cafe" : "papo", a, b: resto[Math.floor(Math.random() * resto.length)], em: iso(agora) });
+    if (!SOC.cena && agora >= SOC.proximaGreve && livres.length >= 4 && noExpediente(180000)) { // greve de demonstração: uns 2 min e meio
+      const quem = livres.slice().sort(() => Math.random() - 0.5).slice(0, Math.min(6, livres.length));
+      SOC.cena = { id: idDemo(), tipo: "greve", participantes: quem, motivo: Math.floor(Math.random() * 100), inicio: iso(agora), ate: iso(agora + 150000), origem: "auto" };
+      SOC.proxima = Math.max(SOC.proxima, agora + 240000);
+    }
+    const soltos = livres.filter(id => !(SOC.cena && (SOC.cena.tipo === "greve" ? SOC.cena.participantes : [SOC.cena.a, SOC.cena.b]).includes(id)));
+    if (soltos.length >= 3 && Math.random() < 0.2) { // café, papo, reclamação, sugestão e fofoca (fatia 2), no formato do servidor
+      const sorteia = l => l[Math.floor(Math.random() * l.length)], a = sorteia(soltos), b = sorteia(soltos.filter(x => x !== a));
+      const tipo = sorteia(["cafe", "papo", "reclamacao", "sugestao", "fofoca"]), e = { id: idDemo(), tipo, a, em: iso(agora) };
+      if (tipo === "cafe" || tipo === "papo") e.b = b;
+      if (tipo === "fofoca") Object.assign(e, { b, sobre: sorteia(livresDemo([]).filter(x => x !== a && x !== b)) });
+      SOC.eventos.unshift(e);
     }
     SOC.eventos = SOC.eventos.filter(e => agora - Date.parse(e.em) < 120000).slice(0, 10);
     return { v: 1, agora: iso(agora), serio: false, cena: SOC.cena, eventos: SOC.eventos, placar: { semana: segundaDemo(), top: rankingDemo().slice(0, 3), anterior: SOC.anterior } };
@@ -340,8 +365,16 @@ const Brincar = (() => {
     if (a === b) return recusa(409, "mesmo_agente", "Escolha dois agentes diferentes.");
     if (!noExpediente(47000)) return recusa(409, "fora_do_expediente", "Fora do expediente: o ringue está fechado.");
     if (ocupados.has(a) || ocupados.has(b)) return recusa(409, "trabalhando", "Um dos dois está trabalhando agora.");
-    if (SOC.cena) return recusa(409, "ocupado", "Já tem briga no ringue; espere um minuto.", { cena: SOC.cena });
+    if (SOC.cena) return recusa(409, "ocupado", SOC.cena.tipo === "greve" ? "Tem greve na Sala comunal; o ringue espera." : "Já tem briga no ringue; espere um minuto.", { cena: SOC.cena });
     return { status: 200, d: { cena: marcarDemo(a, b, "ordem") } };
+  }
+  // "Atender o pedido" na demonstração: as mesmas respostas do POST /api/social/greve/atender, sem sair do navegador
+  function atenderDemo(id) {
+    const c = SOC.cena;
+    if (!c || c.tipo !== "greve" || c.id !== id) return { status: 404, d: { erro: "greve", mensagem: "Essa greve já acabou." } };
+    SOC.eventos.unshift({ id: idDemo(), tipo: "atendida", greve: c.id, motivo: c.motivo, participantes: c.participantes.slice(), em: iso(Date.now()) });   // o motivo escolhe a entrega
+    SOC.cena = null; SOC.proximaGreve = Date.now() + 300000;
+    return { status: 200, d: { cena: null } };
   }
 
   // ---------------- início: atalhos, faixa da demonstração e botão do modo foto
@@ -368,6 +401,6 @@ const Brincar = (() => {
     });
   }
 
-  return { demo, iniciar, montar, desenhar, sobre, tocar, configDemo, estadoDemo, brigaDemo, placarDemo, surpresa, modoFoto };
+  return { demo, iniciar, montar, desenhar, sobre, tocar, configDemo, estadoDemo, brigaDemo, atenderDemo, placarDemo, surpresa, modoFoto };
 })();
 window.Brincar = Brincar;

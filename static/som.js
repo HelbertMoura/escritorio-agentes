@@ -168,6 +168,28 @@ const Som = (() => {
     gongo: ["jogos", () => { const f = vari(196, 0.03); tom(f, 1.8, "sine", 0.1); tom(f * 2.4, 1.1, "sine", 0.04); tom(f * 4.2, 0.5, "sine", 0.02); }],
     soco: ["jogos", () => { estalo(vari(160, 0.2), 0.14, 0.07, "lowpass"); estalo(vari(900, 0.2), 0.05, 0.03, "bandpass", 0.01, 2); }],   // "tchum" abafado
     torcida: ["conversa", () => { chiado(700, 1100, 0.04, 1.4); chiado(1400, 900, 0.02, 1.1, 0.25); }],   // "uuuh" da plateia
+    // greve: o coro "gre-ve! gre-ve!" (duas sílabas, duas vezes, com o burburinho da turma) e a festa de quem foi atendido
+    protesto: ["conversa", () => {
+      for (const t of [0, 0.55]) { tom(vari(233, 0.04), 0.16, "sawtooth", 0.014, t, 247); tom(vari(196, 0.04), 0.22, "sawtooth", 0.014, t + 0.2, 185); estalo(1500, 0.06, 0.03, "bandpass", t + 0.2, 0.8, 0.002); }
+      chiado(500, 700, 0.025, 1.1);
+    }],
+    // entrega do pedido: o "dim-dom" da campainha quando o entregador chega e o "eeee!" da turma
+    campainha: ["avisos", () => { tom(vari(784, 0.02), 0.5, "sine", 0.1); tom(vari(622, 0.02), 0.8, "sine", 0.1, 0.32); }],
+    eba: ["conversa", () => { chiado(900, 1600, 0.035, 0.9); chiado(1300, 2100, 0.02, 0.7, 0.12); for (let i = 0; i < 4; i++) estalo(1600, 0.08, 0.03, "bandpass", 0.35 + i * vari(0.12, 0.3), 0.8, 0.002); }],
+    atendida: ["conversa", () => {
+      [523, 659, 784, 1047].forEach((f, i) => tom(f, i === 3 ? 0.24 : 0.09, "triangle", 0.05, i * 0.08));
+      let t = 0.3; for (let i = 0; i < 7; i++) { estalo(1600, 0.1, 0.03, "bandpass", t, 0.8, 0.002); t += vari(0.11, 0.3); }
+    }],
+    // a entrega de cada pedido (app.js, uma vez por entrega): a moto do motoboy chegando e o som do que chegou
+    moto: ["avisos", () => { tom(vari(70, 0.05), 0.9, "sawtooth", 0.025, 0, 95); tom(vari(140, 0.05), 0.9, "square", 0.008, 0, 190); tom(440, 0.12, "square", 0.04, 1.0); tom(440, 0.18, "square", 0.04, 1.2); }],   // vrum e "bi-biii"
+    entrega_pizza: ["conversa", () => { estalo(500, 0.06, 0.09, "lowpass", 0, 0.7, 0.01); estalo(380, 0.05, 0.1, "lowpass", 0.22, 0.7, 0.01); chiado(1200, 2200, 0.02, 0.5, 0.35); }],   // as tampas abrindo
+    entrega_cafe: ["conversa", () => { for (let i = 0; i < 5; i++) tom(vari(420 + i * 45, 0.05), 0.07, "sine", 0.05, i * 0.11, vari(300 + i * 40, 0.05)); chiado(2500, 3800, 0.015, 0.8, 0.6); }],   // o "glu-glu" e o vapor
+    entrega_ar: ["avisos", () => { tom(2093, 0.06, "square", 0.03); tom(2637, 0.08, "square", 0.03, 0.09); chiado(300, 900, 0.03, 1.6, 0.2); }],   // o bipe do controle e a brisa
+    entrega_faixa: ["conversa", () => { tom(vari(523, 0.03), 0.35, "sawtooth", 0.025, 0, 698); tom(vari(659, 0.03), 0.4, "sawtooth", 0.02, 0.3, 880); for (let i = 0; i < 5; i++) estalo(2500, 0.05, 0.02, "highpass", 0.5 + i * 0.07, 0.8, 0.002); }],   // a língua de sogra e o confete
+    entrega_bolo: ["conversa", () => { [392, 392, 440, 392, 523, 494].forEach((f, i) => tom(f, i === 5 ? 0.5 : 0.18, "triangle", 0.045, [0, 0.15, 0.3, 0.55, 0.8, 1.05][i])); }],   // o comecinho do "parabéns"
+    entrega_pufe: ["conversa", () => { estalo(160, 0.12, 0.25, "lowpass", 0, 0.7, 0.02); chiado(600, 250, 0.03, 0.5, 0.05); }],   // o "puf" de quem se joga
+    entrega_roteador: ["avisos", () => { [1200, 1600, 2000].forEach((f, i) => tom(f, 0.05, "square", 0.025, i * 0.12)); tom(1319, 0.25, "sine", 0.05, 0.45); tom(1760, 0.3, "sine", 0.05, 0.6); }],   // conectando… conectou!
+    entrega_travesseiro: ["conversa", () => { estalo(220, 0.07, 0.2, "lowpass", 0, 0.7, 0.02); tom(vari(330, 0.04), 0.9, "sine", 0.03, 0.35, 196); }],   // o "fofo" e o bocejo
     konami: ["jogos", () => { [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => tom(f, i === 6 ? 0.3 : 0.07, "square", 0.04, i * 0.07)); }],
   };
 
