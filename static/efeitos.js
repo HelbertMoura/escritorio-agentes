@@ -469,6 +469,151 @@ const Efeitos = (() => {
     }
   }
 
+  // plaquinhas da greve (o vida.js põe b.placa em quem está sentado no chão): papelão num cabo de madeira, logo acima da
+  // cabeça, com o motivo em até duas linhas. A fileira é apertada (14 px): cada um pega a altura mais baixa (de duas) que não
+  // tapa a placa do vizinho, e quem não acha lugar ergue uma plaquinha pequena com "!", como numa passeata. Balançam no ritmo
+  // do protesto (paradas com menos movimento). Desenhadas antes dos nomes; devolve os retângulos, e os nomes e os balões desviam
+  function quebra(c, txt, max) {
+    const ps = txt.split(/\s+/).filter(Boolean), linhas = [];
+    for (const p of ps) { const u = linhas.length - 1; if (u >= 0 && c.measureText(`${linhas[u]} ${p}`).width <= max) linhas[u] += ` ${p}`; else linhas.push(p); }
+    return linhas.length > 2 ? [linhas[0], linhas.slice(1).join(" ")] : linhas;
+  }
+  function placas(c, mundo, t) {
+    // o pedido do aviso (o motivo da cena) escolhe o lugar primeiro: ele nunca vira só um "!"
+    const cs = mundo.cenaSocial, pedido = cs && cs.tipo === "greve" && window.Vida && Vida.textoGreve ? Vida.textoGreve(cs.motivo) : null;
+    const com = [...mundo.bonecos.values()].filter(b => typeof b.placa === "string" && b.placa && b.x > -20)
+      .sort((a, b) => (b.placa === pedido) - (a.placa === pedido) || a.y - b.y || a.x - b.x);
+    if (!com.length) return [];
+    const parado = calmo.matches, rets = [];
+    const bate = (x, y, w, h) => rets.some(r => x < r.x + r.w && x + w > r.x && y < r.y + r.h && y + h > r.y);
+    c.save(); c.font = "6px Silkscreen, monospace"; c.textAlign = "center"; c.textBaseline = "alphabetic";
+    com.forEach((b, i) => {
+      const linhas = quebra(c, b.placa.toUpperCase().slice(0, 24), 38), cabeca = Math.round(b.y - 19), mao = Math.round(b.y - 9);
+      let w = Math.ceil(Math.max(...linhas.map(l => c.measureText(l).width))) + 6, h = linhas.length * 6 + 4, base = null;
+      for (const sobe of [0, 18]) if (base === null && !bate(Math.round(b.x - w / 2) - 1, cabeca - sobe - h - 1, w + 2, h + 2)) base = cabeca - sobe;
+      const mini = base === null;
+      if (mini) { w = 7; h = 8; for (const sobe of [0, 9, 18, 27]) if (base === null && !bate(Math.round(b.x - w / 2) - 1, cabeca - sobe - h - 1, w + 2, h + 2)) base = cabeca - sobe; }
+      if (base === null) return;   // sem lugar nem para a pequena: segue só no coro
+      const x = Math.round(b.x - w / 2);
+      rets.push({ x: x - 1, y: base - h - 1, w: w + 2, h: h + 2 });   // o lugar reservado não conta o balanço
+      base -= parado ? 0 : (Math.floor(t / 450) + i) % 2;   // um sobe enquanto o vizinho desce
+      const y = base - h;
+      px(c, Math.round(b.x), base, 1, Math.max(1, mao - base), "#8a5a32");   // cabo, da mão até a placa
+      px(c, x - 1, y - 1, w + 2, h + 2, "#3b2a1e"); px(c, x, y, w, h, "#f1e4c4"); px(c, x, y + h - 1, w, 1, "#d6c193");
+      c.fillStyle = "#b3261e";
+      if (mini) c.fillText("!", x + w / 2, y + 7); else linhas.forEach((l, k) => c.fillText(l, x + w / 2, y + 7 + k * 6));
+    });
+    c.restore();
+    return rets;
+  }
+
+  // ---------------- entrega da greve atendida (o vida.js decide o caminho; aqui só o desenho, todo em pixel): o item nas mãos
+  // do entregador, o item entregue no ponto, a faixa e a brisa do ar. Com menos movimento, nada pisca nem balança
+  const CONTORNO = "#2a2230";
+  const ITENS = {
+    pizza(c, x, y, t, mao) { // na mão: três caixas fechadas; entregue: duas caixas abertas com pizza
+      if (mao) { for (let k = 0; k < 3; k++) { const yy = y - 3 * k; px(c, x - 7, yy - 3, 14, 3, CONTORNO); px(c, x - 6, yy - 3, 12, 2, "#d8b27a"); px(c, x - 2, yy - 3, 4, 1, "#c8332b"); } return; }
+      for (const dx of [-8, 8]) {
+        px(c, x + dx - 7, y - 15, 14, 6, CONTORNO); px(c, x + dx - 6, y - 14, 12, 5, "#e6c894");   // tampa aberta, de pé
+        px(c, x + dx - 3, y - 13, 6, 1, "#c8332b");
+        px(c, x + dx - 7, y - 9, 14, 9, CONTORNO); px(c, x + dx - 6, y - 8, 12, 7, "#d8b27a");
+        bolaPx(c, x + dx, y - 5, 4, "#d98c3a"); bolaPx(c, x + dx, y - 5, 3, "#f2c14e");
+        for (const [a, b] of [[-1, -6], [2, -4], [-2, -3]]) px(c, x + dx + a, y + b, 1, 1, "#c8332b");   // pepperoni
+        px(c, x + dx, y - 5, 1, 3, "#d98c3a");   // uma fatia já saiu
+      }
+    },
+    cafe(c, x, y, t, mao) { // garrafa térmica de inox com tampa vermelha; entregue: duas garrafas e os copinhos
+      const garrafa = (gx, gy) => { px(c, gx - 3, gy - 13, 7, 13, CONTORNO); px(c, gx - 2, gy - 12, 5, 11, "#c9ced8"); px(c, gx - 2, gy - 12, 1, 11, "#eef0f4"); px(c, gx - 3, gy - 15, 7, 3, "#c8332b"); px(c, gx + 4, gy - 10, 1, 5, CONTORNO); };
+      if (mao) { garrafa(x, y + 2); return; }
+      garrafa(x - 5, y); garrafa(x + 4, y);
+      for (const dx of [10, 13]) { px(c, x + dx, y - 4, 3, 4, CONTORNO); px(c, x + dx, y - 4, 2, 3, "#f4f1ea"); }
+      if (!calmo.matches) for (let k = 0; k < 2; k++) { const f = ((t / 900 + k / 2) % 1); px(c, x - 5 + k * 9, Math.round(y - 17 - f * 6), 1, 2, `rgba(255,255,255,${0.6 * (1 - f)})`); }   // vapor
+    },
+    bolo(c, x, y, t, mao) { // na mão: caixa branca com fita; entregue: bolo de dois andares com vela
+      if (mao) { px(c, x - 6, y - 8, 12, 9, CONTORNO); px(c, x - 5, y - 7, 10, 7, "#f4f1ea"); px(c, x - 1, y - 7, 2, 7, "#d23c6e"); px(c, x - 5, y - 4, 10, 1, "#d23c6e"); return; }
+      px(c, x - 9, y - 1, 18, 2, "#c9ced8");   // prato
+      px(c, x - 7, y - 7, 14, 6, CONTORNO); px(c, x - 6, y - 6, 12, 5, "#8a5a32"); px(c, x - 6, y - 6, 12, 2, "#f7b6cf");
+      px(c, x - 4, y - 11, 8, 4, CONTORNO); px(c, x - 3, y - 10, 6, 3, "#8a5a32"); px(c, x - 3, y - 10, 6, 1, "#f7b6cf");
+      for (const dx of [-5, -1, 3]) px(c, x + dx, y - 5, 1, 1, "#ffffff");   // confeitos
+      px(c, x, y - 14, 1, 3, "#3a6fd8");
+      const chama = calmo.matches || Math.floor(t / 160) % 2 ? "#ffd36b" : "#ff9a4d"; px(c, x, y - 16, 1, 2, chama);
+    },
+    pufe(c, x, y, t, mao) { // pufe redondo de tecido laranja com o botão no meio
+      const yy = mao ? y - 2 : y;
+      px(c, x - 7, yy - 8, 14, 8, CONTORNO); px(c, x - 6, yy - 7, 12, 6, "#f08a3c"); px(c, x - 6, yy - 7, 12, 2, "#ffb067");
+      px(c, x - 6, yy - 3, 12, 1, "#c96a22"); px(c, x, yy - 6, 1, 1, "#8a4a1a");
+    },
+    roteador(c, x, y, t, mao) { // roteador preto com duas antenas e leds; entregue: o sinal sai em arcos
+      px(c, x - 6, y - 5, 12, 5, CONTORNO); px(c, x - 5, y - 4, 10, 3, "#3a3a46");
+      px(c, x - 4, y - 11, 1, 6, CONTORNO); px(c, x + 3, y - 11, 1, 6, CONTORNO);
+      const pisca = calmo.matches ? 1 : Math.floor(t / 300) % 3;
+      for (let k = 0; k < 3; k++) px(c, x - 3 + k * 3, y - 3, 1, 1, k <= pisca ? "#5bd88a" : "#1f5a36");
+      if (mao) return;
+      const n = calmo.matches ? 3 : 1 + Math.floor(t / 400) % 3;   // as barrinhas do wi-fi enchendo
+      px(c, x, y - 14, 1, 1, "#8affc1");
+      for (let k = 1; k <= n; k++) { const r = k * 3; for (let a = -2.36; a <= -0.78; a += 0.5 / r) px(c, Math.round(x + Math.cos(a) * r), Math.round(y - 14 + Math.sin(a) * r), 1, 1, "#8affc1"); }   // arcos do sinal
+    },
+    travesseiro(c, x, y, t, mao) { // travesseiros fofos; entregue: a pilha e um "z" subindo
+      const um = (tx, ty, cor) => { px(c, tx - 6, ty - 5, 12, 5, CONTORNO); px(c, tx - 5, ty - 4, 10, 3, cor); px(c, tx - 5, ty - 4, 10, 1, "#ffffff"); };
+      if (mao) { um(x, y, "#dfe7f4"); return; }
+      um(x - 3, y, "#dfe7f4"); um(x + 4, y - 1, "#f4e2ec"); um(x, y - 4, "#e4f1e2");
+      if (!calmo.matches) { const f = (t / 1400) % 1; c.save(); c.font = "6px Silkscreen, monospace"; c.textAlign = "center"; c.fillStyle = `rgba(255,255,255,${1 - f})`; c.fillText("z", x + 6 + f * 4, y - 10 - f * 8); c.restore(); }
+    },
+    ar(c, x, y, t) { // ar portátil, com o 23 no visor e a brisa saindo em ondinhas
+      px(c, x - 6, y - 20, 12, 20, CONTORNO); px(c, x - 5, y - 19, 10, 18, "#eef0f4"); px(c, x - 5, y - 19, 10, 1, "#ffffff");
+      px(c, x - 4, y - 17, 8, 7, "#1b2a34"); for (let k = 0; k < 3; k++) px(c, x - 4, y - 8 + k * 2, 8, 1, "#b9c2cc");
+      c.save(); c.font = "6px Silkscreen, monospace"; c.textAlign = "center"; c.fillStyle = "#8affc1"; c.fillText("23", x, y - 11); c.restore();
+      const f = calmo.matches ? 0.3 : (t / 1200) % 1;
+      for (let k = 0; k < 3; k++) { const d = ((f + k / 3) % 1), bx = x + 6 + Math.round(d * 18), a = 0.75 * (1 - d); for (let i = 0; i < 5; i++) px(c, bx + i, y - 14 + k * 4 + Math.round(Math.sin((bx + i) / 2)), 1, 1, `rgba(170,220,255,${a})`); }
+    },
+    faixa() {},   // a faixa vai no ar (entregaAr)
+  };
+  // item entregue, no chão do ponto (o app.js ordena pela chave y, como os móveis)
+  function entrega(c, e, t) { const f = ITENS[e.item]; if (f && e.fase === "entregue") f(c, Math.round(e.x), Math.round(e.y), t, false); }
+  // item nas mãos do entregador; x,y = canto do quadro 22x22 do Avatar.boneco
+  function itemNaMao(c, item, x, y, t) { const f = ITENS[item]; if (f && item !== "ar" && item !== "faixa") f(c, x + 11, y + 17, t, true); }
+  // o motoboy da pizza: capacete vermelho por cima do boné, com a viseira para o lado em que anda, e a bag térmica nas
+  // costas: de costas, cobre o corpo; de lado, sai para trás do ombro; de frente, fica escondida. x,y = canto do quadro
+  // 22x22 (depois do Avatar.boneco), como no itemNaMao
+  function uniforme(c, item, x, y, olha) {
+    if (item !== "pizza") return;
+    const cx = x + 11, topo = y + 8;
+    if (olha !== "baixo") {
+      const [bx, bw] = olha === "cima" ? [cx - 5, 10] : olha === "esq" ? [cx + 5, 7] : [cx - 12, 7];
+      px(c, bx, topo + 2, bw, 10, CONTORNO); px(c, bx + 1, topo + 3, bw - 2, 8, "#c8332b"); px(c, bx + 1, topo + 3, bw - 2, 1, "#e8574d");
+      px(c, bx + Math.floor(bw / 2) - 2, topo + 6, 4, 2, "#f2c14e");   // a etiqueta da pizzaria
+    }
+    px(c, cx - 7, topo - 4, 14, 8, CONTORNO); px(c, cx - 6, topo - 3, 12, 6, "#d23c3c"); px(c, cx - 5, topo - 3, 6, 1, "#ff8a7a");
+    if (olha === "baixo") px(c, cx - 5, topo + 1, 10, 2, "#1b2a34");
+    else if (olha === "esq") px(c, cx - 7, topo, 5, 3, "#1b2a34");
+    else if (olha === "dir") px(c, cx + 2, topo, 5, 3, "#1b2a34");
+  }
+  // a moto do motoboy, estacionada na calçada ao lado da porta enquanto ele entrega (e.item "pizza", com entregador)
+  function moto(c, x, y) {
+    x = Math.round(x); y = Math.round(y);
+    for (const rx of [x - 9, x + 9]) { bolaPx(c, rx, y - 4, 4, CONTORNO); bolaPx(c, rx, y - 4, 2, "#6b6b78"); px(c, rx, y - 4, 1, 1, "#c9ced8"); }
+    px(c, x - 8, y - 10, 15, 4, CONTORNO); px(c, x - 7, y - 9, 13, 2, "#d23c3c");   // tanque e banco
+    px(c, x - 6, y - 12, 7, 2, "#2b2b34");
+    px(c, x + 6, y - 16, 2, 8, CONTORNO); px(c, x + 5, y - 17, 5, 2, CONTORNO); px(c, x + 9, y - 13, 2, 2, "#ffd36b");   // guidão e farol
+    px(c, x - 15, y - 17, 9, 8, CONTORNO); px(c, x - 14, y - 16, 7, 6, "#c8332b"); px(c, x - 12, y - 14, 3, 2, "#f2c14e");   // o baú da pizza
+  }
+  // faixa "<pedido> aprovado!" com bandeirinhas, acima do ponto, enquanto a entrega estiver em "entregue"; devolve o retângulo
+  function entregaAr(c, e, t) {
+    if (!e || e.fase !== "entregue" || !e.faixa) return null;
+    c.save(); c.font = "8px Silkscreen, monospace"; c.textAlign = "center"; c.textBaseline = "alphabetic";
+    const txt = String(e.faixa).toUpperCase().slice(0, 32), w = Math.ceil(c.measureText(txt).width) + 14, x = Math.round(e.x - w / 2);
+    const y = Math.round(e.y) - 52 + (calmo.matches ? 0 : Math.round(Math.sin(t / 360)));
+    px(c, x - 1, y - 1, w + 2, 14, CONTORNO); px(c, x, y, w, 12, "#5bd88a"); px(c, x, y, w, 1, "#b8f5cf"); px(c, x, y + 11, w, 1, "#2f9a5c");
+    for (let k = 0; k * 8 < w; k++) { const cor = ["#ffd36b", "#d23c3c", "#3a6fd8"][k % 3]; px(c, x + k * 8 + 2, y + 13, 4, 2, cor); px(c, x + k * 8 + 3, y + 15, 2, 1, cor); }   // bandeirinhas
+    c.fillStyle = "#123a24"; c.fillText(txt, e.x, y + 9);
+    if (!calmo.matches) for (let k = 0; k < 16; k++) { // a festinha: confete caindo da faixa, cada papelzinho no seu ritmo
+      const f = ((t / (1400 + (k % 5) * 170)) + k * 0.37) % 1, cx = x + ((k * 53) % w) + Math.round(Math.sin(t / 300 + k) * 2);
+      px(c, cx, y + 16 + Math.round(f * 34), 2, 1 + (k % 2), ["#ffd36b", "#d23c3c", "#3a6fd8", "#5bd88a", "#f7b6cf"][k % 5]);
+    }
+    c.restore();
+    return { x: x - 1, y: y - 1, w: w + 2, h: 18 };
+  }
+
   // faixa "VENCEU: <nome>" acima do ringue, pelos 6 s do resultado: por cima dos nomes e dos emotes; os balões desviam dela.
   // O nome do vencedor só aparece aqui (UI), nunca num balão; com menos movimento, a faixa fica parada
   function faixaVencedor(c, mundo, t) {
@@ -654,7 +799,7 @@ const Efeitos = (() => {
   // H) onde está o robô aspirador agora (null de dia ou fora da sala comunal)
   const posAspirador = () => (aspirador ? { x: aspirador.x, y: aspirador.y } : null);
 
-  return { lancar, aspirador: posAspirador, tela, objeto, animado, iniciar, exterior, luzesNoite, depoisObjeto, chapeu, emote, particulas, robo, painelLogo, festaChao, festaAr, cena, faixaVencedor, placar };
+  return { lancar, aspirador: posAspirador, tela, objeto, animado, iniciar, exterior, luzesNoite, depoisObjeto, chapeu, emote, particulas, robo, painelLogo, festaChao, festaAr, cena, placas, entrega, itemNaMao, uniforme, moto, entregaAr, faixaVencedor, placar };
 })();
 
 window.Efeitos = Efeitos;

@@ -352,6 +352,16 @@ body.travado { overflow: hidden; }
 .pl-pos { width: 1.5em; color: var(--suave); font-weight: 700; }
 .pl-nome { overflow-wrap: anywhere; font-weight: 600; }
 .placar-tabela tbody tr:first-child .pl-pos { color: var(--ambar-texto); }
+/* aviso da greve (vida social): com o motivo e o "Atender o pedido", no canto de baixo, em cima da rua, para não tapar as
+   salas de cima (nem o "!" de quem espera você); no cartão do celular, vai para baixo do mapa */
+.aviso-greve { position: absolute; left: 14px; bottom: 14px; z-index: 5; display: flex; align-items: center; gap: 12px; max-width: min(460px, calc(100% - 28px)); padding: 8px 8px 8px 12px;
+  border-radius: 14px; background: rgba(28, 28, 27, .95); border: 1px solid color-mix(in srgb, var(--ambar) 55%, transparent); box-shadow: 0 10px 30px rgba(0,0,0,.45); animation: surgir var(--medio); }
+.aviso-greve[hidden] { display: none; }
+.greve-linha { margin: 0; flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; font-size: 14px; line-height: 1.3; }
+.greve-ic { flex: none; font-size: 18px; }
+.greve-motivo { color: var(--ambar-texto); font-weight: 700; overflow-wrap: anywhere; }
+.aviso-greve .botao { flex: none; min-height: 44px; }
+.aviso-greve .botao[aria-disabled="true"] { opacity: .7; cursor: progress; }
 
 /* widgets embaixo do mapa: esperando você e trabalhando agora */
 .widgets { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px; margin-bottom: 22px; }
@@ -773,6 +783,8 @@ body.demo [data-rota="personalizar"] { display: none; }
   .controles button + button { border-top: 1px solid rgba(255,255,255,.12); }
   .controles .rotulo-ver { display: none; }
   .selo-vivo { left: 10px; top: 10px; max-width: calc(100% - 20px); }
+  .aviso-greve { left: 8px; right: 60px; bottom: 8px; max-width: none; gap: 8px; padding: 6px 6px 6px 10px; }   /* tela cheia: livre dos controles */
+  .greve-linha { font-size: 13px; }
   .dica-mapa { display: none; }
   .ficha { left: 8px; right: 8px; bottom: 8px; width: auto; }
   /* mapa em cartão de 268 px: só o selo e "Abrir o mapa em tela cheia"; a câmera fica na tela cheia */
@@ -782,6 +794,8 @@ body.demo [data-rota="personalizar"] { display: none; }
   .palco-cartao:not(.cheio) .abrir-cheia { display: flex; position: absolute; z-index: 3; left: 10px; right: 10px; top: calc(268px - 54px); height: 44px; align-items: center; justify-content: center; gap: 8px;
     border-radius: var(--r-botao); background: rgba(15, 15, 14, .86); border: 1px solid rgba(255, 255, 255, .14); color: var(--texto); font-size: 14px; font-weight: 600; }
   /* a ficha do agente entra embaixo do mapa, dentro do cartão, sem cobrir o agente */
+  /* o aviso da greve também: embaixo do mapa, para não tapar a fileira de cima (nem o "!" de quem espera você) */
+  .palco-cartao:not(.cheio) .aviso-greve { position: static; border: 0; border-top: 1px solid var(--borda); border-radius: 0; box-shadow: none; background: var(--cartao); padding: 8px 10px; animation: none; }
   .palco-cartao:not(.cheio) .ficha { position: static; width: auto; border: 0; border-top: 1px solid var(--borda); border-radius: 0; box-shadow: none; background: var(--cartao); }
   /* acontecendo agora: a linha inteira já leva ao mapa; o "Ver no mapa" fica só para o leitor de tela e a frase pode quebrar */
   .ver-mapa { position: absolute; width: 1px; height: 1px; min-height: 0; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

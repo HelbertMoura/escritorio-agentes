@@ -12,6 +12,8 @@ Vida social: o diretor do servidor (social.py) roda com a leitura deste arquivo,
 forçar uma briga na hora (dois agentes sem tarefa, dentro do expediente), o mesmo POST do "Mandar pro ringue":
   curl -H "Origin: http://127.0.0.1:7372" -H "Content-Type: application/json" -d '{"a": "<id>", "b": "<id>"}'
        http://127.0.0.1:7372/api/social/briga
+--greve: força uma greve no primeiro passo do diretor (como se já houvesse 5 reclamações hoje), com os livres do arquivo,
+dentro do expediente; para atender, o clique na plaquinha ou o POST /api/social/greve/atender {"id": "<cena.id>"}.
 """
 import json, os, sys, threading, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -21,6 +23,7 @@ PORTA = int(os.environ.get("PREVIA_PORTA", "7372"))
 # A checagem de origem dos POST compara com a BASE: a prévia declara a própria, antes do import.
 os.environ["ESCRITORIO_BASE"] = f"http://127.0.0.1:{PORTA}"
 import escritorio as e
+import social
 
 class Token:
     def token(self):
@@ -114,6 +117,9 @@ srv.previa_sem_login = True  # prévia local, só em 127.0.0.1
 # o mesmo diretor do servidor, com a leitura do arquivo; o placar semanal vai para o placar.json da pasta temporária
 srv.social = e.Social(srv.leitor, e.config_publica, e.log, e.FUSO, guardar=lambda dados: e.gravar(e.ARQ_PLACAR, dados),
                       placar=e.ler_placar())
+if "--greve" in sys.argv[1:]:   # o dia já começa com as reclamações; a greve sai no primeiro passo (com 3 livres ou mais)
+    srv.social.dia = e.datetime.datetime.now(e.FUSO).date()
+    srv.social.reclamaram_hoje = ["previa"] * social.GREVE_RECLAMACOES
 srv.social.start()
 # modo construção: a planta salva vai para o planta.json da pasta temporária (some ao fechar a prévia)
 srv.planta = e.Planta(e.ARQ_PLANTA, e.log, lambda dados: e.gravar(e.ARQ_PLANTA, dados))

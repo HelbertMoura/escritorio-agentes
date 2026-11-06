@@ -9,7 +9,8 @@ só na rede privada da pessoa, com HTTPS. Na frente de tudo há login com usuár
 
 Rotas: /entrar /primeiro-acesso /sair /logo  /  /<estático>  /api/estado /api/config /api/conversa /api/marca
        /api/logo /api/conversa/modo /api/conversa/modo/fechar /api/conversa/responder /api/social /api/social/briga
-       /api/social/placar /api/planta /oauth/conectar /oauth/retorno (as quatro primeiras e os estáticos do login sem sessão)
+       /api/social/greve/atender /api/social/placar /api/planta /oauth/conectar /oauth/retorno
+       (as quatro primeiras e os estáticos do login sem sessão)
 Uso: python3 -I escritorio.py           serviço (variáveis no /etc/escritorio.env)
      python3 -I escritorio.py codigo    mostra o código de primeiro acesso, só lendo (sudo escritorio-codigo)
 Só biblioteca padrão do Python 3.
@@ -1721,8 +1722,9 @@ class Pagina(BaseHTTPRequestHandler):
         return self._json(st, corpo)
 
     def _post_social(self, rota):
-        """"Mandar pro ringue": Origin obrigatório e igual à BASE (sem a volta para o Referer), sessão (ou a prévia) e
-        JSON exato de até 256 B. Nada aqui chama o Leitor, o MCP ou o agentes.chat."""
+        """"Mandar pro ringue" ({"a", "b"}) e "atender o pedido" da greve ({"id"}): Origin obrigatório e igual à BASE (sem
+        a volta para o Referer), sessão (ou a prévia) e JSON exato de até 256 B. Nada aqui chama o Leitor, o MCP ou o
+        agentes.chat."""
         if self.headers.get("Origin") != BASE:
             log(evento="http", rota=rota[:40], resultado="origem_recusada")
             return self._json(*erro(403, "origem", "Origem não permitida."))
@@ -1735,15 +1737,20 @@ class Pagina(BaseHTTPRequestHandler):
             dados = json.loads(self._corpo(256))
         except (ValueError, RecursionError):   # tamanho, UTF-8 ou JSON inválido
             dados = None
-        if not isinstance(dados, dict) or set(dados) != {"a", "b"} or \
-                not all(isinstance(dados[k], str) and 0 < len(dados[k]) <= 100 for k in ("a", "b")):
+        briga = rota == "/api/social/briga"
+        chaves = ("a", "b") if briga else ("id",)
+        if not isinstance(dados, dict) or set(dados) != set(chaves) or \
+                not all(isinstance(dados[k], str) and 0 < len(dados[k]) <= 100 for k in chaves):
             return self._json(*erro(400, "pedido", "Pedido inválido."))
         social = getattr(self.server, "social", None)
         if not social:
             return self._json(*erro(404, "social_desligado", "A vida social está desligada neste escritório."))
-        st, corpo = social.ordenar(dados["a"], dados["b"], time.time(), self.server.leitor.foto(), config_publica())
+        if briga:
+            st, corpo = social.ordenar(dados["a"], dados["b"], time.time(), self.server.leitor.foto(), config_publica())
+        else:
+            st, corpo = social.atender(dados["id"], time.time(), config_publica())
         if st == 200:
-            log(evento="social", resultado="briga_ordem", usuario=usuario)
+            log(evento="social", resultado="briga_ordem" if briga else "greve_atendida", usuario=usuario)
         return self._json(st, corpo)
 
     def _post_planta(self, rota):
@@ -1780,7 +1787,7 @@ class Pagina(BaseHTTPRequestHandler):
         acesso = self.server.acesso
         if rota in ("/api/conversa/modo", "/api/conversa/modo/fechar", "/api/conversa/responder"):
             return self._post_resposta(rota)
-        if rota == "/api/social/briga":
+        if rota in ("/api/social/briga", "/api/social/greve/atender"):
             return self._post_social(rota)
         if rota == "/api/planta":
             return self._post_planta(rota)

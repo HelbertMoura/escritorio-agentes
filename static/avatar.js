@@ -18,7 +18,7 @@ const Avatar = (() => {
   const TAM = 22;          // quadro do avatar
   const CORPO = { x: 4, y: 8, w: 14, h: 13 };
   const POSES = ["parado", "andando", "sentado", "digitando", "esperando", "cafe", "jogando", "fliperama", "raquete", "taco",
-    "pebolim", "tocando", "comemorando", "acenando", "carinho", "dormindo", "dancando", "violao", "arremesso", "tonto"];
+    "pebolim", "tocando", "comemorando", "acenando", "carinho", "dormindo", "dancando", "violao", "arremesso", "tonto", "sentado_chao"];
   const DIRECOES = ["baixo", "cima", "esq", "dir"];
   const NUM_POSE = Object.fromEntries(POSES.map((p, i) => [p, i])), NUM_DIR = Object.fromEntries(DIRECOES.map((d, i) => [d, i]));
   const MADEIRA = "#c99a5b", ESCURO = "#2b2b34";
@@ -153,7 +153,7 @@ const Avatar = (() => {
         mao(c, p, E, Y);
         if (f) mao(c, p, 16, 9); else { mao(c, p, D, 3); px(c, 19, 0, "#f4f4f6", 3, 3); }
         break;
-      case "esperando": case "sentado": case "dormindo": mao(c, p, 5, 17); mao(c, p, 14, 17); break;
+      case "esperando": case "sentado": case "dormindo": case "sentado_chao": mao(c, p, 5, 17); mao(c, p, 14, 17); break;
       case "tonto": mao(c, p, E - f, Y + 2); mao(c, p, D + 1 - f, Y + 1); break;   // braços largados, balançando
       default: mao(c, p, E, Y); mao(c, p, D, Y);
     }
@@ -165,6 +165,10 @@ const Avatar = (() => {
     const pal = CORES[aparencia.color] || CORES.graphite, costas = olha === "cima";
     if (pose === "andando") pes(c, pal, f);
     corpo(c, pal, costas);
+    if (pose === "sentado_chao") {   // sentado no chão (greve): os pés aparecem dos dois lados, de pernas cruzadas
+      const y = CORPO.y + CORPO.h - 2;
+      px(c, CORPO.x - 1, y, pal.contorno, 4, 2); px(c, CORPO.x + CORPO.w - 3, y, pal.contorno, 4, 2);
+    }
     if (!costas) {
       const tipo = pose === "comemorando" ? "happy" : pose === "tonto" ? "tonto" : pose === "dormindo" || (pose === "cafe" && f) ? "fechados" : aparencia.eyes;
       olhos(c, tipo, piscando, olha === "esq" ? -2 : olha === "dir" ? 2 : 0);
@@ -222,6 +226,7 @@ const Avatar = (() => {
     else if (pose === "dancando") oy = fixo ? 0 : f * 2;   // sobe e desce no ritmo
     else if (pose === "digitando" || pose === "jogando" || pose === "pebolim") oy = fixo ? 0 : f;
     else if (pose === "dormindo") oy = fixo ? 0 : Math.floor(ts / 1600) % 2;
+    else if (pose === "sentado_chao") oy = -3;   // no chão: o corpo fica 3 px mais baixo que em pé
     else if (!b.sentado && pose !== "esperando" && !fixo) oy = Math.floor(ts / 1400) % 2;   // respiração
     atual.pose = pose; atual.olha = olha; atual.f = f; atual.oy = oy; atual.piscando = piscando;
     return atual;

@@ -16,11 +16,19 @@
 // andando ou não, e em 2 de cada 3 brigas alguém (lutador ou plateia) pega tarefa no meio da luta: tem de ir para a mesa
 // em até 3 s (tarefaSemMesa). Com --longe, o par sai dos dois livres mais longe do ringue. Com --calmo, a página roda
 // com prefers-reduced-motion: reduce: ninguém pode correr (pressaNoCalmo), e o lutador que não chega andando aparece
-// direto no ponto de luta (conta em "diretos"). Com --times N (1 a 20), remonta o
+// direto no ponto de luta (conta em "diretos"). Com --greves N, força N greves (fatia 2; uma de cada vez, no formato do
+// servidor) com até 8 livres: alguém tem de sentar no chão (greveSemSentar), só quem está sentado tem plaquinha
+// (placaErrada), em 2 de cada 3 um grevista sentado pega tarefa e vai para a mesa em até 3 s (tarefaSemMesa), metade acaba
+// atendida e metade no horário, e 6 s depois do fim ninguém segue sentado na greve nem com plaquinha (greveNaoDispersou).
+// Ninguém senta atrás da base do ringue, entre a parede e as cordas (greveAtrasDoRingue). A greve atendida traz a entrega
+// do pedido (um motivo diferente a cada uma): a entrega tem de chegar (entregaSemChegar), alguém da turma vai até ela
+// (entregaSemTurma), ninguém com tarefa fica parado nela (entregaComTrabalho), o motoboy da pizza para no balcão da recepção
+// (motoboyLonge) e, 6 s depois, todos voltaram (greveNaoDispersou).
+// Com --times N (1 a 20), remonta o
 // prédio com N times, com os agentes repartidos entre eles. Durante o estresse, o Vida.social do app fica desligado.
 //
 // Uso (com a prévia no ar: python ferramentas/previa.py dados.json):
-//   node ferramentas/estresse_vida.mjs [url] [--minutos 40] [--acoes] [--prints <prefixo>] [--grande] [--brigas 10] [--longe] [--calmo] [--times 20]
+//   node ferramentas/estresse_vida.mjs [url] [--minutos 40] [--acoes] [--prints <prefixo>] [--grande] [--brigas 10] [--longe] [--calmo] [--greves 6] [--times 20]
 //   url padrão http://127.0.0.1:7372/?hora=10.5; outros cenários: ?demo=1, ?data=2026-11-06&hora=17 (sexta à tarde)
 //   --grande acrescenta 14 times vazios (prédio e salão largos) e procura uma marca com jukebox e xadrez
 //   NAVEGADOR=<caminho do executável> troca o navegador; sem ela, usa o Chrome e, na falta, o Edge.
@@ -35,7 +43,7 @@ const args = process.argv.slice(2);
 const opcao = nome => { const i = args.indexOf(nome); return i < 0 ? null : args.splice(i, 2)[1] ?? ""; };
 const flag = nome => { const i = args.indexOf(nome); return i >= 0 && !!args.splice(i, 1); };
 const MINUTOS = Number(opcao("--minutos") ?? 40), PREFIXO = opcao("--prints"), ACOES = flag("--acoes"), GRANDE = flag("--grande");
-const BRIGAS = Number(opcao("--brigas") ?? 0), TIMES = Number(opcao("--times") ?? 0), LONGE = flag("--longe"), CALMO = flag("--calmo");
+const BRIGAS = Number(opcao("--brigas") ?? 0), GREVES = Number(opcao("--greves") ?? 0), TIMES = Number(opcao("--times") ?? 0), LONGE = flag("--longe"), CALMO = flag("--calmo");
 const URL_PAGINA = args[0] || "http://127.0.0.1:7372/?hora=10.5";
 const TELAS = fileURLToPath(new URL("../.previa/telas/", import.meta.url));
 const espera = ms => new Promise(r => setTimeout(r, ms));
@@ -50,6 +58,7 @@ const sair = async (codigo, msg) => {
 };
 process.on("exit", () => { try { nav && nav.exitCode === null && nav.kill(); } catch {} });   // falha no meio: não deixa navegador órfão
 if (!(MINUTOS > 0)) await sair(2, "--minutos precisa ser um número maior que zero");
+if (!Number.isInteger(GREVES) || GREVES < 0) await sair(2, "--greves precisa ser um inteiro >= 0");
 if (!Number.isInteger(BRIGAS) || BRIGAS < 0 || !Number.isInteger(TIMES) || TIMES < 0 || TIMES > 20) await sair(2, "--brigas precisa ser um inteiro >= 0 e --times, de 1 a 20");
 try { await (await fetch(URL_PAGINA)).arrayBuffer(); } catch { await sair(2, `prévia fora do ar em ${URL_PAGINA} (python ferramentas/previa.py dados.json)`); }
 
@@ -124,6 +133,11 @@ await js(`(() => {
   const B = E.brigas = { faltam: ${BRIGAS}, prox: virt / 1000 + 20, atual: null, n: 0, marcadas: 0, lutaram: 0, comPlateia: 0, maiorPlateia: 0,
     tarefas: 0, semMesa: 0, exSemMesa: [], diretos: 0, pressaCalmo: 0, exPressaCalmo: [] };
   const CALMO = ${CALMO}, LONGE = ${LONGE};
+  const G = E.greves = { faltam: ${GREVES}, prox: virt / 1000 + 25, atual: null, n: 0, marcadas: 0, sentaram: 0, maiorSentados: 0, atendidas: 0,
+    semSentar: 0, placaErrada: 0, exPlaca: [], naoDispersou: 0, exDispersou: [], atras: 0,
+    entregas: 0, entregues: 0, semChegar: 0, semTurma: 0, comTrabalho: 0, motoboyLonge: 0, itens: {} };
+  const MOTIVOS = [0, 7, 9, 1, 8, 5, 2, 3, 4, 6];   // café, pizza, ar, sexta livre, soneca, bolo, pufe, wi-fi, menos reunião, bug
+  const naGreve = (o, id) => !o.rota.length && o.lugar && o.lugar.vaga && o.lugar.vaga.tipo === "greve" && o.lugar.vaga.dono === id;
   const noPredio = b => b.x >= 0 && (b.rota.length ? !(b.destino && b.destino.tipo === "fora") : !!b.lugar && b.lugar.tipo !== "fora");
   const extras = [], STATUS = ["running", "waiting_input", "waiting_approval"];
   const tarefas = () => {
@@ -171,7 +185,7 @@ await js(`(() => {
       B.atual = null; B.prox = agora + 20;
       return;
     }
-    if (!B.faltam || agora < B.prox) return;
+    if (!B.faltam || agora < B.prox || G.atual) return;
     // o par sai de todos os livres no prédio, andando ou não, como fazem o servidor e o seletor da ficha
     const livres = mundo.lista.filter(b => !b.trabalho && !b.reuniao && noPredio(b)).sort(() => Math.random() - 0.5);
     const r = mundo.predio.ringue, rx = r ? r.x + r.w / 2 : 0;
@@ -185,6 +199,77 @@ await js(`(() => {
     B.atual = { id, n: B.n, a: a.id, fim: agora + fim, lutou: false, plateia: 0, dada: null }; B.faltam--; B.marcadas++;
     social(mundo, { v: 1, agora: iso(agora), serio: false, eventos: [], cena: { id, tipo: "briga", a: a.id, b: b.id, vencedor: Math.random() < 0.5 ? a.id : b.id,
       inicio: iso(agora + ini), fim: iso(agora + fim), origem: "ordem" } });
+  };
+  const grevar = agora => {
+    const c = G.atual;
+    if (c && !c.acabou) {
+      const sentados = mundo.lista.filter(o => naGreve(o, c.id));
+      c.max = Math.max(c.max, sentados.length);
+      const pr = mundo.predio.ringue;   // na frente do ringue, nunca entre a parede e as cordas
+      if (pr) for (const o of sentados) if (o.y < pr.y + pr.h && !c.atras.has(o.id)) { c.atras.add(o.id); G.atras++; }
+      const ativa = mundo.cena && mundo.cena.id === c.id && mundo.cena.fase !== "fim";   // no "ate", as plaquinhas saem antes de levantarem
+      for (const o of mundo.lista) if (ativa && !!o.placa !== sentados.includes(o)) {   // plaquinha só em quem está sentado na greve
+        G.placaErrada++; if (G.exPlaca.length < 5) G.exPlaca.push({ id: o.id, placa: o.placa, sentado: sentados.includes(o), greve: c.id });
+      }
+      if (!c.dada && c.n % 3 && sentados.length && sentados[0].mesa) {   // 2 de cada 3: um grevista sentado pega tarefa
+        c.dada = { id: sentados[0].id, em: agora, ok: false };
+        extras.push({ agente_id: sentados[0].id, run_id: "estresse-" + c.id, status: STATUS[B.tarefas++ % 3], rotulo: "Tarefa do estresse", url: "" });
+        tarefas();
+      }
+      if (c.dada && !c.dada.ok) {
+        const b = mundo.bonecos.get(c.dada.id);
+        if (b && ((b.lugar && b.lugar.tipo === "mesa") || (b.destino && b.destino.tipo === "mesa"))) c.dada.ok = true;
+        else if (agora - c.dada.em > 3) {
+          c.dada.ok = true; B.semMesa++;
+          if (B.exSemMesa.length < 5) B.exSemMesa.push({ id: c.dada.id, cena: c.id, lugar: b && b.lugar && (b.lugar.vaga ? b.lugar.vaga.tipo : b.lugar.tipo) });
+        }
+      }
+      if (agora < c.acaba) return;
+      c.acabou = agora;   // atendida (o servidor tira a cena e manda o evento) ou no horário (o servidor tira a cena no "ate")
+      social(mundo, { v: 1, agora: iso(agora), serio: false, cena: null, eventos: c.n % 2 ? [{ id: "atd-" + c.id, tipo: "atendida", greve: c.id,
+        motivo: c.motivo, participantes: c.ps, em: iso(agora) }] : [] });
+      G.atendidas += c.n % 2;
+      if (c.dada) { extras.length = 0; tarefas(); }
+      return;
+    }
+    if (c && c.n % 2 && !c.fimEntrega) {   // greve atendida: a entrega do pedido chega, a turma vai até ela e depois volta
+      const en = mundo.entrega, eid = "entrega-atd-" + c.id;
+      if (en && en.id === eid) {
+        if (!c.viu) {
+          c.viu = true; G.entregas++; G.itens[en.item] = (G.itens[en.item] || 0) + 1;
+          if (en.item === "pizza" && !(en.entregador && en.entregador.parada.sala.tipo === "recepcao")) G.motoboyLonge++;   // a pizza fica no balcão
+        }
+        if (en.fase === "entregue") {
+          if (!c.entregue) { c.entregue = true; G.entregues++; }
+          const turma = mundo.lista.filter(o => c.ps.includes(o.id) && !o.rota.length && o.lugar && o.lugar.vaga && o.lugar.vaga.dono === eid);
+          c.turma = Math.max(c.turma || 0, turma.length);
+        }
+        for (const o of mundo.lista) if (o.trabalho && !o.rota.length && o.lugar && o.lugar.vaga && o.lugar.vaga.dono === eid) G.comTrabalho++;
+      }
+      if ((c.viu && (!en || en.id !== eid)) || agora - c.acabou > 120) {
+        c.fimEntrega = agora;
+        if (!c.entregue) G.semChegar++;
+        else if (!c.turma) G.semTurma++;
+      }
+      return;
+    }
+    if (c) {
+      if (agora - (c.fimEntrega || c.acabou) < 6) return;
+      const ficou = mundo.lista.filter(o => naGreve(o, c.id) || o.placa || (!o.rota.length && o.lugar && o.lugar.vaga && o.lugar.vaga.dono === "entrega-atd-" + c.id));
+      G.naoDispersou += ficou.length;
+      for (const o of ficou.slice(0, 5 - G.exDispersou.length)) G.exDispersou.push({ id: o.id, placa: o.placa, greve: c.id });
+      G.sentaram += c.max > 0; G.semSentar += c.max === 0; G.maiorSentados = Math.max(G.maiorSentados, c.max);
+      G.atual = null; G.prox = agora + 20;
+      return;
+    }
+    if (!G.faltam || agora < G.prox || B.atual) return;
+    const livres = mundo.lista.filter(b => !b.trabalho && !b.reuniao && noPredio(b)).sort(() => Math.random() - 0.5).slice(0, 8);
+    if (livres.length < 3) { G.prox = agora + 15; return; }
+    const id = "greve-" + ++G.n, ps = livres.map(b => b.id), dura = 60;
+    const motivo = MOTIVOS[Math.floor((G.n - 1) / 2) % MOTIVOS.length];
+    G.atual = { id, n: G.n, ps, motivo, acaba: G.n % 2 ? agora + 45 : agora + dura + 0.5, max: 0, dada: null, atras: new Set() }; G.faltam--; G.marcadas++;
+    social(mundo, { v: 1, agora: iso(agora), serio: false, eventos: [], cena: { id, tipo: "greve", participantes: ps, motivo,
+      inicio: iso(agora), ate: iso(agora + dura), origem: "auto" } });
   };
   const rastro = new Map(), orfaDesde = new Map(), foraDesde = new Map(), inicio = new Map(), feitas = new Set();
   let cena = null;
@@ -248,7 +333,7 @@ await js(`(() => {
         const d = orfaDesde.get(v) ?? agora; orfaDesde.set(v, d);
         if (agora - d > 3) { E.orfas++; if (E.exOrfas.length < 5) E.exOrfas.push({ tipo: v.tipo, x: v.x, y: v.y, ocupante: v.ocupante }); orfaDesde.set(v, agora); }
       }
-      brigar(agora);   // depois das conferências: a tarefa dada agora só é cobrada depois que o vida.js teve quadros para reagir
+      brigar(agora); grevar(agora);   // depois das conferências: a tarefa dada agora só é cobrada depois que o vida.js teve quadros para reagir
     }
     return { seg: E.seg, cena: null };
   };
@@ -283,6 +368,14 @@ const CENAS = {
   aviaozinho: `(() => { const b = mundo.lista.find(b => b.pose === "arremesso" && b.fala && Vida.FRASES.aviao.includes(b.fala)); return b ? [b.x, b.y] : null; })()`,
   guerra_de_papel: `(() => { const b = mundo.lista.find(b => b.pose === "arremesso" && b.fala && Vida.FRASES.guerra.includes(b.fala)); return b ? [b.x, b.y] : null; })()`,
 };
+// entrega: um print por item, com pelo menos 2 da turma no ponto; e o motoboy da pizza parado no balcão da recepção
+if (GREVES) for (const item of ["cafe", "pizza", "ar", "faixa", "travesseiro"]) CENAS["entrega_" + item] = `(() => { const e = mundo.entrega;
+  return e && e.item === "${item}" && e.fase === "entregue" && mundo.lista.filter(o => !o.rota.length && o.lugar && o.lugar.vaga
+  && o.lugar.vaga.dono === e.id).length >= 2 ? [e.x, e.y - 8] : null; })()`;
+if (GREVES) CENAS.motoboy_balcao = `(() => { const e = mundo.entrega, g = e && e.entregador;
+  return e && e.item === "pizza" && e.fase === "entregue" && g && !g.rota.length && g.destino ? [g.x, g.y - 8] : null; })()`;
+if (GREVES) CENAS.greve = `(() => { const c = mundo.cenaSocial; return c && c.tipo === "greve" && c.fase === "greve"
+  && mundo.lista.filter(o => o.placa).length >= 3 ? [c.x, c.y] : null; })()`;
 if (BRIGAS) CENAS.briga_plateia = `(() => { const c = mundo.cenaSocial; return c && c.fase === "luta" && mundo.lista.filter(o => !o.rota.length && o.lugar && o.lugar.vaga
   && o.lugar.vaga.tipo === "ringue" && o.lugar.vaga.dono === c.id).length >= 2 ? [c.x, c.y] : null; })()`;
 const feitas = new Set();
@@ -394,13 +487,18 @@ const E = await js("window.__E");
 const achados = { erros: E.erros.length, invasaoParado: E.invasaoParado, invasaoAndando: E.invasaoAndando, presos: E.presos, semLugar: E.semLugar,
   vagasOrfas: E.orfas, esperaForaDaMesa: E.esperaFora, trabalhoNaCena: E.trabalhoNaCena, console: consoleMsgs.length, acoes: falhasAcoes.length,
   brigasSemLuta: E.brigas.marcadas - E.brigas.lutaram - (E.brigas.atual ? 1 : 0), brigasPendentes: E.brigas.faltam + (E.brigas.atual ? 1 : 0),
-  tarefaSemMesa: E.brigas.semMesa, pressaNoCalmo: E.brigas.pressaCalmo };
+  tarefaSemMesa: E.brigas.semMesa, pressaNoCalmo: E.brigas.pressaCalmo, greveSemSentar: E.greves.semSentar, placaErrada: E.greves.placaErrada,
+  greveNaoDispersou: E.greves.naoDispersou, greveAtrasDoRingue: E.greves.atras, entregaSemChegar: E.greves.semChegar,
+  entregaSemTurma: E.greves.semTurma, entregaComTrabalho: E.greves.comTrabalho, motoboyLonge: E.greves.motoboyLonge, grevesPendentes: E.greves.faltam + (E.greves.atual ? 1 : 0) };
 const total = Object.values(achados).reduce((a, n) => a + n, 0);
 console.log("RESULTADO " + JSON.stringify({ url: URL_PAGINA, minutosVirtuais: E.seg / 60, agentes: await js("mundo.lista.length"), achados,
   exemplos: { erros: E.erros, invasao: E.exInvasao, presos: E.exPresos, semLugar: E.exSemLugar, orfas: E.exOrfas, esperaFora: E.exEsperaFora,
-    trabalhoNaCena: E.exTrabalhoNaCena, tarefaSemMesa: E.brigas.exSemMesa, pressaNoCalmo: E.brigas.exPressaCalmo, acoes: falhasAcoes },
+    trabalhoNaCena: E.exTrabalhoNaCena, tarefaSemMesa: E.brigas.exSemMesa, pressaNoCalmo: E.brigas.exPressaCalmo, placaErrada: E.greves.exPlaca,
+    greveNaoDispersou: E.greves.exDispersou, acoes: falhasAcoes },
   brigas: BRIGAS ? { marcadas: E.brigas.marcadas, lutaram: E.brigas.lutaram, comPlateia: E.brigas.comPlateia, maiorPlateia: E.brigas.maiorPlateia,
     tarefasNoMeio: E.brigas.tarefas, diretos: E.brigas.diretos } : null,
+  greves: GREVES ? { marcadas: E.greves.marcadas, sentaram: E.greves.sentaram, maiorSentados: E.greves.maiorSentados, atendidas: E.greves.atendidas,
+    entregas: E.greves.entregas, entregues: E.greves.entregues, itens: E.greves.itens } : null,
   cenasSemPrint: PREFIXO === null ? [] : Object.keys(CENAS).filter(c => !feitas.has(c)), eventos: E.eventos, falas: E.falas, poses: E.poses, vagas: E.tiposVaga }));
 console.log("CONSOLE:", consoleMsgs.length ? consoleMsgs.slice(0, 15).join("\n") : "limpo");
 console.log(total ? `${total} achado(s): ${Object.entries(achados).filter(([, n]) => n).map(([k, n]) => `${k} ${n}`).join(", ")}` : "0 achados");

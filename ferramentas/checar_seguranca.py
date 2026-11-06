@@ -131,6 +131,14 @@ confere("POST /api/social/briga com Origin: null", req("/api/social/briga", {**s
 confere("POST /api/social/briga em text/plain (formulario de outro site)",
         req("/api/social/briga", {**sessao, "Origin": base, "Content-Type": "text/plain"}, briga)[0], 415)
 confere("GET /api/social/placar sem sessao", req("/api/social/placar")[0], 401)
+greve = json.dumps({"id": "abc"}).encode()   # atender a greve: as mesmas barreiras do ringue
+confere("POST /api/social/greve/atender sem Origin, com Referer valido",
+        req("/api/social/greve/atender", {**sessao, "Referer": base + "/", "Content-Type": "application/json"}, greve)[0], 403)
+confere("POST /api/social/greve/atender com Origin: null",
+        req("/api/social/greve/atender", {**sessao, "Origin": "null", "Content-Type": "application/json"}, greve)[0], 403)
+confere("POST /api/social/greve/atender em text/plain",
+        req("/api/social/greve/atender", {**sessao, "Origin": base, "Content-Type": "text/plain"}, greve)[0], 415)
+confere("POST /api/social/greve/atender sem sessao", req("/api/social/greve/atender", {"Origin": base, "Content-Type": "application/json"}, greve)[0], 401)
 srv.shutdown()
 print("RESULTADO:", "tudo certo" if not falhas else "%d falha(s)" % len(falhas))
 sys.exit(1 if falhas else 0)

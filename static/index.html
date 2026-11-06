@@ -6,10 +6,11 @@
   <meta name="robots" content="noindex, nofollow">
   <title>Escritório</title>
   <link rel="icon" href="logo.png">
-  <link rel="stylesheet" href="estilo.css?v=80">
+  <link rel="stylesheet" href="estilo.css?v=96">
 </head>
 <body>
   <a class="pular" href="#principal">Ir para o conteúdo</a>
+  <a id="pular-greve" class="pular" href="#aviso-greve" hidden>Ir para a greve (atender o pedido)</a>
   <!-- barra de 52 px: só no celular e com o menu recolhido (menu, nome da empresa e ações) -->
   <header id="topo" class="topo">
     <button id="abrir-menu" class="topo-bt" type="button" aria-controls="lateral" aria-expanded="false" aria-label="Abrir o menu">
@@ -118,6 +119,10 @@
           <div id="palco" class="palco">
             <canvas id="tela" tabindex="0" aria-label="Mapa do escritório. Arraste para mover, use a roda ou a pinça para dar zoom e toque num agente para ver o que ele está fazendo."></canvas>
             <p class="selo-vivo" aria-hidden="true"><span id="ao-vivo" class="ao-vivo"></span><span id="relogio" class="relogio"></span></p>
+            <div id="aviso-greve" class="aviso-greve" hidden>
+              <p class="greve-linha"><span class="greve-ic" aria-hidden="true">✊</span><span><strong id="greve-texto">Greve</strong> <span id="greve-motivo" class="greve-motivo"></span></span></p>
+              <button id="greve-atender" class="botao" type="button" aria-describedby="greve-texto greve-motivo">Atender o pedido</button>
+            </div>
             <div class="controles" role="toolbar" aria-label="Câmera">
               <button id="zoom-menos" type="button" aria-label="Afastar">−</button>
               <button id="zoom-mais" type="button" aria-label="Aproximar">+</button>
@@ -373,18 +378,18 @@
       <div class="acoes"><button id="placar-fechar" class="botao fantasma" type="button">Fechar</button></div>
     </div>
   </dialog>
-  <script src="avatar.js?v=80"></script>
-  <script src="mapa.js?v=80"></script>
-  <script src="expediente.js?v=80"></script>
-  <script src="vida.js?v=80"></script>
-  <script src="som.js?v=80"></script>
-  <script src="ceu.js?v=80"></script>
-  <script src="clima.js?v=80"></script>
-  <script src="festas.js?v=80"></script>
-  <script src="simular.js?v=80"></script>
-  <script src="efeitos.js?v=80"></script>
-  <script src="brincar.js?v=80"></script>
-  <script src="app.js?v=80"></script>
-  <script src="personalizar.js?v=80"></script>
+  <script src="avatar.js?v=96"></script>
+  <script src="mapa.js?v=96"></script>
+  <script src="expediente.js?v=96"></script>
+  <script src="vida.js?v=96"></script>
+  <script src="som.js?v=96"></script>
+  <script src="ceu.js?v=96"></script>
+  <script src="clima.js?v=96"></script>
+  <script src="festas.js?v=96"></script>
+  <script src="simular.js?v=96"></script>
+  <script src="efeitos.js?v=96"></script>
+  <script src="brincar.js?v=96"></script>
+  <script src="app.js?v=96"></script>
+  <script src="personalizar.js?v=96"></script>
 </body>
 </html>

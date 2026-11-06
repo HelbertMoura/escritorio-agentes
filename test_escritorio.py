@@ -3,6 +3,7 @@ import contextlib
 import datetime
 import hashlib
 import io
+import itertools
 import json
 import os
 import random
@@ -756,7 +757,7 @@ class Estaticos(unittest.TestCase):
         # todo <script src>, <link href> e <img src> local das páginas tem que estar em ARQUIVOS e existir no disco;
         # o que a tela de login carrega tem que ser público (sem sessão, o resto vira redirecionamento para /entrar)
         ref = re.compile(r"<(?:script|link|img)\b[^>]*?\b(?:src|href)\s*=\s*[\"']([^\"']+)[\"']", re.I)
-        for pagina, publico in (("index.html", False), ("entrar.html", True)):
+        for pagina, publico in (("index.html", False), ("entrar.html", True), ("construir.html", False)):
             with open(os.path.join(e.ESTATICO, pagina), encoding="utf-8") as f:
                 html = f.read()
             if pagina == "entrar.html":
@@ -2512,14 +2513,14 @@ class SocialDiretor(unittest.TestCase):
 
     def dia_simulado(self, n):
         """20 dias de 07:00 às 20:00 com n agentes e tarefas sorteadas, passos de 60 s. Confere os invariantes a cada passo e
-        devolve (brigas automáticas por dia, tipos de evento vistos, fração das automáticas depois das 13 h)."""
+        devolve (brigas automáticas por dia, tipos de evento vistos, fração das automáticas depois das 13 h, greves por dia)."""
         ids = [f"{n:08x}-0000-4000-8000-{n:012x}" for n in range(n)]
         cfg = {"serio": False, "expediente": EXP_DIA,
                "times": [{"nome": f"Time {t}", "agentes": ids[t * 6:t * 6 + 6]} for t in range(10)]}
-        autos_por_dia, tipos, tarde = [], set(), 0
+        autos_por_dia, tipos, tarde, greves = [], set(), 0, []
         for semente in range(20):
             s, tarefas, ocupados = diretor(semente), random.Random(1000 + semente), set()
-            vistas, eventos_vistos, inicios, pares = set(), set(), [], []
+            vistas, eventos_vistos, inicios, pares, greve = set(), set(), [], [], 0
             for minuto in range(24 * 60):
                 agora = em_bsb("00:00") + minuto * 60
                 for i in ids:   # tarefas sorteadas: ~27% do time ocupado
@@ -2536,10 +2537,18 @@ class SocialDiretor(unittest.TestCase):
                 for ev in s.eventos:
                     if ev["id"] not in eventos_vistos:
                         eventos_vistos.add(ev["id"]); tipos.add(ev["tipo"])
-                        self.assertTrue({ev["a"], ev["b"]} <= livres, ev)   # só entre livres presentes
+                        self.assertTrue({ev["a"], ev.get("b", ev["a"])} <= livres, ev)   # só entre livres presentes
+                        self.assertIn(ev.get("sobre", ev["a"]), ids)   # o assunto da fofoca só precisa estar presente
                         self.assertIsNotNone(fecha)
                 c = s.cena
-                if c and c["id"] not in vistas:
+                if c and c["tipo"] == "greve":
+                    self.assertTrue(set(c["participantes"]) <= livres, c)   # só livres; quem pegou tarefa já saiu
+                    if c["id"] not in vistas:
+                        vistas.add(c["id"]); greve += 1
+                        self.assertTrue(social.GREVE_MIN <= len(c["participantes"]) <= social.GREVE_MAX, c)
+                        self.assertIsNotNone(fecha)
+                        self.assertLessEqual(c["ate"], fecha - social.MARGEM_FECHA)
+                elif c and c["id"] not in vistas:
                     vistas.add(c["id"])
                     self.assertEqual(c["origem"], "auto")
                     self.assertTrue({c["a"], c["b"]} <= livres, c)   # ninguém ocupado no agendamento
@@ -2552,18 +2561,22 @@ class SocialDiretor(unittest.TestCase):
             tarde += sum(i >= em_bsb("13:00") for i in inicios)
             self.assertTrue(all(b - a >= social.ENTRE_AUTO for a, b in zip(inicios, inicios[1:])), inicios)
             autos_por_dia.append(len(inicios))
-        return autos_por_dia, tipos, tarde / max(1, sum(autos_por_dia))
+            self.assertLessEqual(greve, social.GREVES_DIA)
+            greves.append(greve)
+        return autos_por_dia, tipos, tarde / max(1, sum(autos_por_dia)), greves
 
     def test_dia_simulado_67_agentes_20_sementes(self):
-        autos, tipos, tarde = self.dia_simulado(67)
+        autos, tipos, tarde, greves = self.dia_simulado(67)
         self.assertTrue(1 <= sum(autos) / len(autos) <= 4, autos)   # sem nenhuma, a função morre; com mais, vira ruído
         self.assertGreaterEqual(tarde, 0.35, autos)   # espalhadas pelo dia, e não só de manhã
-        self.assertEqual(tipos, {"cafe", "papo", "esbarrao", "grampeador", "pazes"})
+        self.assertEqual(tipos, {"cafe", "papo", "esbarrao", "grampeador", "pazes", "reclamacao", "sugestao", "fofoca"})
+        self.assertTrue(1 <= sum(greves) <= 17, greves)   # greve às vezes: nem nunca, nem todo dia
 
     def test_dia_simulado_9_agentes_20_sementes(self):   # o escritório pequeno, como o da prévia
-        autos, _, tarde = self.dia_simulado(9)
+        autos, _, tarde, greves = self.dia_simulado(9)
         self.assertTrue(1 <= sum(autos) / len(autos) <= 4, autos)
         self.assertGreaterEqual(tarde, 0.35, autos)
+        self.assertTrue(1 <= sum(greves) <= 17, greves)   # greve às vezes: nem nunca, nem todo dia
 
     def test_briga_automatica_respeita_a_margem_do_fechamento(self):
         for hora, marca in (("19:57:10", True), ("19:57:20", False)):   # o fim cairia às 19:57:55 e às 19:58:05 (fecha às 20:00)
@@ -2695,6 +2708,174 @@ class SocialDiretor(unittest.TestCase):
         self.assertEqual(f, {"agente": "ag-a", "media": 55, "amigos": [{"id": "ag-b", "valor": 95}, {"id": "ag-d", "valor": 61}],
                              "rivais": [{"id": "ag-c", "valor": 10}], "ultima_briga": None})
         self.assertEqual(s.amizades("ag-a", {"ag-a"})["media"], None)
+
+
+class SocialGreve(unittest.TestCase):
+    """Fatia 2: reclamação, sugestão, fofoca e a greve (gatilho, teto do dia, quem pega tarefa sai, atender, modo sério)."""
+    IDS = ["g0", "g1", "g2", "g3", "g4", "g5"]
+
+    def insatisfeitos(self, s, quem=("g0", "g1", "g2", "g3")):
+        for i, a in enumerate(quem):
+            for b in quem[i + 1:]:
+                com_valor(s, a, b, 25)   # abaixo dos 30 da greve e acima dos 20 da briga automática
+
+    def com_greve(self, t, ocupados=()):
+        s = diretor()
+        self.assertIsNone(s._insatisfeitos(set(self.IDS)))   # a base sozinha não faz greve
+        self.insatisfeitos(s)
+        s.passo(t, leitura(self.IDS, ocupados=list(ocupados)), CFG_SOCIAL)
+        self.assertEqual(s.cena["tipo"], "greve")
+        return s
+
+    def test_cinco_reclamacoes_disparam_a_greve_so_com_livres(self):
+        s, t, lt = diretor(), em_bsb("10:00"), leitura(self.IDS, ocupados=["g5"])
+        self.assertIsNone(s._insatisfeitos(set(self.IDS) - {"g5"}))
+        s.passo(t, lt, CFG_SOCIAL)
+        for _ in range(social.GREVE_RECLAMACOES - 1):
+            s._evento_fatia2(t, 0.0, ["g4"], set(self.IDS))   # sorte 0: reclamação
+        s.passo(t + 60, lt, CFG_SOCIAL)
+        self.assertIsNone(s.cena)   # 4 reclamações: ainda não
+        s._evento_fatia2(t + 60, 0.0, ["g4"], set(self.IDS))
+        self.assertEqual(s.foto(t + 60, False)["eventos"][0], {"id": s.eventos[-1]["id"], "tipo": "reclamacao", "a": "g4",
+                                                                  "em": social._iso(t + 60)})
+        s.passo(t + 120, lt, CFG_SOCIAL)
+        c = s.cena
+        self.assertEqual((c["tipo"], c["participantes"][0], c["ate"]), ("greve", "g4", t + 120 + social.GREVE_DURA))   # quem reclamou vem primeiro
+        self.assertTrue(set(c["participantes"]) <= set(self.IDS) - {"g5"} and len(c["participantes"]) == 5, c)   # só livres
+        self.assertEqual(set(s.foto(t + 120, False)["cena"]), {"id", "tipo", "participantes", "motivo", "inicio", "ate", "origem"})
+
+    def test_grupo_insatisfeito_dispara_e_so_uma_por_dia(self):
+        t = em_bsb("10:00")
+        s = self.com_greve(t)
+        self.assertTrue({"g0", "g1", "g2", "g3"} <= set(s.cena["participantes"]))
+        s.passo(t + social.GREVE_DURA, leitura(self.IDS), CFG_SOCIAL)   # acaba sozinha no "ate"
+        self.assertIsNone(s.cena)
+        for minuto in range(1, 120):   # o grupo segue insatisfeito, mas é uma por dia
+            s.passo(t + social.GREVE_DURA + minuto * 60, leitura(self.IDS), CFG_SOCIAL)
+            self.assertFalse(s.cena and s.cena["tipo"] == "greve")
+        s.passo(em_bsb("09:59", dia=10), leitura(self.IDS), CFG_SOCIAL)   # a noite reconcilia; o grupo se desentende de novo
+        self.insatisfeitos(s)
+        s.passo(em_bsb("10:00", dia=10), leitura(self.IDS), CFG_SOCIAL)   # no dia seguinte, pode de novo
+        self.assertEqual(s.cena["tipo"], "greve")
+
+    def test_quem_pega_tarefa_sai_e_com_menos_de_dois_acaba(self):
+        t = em_bsb("10:00")
+        s = self.com_greve(t)
+        todos = list(s.cena["participantes"])
+        s.passo(t + 60, leitura(self.IDS, ocupados=[todos[0]]), CFG_SOCIAL)   # o trabalho real manda
+        self.assertEqual(s.cena["participantes"], todos[1:])
+        self.assertEqual(s.foto(t + 60, False)["cena"]["participantes"], todos[1:])
+        s.passo(t + 120, leitura(self.IDS, ocupados=todos[:-1]), CFG_SOCIAL)
+        self.assertIsNone(s.cena)
+        s = self.com_greve(t)
+        s.passo(t + 60, leitura([i for i in self.IDS if i != s.cena["participantes"][0]]), CFG_SOCIAL)   # quem some também sai
+        self.assertEqual(len(s.cena["participantes"]), len(todos) - 1)
+
+    def test_nao_dispara_no_serio_fora_do_expediente_perto_do_fechamento_nem_com_outra_cena(self):
+        for hora, cfg, nasce in (("10:00", {**CFG_SOCIAL, "serio": True}, False), ("06:30", CFG_SOCIAL, False),
+                                 ("19:54", CFG_SOCIAL, False), ("19:52", CFG_SOCIAL, True)):   # 19:52: 6 min até 19:58
+            with self.subTest(hora=hora, serio=cfg["serio"]):
+                s = diretor()
+                self.insatisfeitos(s)
+                s.passo(em_bsb(hora), leitura(self.IDS), cfg)
+                self.assertEqual(s.cena is not None and s.cena["tipo"] == "greve", nasce)
+                if nasce:
+                    self.assertEqual(s.cena["ate"], em_bsb("19:58"))
+        s, t = diretor(), em_bsb("10:00")
+        self.insatisfeitos(s)
+        self.assertEqual(s.ordenar("g4", "g5", t, leitura(self.IDS), CFG_SOCIAL)[0], 200)
+        s.passo(t + 1, leitura(self.IDS), CFG_SOCIAL)
+        self.assertEqual(s.cena["tipo"], "briga")   # uma cena por vez
+        s = self.com_greve(t)
+        s.passo(t + 60, leitura(self.IDS), {**CFG_SOCIAL, "serio": True})   # o modo sério pausa a greve
+        self.assertIsNone(s.cena)
+        s = self.com_greve(t)
+        s.cancelar(t + 60)   # e o /api/marca também
+        self.assertIsNone(s.cena)
+
+    def test_atender(self):
+        t = em_bsb("10:00")
+        s = self.com_greve(t)
+        c, antes = s.cena, {p: s.valor(*p) for p in itertools.combinations(s.cena["participantes"], 2)}
+        st, corpo = s.ordenar("g4", "g5", t + 10, leitura(self.IDS), CFG_SOCIAL)
+        self.assertEqual((st, corpo["erro"], corpo["mensagem"], corpo["cena"]["id"]),
+                         (409, "ocupado", "Tem uma greve no escritório; atenda o pedido primeiro.", c["id"]))
+        self.assertEqual(s.atender("outro", t + 10, CFG_SOCIAL), (404, {"erro": "greve", "mensagem": "Essa greve já acabou."}))
+        self.assertEqual(s.atender(c["id"], t + 10, {**CFG_SOCIAL, "serio": True})[1]["erro"], "modo_serio")
+        self.assertIs(s.cena, c)
+        self.assertEqual(s.atender(c["id"], t + 20, CFG_SOCIAL), (200, {"cena": None}))
+        self.assertIsNone(s.cena)
+        self.assertEqual({p: s.valor(*p) for p in antes}, {p: min(100, v + social.ATENDIDA) for p, v in antes.items()})
+        self.assertEqual(s.foto(t + 20, False)["eventos"][0], {"id": s.eventos[-1]["id"], "tipo": "atendida", "greve": c["id"],
+                                                                  "motivo": c["motivo"], "participantes": c["participantes"],
+                                                                  "em": social._iso(t + 20)})
+        self.assertEqual(s.atender(c["id"], t + 30, CFG_SOCIAL)[0], 404)   # já atendida
+        self.assertEqual(s.ordenar("g4", "g5", t + 30, leitura(self.IDS), CFG_SOCIAL)[1]["erro"], "ocupado")   # a folga de 60 s vale
+
+    def test_grupo_insatisfeito_so_com_livres(self):
+        s, t = diretor(), em_bsb("10:00")
+        self.insatisfeitos(s, ("g0", "g1", "g2", "g3", "g4"))
+        s.passo(t, leitura(self.IDS, ocupados=["g0"]), CFG_SOCIAL)   # o g0 também está insatisfeito, mas trabalha
+        self.assertEqual(sorted(s.cena["participantes"]), ["g1", "g2", "g3", "g4"])
+
+    def test_reclamacoes_de_ontem_nao_contam(self):
+        s, lt, t, amanha = diretor(), leitura(self.IDS), em_bsb("10:00"), em_bsb("10:00", dia=10)
+        s.passo(t, lt, CFG_SOCIAL)
+        for _ in range(social.GREVE_RECLAMACOES - 1):
+            s._evento_fatia2(t, 0.0, ["g4"], set(self.IDS))   # sorte 0: reclamação
+        s.passo(amanha, lt, CFG_SOCIAL)   # vira o dia
+        s._evento_fatia2(amanha, 0.0, ["g4"], set(self.IDS))
+        s.passo(amanha + 60, lt, CFG_SOCIAL)
+        self.assertLess(len(s.reclamaram_hoje), social.GREVE_RECLAMACOES)
+        self.assertIsNone(s.cena)   # 4 de ontem e 1 de hoje: sem greve
+
+    def test_atender_depois_do_ate_da_404(self):
+        t = em_bsb("10:00")
+        s = self.com_greve(t)
+        c = s.cena
+        antes = {p: s.valor(*p) for p in itertools.combinations(c["participantes"], 2)}
+        self.assertEqual(s.atender(c["id"], c["ate"], CFG_SOCIAL), (404, {"erro": "greve", "mensagem": "Essa greve já acabou."}))   # antes do passo
+        self.assertEqual({p: s.valor(*p) for p in antes}, antes)
+        self.assertFalse(any(ev["tipo"] == "atendida" for ev in s.eventos))
+
+    def test_quem_some_sai_so_do_participantes_do_atendida(self):
+        t = em_bsb("10:00")
+        s = self.com_greve(t)
+        c, ps = s.cena, list(s.cena["participantes"])
+        self.assertEqual(s.atender(c["id"], t + 10, CFG_SOCIAL)[0], 200)
+        s.passo(t + 60, leitura([i for i in self.IDS if i != ps[0]]), CFG_SOCIAL)   # um grevista sumiu: o evento fica sem ele
+        ev = next(ev for ev in s.foto(t + 60, False)["eventos"] if ev["tipo"] == "atendida")
+        self.assertEqual((ev["greve"], ev["motivo"], ev["participantes"]), (c["id"], c["motivo"], ps[1:]))
+        s.passo(t + 120, leitura([i for i in self.IDS if i not in ps]), CFG_SOCIAL)   # sumiram todos: o evento sai
+        self.assertFalse(any(ev["tipo"] == "atendida" for ev in s.eventos))
+
+    def test_quem_some_tira_o_evento_de_par(self):
+        s, t = diretor(), em_bsb("10:00")
+        s.passo(t, leitura(self.IDS), CFG_SOCIAL)
+        s._evento(t, "cafe", "g0", "g1")
+        cafe = s.eventos[-1]["id"]
+        s._evento(t, "papo", "g2", "g3")
+        papo = s.eventos[-1]["id"]
+        ids = lambda: {ev["id"] for ev in s.eventos}
+        s.passo(t + 60, leitura([i for i in self.IDS if i != "g1"]), CFG_SOCIAL)   # o b sumiu: o café sai, o papo fica
+        self.assertEqual((cafe in ids(), papo in ids()), (False, True))
+        s.passo(t + 120, leitura([i for i in self.IDS if i not in ("g1", "g2")]), CFG_SOCIAL)   # o a sumiu: o papo sai
+        self.assertNotIn(papo, ids())
+
+    def test_fofoca_e_sugestao(self):
+        s, t = diretor(), em_bsb("10:00")
+        s._evento_fatia2(t, social.CHANCE_RECLAMA, ["g0", "g1"], {"g0", "g1", "g2"})
+        self.assertEqual((s.eventos[-1]["tipo"], s.reclamaram_hoje), ("sugestao", []))   # sugestão não conta para a greve
+        s._evento_fatia2(t, social.CHANCE_RECLAMA + social.CHANCE_SUGERE, ["g0", "g1"], {"g0", "g1", "g2"})
+        ev = s.eventos[-1]
+        self.assertEqual((ev["tipo"], {ev["a"], ev["b"]}, ev["sobre"]), ("fofoca", {"g0", "g1"}, "g2"))
+        a, b = ev["a"], ev["b"]
+        self.assertEqual((s.deltas.get(social._par(a, b)), s.deltas.get(social._par(a, "g2")), s.deltas.get(social._par(b, "g2"))),
+                         (social.FOFOCA_AB, social.FOFOCA_A, social.FOFOCA_B))
+        s._evento_fatia2(t, social.CHANCE_RECLAMA + social.CHANCE_SUGERE, ["g0", "g1"], {"g0", "g1"})   # sem assunto presente, nada
+        self.assertEqual(len(s.eventos), 2)
+        s.passo(t + 1, leitura(["g0", "g1", "g3"]), CFG_SOCIAL)   # o assunto sumiu: a fofoca sai dos eventos
+        self.assertNotIn(ev["id"], [x["id"] for x in s.eventos])
 
 
 class SocialHttp(unittest.TestCase):
@@ -2905,6 +3086,75 @@ class SocialHttp(unittest.TestCase):
         self.srv.social = None
         st, corpo, _ = self.req("/api/social/placar", cab)
         self.assertEqual((st, json.loads(corpo)["erro"]), (404, "social_desligado"))
+
+    def atender(self, corpo, cab=None, sessao=True):
+        if sessao and not self.sessao:
+            self.sessao = self.entrar()
+        cab = {"Origin": self.base, "Content-Type": "application/json", **(self.sessao if sessao else {}), **(cab or {})}
+        st, dados, _ = self.req("/api/social/greve/atender", {k: v for k, v in cab.items() if v is not None},
+                                corpo if isinstance(corpo, bytes) else json.dumps(corpo).encode())
+        return st, json.loads(dados)
+
+    def greve(self):
+        """Uma greve de verdade, pelo passo do diretor: os quatro de valor baixo entre si e livres."""
+        s = self.srv.social
+        for a, b in itertools.combinations(self.IDS, 2):
+            com_valor(s, a, b, 25)
+        s.passo(time.time(), self.srv.leitor.foto(), e.config_publica())
+        self.assertEqual(s.cena["tipo"], "greve")
+        return s.cena["id"]
+
+    def test_atender_greve_barreiras_serio_e_outra_sessao(self):
+        for cab, sessao, status in (({"Origin": None}, True, 403), ({"Origin": None, "Referer": self.base + "/"}, True, 403),
+                                    ({"Origin": "null"}, True, 403), ({}, False, 401), ({"Content-Type": "text/plain"}, True, 415)):
+            with self.subTest(cab=cab, sessao=sessao):
+                self.assertEqual(self.atender({"id": "abc"}, cab, sessao)[0], status)
+        for corpo in ({"id": "abc", "a": "s1"}, {"a": "s1", "b": "s2"}, {"id": 3}, {"id": ""}, {"id": "x" * 101},
+                      json.dumps({"id": "abc"}).encode() + b" " * 300):
+            with self.subTest(corpo=str(corpo)[:40]):
+                self.assertEqual(self.atender(corpo), (400, {"erro": "pedido", "mensagem": "Pedido inválido."}))
+        self.assertEqual(self.atender({"id": "abc"}), (404, {"erro": "greve", "mensagem": "Essa greve já acabou."}))
+        ident = self.greve()
+        outra = self.entrar()   # a greve é igual para todos
+        cena = self.social_do_estado(outra)["cena"]
+        self.assertEqual((cena["id"], cena["tipo"], sorted(cena["participantes"])), (ident, "greve", self.IDS))
+        st, _ = self.briga({"a": "s1", "b": "s2"})   # uma cena por vez
+        self.assertEqual(st, 409)
+        agora = datetime.datetime.now(e.FUSO)
+        exp = {"abre": (agora - datetime.timedelta(hours=1)).strftime("%H:%M"), "fecha": (agora + datetime.timedelta(hours=2)).strftime("%H:%M")}
+        self.expediente(exp, serio=True)
+        self.assertEqual(self.atender({"id": ident})[1]["erro"], "modo_serio")
+        self.assertIsNone(self.social_do_estado(outra)["cena"])   # o modo sério esconde a greve
+        self.expediente(exp, serio=False)
+        self.assertNotIn("greve_atendida", self.saida.getvalue())   # recusa não loga
+        self.assertEqual(self.atender({"id": ident}), (200, {"cena": None}))
+        self.assertIn('"resultado": "greve_atendida", "usuario": "dono"', self.saida.getvalue())
+        bloco = self.social_do_estado(outra)
+        self.assertIsNone(bloco["cena"])
+        self.assertEqual((bloco["eventos"][0]["tipo"], bloco["eventos"][0]["greve"], bloco["eventos"][0]["motivo"]), ("atendida", ident, cena["motivo"]))
+        self.assertEqual(self.atender({"id": ident})[0], 404)
+        antes, self.srv.social = self.srv.social, None
+        try:
+            self.assertEqual(self.atender({"id": ident})[1]["erro"], "social_desligado")
+        finally:
+            self.srv.social = antes
+
+    def test_estado_com_greve_ate_4_kb(self):
+        ids = [f"{n:08x}-0000-4000-8000-{n:012x}" for n in range(67)]
+        self.srv.leitor.ids = ids
+        s, agora = self.srv.social, time.time()
+        s.cena = {"id": "Qk3_x9Zt", "tipo": "greve", "participantes": ids[:social.GREVE_MAX], "motivo": 999, "inicio": agora,
+                  "ate": agora + social.GREVE_DURA, "origem": "auto"}   # o pior caso: 8 grevistas, 9 fofocas e 1 atendida
+        for n in range(social.EVENTOS_NO_ESTADO - 1):
+            s._evento(agora - n, "fofoca", ids[n], ids[n + 1], sobre=ids[n + 2])
+        s._evento(agora - 9, "atendida", greve="Qk3_x9Zt", motivo=999, participantes=ids[:social.GREVE_MAX])
+        maximo = {"v": social.PLACAR_TETO, "d": social.PLACAR_TETO, "seq": -social.PLACAR_TETO}
+        s.placar, s.anterior = {i: dict(maximo) for i in ids}, {"id": ids[5], "v": social.PLACAR_TETO, "d": social.PLACAR_TETO}
+        bloco = self.social_do_estado(self.entrar())
+        self.assertEqual(len(bloco["eventos"]), social.EVENTOS_NO_ESTADO)
+        self.assertEqual({ev["tipo"]: set(ev) for ev in bloco["eventos"]}, {"fofoca": {"id", "tipo", "a", "b", "sobre", "em"},
+                                                                   "atendida": {"id", "tipo", "greve", "motivo", "participantes", "em"}})
+        self.assertLessEqual(len(json.dumps(bloco, ensure_ascii=False).encode()), 4096)
 
     def test_troca_de_conta_no_oauth_zera_o_social(self):
         class Cred:

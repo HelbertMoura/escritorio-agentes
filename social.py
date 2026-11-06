@@ -1,6 +1,6 @@
 # Copyright (C) 2026 Dev Maniac's
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Vida social dos bots (fatia 1): o diretor. Camada de diversão sorteada; não reflete nada do trabalho real.
+"""Vida social dos bots (fatias 1 e 2): o diretor. Camada de diversão sorteada; não reflete nada do trabalho real.
 
 O servidor decide amizades, eventos e brigas com o dado real de quem está livre e manda tudo no /api/estado, igual
 para todos; o navegador só encena. Livre é quem está na leitura e sem tarefa: quem trabalha ou espera a pessoa nunca
@@ -10,6 +10,7 @@ guardar que ele passa); aqui só se conta, se vira a semana e se serializa. Nada
 """
 import collections
 import datetime
+import functools
 import hashlib
 import json
 import random
@@ -36,6 +37,16 @@ ORDENS_DIA = 20                           # "mandar pro ringue": teto do dia, pa
 DELTAS_MAX, HISTORICO = 5000, 50          # memória: pares com delta; eventos e brigas do dia guardados
 EVENTO_VISIVEL, EVENTOS_NO_ESTADO = 120, 10
 TIPOS_BONS, TIPOS_RUINS = ("cafe", "papo"), ("esbarrao", "grampeador")
+# fatia 2: reclamação, sugestão e fofoca (depois dos bons e ruins, na mesma sorte do passo) e a greve
+CHANCE_RECLAMA, CHANCE_SUGERE, CHANCE_FOFOCA = 0.006, 0.006, 0.02
+FOFOCA_AB, FOFOCA_A, FOFOCA_B = 2, -3, -2  # a e b se aproximam; os dois esfriam com quem é o assunto
+# gatilho: 4+ livres com média abaixo de 30 entre si, ou 5 reclamações hoje. O 45 do contrato disparava só com os valores de
+# base (25 a 90), na abertura, todo dia; com 30 e as chances acima, o dia simulado (20 sementes) deu greve em 75% dos dias
+# com 67 agentes e em 45% com 9, espalhada da manhã ao fim da tarde
+GREVE_MEDIA, GREVE_RECLAMACOES = 30, 5
+GREVE_MIN, GREVE_MAX, GREVES_DIA = 3, 8, 1   # participantes (só livres) e teto do dia
+GREVE_DURA, GREVE_MINIMA = 1800, 300      # acaba sozinha em 30 min; só começa se couber 5 min antes do fechamento menos 2 min
+ATENDIDA = 4                              # atender a greve: +4 entre os participantes
 PLACAR_MAX, PLACAR_BYTES, PLACAR_TETO = 500, 64 * 1024, 100_000   # entradas, tamanho do placar.json e maior número guardado
 ID_PLACAR = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-")   # o [A-Za-z0-9_-] do ler_placar
 
@@ -52,6 +63,7 @@ def _par(a, b):
     return (a, b) if a < b else (b, a)
 
 
+@functools.lru_cache(maxsize=8192)   # pura; a greve olha todos os pares de livres a cada passo
 def base(a, b):
     """Valor de partida de um par, de 25 a 90: simétrico e fixo entre reinícios e instalações."""
     a, b = _par(a, b)
@@ -124,11 +136,13 @@ class Social(threading.Thread):
 
     def _zerar(self):
         self.deltas = {}   # (a, b) com a < b -> int; o valor do par é base + delta, sempre de 0 a 100
-        self.cena = None   # uma por vez: id, tipo, a, b, vencedor, inicio, fim (instantes), origem e assentada
+        self.cena = None   # uma por vez. briga: id, tipo, a, b, vencedor, inicio, fim (instantes), origem e assentada;
+        # greve: id, tipo, participantes, motivo, inicio, ate e origem
         self.eventos = collections.deque(maxlen=HISTORICO)   # do mais velho para o mais novo
         self.brigas_hoje = collections.deque(maxlen=HISTORICO)   # a, b, vencedor, em (o fim) e pazes (quando)
         self.pares_hoje, self.pazes_hoje = set(), set()
-        self.autos_hoje = self.ordens_hoje = 0
+        self.autos_hoje = self.ordens_hoje = self.greves_hoje = 0
+        self.reclamaram_hoje = []   # quem reclamou hoje, na ordem, um registro por reclamação
         self.ultima_auto = self.fim_ultima = None   # início da última automática; fim da última cena
         self.ocupados_antes = set()
         self.dia = None   # data de hoje em Brasília
@@ -185,7 +199,8 @@ class Social(threading.Thread):
         dia = datetime.datetime.fromtimestamp(agora, self.fuso).date()
         if dia != self.dia:
             self.dia = dia
-            self.autos_hoje = self.ordens_hoje = 0
+            self.autos_hoje = self.ordens_hoje = self.greves_hoje = 0
+            self.reclamaram_hoje = []
             self.pares_hoje, self.pazes_hoje = set(), set()
             self.brigas_hoje.clear()
 
@@ -233,6 +248,10 @@ class Social(threading.Thread):
     def _assentar(self, agora):
         """Item 7: no fim da briga, o par perde mais 5 e entra no pares_hoje; a cena fica à vista até o fim + 10 s."""
         c = self.cena
+        if c is not None and c["tipo"] == "greve":   # a greve acaba sozinha no "ate"
+            if agora >= c["ate"]:
+                self.cena, self.fim_ultima = None, c["ate"]
+            return
         if c is None or agora < c["fim"]:
             return
         if not c["assentada"]:
@@ -251,18 +270,40 @@ class Social(threading.Thread):
                      "inicio": inicio, "fim": inicio + LUTA, "origem": origem, "assentada": False}
         return self.cena
 
-    def _evento(self, agora, tipo, a, b):
-        self._mudar(a, b, EFEITO[tipo])
-        self.eventos.append({"id": secrets.token_urlsafe(6), "tipo": tipo, "a": a, "b": b, "em": agora})
+    def _evento(self, agora, tipo, a=None, b=None, **extra):
+        """Evento público: a e b (o b só nos de par), mais o que o tipo pede (sobre, greve, participantes)."""
+        if tipo in EFEITO:
+            self._mudar(a, b, EFEITO[tipo])
+        ev = {"id": secrets.token_urlsafe(6), "tipo": tipo, "a": a, "b": b, **extra, "em": agora}
+        self.eventos.append({k: v for k, v in ev.items() if v is not None})
+
+    @staticmethod
+    def _envolvidos(ev):
+        return {x for x in (ev.get("a"), ev.get("b"), ev.get("sobre"), *ev.get("participantes", ())) if x is not None}
+
+    @staticmethod
+    def _sem_quem_sumiu(ev, presentes):
+        """O evento sem quem sumiu: no "atendida", sai só o id do participantes, e o evento fica enquanto sobrar alguém (as
+        telas que ainda não o viram encenam a entrega); nos outros, sem o a, o b ou o assunto, o evento sai (None)."""
+        if "participantes" in ev:
+            ev = {**ev, "participantes": [p for p in ev["participantes"] if p in presentes]}
+            if not ev["participantes"]:
+                return None
+        return ev if {x for x in (ev.get("a"), ev.get("b"), ev.get("sobre")) if x is not None} <= presentes else None
 
     @staticmethod
     def _publica(c):
+        if c["tipo"] == "greve":
+            return {"id": c["id"], "tipo": "greve", "participantes": list(c["participantes"]), "motivo": c["motivo"],
+                    "inicio": _iso(c["inicio"]), "ate": _iso(c["ate"]), "origem": c["origem"]}
         return {"id": c["id"], "tipo": c["tipo"], "a": c["a"], "b": c["b"], "vencedor": c["vencedor"],
                 "inicio": _iso(c["inicio"]), "fim": _iso(c["fim"]), "origem": c["origem"]}
 
     def _visivel(self, agora):
         c = self.cena
-        return self._publica(c) if c and agora < c["fim"] + VISIVEL else None
+        if not c:
+            return None
+        return self._publica(c) if agora < (c["ate"] if c["tipo"] == "greve" else c["fim"] + VISIVEL) else None
 
     # ------------------------------------------------------------ o passo
 
@@ -304,10 +345,14 @@ class Social(threading.Thread):
         # aviso de 15 s, na prática só pega a "ordem" marcada entre dois passos; o resto fica com o navegador (o
         # trabalho real tira o lutador da cena)
         c = self.cena
-        if c and agora < c["inicio"] and not {c["a"], c["b"]} <= livres:
+        if c and c["tipo"] == "briga" and agora < c["inicio"] and not {c["a"], c["b"]} <= livres:
             self.cena = None
-        if any(ev["a"] not in presentes or ev["b"] not in presentes for ev in self.eventos):
-            self.eventos = collections.deque((ev for ev in self.eventos if ev["a"] in presentes and ev["b"] in presentes),
+        if c and c["tipo"] == "greve":   # quem pegou tarefa ou sumiu sai da greve (o trabalho real manda); com menos de 2, acaba
+            c["participantes"] = [p for p in c["participantes"] if p in livres]
+            if len(c["participantes"]) < 2:
+                self.cena, self.fim_ultima = None, agora
+        if any(not self._envolvidos(ev) <= presentes for ev in self.eventos):   # S6: quem some sai dos eventos
+            self.eventos = collections.deque((ev for ev in map(lambda ev: self._sem_quem_sumiu(ev, presentes), self.eventos) if ev),
                                              maxlen=HISTORICO)
         terminaram, self.ocupados_antes = (self.ocupados_antes & livres), ocupados
         fecha = fechamento(agora, cfg["expediente"], self.fuso)
@@ -316,9 +361,10 @@ class Social(threading.Thread):
         times = _times(leitura, cfg)
         self._comemorar(terminaram, presentes, times)
         self._trabalho_perto(ocupados, times)
-        self._evento_publico(agora, livres)
+        self._evento_publico(agora, livres, presentes)
         self._pazes(agora, livres)
         self._briga_automatica(agora, livres, fecha)
+        self._greve(agora, livres, fecha)
         self._podar()
 
     def _comemorar(self, terminaram, presentes, times):
@@ -337,16 +383,17 @@ class Social(threading.Thread):
         if grupos:
             self._mudar(*self.rng.sample(self.rng.choice(grupos), 2), TRABALHO_PERTO)
 
-    def _evento_publico(self, agora, livres):
+    def _evento_publico(self, agora, livres, presentes):
         """Item 4: café ou papo; esbarrão ou grampeador, no reencontro de rivais ou no pior de 3 pares sorteados. O par
-        que já brigou hoje fica fora dos eventos ruins: depois da briga, só a reconciliação e as pazes."""
+        que já brigou hoje fica fora dos eventos ruins: depois da briga, só a reconciliação e as pazes. Na mesma sorte vem
+        a fatia 2 (_evento_fatia2)."""
         if len(livres) < 2:
             return
         lista, sorte = sorted(livres), self.rng.random()
         if sorte < CHANCE_BOM:
             return self._evento(agora, self.rng.choice(TIPOS_BONS), *self.rng.sample(lista, 2))
         if sorte >= CHANCE_BOM + CHANCE_RUIM:
-            return
+            return self._evento_fatia2(agora, sorte - CHANCE_BOM - CHANCE_RUIM, lista, presentes)
         tipo = self.rng.choice(TIPOS_RUINS)
         rivais = sorted(p for p, d in self.deltas.items() if d < 0 and p[0] in livres and p[1] in livres and p not in self.pares_hoje)
         if rivais and self.rng.random() < REENCONTRO:
@@ -357,6 +404,27 @@ class Social(threading.Thread):
                 return
             par = min(pares, key=lambda p: (self.valor(*p), p))
         self._evento(agora, tipo, *par)
+
+    def _evento_fatia2(self, agora, sorte, lista, presentes):
+        """Reclamação e sugestão: balão de um livre, sem efeito (a reclamação conta para a greve). Fofoca: dois livres
+        sobre um terceiro presente (a e b +2; a e o assunto −3; b e o assunto −2)."""
+        if sorte < CHANCE_RECLAMA:
+            a = self.rng.choice(lista)
+            self.reclamaram_hoje.append(a)
+            return self._evento(agora, "reclamacao", a)
+        sorte -= CHANCE_RECLAMA
+        if sorte < CHANCE_SUGERE:
+            return self._evento(agora, "sugestao", self.rng.choice(lista))
+        sorte -= CHANCE_SUGERE
+        if sorte < CHANCE_FOFOCA:
+            a, b = self.rng.sample(lista, 2)
+            outros = sorted(presentes - {a, b})
+            if outros:
+                sobre = self.rng.choice(outros)
+                self._mudar(a, b, FOFOCA_AB)
+                self._mudar(a, sobre, FOFOCA_A)
+                self._mudar(b, sobre, FOFOCA_B)
+                self._evento(agora, "fofoca", a, b, sobre=sobre)
 
     def _pazes(self, agora, livres):
         """Item 5: o par que brigou hoje, com os dois livres, no horário sorteado ao fim da briga (até 180 min depois)."""
@@ -384,6 +452,40 @@ class Social(threading.Thread):
             self.autos_hoje += 1
             self.ultima_auto = inicio
 
+    def _insatisfeitos(self, livres):
+        """Até 8 livres de média baixa entre si (abaixo do GREVE_MEDIA), com pelo menos 4; ou None. Guloso: os livres em ordem da
+        média com os outros livres, do menor para o maior, e o maior grupo do começo da fila que passa."""
+        if len(livres) < 4:
+            return None
+        lista = sorted(livres)
+        media = {x: sum(self.valor(x, o) for o in lista if o != x) / (len(lista) - 1) for x in lista}
+        fila = sorted(lista, key=lambda x: (media[x], x))
+        for k in range(min(GREVE_MAX, len(fila)), 3, -1):
+            pares = [(p, q) for i, p in enumerate(fila[:k]) for q in fila[i + 1:k]]
+            if sum(self.valor(p, q) for p, q in pares) / len(pares) < GREVE_MEDIA:
+                return fila[:k]
+        return None
+
+    def _greve(self, agora, livres, fecha):
+        """Fatia 2: no máximo 1 por dia, sem outra cena e dentro do expediente; só livres participam. Gatilho: um grupo de
+        insatisfeitos, ou 5 reclamações hoje (quem reclamou e está livre entra primeiro)."""
+        if self.cena or self.greves_hoje >= GREVES_DIA or len(livres) < GREVE_MIN:
+            return
+        if self.fim_ultima is not None and agora - self.fim_ultima < FOLGA_CENA:
+            return
+        ate = min(agora + GREVE_DURA, fecha - MARGEM_FECHA)
+        if ate - agora < GREVE_MINIMA:
+            return
+        grupo = self._insatisfeitos(livres)
+        if grupo is None and len(self.reclamaram_hoje) >= GREVE_RECLAMACOES:
+            primeiro = list(dict.fromkeys(a for a in self.reclamaram_hoje if a in livres))
+            resto = sorted(livres - set(primeiro), key=lambda x: (sum(self.valor(x, o) for o in livres if o != x), x))
+            grupo = (primeiro + resto)[:GREVE_MAX]
+        if grupo:
+            self.cena = {"id": secrets.token_urlsafe(6), "tipo": "greve", "participantes": grupo,
+                         "motivo": self.rng.randrange(1000), "inicio": agora, "ate": ate, "origem": "auto"}
+            self.greves_hoje += 1
+
     # ------------------------------------------------------------ o que as rotas usam
 
     def foto(self, agora, serio, presentes=None):
@@ -392,8 +494,8 @@ class Social(threading.Thread):
         eventos e com placar null."""
         with self.trava:
             cena = None if serio else self._visivel(agora)
-            eventos = [] if serio else [{"id": ev["id"], "tipo": ev["tipo"], "a": ev["a"], "b": ev["b"], "em": _iso(ev["em"])}
-                                        for ev in reversed(self.eventos) if 0 <= agora - ev["em"] <= EVENTO_VISIVEL]
+            eventos = [] if serio else [{**ev, "em": _iso(ev["em"])} for ev in reversed(self.eventos)
+                                        if 0 <= agora - ev["em"] <= EVENTO_VISIVEL]
             placar = None if serio else self._placar(agora, presentes, 3)
         return {"v": 1, "agora": _iso(agora), "serio": serio, "cena": cena, "eventos": eventos[:EVENTOS_NO_ESTADO],
                 "placar": placar and {"semana": placar["semana"], "top": placar["ranking"], "anterior": placar["anterior"]}}
@@ -443,16 +545,36 @@ class Social(threading.Thread):
             if {a, b} & {t["agente_id"] for t in leitura.get("trabalhos", [])}:
                 return _erro(409, "trabalhando", "Um dos dois está trabalhando agora.")
             if self.cena or (self.fim_ultima is not None and agora - self.fim_ultima < FOLGA_CENA):
-                st, corpo = _erro(409, "ocupado", "Já tem briga no ringue; espere um minuto." if self.cena else
-                                  "Acabou de ter briga; espere um minuto.")
+                st, corpo = _erro(409, "ocupado", "Acabou de ter briga; espere um minuto." if not self.cena else
+                                  "Tem uma greve no escritório; atenda o pedido primeiro." if self.cena["tipo"] == "greve" else
+                                  "Já tem briga no ringue; espere um minuto.")
                 return st, {**corpo, "cena": self._visivel(agora)}
             if self.ordens_hoje >= ORDENS_DIA:
                 return _erro(429, "teto_dia", "O ringue já teve brigas demais hoje; volta amanhã.")
             self.ordens_hoje += 1
             return 200, {"cena": self._publica(self._marcar(a, b, inicio, "ordem"))}
 
+    def atender(self, ident, agora, cfg):
+        """"Atender o pedido" da greve: devolve (status HTTP, corpo). A rota já conferiu origem, sessão e o formato."""
+        with self.trava:
+            self._virar_dia(agora)
+            self._virar_semana(agora)
+            self._assentar(agora)
+            if cfg.get("serio") is True:
+                return _erro(409, "modo_serio", "O modo sério está ligado: a vida social está pausada.")
+            c = self.cena
+            if not c or c["tipo"] != "greve" or c["id"] != ident:
+                return _erro(404, "greve", "Essa greve já acabou.")
+            ps = c["participantes"]
+            for i, a in enumerate(ps):
+                for b in ps[i + 1:]:
+                    self._mudar(a, b, ATENDIDA)
+            self._evento(agora, "atendida", greve=c["id"], motivo=c["motivo"], participantes=list(ps))   # cada tela encena a entrega
+            self.cena, self.fim_ultima = None, agora
+            return 200, {"cena": None}
+
     def cancelar(self, agora):
-        """Modo sério ligado: tira a cena. A briga que já terminou conta; a que não terminou sai sem efeito."""
+        """Modo sério ligado: tira a cena (briga ou greve). A briga que já terminou conta; a que não terminou sai sem efeito."""
         with self.trava:
             self._assentar(agora)
             self.cena = None
