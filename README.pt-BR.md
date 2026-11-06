@@ -20,8 +20,12 @@
 
 [Recursos](#recursos) · [Capturas](#capturas) · [Instalar](#instalar) · [Personalizar](#personalizar-white-label) · [Vida social](#vida-social) · [Modo construção](#modo-construção) · [Segurança](#segurança) · [Arquitetura](#arquitetura) · [Desenvolvimento](#desenvolvimento) · [Histórico de mudanças](./CHANGELOG.pt-BR.md) · [Contribuir](./CONTRIBUTING.md) · [Código de conduta](./CODE_OF_CONDUCT.md)
 
-<!-- Vídeo de lançamento: troque "em breve" pelo link da release do GitHub que tem o vídeo anexado. -->
-🎬 **Vídeo de lançamento:** em breve.
+🎬 **[Vídeo de lançamento](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2026.11.06)** (narração em português do Brasil, com legenda), anexado à release.
+
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="./docs/screenshots/13-greve-plaquinhas.png">
+  <img src="./docs/novidades.gif" alt="Trecho animado das novidades, no modo demonstração com agentes fictícios: uma greve na sala comunal, com todo mundo sentado no chão segurando plaquinhas de papelão; uma briga no Ringue que termina com a faixa 'VENCEU' e a plateia em volta; o pedido entregue (o motoboy da pizza na rua e a turma comendo na frente do ringue); e o editor do modo construção, onde se pintam as salas e se arrastam e espelham os móveis. As legendas em português ficam gravadas na imagem." width="600">
+</picture>
 
 </div>
 

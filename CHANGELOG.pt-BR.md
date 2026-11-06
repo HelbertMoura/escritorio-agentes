@@ -6,7 +6,7 @@ As mudanças que importam neste projeto ficam aqui, da mais nova para a mais ant
 
 ## 2026-11-06 · Modo construção v1
 
-Commits [`4860c88`](https://github.com/HelbertMoura/escritorio-agentes/commit/4860c88) e [`26192a6`](https://github.com/HelbertMoura/escritorio-agentes/commit/26192a6).
+Release [`v2026.11.06`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2026.11.06), com o vídeo de lançamento (narração em português do Brasil, com legenda). Commits [`4860c88`](https://github.com/HelbertMoura/escritorio-agentes/commit/4860c88) e [`26192a6`](https://github.com/HelbertMoura/escritorio-agentes/commit/26192a6).
 
 ### Adicionado
 - **Modo construção** (`construir.html`, aberto pelo **Personalizar**): pintar a parede e o piso de cada sala; mover, espelhar, tirar e pôr móveis de um catálogo de 53 enfeites (peça nova é só enfeite: ninguém senta nela). Veja [Modo construção](./README.pt-BR.md#modo-construção).

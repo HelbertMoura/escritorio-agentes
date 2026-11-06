@@ -6,7 +6,7 @@ All notable changes to this project are listed here, newest first. The format fo
 
 ## 2026-11-06 · Construction mode v1
 
-Commits [`4860c88`](https://github.com/HelbertMoura/escritorio-agentes/commit/4860c88) and [`26192a6`](https://github.com/HelbertMoura/escritorio-agentes/commit/26192a6).
+Release [`v2026.11.06`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2026.11.06), with the launch video (narrated in Brazilian Portuguese, with subtitles). Commits [`4860c88`](https://github.com/HelbertMoura/escritorio-agentes/commit/4860c88) and [`26192a6`](https://github.com/HelbertMoura/escritorio-agentes/commit/26192a6).
 
 ### Added
 - **Construction mode** (`construir.html`, opened from **Customize**): paint the wall and the floor of each room; move, mirror, remove and add furniture from a catalog of 53 decorations (new pieces are decoration only: nobody sits on them). See [Construction mode](./README.md#construction-mode).

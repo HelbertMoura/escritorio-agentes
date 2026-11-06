@@ -20,8 +20,12 @@
 
 [Features](#features) · [Screenshots](#screenshots) · [Install](#install) · [Customize](#customize-white-label) · [Social life](#social-life) · [Construction mode](#construction-mode) · [Security](#security) · [Architecture](#architecture) · [Development](#development) · [Changelog](./CHANGELOG.md) · [Contributing](./CONTRIBUTING.md) · [Code of Conduct](./CODE_OF_CONDUCT.md)
 
-<!-- Launch video: replace "coming soon" with the link to the GitHub release that has the video attached. -->
-🎬 **Launch video:** coming soon.
+🎬 **[Launch video](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2026.11.06)** (narrated in Brazilian Portuguese, with subtitles), attached to the release.
+
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="./docs/screenshots/13-greve-plaquinhas.png">
+  <img src="./docs/novidades.gif" alt="Animated clip of what is new, in demo mode with fictional agents: a strike in the lounge with everyone sitting on the floor holding cardboard signs, a fight in the Ring ending with the 'VENCEU' winner's banner and the crowd around, the demand delivered (the pizza rider on the street and the crew eating in front of the ring) and the construction mode editor, where you paint the rooms and drag and mirror the furniture. Captions in Portuguese are burned into the image." width="600">
+</picture>
 
 </div>
 
