@@ -394,7 +394,6 @@
   }
   function desenharAvisos() {
     const av = $("avisos"), itens = [];
-    if (DEMO) itens.push(caixa("", "Demonstração: dá para mexer em tudo, mas nada é salvo."));
     if (avisoSalvar) {
       const c = caixa(avisoSalvar.tipo, avisoSalvar.texto);
       if (avisoSalvar.link) { const l = document.createElement("div"); l.className = "linha-bt"; const a = document.createElement("a"); a.href = "./"; a.textContent = "Ver no escritório"; l.append(a); c.append(l); }
@@ -456,7 +455,7 @@
     $("salvar").textContent = salvando ? "Salvando…" : "Salvar";
     const m = $("motivo-salvar");
     m.className = "motivo" + (bloq === "demo" ? " neutro" : "");
-    if (bloq === "demo") m.textContent = "Na demonstração nada é salvo.";
+    if (bloq === "demo") m.textContent = "Demonstração: dá para mexer em tudo, mas nada é salvo.";   // o único aviso da demo, preso ao Salvar
     else if (bloq === "passagem") m.textContent = fechadas.length === 1
       ? "Não dá para salvar: 1 assento ficou sem passagem (marcado em vermelho no mapa). Mova ou tire o que está na frente."
       : `Não dá para salvar: ${fechadas.length} assentos ficaram sem passagem (marcados em vermelho no mapa). Mova ou tire o que está na frente.`;

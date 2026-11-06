@@ -30,9 +30,10 @@ ESCRITORIO_TIMES=times.exemplo.json python ferramentas/previa.py ferramentas/pre
 ### Before opening a pull request
 
 ```bash
-python -m unittest test_escritorio
+python -B -I -m unittest discover -p "test_*.py"   # every test (test_escritorio and test_planta)
 python -B ferramentas/checar_seguranca.py .
 node --check static/<file you changed>.js
+node ferramentas/checar_planta_mapa.mjs [url]   # if you changed mapa.js or the construction mode, with the preview running
 bash -n instalar.sh   # if you changed the installer
 ```
 
@@ -72,9 +73,10 @@ O `ferramentas/previa.exemplo.json` traz respostas do MCP (`agents` e `tasks`) c
 ### Antes de abrir um pull request
 
 ```bash
-python -m unittest test_escritorio
+python -B -I -m unittest discover -p "test_*.py"   # todos os testes (test_escritorio e test_planta)
 python -B ferramentas/checar_seguranca.py .
 node --check static/<arquivo que você mudou>.js
+node ferramentas/checar_planta_mapa.mjs [url]   # se mudou o mapa.js ou o modo construção, com a prévia no ar
 bash -n instalar.sh   # se mudou o instalador
 ```
 

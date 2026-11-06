@@ -18,7 +18,10 @@
   <img src="./docs/demo.gif" alt="Animated demo of the office in demo mode, with fictional agents: the pixel-art map by day with agents walking and working, the camera zooming in on an agent with a '?' question bubble, then the pointer moves to a request in the Waiting for you list (one click takes you to that agent). Short captions in Portuguese explain each step." width="900">
 </picture>
 
-[Features](#features) · [Screenshots](#screenshots) · [Install](#install) · [Customize](#customize-white-label) · [Security](#security) · [Architecture](#architecture) · [Development](#development) · [Contributing](./CONTRIBUTING.md) · [Code of Conduct](./CODE_OF_CONDUCT.md)
+[Features](#features) · [Screenshots](#screenshots) · [Install](#install) · [Customize](#customize-white-label) · [Social life](#social-life) · [Construction mode](#construction-mode) · [Security](#security) · [Architecture](#architecture) · [Development](#development) · [Changelog](./CHANGELOG.md) · [Contributing](./CONTRIBUTING.md) · [Code of Conduct](./CODE_OF_CONDUCT.md)
+
+<!-- Launch video: replace "coming soon" with the link to the GitHub release that has the video attached. -->
+🎬 **Launch video:** coming soon.
 
 </div>
 
@@ -35,16 +38,18 @@ It **does not call any AI model** and does not spend tokens. Approving always ha
 ## Features
 
 - 🏢 **A building made from your teams:** reception with your logo, one room per team (it grows with the number of agents), corridor, meeting room, lounge and kitchen. A new agent gets a desk in the "New" room.
-- 🧑‍💻 **Live map:** agents go to their desk and type when they get a task. When they are free they play arcade, video games, pool, foosball and ping-pong, play the piano, grab a coffee or chat in pairs. They arrive in the morning and leave at night through the front door.
+- 🧑‍💻 **Live map:** agents go to their desk and type when they get a task. When they are free they play arcade, video games, pool, foosball, ping-pong, chess, darts and basketball by themselves, play the piano or the guitar, grab a coffee or chat in pairs. They arrive in the morning and leave at night through the front door.
 - ✋ **Approvals at a glance:** a "!" or "?" over anyone waiting for your approval or answer, and a **"Waiting for you"** list with how long each request has been waiting. Each one opens the right request in agentes.chat (approving is always done there).
-- 🎵 **Life and sounds:** 16 poses, games in pairs with a scoreboard, darts, basketball, a jukebox and more. Optional sounds (keyboard, "simlish" chatter with a voice per agent, games, alerts, rain and thunder), with a volume control and on/off per category. Audio only starts after you interact with the page.
+- 🎵 **Life and sounds:** 21 poses, games in pairs up to 3 points with a cheering crowd, a coffee circle, high-fives, a robot vacuum at night and more. 45 optional sound effects synthesized in the browser (keyboard, "simlish" chatter with a voice per agent, games, alerts, the ring and the strike, rain and thunder), with a volume control and on/off per category. Audio only starts after you interact with the page.
+- 🖱️ **Clickable objects** (mouse, touch, or Tab and Enter): the TV (5 channels), arcade machines, jukebox, coffee maker, aquarium, lamps, notice board, plants, the opening-hours sign, the cat, the wall clock, the code board, kanban and moodboard, the sales bell, the ring scoreboard and the strike signs. Most of them also bring a free agent over. The games (pool, foosball, ping-pong, chess, darts, basketball) are not clickable: the agents play them on their own.
 - 🌦️ **Real time and weather:** day and night follow the real clock, empty rooms turn their lights off and windows show the sky of the hour. Real weather for your city ([Open-Meteo](https://open-meteo.com), no key): rain, drizzle, thunderstorm, snow, fog, overcast.
 - 🎉 **Holidays:** Christmas, New Year (fireworks), Carnival and Easter (calculated), Lunar New Year, Halloween, Festa Junina, Brazilian Independence Day, Programmers' Day, Diwali and more, with decorations, hats and lines.
 - 🎨 **Customization:** company name, accent color and logo from the **Customize** screen; teams, rooms, floors, walls, icons and avatars in `times.json`.
 - 🕹️ **Simulation:** a panel to preview the office on another date, time or weather (Christmas at night in the snow, for example). Nothing is saved: it only changes the URL of that tab, and a "Simulation" banner stays visible with "Back to real".
-- 🥊 **Social life:** friendships, rivals and cartoon fights in the Ring, the same on every screen and only among agents who are free (see [Social life](#social-life)).
+- 🥊 **Social life:** friendships and rivals, cartoon fights in the Ring with a weekly scoreboard, complaints, gossip and a strike that ends with a delivery (pizza by motorbike, coffee, a "Sexta livre aprovada!" banner...). The same on every screen and only among agents who are free (see [Social life](#social-life)).
+- 🧱 **Construction mode:** paint the rooms and move, mirror, remove and add furniture with the mouse or the keyboard, with undo; the plan is saved on the server for everyone (see [Construction mode](#construction-mode)).
 - 📸 **Photo mode:** hides the interface and saves a PNG of the office.
-- 🧪 **Demo mode:** `?demo=1` shows fictional agents and an accelerated day, with nothing sent to or read from the server. Good for trying it out and for screenshots.
+- 🧪 **Demo mode:** `?demo=1` shows fictional agents and an accelerated day, ring and strike included, with nothing sent to or read from the server. Good for trying it out and for screenshots.
 - 🎥 **Camera:** zoom with the wheel or pinch, drag, double-click to focus a room, "Go to…" an agent (`/` or `Ctrl+K`), and keyboard shortcuts (`+`, `-`, `0`).
 - 📱 **Phone friendly**, with clickable objects that also work with the keyboard and touch.
 - 🔒 **Login** with username and password, published **only on your Tailscale network**.
@@ -74,7 +79,42 @@ All screenshots come from **demo mode** or from a preview with **fictional data*
       <p><em>Conversations: today's tasks and, in the optional reply mode, a reply box.</em></p>
     </td>
   </tr>
+  <tr>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/11-ringue-plateia.png"><img src="./docs/screenshots/11-ringue-plateia.png" alt="Social life in demo mode: Gael and Aurora fight inside a cartoon dust cloud in the Ring of the lounge, with a 'BUM!' sound effect, while the crowd gathers around with 'Alguém chama o RH!' and 'Briga no ringue!' speech bubbles; the scoreboard board hangs on the wall behind the ring" width="100%"></a>
+      <p><em>The Ring: a cartoon fight, with the crowd gathering around.</em></p>
+    </td>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/12-placar-campeao.png"><img src="./docs/screenshots/12-placar-campeao.png" alt="The Ring scoreboard dialog: the week that started on Monday, last week's champion Hana with 6 wins and 1 loss, and a table with Aurora, Gael, Flora and Jade, their wins, losses and streaks" width="100%"></a>
+      <p><em>Weekly scoreboard, with last week's champion.</em></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/13-greve-plaquinhas.png"><img src="./docs/screenshots/13-greve-plaquinhas.png" alt="A strike in the lounge: six free agents sit on the floor in front of the ring holding cardboard signs ('MAIS CAFÉ', 'SONECA LIVRE', 'QUEREMOS PIZZA'), and a notice at the bottom of the map reads 'Greve na Sala comunal: QUEREMOS PIZZA' with the 'Atender o pedido' button" width="100%"></a>
+      <p><em>Strike: cardboard signs and the "Atender o pedido" button.</em></p>
+    </td>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/14-entrega-pizza.png"><img src="./docs/screenshots/14-entrega-pizza.png" alt="The demand met: the strikers stand in front of the ring with the pizza boxes the rider brought, a slice in hand, and one of them says 'Pizza!!'" width="100%"></a>
+      <p><em>Demand met: the pizza arrives and the crew eats in front of the ring.</em></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/15-entrega-sexta-livre.png"><img src="./docs/screenshots/15-entrega-sexta-livre.png" alt="Another demand met: a green 'SEXTA LIVRE APROVADA!' banner with bunting above the ring, a strike veteran says 'Vitória!', while the rest of the team works and Bento waits for approval" width="100%"></a>
+      <p><em>Each demand has its own delivery: here, the "Sexta livre aprovada!" banner.</em></p>
+    </td>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/16-modo-construcao.png"><img src="./docs/screenshots/16-modo-construcao.png" alt="The construction mode editor in demo mode: the whole building on the left with the lounge outlined and the sofa selected; on the right, the Piece panel with Mirror and Remove, Paint room with 7 walls and 10 floors for the lounge, and the catalog of decorations" width="100%"></a>
+      <p><em>Construction mode: pick a piece, paint the room, add decorations.</em></p>
+    </td>
+  </tr>
 </table>
+
+<p align="center">
+  <a href="./docs/screenshots/17-modo-construcao-antes-depois.png"><img src="./docs/screenshots/17-modo-construcao-antes-depois.png" alt="The lounge before and after the construction mode: on top, the automatic room with a patterned wall and a wooden floor; below, the same room with a green wall, a darker floor, one plant removed, the sofa moved and two new plants" width="900"></a>
+</p>
+<p align="center"><em>Before and after: the same lounge, repainted and rearranged.</em></p>
 
 <p align="center">
   <img src="./docs/screenshots/09-celular.png" alt="The office on a phone: the map at the top with agents and speech bubbles, and the 'Waiting for you' list with Review and Answer buttons below" width="300">
@@ -141,9 +181,23 @@ A layer of fun, drawn by the server. Free agents make friends and rivals, grab c
 - **Best friends and rivals:** the card shows up to 3 of each, with a value from 0 to 100, and the day's last fight.
 - **Ring scoreboard:** each agent's wins, losses and streak for the week (Monday to Sunday, Brasília time), with the top 3 on a board on the ring's wall, the full ranking when you click it and last week's champion. Automatic and sent fights count; one canceled before the end does not. The winner shows up on a banner above the ring.
 - **Serious mode:** the box in **Customize** pauses the whole layer, with no events, fights or strikes; a scene in progress disappears within 10 s on every screen. Good for presentations.
+- **Demo and Simulation:** in demo mode (`?demo=1`) the ring, the strike, the scoreboard and **Send to the ring** also run, locally, with no server: the first fight comes in about a minute and the strike a little later. The Simulation parameters (`?hora=`, `?data=`, `?clima=`) turn the social life off on that tab.
 - **Starts over on restart, except the scoreboard:** friendships, rivalries and events live only in the service's memory; a restart takes everyone back to the starting point, the same for all. Only the week's scoreboard goes to disk, in `dados/placar.json` (up to 64 KB and 500 agents, written atomically when it changes). If the file is unreadable, the scoreboard starts empty, with a note in the log; switching the agentes.chat account also clears it.
 - **Does not call agentes.chat** or touch the agents' work: it only uses the reading the office already does.
 - The numbers (chances, caps and intervals) are at the top of `social.py`, and the lines are in `FRASES.social` in `static/vida.js`, to change for white-label.
+
+## Construction mode
+
+Rearrange the office with the mouse, on a computer. Open it from the **Customize** screen (`construir.html`); on a phone, the editor only shows a notice, and the main page shows the result.
+
+- **Paint:** pick a room, then one of 7 walls and one of 10 floors.
+- **Furniture:** drag a piece, or pick it with Tab and Enter and move it with the arrows (8 px; Shift: 1 px). `E` mirrors it, `Delete` removes it, and the catalog adds one of 53 decorations (plants, rugs, sofas, armchairs, beanbags, bookcases, lamps, a guitar, a bicycle...): pick it and click a room. New pieces are decoration only: nobody sits on them.
+- **Undo and redo** (`Ctrl+Z`, `Ctrl+Shift+Z` or `Ctrl+Y`, up to 100 steps), **Discard** (back to what is saved) and **Back to automatic**, which asks first and saves an empty plan; while the editor is open, it can still be undone.
+- **Save** writes the plan for everyone; other open screens show it when they reload. If another screen saved first, the editor says so and offers to reload. Save stays blocked while a seat has no way in, and that seat is marked in red on the map.
+- **What stays automatic:** desks and chairs (a new agent still gets a desk), the kitchen counter, the ring, everything on the walls (boards, windows, signs, the logo panel and the scoreboard board) and the pieces in the corridor and outside. Pieces with an animation tied to their spot (the coffee counter and the TV rack) can only be removed; arcade machines, the jukebox and a few others do not mirror. Nothing moved or added may touch the ring or cover what is on the walls.
+- **A layer on top of the automatic building:** the plan keeps only what changed (paint and moved, mirrored, removed and added pieces). With an empty plan, the building is exactly the automatic one. When teams change, the building is rebuilt and the plan reapplies whatever still exists and fits; the editor says how many adjustments no longer show up and offers to clear them.
+- **Try it without saving:** `construir.html?demo=1` builds an example of its own.
+- **Limits:** 64 painted rooms, 400 adjusted pieces and 200 new pieces, in up to 64 KB (`dados/planta.json`).
 
 ## Security
 
@@ -177,6 +231,9 @@ In short: the office is reachable **only on your tailnet**, it **fails closed** 
   - **Limits:** at most 5 messages a minute and 50 a day; a pause request from agentes.chat pauses only the sending. Each message's log line keeps the user, the agent, the task and the length, never the text.
   - **Turn it off right away** (for example, if a message lands in the wrong place): 1) "Close now" on the mode badge; 2) `"ler"` in `times.json`, which applies without a restart; 3) in **Settings › AI apps**, on agentes.chat, disconnect "Escritório dos agentes".
   - **Back to read-only:** switch to `"ler"` (or `"desligado"`) in `times.json`. The office revokes the write token and asks for a new, read-only connection; until then, reading stops too. An unreadable `times.json` or a typo revokes nothing (it only blocks sending). Then disconnect the old app in **Settings › AI apps**, on agentes.chat.
+- **Construction mode (`POST /api/planta`):** whoever is signed in can edit, the same rule as **Customize** (there is a single account). The route requires an `Origin` equal to the server address (with no fallback to the `Referer`), a session, `application/json` (otherwise 415), a body of up to 64 KB and the plan's current `rev` (409 when another screen saved first). The plan is validated all or nothing, the same way on save and on read, and written atomically (0600), under a lock, to `dados/planta.json`; the log keeps counts, never the content. An unreadable or invalid file falls back to the automatic building, with one line in the log. The server only checks the format and the limits: the list of pieces is a closed catalog in the browser, and a bad plan never takes the page down.
+- **Social life routes:** **Send to the ring** (`POST /api/social/briga`) and **Atender o pedido** (`POST /api/social/greve/atender`) follow the same strict origin and JSON-only rules. The weekly scoreboard (`dados/placar.json`) holds only agent ids and numbers.
+- **POST bodies:** every `POST` reads its body (up to 128 KB) before answering, so a refusal (wrong origin, wrong type, too big) reaches the client instead of a connection reset. Each route keeps its own size cap; above 128 KB, only the logo upload reads the body.
 - **Branding on the sign-in screen:** the company name, color and logo are shown to anyone who reaches the page on the tailnet, before login. The logo only accepts PNG, JPEG and WEBP, up to 600 KB. Prefer an image without sensitive metadata (EXIF, GPS).
 - **Network:** the service listens only on 127.0.0.1, on a privileged port, and Tailscale publishes it.
 - **System:** runs as its own user with a hardened systemd unit. Tokens, passwords and the logo live in `/var/lib/escritorio` (0700).
@@ -192,11 +249,12 @@ agentes.chat (MCP, OAuth "read")
 escritorio.py ── 127.0.0.1:737 ── tailscale serve (HTTPS, tailnet only) ──▶ browser
    │  stdlib HTTP server, login, OAuth + PKCE, MCP reader, weather, branding
    ├─ acesso.py: users (scrypt), sessions, first access
-   └─ social.py: social life director (in memory; the weekly scoreboard in dados/placar.json)
+   ├─ social.py: social life director (in memory; the weekly scoreboard in dados/placar.json)
+   └─ planta.py: construction mode plan (validation, lock and rev; dados/planta.json)
 ```
 
-- **Server:** Python 3 standard library only (`escritorio.py`, `acesso.py` and `social.py`, the director of the [social life](#social-life)). No database: a few files in the data folder.
-- **Front-end:** vanilla JavaScript and canvas, no build step (`static/`). `app.js` (UI, camera, panels), `mapa.js` (procedural building, furniture collision, doors), `vida.js` (agent life), `avatar.js`, `efeitos.js`, `ceu.js`, `clima.js`, `festas.js`, `som.js` (WebAudio), `simular.js`, `brincar.js` (clickable objects, photo mode, demo), `personalizar.js` and `entrar.*` (sign-in).
+- **Server:** Python 3 standard library only (`escritorio.py`, `acesso.py`, `social.py`, the director of the [social life](#social-life), and `planta.py`, the plan of the [construction mode](#construction-mode)). No database: a few files in the data folder.
+- **Front-end:** vanilla JavaScript and canvas, no build step (`static/`). `app.js` (UI, camera, panels), `mapa.js` (procedural building, furniture collision, doors, and the plan applied on top), `vida.js` (agent life), `avatar.js`, `efeitos.js`, `ceu.js`, `clima.js`, `festas.js`, `expediente.js`, `som.js` (WebAudio), `simular.js`, `brincar.js` (clickable objects, photo mode, demo), `personalizar.js`, `planta.js` and `construir.*` (construction mode editor) and `entrar.*` (sign-in).
 - **Install:** `instalar.sh` sets up the user, files, a hardened systemd unit and `tailscale serve`.
 
 ### Transition log
@@ -206,11 +264,14 @@ On every read (30 s), the server compares tasks with the previous read, by `run_
 ## Development
 
 ```bash
-python -m unittest test_escritorio
+python -m unittest test_escritorio test_planta
 ESCRITORIO_TIMES=times.exemplo.json python ferramentas/previa.py ferramentas/previa.exemplo.json   # local preview at http://127.0.0.1:7372, no login
-python -B ferramentas/checar_seguranca.py .  # checks login, origin, cookie and attempt limit
+python -B ferramentas/checar_seguranca.py .  # checks login, origin, cookie, attempt limit and the POST routes
 node ferramentas/estresse_vida.mjs [url] [--minutos 40] [--acoes] [--brigas 10] [--times 20]  # agent-life regression on the preview (headless Chrome/Edge); exits 1 if it finds something
+node ferramentas/checar_planta_mapa.mjs [url] [--ref main] [--prints]  # construction mode: with an empty plan the building is identical to the reference; example and tampered plans
 ```
+
+In the preview, the construction mode saves to a temporary folder (gone when the preview stops); `--greve` starts a strike at the first step of the social life director.
 
 `ferramentas/previa.exemplo.json` holds fictional MCP responses (`agents` and `tasks`, with the handles of `times.exemplo.json`) to test without connecting; `ESCRITORIO_TIMES` makes the rooms of the example show up. To test with your own workspace, copy its responses to `dados.json`, which git ignores, and run `python ferramentas/previa.py dados.json`. The preview rereads the file when it changes: to see events live, change a task's `status` or remove and add tasks. Another port: `PREVIA_PORTA=7373`.
 

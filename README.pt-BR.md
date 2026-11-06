@@ -18,7 +18,10 @@
   <img src="./docs/demo.gif" alt="Demonstração animada do escritório no modo demonstração, com agentes fictícios: o mapa em pixel art de dia, com agentes andando e trabalhando; a câmera aproxima de um agente com um balão de pergunta '?'; depois o cursor vai até um pedido da lista Esperando você (um clique leva até esse agente). Legendas curtas explicam cada passo." width="900">
 </picture>
 
-[Recursos](#recursos) · [Capturas](#capturas) · [Instalar](#instalar) · [Personalizar](#personalizar-white-label) · [Segurança](#segurança) · [Arquitetura](#arquitetura) · [Desenvolvimento](#desenvolvimento) · [Contribuir](./CONTRIBUTING.md) · [Código de conduta](./CODE_OF_CONDUCT.md)
+[Recursos](#recursos) · [Capturas](#capturas) · [Instalar](#instalar) · [Personalizar](#personalizar-white-label) · [Vida social](#vida-social) · [Modo construção](#modo-construção) · [Segurança](#segurança) · [Arquitetura](#arquitetura) · [Desenvolvimento](#desenvolvimento) · [Histórico de mudanças](./CHANGELOG.pt-BR.md) · [Contribuir](./CONTRIBUTING.md) · [Código de conduta](./CODE_OF_CONDUCT.md)
+
+<!-- Vídeo de lançamento: troque "em breve" pelo link da release do GitHub que tem o vídeo anexado. -->
+🎬 **Vídeo de lançamento:** em breve.
 
 </div>
 
@@ -35,16 +38,18 @@ Ele **não chama nenhum modelo de IA** e não gasta tokens. Aprovar é sempre no
 ## Recursos
 
 - 🏢 **Prédio montado pelos seus times:** recepção com o seu logo, uma sala por time (cresce com o número de agentes), corredor, sala de reunião, sala comunal e cozinha. Agente novo ganha mesa na sala "Novos".
-- 🧑‍💻 **Mapa vivo:** os agentes vão para a mesa e digitam quando recebem tarefa. Livres, jogam fliperama, videogame, sinuca, pebolim e pingue-pongue, tocam piano, tomam café ou conversam em dupla. Chegam de manhã e vão embora à noite pela porta da frente.
+- 🧑‍💻 **Mapa vivo:** os agentes vão para a mesa e digitam quando recebem tarefa. Livres, jogam sozinhos fliperama, videogame, sinuca, pebolim, pingue-pongue, xadrez, dardos e basquete, tocam piano ou violão, tomam café ou conversam em dupla. Chegam de manhã e vão embora à noite pela porta da frente.
 - ✋ **Aprovações num relance:** um "!" ou "?" sobre quem espera a sua aprovação ou resposta, e a lista **"Esperando você"**, com há quanto tempo cada pedido espera. Cada um abre o pedido certo no agentes.chat (aprovar é sempre lá).
-- 🎵 **Vida e sons:** 16 poses, jogos em dupla com placar, dardos, basquete, jukebox e mais. Sons opcionais (teclado, conversas em "simlês" com voz própria por agente, jogos, avisos, chuva e trovão), com volume e liga/desliga por categoria. O áudio só começa depois que você interage com a página.
+- 🎵 **Vida e sons:** 21 poses, jogos em dupla até 3 pontos com torcida, roda de café, "toca aqui", robô aspirador à noite e mais. 45 efeitos de som opcionais, sintetizados no navegador (teclado, conversas em "simlês" com voz própria por agente, jogos, avisos, o ringue e a greve, chuva e trovão), com volume e liga/desliga por categoria. O áudio só começa depois que você interage com a página.
+- 🖱️ **Objetos clicáveis** (mouse, toque, ou Tab e Enter): a TV (5 canais), os fliperamas, a jukebox, a cafeteira, o aquário, as luminárias, o quadro de avisos, as plantas, a placa do expediente, o gato, o relógio de parede, a lousa de código, o kanban e o moodboard, o sino das vendas, o placar do ringue e as plaquinhas da greve. A maioria também chama um agente livre. Os jogos (sinuca, pebolim, pingue-pongue, xadrez, dardos, basquete) não são clicáveis: os agentes jogam sozinhos.
 - 🌦️ **Hora e clima reais:** dia e noite pelo relógio de verdade, luzes que apagam nas salas vazias e janelas com o céu da hora. Clima real da sua cidade ([Open-Meteo](https://open-meteo.com), sem chave): chuva, garoa, tempestade, neve, neblina, nublado.
 - 🎉 **Datas comemorativas:** Natal, Ano Novo (fogos), Carnaval e Páscoa (calculados), Ano Novo Chinês, Halloween, Festa Junina, Independência, Dia do Programador, Diwali e mais, com enfeites, chapéus e falas.
 - 🎨 **Personalização:** nome da empresa, cor de destaque e logo pela tela **Personalizar**; times, salas, pisos, paredes, ícones e avatares no `times.json`.
 - 🕹️ **Simulação:** um painel para ver o escritório em outra data, hora ou clima (Natal à noite na neve, por exemplo). Nada é salvo: muda só o endereço daquela aba, e a faixa "Simulação" fica à vista, com "Voltar ao real".
-- 🥊 **Vida social:** amizades, rivais e brigas de desenho animado no Ringue, iguais em todas as telas e só entre quem está livre (veja [Vida social](#vida-social)).
+- 🥊 **Vida social:** amizades e rivais, brigas de desenho animado no Ringue com placar semanal, reclamações, fofoca e uma greve que acaba com uma entrega (a pizza de moto, o café, a faixa "Sexta livre aprovada!"...). Iguais em todas as telas e só entre quem está livre (veja [Vida social](#vida-social)).
+- 🧱 **Modo construção:** pintar as salas e mover, espelhar, tirar e pôr móveis com o mouse ou o teclado, com desfazer; a planta fica salva no servidor para todos (veja [Modo construção](#modo-construção)).
 - 📸 **Modo foto:** esconde a interface e salva um PNG do escritório.
-- 🧪 **Modo demonstração:** `?demo=1` mostra agentes fictícios e um dia acelerado, sem mandar nem ler nada do servidor. Bom para experimentar e para capturas de tela.
+- 🧪 **Modo demonstração:** `?demo=1` mostra agentes fictícios e um dia acelerado, com ringue e greve, sem mandar nem ler nada do servidor. Bom para experimentar e para capturas de tela.
 - 🎥 **Câmera:** zoom com a roda ou a pinça, arrastar, duplo clique para focar uma sala, "Ir para…" um agente (`/` ou `Ctrl+K`) e atalhos (`+`, `-`, `0`).
 - 📱 **Funciona no celular**, com objetos clicáveis que também respondem ao teclado e ao toque.
 - 🔒 **Login** com usuário e senha, publicado **só na sua rede Tailscale**.
@@ -74,7 +79,42 @@ Todas as capturas saem do **modo demonstração** ou de uma prévia com **dados 
       <p><em>Conversas: as tarefas do dia e, no modo resposta opcional, a caixa de resposta.</em></p>
     </td>
   </tr>
+  <tr>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/11-ringue-plateia.png"><img src="./docs/screenshots/11-ringue-plateia.png" alt="Vida social no modo demonstração: Gael e Aurora brigam dentro de uma nuvem de poeira de desenho animado no Ringue da sala comunal, com a onomatopeia 'BUM!', enquanto a plateia se junta em volta com os balões 'Alguém chama o RH!' e 'Briga no ringue!'; o quadro do placar fica na parede atrás do ringue" width="100%"></a>
+      <p><em>O Ringue: briga de desenho animado, com a plateia em volta.</em></p>
+    </td>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/12-placar-campeao.png"><img src="./docs/screenshots/12-placar-campeao.png" alt="O diálogo do placar do ringue: a semana que começou na segunda, a campeã da semana passada, Hana, com 6 vitórias e 1 derrota, e a tabela com Aurora, Gael, Flora e Jade, com vitórias, derrotas e sequência" width="100%"></a>
+      <p><em>Placar semanal, com a campeã da semana passada.</em></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/13-greve-plaquinhas.png"><img src="./docs/screenshots/13-greve-plaquinhas.png" alt="Greve na sala comunal: seis agentes livres sentados no chão na frente do ringue com plaquinhas de papelão ('MAIS CAFÉ', 'SONECA LIVRE', 'QUEREMOS PIZZA'), e um aviso no canto de baixo do mapa diz 'Greve na Sala comunal: QUEREMOS PIZZA', com o botão 'Atender o pedido'" width="100%"></a>
+      <p><em>Greve: plaquinhas de papelão e o botão "Atender o pedido".</em></p>
+    </td>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/14-entrega-pizza.png"><img src="./docs/screenshots/14-entrega-pizza.png" alt="O pedido atendido: os grevistas, de pé na frente do ringue com as caixas de pizza que o motoboy trouxe e uma fatia na mão, e um deles diz 'Pizza!!'" width="100%"></a>
+      <p><em>Pedido atendido: a pizza chega e a turma come na frente do ringue.</em></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/15-entrega-sexta-livre.png"><img src="./docs/screenshots/15-entrega-sexta-livre.png" alt="Outro pedido atendido: a faixa verde 'SEXTA LIVRE APROVADA!' com bandeirinhas acima do ringue, um ex-grevista diz 'Vitória!', enquanto o resto do time trabalha e o Bento espera aprovação" width="100%"></a>
+      <p><em>Cada pedido tem a sua entrega: aqui, a faixa "Sexta livre aprovada!".</em></p>
+    </td>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/16-modo-construcao.png"><img src="./docs/screenshots/16-modo-construcao.png" alt="O editor do modo construção na demonstração: o prédio inteiro à esquerda, com a sala comunal contornada e o sofá escolhido; à direita, o painel Peça com Espelhar e Tirar, Pintar sala com 7 paredes e 10 pisos para a sala comunal e o catálogo de enfeites" width="100%"></a>
+      <p><em>Modo construção: escolher a peça, pintar a sala, pôr enfeites.</em></p>
+    </td>
+  </tr>
 </table>
+
+<p align="center">
+  <a href="./docs/screenshots/17-modo-construcao-antes-depois.png"><img src="./docs/screenshots/17-modo-construcao-antes-depois.png" alt="A sala comunal antes e depois do modo construção: em cima, a sala automática, com parede estampada e piso de madeira; embaixo, a mesma sala com parede verde, piso mais escuro, uma planta a menos, o sofá mudado de lugar e duas plantas novas" width="900"></a>
+</p>
+<p align="center"><em>Antes e depois: a mesma sala comunal, repintada e rearrumada.</em></p>
 
 <p align="center">
   <img src="./docs/screenshots/09-celular.png" alt="O escritório no celular: o mapa no topo, com agentes e balões de fala, e a lista 'Esperando você' com os botões Revisar e Responder embaixo" width="300">
@@ -141,9 +181,23 @@ Uma camada de diversão sorteada pelo servidor. Os agentes livres fazem amizades
 - **Melhores amigos e rivais:** a ficha mostra até 3 de cada, com o valor de 0 a 100, e a última briga do dia.
 - **Placar do ringue:** vitórias, derrotas e sequência de cada agente na semana (segunda a domingo, no horário de Brasília), com o top 3 num quadro na parede do ringue, o ranking completo ao clicar nele e o campeão da semana passada. As brigas automáticas e as mandadas contam; a cancelada antes do fim não conta. O vencedor aparece numa faixa acima do ringue.
 - **Modo sério:** a caixa no **Personalizar** pausa a camada inteira, sem eventos, brigas nem greve; a cena em curso some em até 10 s em todas as telas. Bom para apresentar.
+- **Demonstração e Simulação:** no modo demonstração (`?demo=1`), o ringue, a greve, o placar e o **Mandar pro ringue** também rodam, no próprio navegador, sem servidor: a primeira briga sai em cerca de um minuto, e a greve, um pouco depois. Os parâmetros da Simulação (`?hora=`, `?data=`, `?clima=`) desligam a vida social naquela aba.
 - **Recomeça ao reiniciar, menos o placar:** amizades, rivalidades e eventos ficam só na memória do serviço; reiniciar volta todo mundo ao ponto de partida, o mesmo para todos. Só o placar da semana vai para o disco, em `dados/placar.json` (até 64 KB e 500 agentes, gravado de forma atômica quando muda). Se o arquivo estiver ilegível, o placar recomeça vazio, com um aviso no log; a troca de conta no agentes.chat também o esvazia.
 - **Não chama o agentes.chat** nem mexe no trabalho dos agentes: usa só a leitura que o escritório já faz.
 - Os números (chances, tetos e intervalos) ficam no topo do `social.py`, e as falas, no `FRASES.social` do `static/vida.js`, para trocar no white-label.
+
+## Modo construção
+
+Arrume o escritório com o mouse, no computador. Abra pela tela **Personalizar** (`construir.html`); no celular, o editor mostra só um aviso, e a página principal mostra o resultado.
+
+- **Pintar:** escolha a sala e depois uma das 7 paredes e um dos 10 pisos.
+- **Móveis:** arraste a peça, ou escolha com Tab e Enter e mova com as setas (8 px; Shift: 1 px). `E` espelha, `Delete` tira, e o catálogo põe um dos 53 enfeites (plantas, tapetes, sofás, poltronas, pufes, estantes, luminárias, violão, bicicleta...): escolha a peça e clique numa sala. Peça nova é só enfeite: ninguém senta nela.
+- **Desfazer e refazer** (`Ctrl+Z`, `Ctrl+Shift+Z` ou `Ctrl+Y`, até 100 passos), **Descartar** (volta ao que está salvo) e **Voltar ao automático**, que pergunta antes e salva a planta vazia; com o editor aberto, ainda dá para desfazer.
+- **Salvar** grava a planta para todos; as outras telas abertas mostram ao recarregar. Se outra tela salvou antes, o editor avisa e oferece recarregar. O Salvar fica bloqueado enquanto um assento estiver sem passagem, e esse assento aparece marcado em vermelho no mapa.
+- **O que continua automático:** mesas e cadeiras (agente novo continua ganhando mesa), a bancada da cozinha, o ringue, tudo o que fica na parede (quadros, janelas, placas, o painel do logo e o quadro do placar) e as peças do corredor e de fora do prédio. As peças com animação presa ao lugar (o balcão do café e o rack da TV) só saem; os fliperamas, a jukebox e mais algumas não espelham. Nada movido ou posto pode encostar no ringue nem cobrir o que está na parede.
+- **Uma camada por cima do prédio automático:** a planta guarda só o que mudou (pintura e peças movidas, espelhadas, tiradas e postas). Com a planta vazia, o prédio é exatamente o automático. Quando os times mudam, o prédio é refeito e a planta reaplica o que ainda existe e cabe; o editor diz quantos ajustes não aparecem mais e oferece limpar.
+- **Para testar sem salvar:** `construir.html?demo=1` monta um exemplo próprio.
+- **Limites:** 64 salas pintadas, 400 móveis ajustados e 200 peças novas, em até 64 KB (`dados/planta.json`).
 
 ## Segurança
 
@@ -177,6 +231,9 @@ Em resumo: o escritório só é alcançável **na sua tailnet**, **falha fechado
   - **Limites:** no máximo 5 envios por minuto e 50 por dia; um pedido de pausa do agentes.chat pausa só os envios. O log de cada envio guarda o usuário, o agente, a tarefa e o tamanho, nunca o texto.
   - **Desligar na hora** (por exemplo, se uma mensagem cair no lugar errado): 1) "Fechar agora" no selo do modo; 2) `"ler"` no `times.json`, que vale sem reiniciar; 3) em **Settings › AI apps**, no agentes.chat, desconecte o "Escritório dos agentes".
   - **Voltar ao só leitura:** troque para `"ler"` (ou `"desligado"`) no `times.json`. O escritório revoga o token de escrita e pede uma nova conexão, só de leitura; até lá, a leitura também para. Um `times.json` ilegível ou com erro de digitação não revoga nada (só bloqueia os envios). Depois, desconecte o app antigo em **Settings › AI apps**, no agentes.chat.
+- **Modo construção (`POST /api/planta`):** quem está logado edita, a mesma regra do **Personalizar** (só existe uma conta). A rota exige o `Origin` igual ao endereço do servidor (sem cair para o `Referer`), sessão, `application/json` (senão, 415), corpo de até 64 KB e o `rev` atual da planta (409 quando outra tela salvou antes). A planta é validada tudo ou nada, do mesmo jeito no salvar e na leitura, e gravada de forma atômica (0600), sob uma trava, em `dados/planta.json`; o log guarda contagens, nunca o conteúdo. Um arquivo ilegível ou inválido volta ao prédio automático, com uma linha no log. O servidor confere só o formato e os limites: a lista de peças é um catálogo fechado no navegador, e uma planta ruim nunca derruba a página.
+- **Rotas da vida social:** o **Mandar pro ringue** (`POST /api/social/briga`) e o **Atender o pedido** (`POST /api/social/greve/atender`) seguem as mesmas regras de origem estrita e só JSON. O placar semanal (`dados/placar.json`) guarda só ids de agentes e números.
+- **Corpo dos POST:** todo `POST` lê o corpo (até 128 KB) antes de responder, para a recusa (origem errada, tipo errado, grande demais) chegar ao cliente em vez de a conexão cair. Cada rota mantém o seu teto de tamanho; acima de 128 KB, só o envio do logo lê o corpo.
 - **Marca na tela de entrar:** o nome, a cor e o logo da empresa aparecem para quem alcança a página na tailnet, antes do login. O logo aceita só PNG, JPEG e WEBP, de até 600 KB. Prefira uma imagem sem metadados sensíveis (EXIF, GPS).
 - **Rede:** o serviço escuta só em 127.0.0.1, numa porta privilegiada, e quem o publica é a Tailscale.
 - **Sistema:** roda com usuário próprio e unit systemd endurecida. Tokens, senhas e logo ficam em `/var/lib/escritorio` (0700).
@@ -192,11 +249,12 @@ agentes.chat (MCP, OAuth "read")
 escritorio.py ── 127.0.0.1:737 ── tailscale serve (HTTPS, só na tailnet) ──▶ navegador
    │  servidor HTTP da stdlib, login, OAuth + PKCE, leitor MCP, clima, marca
    ├─ acesso.py: usuários (scrypt), sessões, primeiro acesso
-   └─ social.py: diretor da vida social (na memória; o placar semanal em dados/placar.json)
+   ├─ social.py: diretor da vida social (na memória; o placar semanal em dados/placar.json)
+   └─ planta.py: planta do modo construção (validação, trava e rev; dados/planta.json)
 ```
 
-- **Servidor:** só a biblioteca padrão do Python 3 (`escritorio.py`, `acesso.py` e `social.py`, o diretor da [vida social](#vida-social)). Sem banco de dados: poucos arquivos na pasta de dados.
-- **Front-end:** JavaScript puro e canvas, sem build (`static/`). `app.js` (interface, câmera, painéis), `mapa.js` (prédio procedural, colisão de móveis, portas), `vida.js` (vida dos agentes), `avatar.js`, `efeitos.js`, `ceu.js`, `clima.js`, `festas.js`, `som.js` (WebAudio), `simular.js`, `brincar.js` (objetos clicáveis, modo foto, demonstração), `personalizar.js` e `entrar.*` (login).
+- **Servidor:** só a biblioteca padrão do Python 3 (`escritorio.py`, `acesso.py`, `social.py`, o diretor da [vida social](#vida-social), e `planta.py`, a planta do [modo construção](#modo-construção)). Sem banco de dados: poucos arquivos na pasta de dados.
+- **Front-end:** JavaScript puro e canvas, sem build (`static/`). `app.js` (interface, câmera, painéis), `mapa.js` (prédio procedural, colisão de móveis, portas e a planta aplicada por cima), `vida.js` (vida dos agentes), `avatar.js`, `efeitos.js`, `ceu.js`, `clima.js`, `festas.js`, `expediente.js`, `som.js` (WebAudio), `simular.js`, `brincar.js` (objetos clicáveis, modo foto, demonstração), `personalizar.js`, `planta.js` e `construir.*` (editor do modo construção) e `entrar.*` (login).
 - **Instalação:** o `instalar.sh` cria o usuário, os arquivos, uma unit systemd endurecida e o `tailscale serve`.
 
 ### Diário de transições
@@ -206,11 +264,14 @@ A cada leitura (30 s), o servidor compara as tarefas com a leitura anterior, pel
 ## Desenvolvimento
 
 ```bash
-python -m unittest test_escritorio
+python -m unittest test_escritorio test_planta
 ESCRITORIO_TIMES=times.exemplo.json python ferramentas/previa.py ferramentas/previa.exemplo.json   # prévia local em http://127.0.0.1:7372, sem login
-python -B ferramentas/checar_seguranca.py .  # confere login, origem, cookie e limite de tentativas
+python -B ferramentas/checar_seguranca.py .  # confere login, origem, cookie, limite de tentativas e as rotas POST
 node ferramentas/estresse_vida.mjs [url] [--minutos 40] [--acoes] [--brigas 10] [--times 20]  # regressão da vida sobre a prévia (Chrome/Edge headless); sai com 1 se achar algo
+node ferramentas/checar_planta_mapa.mjs [url] [--ref main] [--prints]  # modo construção: com a planta vazia, o prédio fica idêntico ao da referência; plantas de exemplo e adulteradas
 ```
+
+Na prévia, o modo construção grava numa pasta temporária (some quando a prévia para); o `--greve` começa uma greve no primeiro passo do diretor da vida social.
 
 O `ferramentas/previa.exemplo.json` traz respostas fictícias do MCP (`agents` e `tasks`, com os handles do `times.exemplo.json`) para testar sem conectar; o `ESCRITORIO_TIMES` faz as salas do exemplo aparecerem. Para testar com o seu workspace, copie as respostas dele para `dados.json`, que o git ignora, e rode `python ferramentas/previa.py dados.json`. A prévia relê o arquivo quando ele muda: para ver os eventos ao vivo, mude o `status` de uma tarefa ou tire e ponha tarefas. Outra porta: `PREVIA_PORTA=7373`.
 
