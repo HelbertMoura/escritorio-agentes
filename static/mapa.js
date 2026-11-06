@@ -331,12 +331,38 @@ const PROCEDURAIS = { ventilador: [14, 22], hidrante: [7, 10], ring_light: [16, 
 const pisoDoTime = n => { n = Number.isInteger(n) ? ((n % 10) + 10) % 10 : 3; return n === 6 ? 3 : n === 7 ? 5 : n; };
 const paredeDoTime = n => { n = Number.isInteger(n) ? ((n % 7) + 7) % 7 : 2; return n === 6 ? 5 : n; };
 
-function montarPredio(atlas, config, grupos) {
+// Modo construção (planta.js): o que dá para pôr (só enfeite de chão, sem atividade na vida.js nem no brincar.js),
+// o que só sai (a animação fica presa ao lugar) e o que não se espelha (direção, tela ou letreiro no desenho)
+const CATALOGO = new Set(["planta", "planta2", "planta_fina", "planta_alta", "planta_alta2", "planta_alta3", "planta_cacto", "planta_g1", "planta_g3", "planta_g4",
+  "tapete", "tapete2", "tapete3", "tapete_persa", "luminaria", "luminaria_chao", "luminaria_arco", "estante", "estante_baixa", "estante_livros", "armario", "armario2",
+  "arquivo", "arquivo2", "caixas", "sofa", "sofa2", "sofa3", "sofa_cinza", "poltrona_amarela", "poltrona_azul", "poltrona_couro", "poltrona_tecido",
+  "pufe_amarelo", "pufe_azul", "pufe_branco", "pufe_vermelho", "mesinha", "mesinha2", "aparador", "aparador_baixo", "cabideiro", "quadro_branco", "impressora",
+  "globo", "vitrine", "cofre", "violao", "ventilador", "lixeira", "lixeiras", "extintor", "bicicleta"]);
+const FIXOS = new Set(["balcao", "rack_tv"]);
+const SEM_ESPELHO = new Set(["reuniao", "balcao", "rack_tv", "arcade1", "arcade2", "arcade3", "console", "estacao_gamer", "jukebox", "vendas", "vendas2", "recepcao"]);
+const dePlanta = (o, k) => (o && typeof o === "object" && Object.hasOwn(o, k) ? o[k] : undefined);   // nada da planta chega ao protótipo
+const coordOk = n => Number.isInteger(n) && n >= 0 && n <= 4095;
+function tamanho(atlas, nome) {
+  const s = typeof nome !== "string" ? null : Object.hasOwn(atlas.json.sprites, nome) ? atlas.json.sprites[nome] : Object.hasOwn(PROCEDURAIS, nome) ? [0, 0, ...PROCEDURAIS[nome]] : null;
+  return s ? [s[2], s[3]] : null;
+}
+
+// Planta ruim nunca derruba a página: em qualquer exceção, o prédio sai automático
+function montarPredio(atlas, config, grupos, planta) {
+  if (planta === undefined) planta = config && config.planta;
+  if (!planta || typeof planta !== "object") return montar(atlas, config, grupos, null);
+  try { return montar(atlas, config, grupos, planta); } catch (e) {
+    console.warn("Planta do escritório ignorada; o prédio saiu automático.", e && e.message);
+    return montar(atlas, config, grupos, null);
+  }
+}
+
+function montar(atlas, config, grupos, planta) {
   const tem = n => !!sprite(atlas, n);
   const marca = semente(config.empresa || "escritorio");   // cada empresa ganha seu próprio sorteio
   const salas = [];
   let x = MX;
-  const recepcao = { tipo: "recepcao", nome: "Recepção", tx: x, ty: MY, tw: 10, parede: 3, piso: 1, mesas: [] };
+  const recepcao = { tipo: "recepcao", chave: "recepcao", nome: "Recepção", tx: x, ty: MY, tw: 10, parede: 3, piso: 1, mesas: [] };
   salas.push(recepcao); x += recepcao.tw + 1;
   // Cada time vira uma sala; com muitos times, os últimos descem para a fileira de baixo (porta na
   // parede de cima, no máximo 2 fileiras de mesas) até as duas fileiras ficarem com larguras parecidas.
@@ -355,7 +381,7 @@ function montarPredio(atlas, config, grupos) {
   grupos.forEach((g, i) => {
     const n = qtd(g), embaixo = i >= emCima;
     const cols = embaixo ? Math.max(2, Math.ceil(n / 2)) : Math.min(Math.max(n, 2), 4), linhas = Math.ceil(n / cols);
-    const s = { tipo: g.tipo || "mesas", nome: g.nome, cor: g.cor, icone: g.icone, tx: x, ty: MY, tw: cols * MESA_W + 4, parede: paredeDoTime(g.parede), piso: pisoDoTime(g.piso), cols, linhas, handles: g.handles, mesas: [] };
+    const s = { tipo: g.tipo || "mesas", chave: "time:" + g.nome, nome: g.nome, cor: g.cor, icone: g.icone, tx: x, ty: MY, tw: cols * MESA_W + 4, parede: paredeDoTime(g.parede), piso: pisoDoTime(g.piso), cols, linhas, handles: g.handles, mesas: [] };
     salas.push(s);
     if (embaixo) { s.emCima = true; debaixo.push(s); return; }
     linhasMax = Math.max(linhasMax, linhas);
@@ -371,11 +397,23 @@ function montarPredio(atlas, config, grupos) {
   // fileira de baixo, da direita para a esquerda: salas de time que desceram, cozinha, sala comunal (o que sobrar) e reunião
   let xb = B;
   for (const s of [...debaixo].reverse()) { xb -= s.tw; Object.assign(s, { tx: xb, ty: yb, th: thb }); xb -= 1; }
-  const reuniao = { tipo: "reuniao", nome: "Reunião", tx: MX, ty: yb, tw: 12, th: thb, parede: 1, piso: 7 };
-  const cozinha = { tipo: "cozinha", nome: "Cozinha", tx: xb - 14, ty: yb, tw: 14, th: thb, parede: 6, piso: 6 };
-  const lounge = { tipo: "lounge", nome: "Sala comunal", tx: reuniao.tx + reuniao.tw + 1, ty: yb, th: thb, parede: 2, piso: 1 };
+  const reuniao = { tipo: "reuniao", chave: "reuniao", nome: "Reunião", tx: MX, ty: yb, tw: 12, th: thb, parede: 1, piso: 7 };
+  const cozinha = { tipo: "cozinha", chave: "cozinha", nome: "Cozinha", tx: xb - 14, ty: yb, tw: 14, th: thb, parede: 6, piso: 6 };
+  const lounge = { tipo: "lounge", chave: "lounge", nome: "Sala comunal", tx: reuniao.tx + reuniao.tw + 1, ty: yb, th: thb, parede: 2, piso: 1 };
   lounge.tw = cozinha.tx - 1 - lounge.tx;
   const baixo = [reuniao, lounge, cozinha];
+  // planta: a pintura vale mais que o times.json (valor cru); sala que não existe nesta montagem é ignorada e contada
+  const resumoPlanta = { rev: planta && Number.isInteger(planta.rev) ? planta.rev : 0, aplicados: 0, ignorados: [] };
+  const pinturas = planta && planta.salas && typeof planta.salas === "object" ? planta.salas : null;
+  if (pinturas) for (const chaveSala of Object.keys(pinturas)) {
+    const p = pinturas[chaveSala], minhas = [...salas, ...baixo].filter(s => s.chave === chaveSala);
+    const parede = dePlanta(p, "parede"), piso = dePlanta(p, "piso");
+    const okParede = parede === undefined || (Number.isInteger(parede) && tem(`parede${parede}_1_0`));
+    const okPiso = piso === undefined || (Number.isInteger(piso) && tem(`piso${piso}`));
+    if (!minhas.length || !okParede || !okPiso || (parede === undefined && piso === undefined)) { resumoPlanta.ignorados.push(chaveSala); continue; }
+    for (const s of minhas) { if (parede !== undefined) s.parede = parede; if (piso !== undefined) s.piso = piso; }
+    resumoPlanta.aplicados++;
+  }
   const W = (B + MX) * T, H = (yb + thb + MB) * T;
   const predioRet = { x: (MX - 1) * T, y: (MY - 1) * T, w: (B - MX + 2) * T, h: (yb + thb - MY + 2) * T };
   const corredorY = (corredor.ty + 1.5) * T;
@@ -413,14 +451,21 @@ function montarPredio(atlas, config, grupos) {
   const sobre = (r, p) => r.x < p.x + p.w && r.x + r.w > p.x && r.y < p.y + p.h && r.y + r.h > p.y;
   const colide = r => pegadas.some(p => sobre(r, p));
   const reservas = [];  // trechos de parede guardados para placas: nenhum quadro nem móvel alto na frente
+  // modo construção: cada peça de chão de uma sala ganha o id "<sala>|<sprite>|<k>" (k conta as chamadas daquele sprite naquela
+  // sala antes de qualquer desvio, então tirar ou mover uma peça não muda o id das outras); a planta é aplicada no passe final
+  const editaveis = new Map(), ocorrencias = new Map(), ligados = new Map();   // ligados: assentos e anexos que andam com a peça
+  const liga = (o, chave, item) => { if (!o) return; if (!ligados.has(o)) ligados.set(o, { vagas: [], anexos: [] }); ligados.get(o)[chave].push(item); };
   const obj = (nome, cx, base, evitar = true, cheio = false) => {   // desvia de móveis, portas e passagens; cheio: pelo sprite inteiro
     const s = sprite(atlas, nome); if (!s) return null;
     // dentro de uma sala, o móvel inteiro fica entre as paredes laterais
     const sala = [...salas, ...baixo].find(q => q.pw && cx >= q.px && cx <= q.px + q.pw && base > q.py && base <= q.py + q.ph + 2);
+    let id = null;
+    if (sala && evitar) { const k = `${sala.chave}|${nome}`, n = ocorrencias.get(k) || 0; ocorrencias.set(k, n + 1); if (n < 100) id = `${k}|${n}`; }
     const prender = x => (sala ? Math.max(sala.px + s[2] / 2 + 1, Math.min(sala.px + sala.pw - s[2] / 2 - 1, x)) : x);
     const cx0 = cx; cx = prender(cx);
-    if (!/^tapete/.test(nome)) {
-      const fundo = cheio ? s[3] : Math.max(6, s[3] * 0.35);
+    let peg = null;
+    const fundo = /^tapete/.test(nome) ? null : cheio ? s[3] : Math.max(6, s[3] * 0.35);
+    if (fundo !== null) {
       const pegada = x => ({ x: x - s[2] / 2 + 1, y: base - fundo, w: s[2] - 2, h: fundo });
       if (evitar) {
         const inteiro = x => ({ x: x - s[2] / 2, y: base - s[3], w: s[2], h: s[3] });
@@ -428,12 +473,16 @@ function montarPredio(atlas, config, grupos) {
         if (d === undefined) return null;
         cx = prender(cx + d);
       }
-      pegadas.push(pegada(cx));
+      peg = pegada(cx); pegadas.push(peg);
     }
     const dx = cx - cx0;
     usoPredio.set(nome, (usoPredio.get(nome) || 0) + 1);
     // dx: quanto o móvel andou para desviar (o assento dele anda junto)
     const o = { nome, x: Math.round(cx - s[2] / 2), y: Math.round(base - s[3]), w: s[2], h: s[3], dx, chave: /^tapete/.test(nome) ? -1 : base };
+    if (id) {
+      o.id = id; o.salaChave = sala.chave; o.auto = { x: Math.round(cx) - sala.px, y: Math.round(base) - sala.chao }; o.pos = { ...o.auto };
+      editaveis.set(id, { o, sala, sp: s, cx, base, fundo, peg });
+    }
     objetos.push(o); return o;
   };
   // sorteia entre as peças menos usadas no prédio até agora
@@ -472,7 +521,7 @@ function montarPredio(atlas, config, grupos) {
   const paredeLivreEm = (x0, x1, chao) => paredeOcupada.every(o => x1 < o.x || x0 > o.x + o.w || o.y < chao - PAREDE * T - 8 || o.y > chao)
     && objetos.every(o => o.chave < 0 || !o.w || o.y >= chao - 4 || o.y + o.h <= chao - PAREDE * T || x1 < o.x || x0 > o.x + o.w);   // só o que sobe nesta parede
   const vaga = (sala, x, y, tipo) => { const v = { sala, x: Math.round(x), y: Math.round(y), tipo }; vagas.push(v); return v; };
-  const junto = (sala, o, x, y, tipo) => (o ? vaga(sala, x + o.dx, y, tipo) : null);   // assento de um móvel (some se ele não coube)
+  const junto = (sala, o, x, y, tipo) => { if (!o) return null; const v = vaga(sala, x + o.dx, y, tipo); liga(o, "vagas", v); return v; };   // assento de um móvel (some se ele não coube)
 
   // ---------------- salas de cima
   let vizinha = new Set();   // peças da sala anterior na mesma fileira (a vizinha nunca repete)
@@ -499,11 +548,13 @@ function montarPredio(atlas, config, grupos) {
       obj("recepcao", s.px + s.pw / 2, chao + 34);
       obj("planta_alta", s.px + 10, chao + 30);
       obj("planta_alta3", s.px + s.pw - 10, chao + 30);
-      obj("poltrona_azul", s.px + 28, fim - 6);
-      obj("poltrona_amarela", s.px + 52, fim - 6);
+      const pa = obj("poltrona_azul", s.px + 28, fim - 6);
+      const pb = obj("poltrona_amarela", s.px + 52, fim - 6);
       obj("mesinha", s.px + 40, fim - 2);
       animados.push({ tipo: "gato", ...ancorar(atlas, "gato_0", s.px + s.pw - 36, chao + 58) });   // longe da placa da fachada
-      s.vagasLivres = [vaga(s, s.px + 28, fim - 8, "recepcao"), vaga(s, s.px + 52, fim - 8, "recepcao")];
+      // assento preso à poltrona; sem ela no automático (não coube), fica o ponto de espera de sempre
+      const assento = (o, x) => (o ? junto(s, o, x, fim - 8, "recepcao") : vaga(s, x, fim - 8, "recepcao"));
+      s.vagasLivres = [assento(pa, s.px + 28), assento(pb, s.px + 52)];
       continue;
     }
     if (s.emCima) livre(s.porta.x - 22, chao - 2, 44, 36); else livre(s.porta.x - 20, fim - 34, 40, 34);
@@ -646,7 +697,7 @@ function montarPredio(atlas, config, grupos) {
     obj("quadro_branco", s.px + s.pw - 20, chao + 5.4 * T);   // na altura da mesa, para a apresentação
     if (mesa) { // pé de quem senta em cada cadeira do sprite (mesa na diagonal) e para onde olha
       const cadeiras = [[7, 36, "dir"], [21, 20, "baixo"], [35, 13, "baixo"], [72, 12, "esq"], [48, 44, "cima"], [63, 36, "cima"]];
-      for (const [cx0, cy0, olha] of cadeiras) vaga(s, mesa.x + cx0 * mesa.w / 77, mesa.y + cy0 * mesa.h / 49, "reuniao").olha = olha;
+      for (const [cx0, cy0, olha] of cadeiras) { const v = vaga(s, mesa.x + cx0 * mesa.w / 77, mesa.y + cy0 * mesa.h / 49, "reuniao"); v.olha = olha; liga(mesa, "vagas", v); }
     }
   }
   // Cozinha de verdade: bancada contínua na parede (geladeira na ponta, pia sob a janela, cooktop com coifa e
@@ -667,10 +718,10 @@ function montarPredio(atlas, config, grupos) {
     }
     vaga(s, b.x + b.fogao + 10, chao + 2.6 * T, "cozinha");
     const bal = obj("balcao", L + 146, base);   // máquina de café: centro da roda de café
-    if (bal) animados.push({ tipo: "cafe", ...ancorar(atlas, "cafe_0", bal.x + bal.w / 2, bal.y + 4), chave: bal.chave + 0.1 });
+    if (bal) { const a = { tipo: "cafe", ...ancorar(atlas, "cafe_0", bal.x + bal.w / 2, bal.y + 4), chave: bal.chave + 0.1 }; animados.push(a); liga(bal, "anexos", a); }
     junto(s, bal, L + 146, chao + 2.8 * T, "cafe");
     const m1 = obj("mesa_cozinha", L + 44, chao + 100), m2 = obj("mesa_cozinha2", L + 92, chao + 100);
-    for (const m of [m1, m2]) if (m) { vaga(s, m.x + 6, m.y + m.h - 6, "lanche"); vaga(s, m.x + m.w - 6, m.y + m.h - 6, "lanche"); }
+    for (const m of [m1, m2]) if (m) { liga(m, "vagas", vaga(s, m.x + 6, m.y + m.h - 6, "lanche")); liga(m, "vagas", vaga(s, m.x + m.w - 6, m.y + m.h - 6, "lanche")); }
     // placa no alto da parede, logo à esquerda da porta (a bancada é baixa: cabe embaixo dela)
     const tp = tamanhoPlaca(s), x = s.portas[0] - 20 - tp.total;
     s.placa = { x, y: s.py + 4, w: tp.w, total: tp.total, max: tp.total };
@@ -710,7 +761,7 @@ function montarPredio(atlas, config, grupos) {
       [8, zx => { // TV e videogame
         obj("tapete", zx + 4 * T, chao + 3.2 * T);
         const tv = obj("rack_tv", zx + 4 * T, chao + 10);
-        if (tv) animados.push({ tipo: "tela", nome: "rack_tv", para: ["videogame", "tv"], ...telaDe(atlas, "rack_tv", tv.x + tv.w / 2, tv.y + tv.h) });
+        if (tv) { const a = { tipo: "tela", nome: "rack_tv", para: ["videogame", "tv"], ...telaDe(atlas, "rack_tv", tv.x + tv.w / 2, tv.y + tv.h) }; animados.push(a); liga(tv, "anexos", a); }
         junto(s, obj("pufe_amarelo", zx + 2.8 * T, chao + 2.7 * T), zx + 2.8 * T, chao + 2.4 * T, "videogame");
         junto(s, obj("pufe_azul", zx + 5.2 * T, chao + 2.7 * T), zx + 5.2 * T, chao + 2.4 * T, "videogame");
         // nas laterais da TV, os jogos de parede (vida.js): alvo de dardos à esquerda e cesta de basquete à direita
@@ -743,7 +794,8 @@ function montarPredio(atlas, config, grupos) {
       }],
       [6, zx => { // pingue-pongue
         naParede("poster1", zx + 3 * T, chao - 4);
-        { const o = obj("pingpong", zx + 3 * T, fim - 10); junto(s, o, zx + 3 * T, chao + 1.2 * T, "pingpong"); junto(s, o, zx + 3 * T, fim - 10, "pingpong"); }
+        // a mesa sobe 12 px da parede de baixo: o jogador de baixo fica numa faixa livre, com passagem pelos lados
+        { const o = obj("pingpong", zx + 3 * T, fim - 22); junto(s, o, zx + 3 * T, chao + 1.2 * T, "pingpong"); junto(s, o, zx + 3 * T, fim - 10, "pingpong"); }
         obj("planta_cacto", zx + 0.6 * T, chao + 1.4 * T);   // a planta_g2 é de pendurar: não vai no chão
       }],
       [5, zx => { // canto gamer
@@ -781,7 +833,7 @@ function montarPredio(atlas, config, grupos) {
         junto(s, obj("cafeteira", zx + 1 * T, chao + 12), zx + 1 * T, chao + 2.4 * T, "cafe");
         junto(s, obj("geladeira_bebidas", zx + 2.6 * T, chao + 12), zx + 2.8 * T, chao + 2.6 * T, "papo");
         const m = obj("mesinha", zx + 2.5 * T, fim - 14);
-        if (m && tem("fruteira")) { const f = obj("fruteira", m.x + m.w / 2, m.y + 9, false); if (f) f.chave = m.chave + 0.1; }
+        if (m && tem("fruteira")) { const f = obj("fruteira", m.x + m.w / 2, m.y + 9, false); if (f) { f.chave = m.chave + 0.1; liga(m, "anexos", f); } }
         junto(s, m, zx + 1.3 * T, fim - 8, "lanche"); junto(s, m, zx + 3.7 * T, fim - 8, "lanche");
         obj("planta_alta2", zx + 4.4 * T, chao + 1.6 * T);
       }],
@@ -869,6 +921,120 @@ function montarPredio(atlas, config, grupos) {
     for (let jx = s.px + 3 * T; jx < s.px + s.pw - 3 * T; jx += 7 * T)
       if (s.portas.every(p => Math.abs(p - jx) > 3 * T) && paredeLivreEm(jx - 16, jx + 16, chao)) janela(jx, chao - 14, 28, 22);
   }
+  // ---------------- planta (modo construção): peças tiradas, movidas, espelhadas e postas, por cima do prédio automático.
+  // Mudança que não cabe volta ao lugar automático e entra em ignorados; o prédio continua igual para todo o resto.
+  function aplicarPlanta() {
+    const ignora = id => resumoPlanta.ignorados.push(id);
+    const tira = (lista, item) => { const i = lista.indexOf(item); if (i >= 0) lista.splice(i, 1); return i; };
+    // o que nada movido ou posto pode encostar: mesas e cadeiras (não têm pegada), o gato da recepção, o ringue com a plateia
+    // (30 px de folga e a frente da entrada) e o painel do logo da recepção
+    const mesas = salas.flatMap(s => s.mesas.map(m => ({ x: m.x - 17, y: m.topo - 7, w: 34, h: 27 })));
+    const gatos = animados.filter(a => a.tipo === "gato" && a.w).map(a => ({ x: a.x, y: a.y, w: a.w, h: a.h }));
+    const rg = lounge.ringue, ab = RINGUE.abertura;
+    const zonas = rg ? [{ x: rg.x - 30, y: rg.y - 48, w: rg.w + 60, h: rg.h + 96 }, { x: rg.x + (rg.w - ab) / 2 - 8, y: rg.y + rg.h, w: ab + 16, h: 72 }] : [];
+    for (const s of salas) if (s.placaLogo) zonas.push({ x: s.placaLogo.x - 4, y: s.placaLogo.y - 4, w: s.placaLogo.w + 8, h: s.placaLogo.h + 8 });
+    // a peça (sprite sp, centro cx, pé base, espelhada ou não) cabe ali? fundo null: tapete, que não tem pegada
+    // parado: só espelhou no lugar automático (a pegada é simétrica), então basta conferir os assentos
+    const suspensas = new Set();   // assentos das peças que ainda vão andar: não contam como obstáculo
+    const cabe = (sp, s, cx, base, fundo, assentos, proprias, parado = false) => {
+      const w = sp[2], h = sp[3], inteiro = { x: cx - w / 2, y: base - h, w, h };
+      const assentosOk = () => assentos.every(([x, y]) => x >= s.px + 5 && x <= s.px + s.pw - 5 && y >= s.chao + 5 && y <= s.py + s.ph - 3
+        && !pegadas.some(p => !p.livre && x > p.x && x < p.x + p.w && y > p.y && y < p.y + p.h));
+      if (parado) return assentosOk();
+      if (cx - w / 2 < s.px + 1 || cx + w / 2 > s.px + s.pw - 1 || base < s.chao + 8 || base > s.py + s.ph - 2) return false;
+      if (zonas.some(z => sobre(inteiro, z)) || reservas.some(q => sobre(inteiro, q))) return false;
+      // subindo na parede: não cobre placa, quadro, painel do logo, quadro do placar, TV, ar nem telas
+      if (inteiro.y < s.chao && paredeOcupada.some(q => q.y >= s.py - 8 && q.y < s.chao && inteiro.x < q.x + q.w && inteiro.x + w > q.x)) return false;
+      if (fundo === null) return true;
+      const peg = { x: cx - w / 2 + 1, y: base - fundo, w: w - 2, h: fundo };
+      if (colide(peg) || mesas.some(q => sobre(peg, q)) || gatos.some(q => sobre(peg, q))) return false;   // colide: portas, corredores e entrada
+      if (vagas.some(v => !proprias.has(v) && !suspensas.has(v) && v.x > peg.x - 3 && v.x < peg.x + peg.w + 3 && v.y > peg.y - 3 && v.y < peg.y + peg.h + 3)) return false;
+      return assentosOk();
+    };
+    // tirar primeiro (libera espaço), depois mover e espelhar
+    const pendentes = [];
+    for (const [id, m] of Object.entries(planta.moveis && typeof planta.moveis === "object" ? planta.moveis : {})) {
+      const ed = editaveis.get(id);
+      if (!ed || !m || typeof m !== "object") { ignora(id); continue; }
+      const fora = dePlanta(m, "fora"), x = dePlanta(m, "x"), y = dePlanta(m, "y"), e = dePlanta(m, "e");
+      if (fora === true) {
+        const { o } = ed, lig = ligados.get(o);
+        tira(objetos, o); if (ed.peg) tira(pegadas, ed.peg);
+        if (lig) {
+          for (const v of lig.vagas) { tira(vagas, v); if (v.sala.vagasLivres) tira(v.sala.vagasLivres, v); }
+          for (const a of lig.anexos) { tira(objetos, a); tira(animados, a); }
+        }
+        editaveis.delete(id); resumoPlanta.aplicados++;
+        continue;
+      }
+      const temPos = x !== undefined || y !== undefined;
+      if (fora !== undefined || (temPos && !(coordOk(x) && coordOk(y))) || (e !== undefined && typeof e !== "boolean") || (!temPos && e === undefined)
+        || FIXOS.has(ed.o.nome) || (e === true && SEM_ESPELHO.has(ed.o.nome))) { ignora(id); continue; }
+      const anda = temPos && (x !== ed.o.auto.x || y !== ed.o.auto.y);   // x, y iguais aos do automático: fica no lugar exato dele
+      pendentes.push({ id, ed, cx: anda ? ed.sala.px + x : ed.cx, base: anda ? ed.sala.chao + y : ed.base, e: e === true });
+    }
+    // tudo o que vai andar sai do chão antes (trocar duas peças de lugar funciona em qualquer ordem); cada uma tenta o destino e,
+    // se não coube, volta ao lugar automático, e quem tinha ido para lá volta também
+    const vagasDe = p => (ligados.get(p.ed.o) || { vagas: [] }).vagas;
+    for (const p of pendentes) { if (p.ed.peg) tira(pegadas, p.ed.peg); vagasDe(p).forEach(v => suspensas.add(v)); }
+    const aplicar = p => {
+      const { ed, cx, base, e } = p, { o, sp, sala: s, fundo } = ed, lig = ligados.get(o) || { vagas: [], anexos: [] };
+      const ddx = Math.round(cx - sp[2] / 2) - o.x, ddy = Math.round(base - sp[3]) - o.y, meio = o.x + ddx + o.w / 2;
+      const espelha = e !== !!o.espelho, gira = x => (espelha ? Math.round(2 * meio - x) : x);
+      const assentos = lig.vagas.map(v => [gira(v.x + ddx), v.y + ddy]);
+      if (!cabe(sp, s, cx, base, fundo, assentos, new Set(lig.vagas), cx === ed.cx && base === ed.base)) return false;
+      p.antes = { x: o.x, y: o.y, chave: o.chave, espelho: o.espelho, peg: ed.peg, cx: ed.cx, base: ed.base,
+        vagas: lig.vagas.map(v => [v.x, v.y, v.olha]), anexos: lig.anexos.map(a => [a.x, a.y, a.chave]) };
+      lig.vagas.forEach((v, k) => {
+        [v.x, v.y] = assentos[k]; suspensas.delete(v);
+        if (espelha && (v.olha === "dir" || v.olha === "esq")) v.olha = v.olha === "dir" ? "esq" : "dir";
+      });
+      for (const a of lig.anexos) { a.x += ddx; a.y += ddy; a.chave += ddy; if (espelha) a.x = Math.round(2 * meio - a.x - a.w); }
+      o.x += ddx; o.y += ddy; if (o.chave >= 0) o.chave = base;
+      if (e) o.espelho = true; else delete o.espelho;
+      if (fundo !== null) { ed.peg = { x: cx - sp[2] / 2 + 1, y: base - fundo, w: sp[2] - 2, h: fundo }; pegadas.push(ed.peg); }
+      ed.cx = cx; ed.base = base;
+      o.pos = { x: Math.round(cx) - s.px, y: Math.round(base) - s.chao };
+      return true;
+    };
+    const desfazer = p => {
+      const { ed } = p, { o } = ed, a0 = p.antes, lig = ligados.get(o) || { vagas: [], anexos: [] };
+      if (ed.peg) tira(pegadas, ed.peg);
+      Object.assign(o, { x: a0.x, y: a0.y, chave: a0.chave }); if (a0.espelho) o.espelho = true; else delete o.espelho;
+      lig.vagas.forEach((v, k) => { [v.x, v.y, v.olha] = a0.vagas[k]; if (v.olha === undefined) delete v.olha; });
+      lig.anexos.forEach((a, k) => { [a.x, a.y, a.chave] = a0.anexos[k]; });
+      Object.assign(ed, { peg: a0.peg, cx: a0.cx, base: a0.base }); o.pos = { ...o.auto };
+    };
+    const colocadas = new Set();
+    for (let volta = 0; volta < 2; volta++) for (const p of pendentes) if (!colocadas.has(p) && aplicar(p)) colocadas.add(p);
+    const falhas = pendentes.filter(p => !colocadas.has(p));
+    const dentro = (v, r) => v.x > r.x - 3 && v.x < r.x + r.w + 3 && v.y > r.y - 3 && v.y < r.y + r.h + 3;
+    const bate = (p, f) => (p.ed.peg && f.ed.peg && sobre(p.ed.peg, f.ed.peg)) || (p.ed.peg && vagasDe(f).some(v => dentro(v, p.ed.peg)))
+      || (f.ed.peg && vagasDe(p).some(v => dentro(v, f.ed.peg)));
+    for (let mudou = true; mudou;) {
+      mudou = false;
+      for (const p of colocadas) if (falhas.some(f => bate(p, f))) { desfazer(p); colocadas.delete(p); falhas.push(p); mudou = true; }
+    }
+    for (const f of falhas) { if (f.ed.peg) pegadas.push(f.ed.peg); ignora(f.id); }
+    resumoPlanta.aplicados += colocadas.size;
+    // peças novas: só enfeite do catálogo (conferido antes de qualquer busca no atlas), com o desvio de sempre
+    (Array.isArray(planta.novos) ? planta.novos : []).forEach((n, i) => {
+      const id = "novo:" + i, nome = dePlanta(n, "nome"), chaveSala = dePlanta(n, "sala"), x = dePlanta(n, "x"), y = dePlanta(n, "y"), e = dePlanta(n, "e");
+      const s = typeof chaveSala === "string" ? [...salas, ...baixo].find(q => q.chave === chaveSala) : null;
+      const sp = typeof nome === "string" && CATALOGO.has(nome) ? sprite(atlas, nome) : null;
+      if (!sp || !s || !coordOk(x) || !coordOk(y) || (e !== undefined && typeof e !== "boolean")) { ignora(id); return; }
+      const tapete = /^tapete/.test(nome), fundo = tapete ? null : Math.max(6, sp[3] * 0.35), base = s.chao + y;
+      const prender = cx => Math.max(s.px + sp[2] / 2 + 1, Math.min(s.px + s.pw - sp[2] / 2 - 1, cx));
+      const cx = [0, -8, 8, -16, 16, -24, 24].map(d => prender(s.px + x + d)).find(cx => cabe(sp, s, cx, base, fundo, [], new Set()));
+      if (cx === undefined) { ignora(id); return; }
+      const o = { nome, x: Math.round(cx - sp[2] / 2), y: Math.round(base - sp[3]), w: sp[2], h: sp[3], dx: 0, chave: tapete ? -1 : base,
+        id, salaChave: s.chave, pos: { x: Math.round(cx) - s.px, y } };
+      if (e === true) o.espelho = true;
+      if (fundo !== null) pegadas.push({ x: cx - sp[2] / 2 + 1, y: base - fundo, w: sp[2] - 2, h: fundo });
+      objetos.push(o); resumoPlanta.aplicados++;
+    });
+  }
+  if (planta) aplicarPlanta();
   for (const v of vagas) if (v.sala && v.sala.faixa) v.via = v.sala.faixa;
   const tapada = (j, x) => objetos.some(o => o.nome && o.chave >= 0 && o.y + o.h > j.y + j.h && x < o.x + o.w && x + j.w > o.x && j.y < o.y + o.h && j.y + j.h > o.y);
   for (let i = janelas.length - 1; i >= 0; i--) {
@@ -975,7 +1141,7 @@ function montarPredio(atlas, config, grupos) {
     }
     ringue.plateia = pts.filter(([px, py]) => livre(px, py) && !(py > y + h && Math.abs(px - meio) < RINGUE.abertura / 2 + 6));
   }
-  return { livre, W, H, fundo, salas, baixo, lounge, ringue, corredorY, objetos, animados, vagas, janelas, portas, quadros, predioRet, externos, entrada, luzesTeto, corredorTopo: corredor.ty * T, corredorAlt: corredor.h * T };
+  return { livre, W, H, fundo, salas, baixo, lounge, ringue, corredorY, objetos, animados, vagas, janelas, portas, quadros, predioRet, externos, entrada, luzesTeto, corredorTopo: corredor.ty * T, corredorAlt: corredor.h * T, planta: resumoPlanta };
 }
 
 // Área externa: grama, calçada em volta do prédio e rua embaixo, com os detalhes sorteados por empresa.
@@ -1098,6 +1264,6 @@ function telaDe(atlas, nome, cx, base) {
   return { x: x0 + r[0], y: y0 + r[1], w: r[2], h: r[3], chave: base + 0.2 };
 }
 
-return { nomePlaca, montarPredio, desenharMesa, desenharCadeira, mistura, hex6, cor, rgb, T, TELAS, PLACA_FONTE, PLACA_H };
+return { nomePlaca, montarPredio, desenharMesa, desenharCadeira, mistura, hex6, cor, rgb, T, TELAS, PLACA_FONTE, PLACA_H, CATALOGO, FIXOS, SEM_ESPELHO, tamanho };
 })();
 window.Mapa = Mapa;

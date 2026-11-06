@@ -115,6 +115,8 @@ srv.previa_sem_login = True  # prévia local, só em 127.0.0.1
 srv.social = e.Social(srv.leitor, e.config_publica, e.log, e.FUSO, guardar=lambda dados: e.gravar(e.ARQ_PLACAR, dados),
                       placar=e.ler_placar())
 srv.social.start()
+# modo construção: a planta salva vai para o planta.json da pasta temporária (some ao fechar a prévia)
+srv.planta = e.Planta(e.ARQ_PLANTA, e.log, lambda dados: e.gravar(e.ARQ_PLANTA, dados))
 cl = e.carregar_times().get("clima")
 if cl:
     srv.clima = e.Clima(cl["lat"], cl["lon"], cl["cidade"]); srv.clima.start()

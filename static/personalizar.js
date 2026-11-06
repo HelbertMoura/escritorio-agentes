@@ -131,6 +131,30 @@ const Personalizar = (() => {
     desenharMiniaturas();
   }
 
+  // Entrada do modo construção (construir.html, editor à parte com o próprio Salvar): editar só no computador; no celular, o aviso
+  const NO_COMPUTADOR = "(min-width: 700px) and (any-pointer: fine)";   // o avesso do SO_VER do construir.js e do construir.css
+  function montarConstrucao() {
+    if ($("m-construcao")) return;
+    const f = document.createElement("fieldset"), leg = document.createElement("legend"), txt = document.createElement("p"), link = document.createElement("a");
+    f.id = "m-construcao";
+    leg.textContent = "Modo construção";
+    txt.id = "m-construcao-ajuda"; txt.className = "ajuda";
+    link.className = "botao secundario"; link.textContent = "Abrir o modo construção"; link.setAttribute("aria-describedby", "m-construcao-ajuda");
+    link.style.alignSelf = "flex-start";
+    link.addEventListener("click", ev => {   // sair daqui descarta o que não foi salvo: avisa em vez de perder
+      if (!alterado()) return;
+      ev.preventDefault(); aviso("Salve ou desfaça as mudanças desta tela antes de abrir o modo construção.", "ruim");
+    });
+    f.append(leg, txt, link);
+    $("m-aviso").before(f);
+    const tela = matchMedia(NO_COMPUTADOR), ajustar = () => {
+      link.hidden = !tela.matches;
+      txt.textContent = tela.matches ? "Mover, tirar e pôr móveis e pintar as salas, num editor à parte com o próprio Salvar. Vale para todo mundo ao recarregar a página."
+        : "Para arrumar o escritório (mover, tirar e pôr móveis e pintar as salas), abra num computador. Aqui no celular dá para ver o resultado no mapa.";
+    };
+    tela.addEventListener("change", ajustar); ajustar();
+  }
+
   function esquecerLogo() { logoNovo = null; tirarLogo = false; if (urlLocal) { URL.revokeObjectURL(urlLocal); urlLocal = null; } }
 
   function abrir(cfg) {
@@ -141,6 +165,7 @@ const Personalizar = (() => {
     esquecerLogo(); configApp = cfg;
     salvo = { empresa: cfg.empresa || "", cor: cfg.cor || "#f5b83d", logo: cfg.logo || LOGO_PADRAO, abre: Expediente.abre, fecha: Expediente.fecha, serio: cfg.serio === true };
     $("m-social").hidden = !temSocial();   // servidor sem a vida social (ou a demonstração): a caixa nem aparece
+    montarConstrucao(); $("m-construcao").querySelector("a").href = window.Brincar && Brincar.demo ? "construir.html?demo=1" : "construir.html";
     $("m-empresa").value = salvo.empresa; $("m-cor").value = salvo.cor; $("m-abre").value = salvo.abre; $("m-fecha").value = salvo.fecha; $("m-serio").checked = salvo.serio;
     mostrarLogo(salvo.logo);
     aviso(""); mudou();

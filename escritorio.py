@@ -9,7 +9,7 @@ só na rede privada da pessoa, com HTTPS. Na frente de tudo há login com usuár
 
 Rotas: /entrar /primeiro-acesso /sair /logo  /  /<estático>  /api/estado /api/config /api/conversa /api/marca
        /api/logo /api/conversa/modo /api/conversa/modo/fechar /api/conversa/responder /api/social /api/social/briga
-       /api/social/placar /oauth/conectar /oauth/retorno (as quatro primeiras e os estáticos do login sem sessão)
+       /api/social/placar /api/planta /oauth/conectar /oauth/retorno (as quatro primeiras e os estáticos do login sem sessão)
 Uso: python3 -I escritorio.py           serviço (variáveis no /etc/escritorio.env)
      python3 -I escritorio.py codigo    mostra o código de primeiro acesso, só lendo (sudo escritorio-codigo)
 Só biblioteca padrão do Python 3.
@@ -36,6 +36,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from acesso import (ARQ_CODIGO, ARQ_USUARIOS, Acesso, TentativasDemais, UsuariosIlegiveis, gravar, ler_codigo,  # noqa: E402
                     ler_usuarios)
+from planta import PLANTA_BYTES, Planta, validar_planta  # noqa: E402
 from social import PLACAR_BYTES, PLACAR_MAX, PLACAR_TETO, Social  # noqa: E402
 
 VERSAO = "1.0.0"
@@ -79,6 +80,8 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "entrar.css": "text/css; charset=utf-8", "entrar.js": "text/javascript; charset=utf-8",
     "personalizar.js": "text/javascript; charset=utf-8", "brincar.js": "text/javascript; charset=utf-8",
     "simular.js": "text/javascript; charset=utf-8", "expediente.js": "text/javascript; charset=utf-8",
+    "planta.js": "text/javascript; charset=utf-8", "construir.html": "text/html; charset=utf-8",
+    "construir.js": "text/javascript; charset=utf-8", "construir.css": "text/css; charset=utf-8",
 }
 TIMEOUT = 20
 
@@ -1286,6 +1289,7 @@ def modo_declarado(caminho=None):
 ARQ_MARCA = os.path.join(DADOS, "marca.json")
 ARQ_LOGO = os.path.join(DADOS, "logo.img")
 LOGO_MAX = 600_000
+CORPO_ANTES = 128 * 1024   # POST: corpo lido antes de qualquer resposta (do_POST); acima disso, só a rota que aceita lê
 
 
 def tipo_imagem(dados):
@@ -1323,6 +1327,7 @@ def modo_serio(marca=None):
 
 ARQ_PLACAR = os.path.join(DADOS, "placar.json")   # placar semanal do ringue (vida social); só a thread do Social grava
 ID_PLACAR = re.compile(r"[A-Za-z0-9_-]{1,100}")
+ARQ_PLANTA = os.path.join(DADOS, "planta.json")   # modo construção; só o POST /api/planta grava, sob a trava da Planta
 
 
 def _numero(x, minimo):
@@ -1540,7 +1545,9 @@ class Pagina(BaseHTTPRequestHandler):
         tam = self.headers.get("Content-Length", "")
         if not re.fullmatch(r"[0-9]{1,7}", tam) or int(tam) > maximo:
             raise ValueError("tamanho inválido")
-        return self.rfile.read(int(tam))
+        if self.lido is None:
+            self.lido = self.rfile.read(int(tam))
+        return self.lido
 
     def _cookie(self, token, idade):
         # Lax: a volta do agentes.chat (/oauth/retorno) é navegação de outro site e precisa do cookie.
@@ -1599,6 +1606,9 @@ class Pagina(BaseHTTPRequestHandler):
             if self._previa():  # o front mostra a faixa "Prévia de desenvolvimento · dados fixos"
                 cfg["previa"] = True
             cfg["pode_responder"] = self._pode_responder()
+            planta = getattr(self.server, "planta", None)
+            if planta:   # só aqui, e não no config_publica() que o diretor social chama a cada minuto
+                cfg["planta"] = planta.publica()
             return self._json(200, cfg)
         if rota == "/api/social":   # ficha: amizades e rivais de um agente presente, só ids e números
             social = getattr(self.server, "social", None)
@@ -1736,13 +1746,44 @@ class Pagina(BaseHTTPRequestHandler):
             log(evento="social", resultado="briga_ordem", usuario=usuario)
         return self._json(st, corpo)
 
+    def _post_planta(self, rota):
+        """Modo construção: Origin obrigatório e igual à BASE (sem a volta para o Referer), sessão (ou a prévia), JSON
+        exato de até 64 KB e o rev da planta atual (outro rev: 409). Planta vazia é o "voltar ao automático"."""
+        if self.headers.get("Origin") != BASE:
+            log(evento="http", rota=rota[:40], resultado="origem_recusada")
+            return self._json(*erro(403, "origem", "Origem não permitida."))
+        usuario = self._usuario()
+        if not usuario:
+            return self._json(401, {"erro": "entre de novo"})
+        planta = getattr(self.server, "planta", None)
+        if not planta:
+            return self._json(*erro(404, "planta_desligada", "O modo construção está desligado neste escritório."))
+        if (self.headers.get("Content-Type") or "").split(";")[0].strip().lower() != "application/json":
+            return self._json(*erro(415, "formato", "Envie JSON (application/json)."))
+        try:
+            dados = json.loads(self._corpo(PLANTA_BYTES))
+        except (ValueError, RecursionError):   # tamanho, UTF-8 ou JSON inválido
+            return self._json(*erro(400, "pedido", "Pedido inválido."))
+        try:
+            pedido = validar_planta(dados)
+        except (ValueError, TypeError):   # sem ecoar nada do que veio
+            return self._json(*erro(400, "pedido", "Planta inválida."))
+        return self._json(*planta.salvar(pedido, usuario))
+
     def do_POST(self):
+        # o corpo (até 128 KB) é lido antes de qualquer resposta: respondendo com ele ainda por ler, o sistema fecha a
+        # conexão com reset e o cliente que ainda está mandando perde a resposta (a recusa virava "Sem conexão"). O teto
+        # de cada rota segue no _corpo; acima de 128 KB, só a rota que aceita (o logo) lê
+        tam = self.headers.get("Content-Length", "")
+        self.lido = self.rfile.read(int(tam)) if re.fullmatch(r"[0-9]{1,7}", tam) and int(tam) <= CORPO_ANTES else None
         rota = urllib.parse.urlsplit(self.path).path
         acesso = self.server.acesso
         if rota in ("/api/conversa/modo", "/api/conversa/modo/fechar", "/api/conversa/responder"):
             return self._post_resposta(rota)
         if rota == "/api/social/briga":
             return self._post_social(rota)
+        if rota == "/api/planta":
+            return self._post_planta(rota)
         if not self._mesma_origem():
             log(evento="http", rota=rota[:40], resultado="origem_recusada")
             return self._envia(403, "Origem não permitida.".encode())
@@ -1823,6 +1864,7 @@ def main():
     # vida social: na memória, sem rede; só o placar semanal vai para o disco, pelo gravar() atômico
     srv.social = Social(leitor, config_publica, log, FUSO, guardar=lambda dados: gravar(ARQ_PLACAR, dados), placar=ler_placar())
     srv.social.start()
+    srv.planta = Planta(ARQ_PLANTA, log, lambda dados: gravar(ARQ_PLANTA, dados))   # planta ilegível sobe vazia, com 1 log
     if contas.precisa_configurar():
         log(evento="acesso", resultado="aguardando_primeiro_usuario", ver_codigo="sudo escritorio-codigo")
     cl = carregar_times().get("clima")

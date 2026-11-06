@@ -105,6 +105,24 @@ envio = json.dumps({"id": "abcdefghijkl", "run_id": "r1", "texto": "oi", "chave"
 st, _ = req("/api/conversa/responder", {**sessao, "Origin": base, "Content-Type": "application/json"}, envio)
 confere("envio da mesma sessao sem o cookie do modo (outro navegador)", st, 403)
 
+print("== Modo construcao: salvar a planta (Origin obrigatorio, JSON exato, rev)")
+srv.planta = e.Planta(e.ARQ_PLANTA, e.log, lambda dados: e.gravar(e.ARQ_PLANTA, dados))
+pl = lambda rev, **x: json.dumps({"rev": rev, "salas": {}, "moveis": {}, "novos": [], **x}).encode()
+jp = {**sessao, "Origin": base, "Content-Type": "application/json"}
+confere("POST /api/planta sem Origin, com Referer valido (aqui o Referer nao conta)",
+        req("/api/planta", {**sessao, "Referer": base + "/", "Content-Type": "application/json"}, pl(0))[0], 403)
+confere("POST /api/planta com Origin: null", req("/api/planta", {**sessao, "Origin": "null", "Content-Type": "application/json"}, pl(0))[0], 403)
+confere("POST /api/planta com Origin de outro site", req("/api/planta", {**jp, "Origin": "https://outro.exemplo"}, pl(0))[0], 403)
+confere("POST /api/planta em text/plain (formulario de outro site)", req("/api/planta", {**jp, "Content-Type": "text/plain"}, pl(0))[0], 415)
+confere("POST /api/planta sem sessao", req("/api/planta", {"Origin": base, "Content-Type": "application/json"}, pl(0))[0], 401)
+confere("POST /api/planta com True no lugar de numero", req("/api/planta", jp, pl(0, salas={"lounge": {"piso": True}}))[0], 400)
+grande = pl(0)[:-1] + b" " * 65536 + b"}"
+confere("POST /api/planta com JSON valido de mais de 64 KB", req("/api/planta", jp, grande)[0], 400)
+confere("POST /api/planta com rev certo", req("/api/planta", jp, pl(0, salas={"lounge": {"piso": 3}}))[0], 200)
+confere("POST /api/planta com rev velho", req("/api/planta", jp, pl(0))[0], 409)
+st, h = req("/construir.html")
+confere("GET /construir.html sem sessao cai no login", (st, h.get("Location")), (302, "/entrar"))
+
 print("== Vida social: mandar pro ringue (Origin obrigatorio, JSON exato)")
 briga = json.dumps({"a": "a1", "b": "a2"}).encode()
 confere("POST /api/social/briga sem Origin, com Referer valido (aqui o Referer nao conta)",

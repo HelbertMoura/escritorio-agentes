@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Modo construção · Escritório</title>
+  <link rel="icon" href="logo.png">
+  <link rel="stylesheet" href="estilo.css?v=80">
+  <link rel="stylesheet" href="construir.css?v=1">
+</head>
+<body class="construir">
+  <a class="pular" href="#painel">Ir para as ferramentas</a>
+
+  <!-- celular (ou sem mouse): só ver; o editor pede um computador -->
+  <main id="so-celular" class="so-celular">
+    <div class="cel-cartao">
+      <h1>Modo construção</h1>
+      <p>Para arrumar o escritório, abra num computador.</p>
+      <p class="suave">No celular dá para ver o escritório como ele ficou.</p>
+      <a class="botao" href="./" data-voltar>Voltar ao escritório</a>
+    </div>
+  </main>
+
+  <div id="editor" class="editor">
+    <header class="ed-topo">
+      <a class="ed-voltar" href="./" data-voltar aria-label="Voltar ao escritório">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>
+        <span>Escritório</span>
+      </a>
+      <div class="ed-titulo">
+        <h1>Modo construção</h1>
+        <p id="ed-sub" class="suave">Mova, espelhe, tire e ponha móveis e pinte as salas.</p>
+      </div>
+      <div class="ed-acoes" role="toolbar" aria-label="Histórico e gravação">
+        <button id="desfazer" class="ed-ic" type="button" aria-keyshortcuts="Control+Z" title="Desfazer (Ctrl+Z)" disabled>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10a6 6 0 0 1 0 12h-3"></path></svg>
+          <span class="oculto">Desfazer</span>
+        </button>
+        <button id="refazer" class="ed-ic" type="button" aria-keyshortcuts="Control+Shift+Z Control+Y" title="Refazer (Ctrl+Shift+Z)" disabled>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"></path><path d="M20 9H10a6 6 0 0 0 0 12h3"></path></svg>
+          <span class="oculto">Refazer</span>
+        </button>
+        <span class="ed-sep" aria-hidden="true"></span>
+        <button id="descartar" class="botao fantasma" type="button" disabled>Descartar</button>
+        <button id="salvar" class="botao" type="button" aria-describedby="motivo-salvar" disabled>Salvar</button>
+      </div>
+    </header>
+
+    <div class="ed-corpo">
+      <section class="palco-ed" aria-label="Planta do escritório">
+        <div id="palco" class="palco-area">
+          <canvas id="tela" aria-hidden="true"></canvas>
+          <!-- uma "peça" focável por móvel editável, por cima do desenho: Tab e Enter escolhem, setas movem -->
+          <div id="camada" class="camada" role="group" aria-label="Móveis que podem ser mexidos"></div>
+          <p id="carregando" class="ed-carregando" role="status">Montando o escritório…</p>
+        </div>
+        <div class="zoom" role="group" aria-label="Zoom">
+          <button id="zoom-menos" class="ed-ic" type="button" aria-label="Afastar" title="Afastar (-)">−</button>
+          <button id="zoom-tudo" class="ed-ic" type="button" aria-label="Ver tudo" title="Ver tudo (0)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"></path></svg>
+          </button>
+          <button id="zoom-mais" class="ed-ic" type="button" aria-label="Aproximar" title="Aproximar (+)">+</button>
+        </div>
+        <p id="dica-por" class="dica-por" hidden></p>
+      </section>
+
+      <aside id="painel" class="ed-painel" tabindex="-1" aria-label="Ferramentas">
+        <!-- avisos e motivo do Salvar presos no topo do painel: ficam à vista mesmo com o catálogo rolado -->
+        <div class="ed-status">
+          <div id="avisos" class="avisos"></div>
+          <p id="motivo-salvar" class="motivo" hidden></p>
+        </div>
+
+        <section class="bloco" aria-labelledby="t-peca">
+          <h2 id="t-peca" class="olho">Peça</h2>
+          <div id="sem-peca">
+            <p class="suave">Clique num móvel do mapa (ou use Tab e Enter) para mexer nele.</p>
+          </div>
+          <div id="com-peca" hidden>
+            <p class="peca-nome"><strong id="peca-nome"></strong> <span id="peca-sala" class="suave"></span></p>
+            <p id="peca-nota" class="suave"></p>
+            <div class="linha-bt">
+              <button id="espelhar" class="botao secundario" type="button" aria-keyshortcuts="E">Espelhar <kbd aria-hidden="true">E</kbd></button>
+              <button id="tirar" class="botao secundario" type="button" aria-keyshortcuts="Delete">Tirar <kbd aria-hidden="true">Del</kbd></button>
+            </div>
+            <p class="suave dica">Arraste ou use as setas: 8 px por vez (Shift: 1 px). Esc solta a peça.</p>
+          </div>
+        </section>
+
+        <section class="bloco" aria-labelledby="t-pintar">
+          <h2 id="t-pintar" class="olho">Pintar sala</h2>
+          <label class="campo-rot" for="sala">Sala</label>
+          <select id="sala" class="campo"></select>
+          <fieldset class="amostras">
+            <legend>Parede</legend>
+            <div id="paredes" class="grade-amostras" role="radiogroup" aria-label="Parede"></div>
+          </fieldset>
+          <fieldset class="amostras">
+            <legend>Piso</legend>
+            <div id="pisos" class="grade-amostras" role="radiogroup" aria-label="Piso"></div>
+          </fieldset>
+        </section>
+
+        <section class="bloco" aria-labelledby="t-por">
+          <h2 id="t-por" class="olho">Pôr peça <span class="selo-enfeite">enfeite</span></h2>
+          <p class="suave">Escolha a peça e clique numa sala. Peças novas são só enfeite: ninguém senta nelas.</p>
+          <div id="catalogo" class="catalogo" role="group" aria-label="Catálogo de peças"></div>
+          <button id="por-aqui" class="botao secundario largo" type="button" hidden>Pôr na sala escolhida</button>
+        </section>
+
+        <section class="bloco" aria-labelledby="t-auto">
+          <h2 id="t-auto" class="olho">Recomeçar</h2>
+          <button id="automatico" class="link-botao" type="button">Voltar ao automático</button>
+        </section>
+      </aside>
+    </div>
+  </div>
+
+  <dialog id="dlg-auto" class="dlg-ed" aria-labelledby="dlg-auto-t" aria-describedby="dlg-auto-d">
+    <h2 id="dlg-auto-t">Voltar ao automático?</h2>
+    <p id="dlg-auto-d">Todas as cores e móveis voltam a ser montados sozinhos, e isso já é salvo para todo mundo. Dá para desfazer enquanto o editor estiver aberto.</p>
+    <div class="linha-bt fim">
+      <button id="auto-nao" class="botao fantasma" type="button">Cancelar</button>
+      <button id="auto-sim" class="botao" type="button">Voltar ao automático</button>
+    </div>
+  </dialog>
+
+  <div id="anuncio" class="oculto" aria-live="polite"></div>
+
+  <script src="mapa.js?v=80"></script>
+  <script src="expediente.js?v=80"></script>
+  <script src="ceu.js?v=80"></script>
+  <script src="clima.js?v=80"></script>
+  <script src="efeitos.js?v=80"></script>
+  <script src="planta.js?v=1"></script>
+  <script src="construir.js?v=1"></script>
+</body>
+</html>
