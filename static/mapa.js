@@ -131,6 +131,36 @@ const ASSINATURAS = {
   }],
 };
 
+// Ringue da Sala comunal (vida social): a lona, o avental, os degraus da entrada e as cordas dos lados vão no fundo; os postes
+// e as cordas de trás e da frente são peças do efeitos.js (ringue_tras, ringue_frente), e quem luta fica atrás da corda da frente
+const RINGUE = { w: 6 * T, h: 56, abertura: 32 };   // lona e entrada no meio da frente, em pixels
+function pintarRingue(c, x, y, w, h, abertura, corP) {
+  const lona = "#e9e2cf", borda = mistura(corP, "#1b1622", 0.35), avental = mistura(corP, "#1b1622", 0.55);
+  pintaPx(c, x + 2, y + h + 6, w, 2, "rgba(0,0,0,.2)");                                          // sombra do tablado
+  pintaPx(c, x, y + h, w, 6, avental); pintaPx(c, x, y + h, w, 1, mistura(avental, "#ffffff", 0.25));
+  for (let k = 6; k < w - 3; k += 10) pintaPx(c, x + k, y + h + 2, 1, 4, mistura(avental, "#000000", 0.3));   // pregas do avental
+  pintaPx(c, x, y, w, h, borda); pintaPx(c, x + 3, y + 3, w - 6, h - 6, lona);
+  const r = rng(semente("ringue"));
+  for (let i = 0; i < (w * h) / 40; i++) pintaPx(c, x + 3 + Math.floor(r() * (w - 6)), y + 3 + Math.floor(r() * (h - 6)), 1, 1, r() < 0.5 ? "#dbd2bb" : "#f4efe2");
+  const cx = x + w / 2, cy = y + h / 2, emblema = mistura(corP, lona, 0.3);                       // círculo do meio, na cor da marca
+  for (let j = -9; j <= 9; j++) for (let i = -9; i <= 9; i++) { const d = Math.hypot(i, j); if (d > 6.4 && d <= 8.4) pintaPx(c, cx + i, cy + j, 1, 1, emblema); }
+  const ex = cx - abertura / 2 + 3;                                                               // degraus na frente da entrada
+  pintaPx(c, ex, y + h, abertura - 6, 3, "#c99a5b"); pintaPx(c, ex, y + h, abertura - 6, 1, "#e0b77a");
+  pintaPx(c, ex - 2, y + h + 3, abertura - 2, 4, "#a87a45"); pintaPx(c, ex - 2, y + h + 3, abertura - 2, 1, "#c99a5b"); pintaPx(c, ex - 2, y + h + 7, abertura - 2, 1, "rgba(0,0,0,.25)");
+  for (const [sx, lado] of [[x, -1], [x + w - 1, 1]]) {                                          // cordas dos lados (de cima, as três viram uma linha)
+    pintaPx(c, sx, y - 15, 1, h + 10, "#f4f1ea"); pintaPx(c, sx + lado, y - 14, 1, h + 10, "rgba(0,0,0,.22)");
+  }
+}
+
+// quadro do placar do ringue: moldura e fundo; o título, o top 3 e o campeão anterior são do efeitos.js (mudam a cada leitura)
+const QUADRO_PLACAR = { w: 64, h: 40 };
+function pintarQuadroPlacar(c, x, y, w, h) {
+  pintaPx(c, x + 1, y + h, w, 1, "rgba(0,0,0,.25)");                                    // sombra na parede
+  pintaPx(c, x, y, w, h, "#4a3020"); pintaPx(c, x + 1, y + 1, w - 2, h - 2, "#7a5232"); pintaPx(c, x + 2, y + 2, w - 4, h - 4, "#171a24");
+  pintaPx(c, x + 2, y + 2, w - 4, 9, "#222736"); pintaPx(c, x + 2, y + 11, w - 4, 1, "#2e3446");   // faixa do título
+  pintaPx(c, x + 2, y + 2, w - 4, 1, "#2a3042");
+}
+
 function pintarSala(c, atlas, sala) {
   const { tx, ty, tw, th, parede, piso } = sala;
   const p = sprite(atlas, `piso${piso}`), chao = { x: tx * T, y: (ty + PAREDE) * T, w: tw * T, h: (th - PAREDE) * T };
@@ -776,13 +806,29 @@ function montarPredio(atlas, config, grupos) {
         junto(s, obj("pufe_amarelo", zx + 3.6 * T, chao + 3.4 * T), zx + 3.6 * T, chao + 3.1 * T, "videogame");
         obj("planta_g4", zx + 0.6 * T, fim - 4);
       }, ["tv_parede", "console"]],
+      [8, zx => { // ringue da vida social (vida.js): cordas sólidas para o caminho, com a entrada no meio da frente
+        if (s.ringue) return false;
+        const { w, h, abertura } = RINGUE, x = zx + T, y = chao + 26, lado = (w - abertura) / 2;
+        if (colide({ x: x - 4, y: y - 20, w: w + 8, h: h + 32 })) return false;
+        pintarRingue(c, x, y, w, h, abertura, corMarca);
+        objetos.push({ nome: "ringue_tras", x: x - 2, y: y - 18, w: w + 4, h: 20, dx: 0, chave: y, cor: corMarca });
+        objetos.push({ nome: "ringue_frente", x: x - 2, y: y + h - 18, w: w + 4, h: 20, dx: 0, chave: y + h, cor: corMarca, abertura });
+        pegadas.push({ x, y: y - 2, w, h: 3 }, { x, y, w: 3, h }, { x: x + w - 3, y, w: 3, h },   // corda de trás e dos lados
+          { x, y: y + h - 3, w: lado, h: 9 }, { x: x + w - lado, y: y + h - 3, w: lado, h: 9 },     // corda da frente e o avental
+          { x: x + lado, y: y + h, w: abertura, h: 24, livre: true });                               // a frente da entrada fica livre
+        const q = lugarNaParede(QUADRO_PLACAR.w, QUADRO_PLACAR.h, x + w / 2, chao - 3);   // placar na parede do próprio cantinho (as janelas desviam)
+        if (q) { pintarQuadroPlacar(c, q.px, q.py, QUADRO_PLACAR.w, QUADRO_PLACAR.h); quadros.push({ nome: "placar_ringue", x: q.px, y: q.py, w: QUADRO_PLACAR.w, h: QUADRO_PLACAR.h }); }
+        s.ringue = { sala: s, x, y, w, h, pontos: [[Math.round(x + w * 0.3), y + 32], [Math.round(x + w * 0.7), y + 32]],
+          quadro: q ? { x: q.px, y: q.py, w: QUADRO_PLACAR.w, h: QUADRO_PLACAR.h } : null };
+      }],
     ].filter(([, , precisa]) => (precisa || []).every(tem));
-    // ordem sorteada por empresa: primeiro os de jogo e o painel do logo (TV, logo, fliperama), depois os outros;
-    // quando um cantinho não cabe, tenta o próximo (menor) para não sobrar buraco
+    // ordem sorteada por empresa: primeiro o ringue e o painel do logo (cabem até na menor sala comunal, de 40 tiles), depois
+    // os de jogo (TV, fliperama) e os outros; quando um cantinho não cabe, tenta o próximo (menor) para não sobrar buraco
     let zx = s.px + T, temCopa = false, ultima = -Infinity;
     const limite = s.px + s.pw - T, rc = rng(marca);
     const embaralha = l => { for (let i = l.length - 1; i > 0; i--) { const j = Math.floor(rc() * (i + 1)); [l[i], l[j]] = [l[j], l[i]]; } return l; };
-    const ordem = [...embaralha([0, 1, 2]), ...embaralha([...cantos.keys()].slice(3))];
+    const iRingue = cantos.length - 1;   // o ringue é o último da lista; o painel do logo é o 1
+    const ordem = [...embaralha([iRingue, 1]), ...embaralha([0, 2]), ...embaralha([...cantos.keys()].slice(3, iRingue))];
     // portas reservadas antes dos cantinhos; ao lado da primeira, o trecho de parede da placa
     const porta = (z, larg) => { const px = z + 1.5 * T; s.portas.push(px); reservarPorta(s, px); ultima = px; return larg * T; };
     {
@@ -918,7 +964,18 @@ function montarPredio(atlas, config, grupos) {
     const noCorredor = x >= predioRet.x + T && x <= predioRet.x + predioRet.w - T && y >= corredor.ty * T + 5 && y <= (corredor.ty + corredor.h) * T - 3;
     return (naSala || noCorredor) && !solidos.some(q => x > q.x - 5 && x < q.x + q.w + 5 && y > q.y - 5 && y < q.y + q.h + 5);
   };
-  return { livre, W, H, fundo, salas, baixo, lounge, corredorY, objetos, animados, vagas, janelas, portas, quadros, predioRet, externos, entrada, luzesTeto, corredorTopo: corredor.ty * T, corredorAlt: corredor.h * T };
+  // plateia do ringue: chão livre em duas voltas por fora das cordas, sem tapar a entrada (o vida.js ainda confere o alcance)
+  const ringue = lounge.ringue || null;
+  if (ringue) {
+    const { x, y, w, h } = ringue, meio = x + w / 2, pts = [];
+    for (const d of [14, 28]) {
+      const x0 = x - d, x1 = x + w + d, y0 = y - d, y1 = y + h + 6 + d;
+      for (let px = x0; px <= x1; px += 12) pts.push([px, y0], [px, y1]);
+      for (let py = y0 + 12; py < y1; py += 12) pts.push([x0, py], [x1, py]);
+    }
+    ringue.plateia = pts.filter(([px, py]) => livre(px, py) && !(py > y + h && Math.abs(px - meio) < RINGUE.abertura / 2 + 6));
+  }
+  return { livre, W, H, fundo, salas, baixo, lounge, ringue, corredorY, objetos, animados, vagas, janelas, portas, quadros, predioRet, externos, entrada, luzesTeto, corredorTopo: corredor.ty * T, corredorAlt: corredor.h * T };
 }
 
 // Área externa: grama, calçada em volta do prédio e rua embaixo, com os detalhes sorteados por empresa.

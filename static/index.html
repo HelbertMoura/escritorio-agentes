@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex, nofollow">
   <title>Escritório</title>
   <link rel="icon" href="logo.png">
-  <link rel="stylesheet" href="estilo.css?v=67">
+  <link rel="stylesheet" href="estilo.css?v=80">
 </head>
 <body>
   <a class="pular" href="#principal">Ir para o conteúdo</a>
@@ -130,6 +130,7 @@
             <div id="cartao-agente" class="cartao-agente" hidden></div>
             <div id="ficha" class="ficha" role="dialog" aria-labelledby="ficha-nome" hidden></div>
             <section id="conversa" class="conversa" role="dialog" aria-labelledby="conversa-titulo" tabindex="-1" hidden></section>
+            <p id="social-anuncio" class="oculto" role="status"></p>
           </div>
         </section>
         <div class="widgets">
@@ -206,6 +207,11 @@
                 <div class="campo-hora"><label for="m-fecha">Fecha às</label><input id="m-fecha" name="fecha" type="time" required aria-describedby="m-expediente-ajuda"></div>
               </div>
               <p id="m-expediente-ajuda" class="ajuda" aria-live="polite"></p>
+            </fieldset>
+            <fieldset id="m-social" hidden>
+              <legend>Vida social</legend>
+              <label class="marcar" for="m-serio"><input id="m-serio" name="serio" type="checkbox" aria-describedby="m-serio-ajuda"><span>Modo sério (sem brigas nem greves; bom para apresentar)</span></label>
+              <p id="m-serio-ajuda" class="ajuda">Pausa a vida social em todas as telas em até 10 segundos: a briga em curso para, e as amizades e o ringue somem da ficha. O trabalho dos agentes não muda.</p>
             </fieldset>
             <p id="m-aviso" class="aviso-form" role="status"></p>
             <div class="acoes"><button id="m-salvar" class="botao" type="submit">Salvar</button><button id="m-desfazer" class="botao fantasma" type="button">Desfazer</button></div>
@@ -342,18 +348,43 @@
       <div class="acoes"><button id="senha-abrir" class="botao" type="submit">Abrir e enviar</button><button id="senha-cancelar" class="botao fantasma" type="button">Cancelar</button></div>
     </form>
   </dialog>
-  <script src="avatar.js?v=67"></script>
-  <script src="mapa.js?v=67"></script>
-  <script src="expediente.js?v=67"></script>
-  <script src="vida.js?v=67"></script>
-  <script src="som.js?v=67"></script>
-  <script src="ceu.js?v=67"></script>
-  <script src="clima.js?v=67"></script>
-  <script src="festas.js?v=67"></script>
-  <script src="simular.js?v=67"></script>
-  <script src="efeitos.js?v=67"></script>
-  <script src="brincar.js?v=67"></script>
-  <script src="app.js?v=67"></script>
-  <script src="personalizar.js?v=67"></script>
+  <!-- "Mandar pro ringue" (vida social): escolhe o par; o servidor confere tudo de novo no envio -->
+  <dialog id="dlg-ringue" class="boas-vindas dlg-ringue" aria-labelledby="ringue-titulo" aria-describedby="ringue-texto">
+    <form id="form-ringue" class="form-bv" novalidate>
+      <h2 id="ringue-titulo">Mandar pro ringue</h2>
+      <p id="ringue-texto" class="ajuda"></p>
+      <fieldset><legend>Quem enfrenta</legend><div id="ringue-lista" class="ringue-lista"></div></fieldset>
+      <p id="ringue-aviso" class="aviso-form ruim" role="alert"></p>
+      <div class="acoes"><button id="ringue-mandar" class="botao" type="submit">Mandar pro ringue</button><button id="ringue-cancelar" class="botao fantasma" type="button">Cancelar</button></div>
+    </form>
+  </dialog>
+  <!-- placar do ringue (vida social): ranking da semana, aberto pelo quadro na parede do ringue -->
+  <dialog id="dlg-placar" class="boas-vindas dlg-placar" aria-labelledby="placar-titulo" aria-describedby="placar-semana">
+    <div class="form-bv">
+      <h2 id="placar-titulo">Placar do ringue</h2>
+      <p id="placar-semana" class="ajuda"></p>
+      <p id="placar-anterior" class="placar-anterior" hidden></p>
+      <table id="placar-tabela" class="placar-tabela" hidden>
+        <caption class="oculto">Ranking da semana: posição, agente, vitórias, derrotas e sequência</caption>
+        <thead><tr><th scope="col"><span aria-hidden="true">#</span><span class="oculto">Posição</span></th><th scope="col">Agente</th><th scope="col"><span aria-hidden="true">V</span><span class="oculto">Vitórias</span></th><th scope="col"><span aria-hidden="true">D</span><span class="oculto">Derrotas</span></th><th scope="col">Sequência</th></tr></thead>
+        <tbody id="placar-corpo"></tbody>
+      </table>
+      <p id="placar-aviso" class="aviso-form" role="status"></p>
+      <div class="acoes"><button id="placar-fechar" class="botao fantasma" type="button">Fechar</button></div>
+    </div>
+  </dialog>
+  <script src="avatar.js?v=80"></script>
+  <script src="mapa.js?v=80"></script>
+  <script src="expediente.js?v=80"></script>
+  <script src="vida.js?v=80"></script>
+  <script src="som.js?v=80"></script>
+  <script src="ceu.js?v=80"></script>
+  <script src="clima.js?v=80"></script>
+  <script src="festas.js?v=80"></script>
+  <script src="simular.js?v=80"></script>
+  <script src="efeitos.js?v=80"></script>
+  <script src="brincar.js?v=80"></script>
+  <script src="app.js?v=80"></script>
+  <script src="personalizar.js?v=80"></script>
 </body>
 </html>

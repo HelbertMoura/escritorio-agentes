@@ -240,8 +240,28 @@ const Efeitos = (() => {
     px(c, x + 11, y + 11, 1, 8, esc); px(c, x + 22, y + 11, 1, 8, esc); px(c, x + 9, y + 14, 1, 2, esc); px(c, x + 24, y + 14, 1, 2, esc);
     px(c, x + 2, y + 19, 2, 2, esc); px(c, x + 30, y + 19, 2, 2, esc);
   }
+  // ringue da Sala comunal (o mapa.js pinta a lona): postes com o protetor do corner (vermelho à esquerda, azul à direita)
+  // e três cordas, a de cima na cor da marca; na frente, a entrada fica no meio, entre dois postinhos
+  function posteRingue(c, x, y, protetor) {
+    px(c, x, y + 3, 3, 17, "#8a909c"); px(c, x, y + 3, 1, 17, "#c9ced8"); px(c, x + 2, y + 3, 1, 17, "#5b6170");
+    px(c, x - 1, y, 5, 4, protetor); px(c, x - 1, y, 5, 1, claro(protetor)); px(c, x - 1, y + 3, 5, 1, escuro(protetor));
+  }
+  function cordasRingue(c, x0, x1, y, cor) {
+    for (const [k, dy] of [[cor, 3], ["#f4f1ea", 8], ["#f4f1ea", 13]]) { px(c, x0, y + dy, x1 - x0, 1, k); px(c, x0, y + dy + 1, x1 - x0, 1, "rgba(0,0,0,.22)"); }
+  }
+  function ringueTras(c, o) {
+    cordasRingue(c, o.x + 4, o.x + o.w - 4, o.y, o.cor);
+    posteRingue(c, o.x + 1, o.y, "#d23c3c"); posteRingue(c, o.x + o.w - 4, o.y, "#3a6fd8");
+  }
+  function ringueFrente(c, o) {
+    const meio = o.x + o.w / 2, a = o.abertura / 2;
+    cordasRingue(c, o.x + 4, meio - a, o.y, o.cor); cordasRingue(c, meio + a, o.x + o.w - 4, o.y, o.cor);
+    for (const ex of [meio - a - 1, meio + a - 1]) { px(c, ex, o.y + 5, 2, 15, "#8a909c"); px(c, ex, o.y + 5, 1, 15, "#c9ced8"); px(c, ex - 1, o.y + 3, 4, 2, "#e8e4dc"); }
+    posteRingue(c, o.x + 1, o.y, "#d23c3c"); posteRingue(c, o.x + o.w - 4, o.y, "#3a6fd8");
+  }
   const PECAS = { quadro_avisos: [0, quadroAvisos], lixeiras: [0, lixeiras], bancada: [3, bancada], jardineira: [0, jardineira], divisoria: [0, divisoria],
-    estante_livros: [0, estanteLivros], luminaria_arco: [0, luminariaArco], poltrona_tecido: [0, poltronaTecido], aparador_baixo: [0, aparadorBaixo] };
+    estante_livros: [0, estanteLivros], luminaria_arco: [0, luminariaArco], poltrona_tecido: [0, poltronaTecido], aparador_baixo: [0, aparadorBaixo],
+    ringue_tras: [0, ringueTras], ringue_frente: [0, ringueFrente] };
   const salaDe = o => o.sala !== undefined ? o.sala : (o.sala = [...P.salas, ...P.baixo].find(s => o.x + o.w / 2 >= s.px && o.x + o.w / 2 <= s.px + s.pw && o.y + o.h > s.py && o.y + o.h <= s.py + s.ph + 2) || null);
   const anel = {};   // o ring light é desenhado uma vez (aceso e apagado) e depois só copiado
   function desenharAnel(aceso) {
@@ -408,6 +428,92 @@ const Efeitos = (() => {
     ic.forEach((l, iy) => [...l].forEach((ch, ix) => { if (ch === "#") c.fillRect(x + ix, y + iy, 1, 1); }));
   }
 
+  // ---------------- vida social (vida.js decide, aqui só se desenha): na luta, a nuvem de poeira de desenho animado cobre os
+  // dois lutadores (o app.js não os desenha), com luvas e tênis saindo dela e as onomatopeias; quem perdeu fica com
+  // estrelinhas em volta da cabeça enquanto b.tonto durar. Sem sangue, sem arma, sem machucado. Com menos movimento, tudo parado.
+  const bolaPx = (c, cx, cy, r, cor) => { c.fillStyle = cor; for (let dy = -r; dy <= r; dy++) { const w = Math.round(Math.sqrt(r * r - dy * dy)); c.fillRect(cx - w, cy + dy, 2 * w + 1, 1); } };
+  const NUVEM = [[-20, 0, 8], [-9, -6, 10], [5, -8, 10], [18, -2, 9], [-14, 5, 8], [1, 4, 10], [15, 6, 8], [-26, 4, 5], [25, 4, 5]];
+  const ONOMATOPEIAS = ["POW!", "TCHUM!", "PAF!", "BUM!"];
+  const estrela = (c, x, y, cor) => { px(c, x, y - 2, 1, 5, cor); px(c, x - 2, y, 5, 1, cor); px(c, x - 1, y - 1, 3, 3, cor); };
+  function cena(c, mundo, t) {
+    const cs = mundo.cenaSocial, parado = calmo.matches, agora = performance.now() / 1000;
+    if (cs && cs.fase === "luta") {
+      const cx = Math.round(cs.x), cy = Math.round(cs.y) - 12, vez = parado ? 0 : Math.floor(t / 140);
+      const mexe = k => (parado ? 0 : Math.round(Math.sin(t / 90 + k * 1.7)));
+      NUVEM.forEach(([dx, dy, r], k) => bolaPx(c, cx + dx + mexe(k), cy + dy + mexe(k + 3), r + 1, "#6b6b78"));   // contorno
+      NUVEM.forEach(([dx, dy, r], k) => bolaPx(c, cx + dx + mexe(k), cy + dy + mexe(k + 3), r, k % 3 ? "#e6e2d6" : "#d6d1c2"));
+      NUVEM.slice(1, 4).forEach(([dx, dy, r], k) => bolaPx(c, cx + dx - 2 + mexe(k + 1), cy + dy - 3 + mexe(k + 4), Math.max(2, r - 5), "#ffffff"));   // brilho de cima
+      // braços e pernas saindo da borda da nuvem: luvas vermelha e azul (as cores dos corners) e tênis; mudam de lugar a cada 140 ms
+      for (let k = 0; k < 5; k++) {
+        const h = ((vez + k * 7) * 2654435761) >>> 0, ang = (k / 5) * Math.PI * 2 + ((h % 100) / 100 - 0.5) * 1.1 + (parado ? 0.4 : 0);
+        const ex = cx + Math.cos(ang) * 25, ey = cy + Math.sin(ang) * 11, fx = ex + Math.cos(ang) * 9, fy = ey + Math.sin(ang) * 6, perna = Math.sin(ang) > 0.35;
+        for (let s = 0; s <= 8; s++) px(c, Math.round(ex + (fx - ex) * s / 8), Math.round(ey + (fy - ey) * s / 8), 2, 2, "#3a3a46");
+        if (perna) { px(c, Math.round(fx) - 2, Math.round(fy), 5, 3, "#f4f1ea"); px(c, Math.round(fx) - 2, Math.round(fy) + 2, 5, 1, "#8a909c"); }
+        else { const luva = k % 2 ? "#3a6fd8" : "#d23c3c"; px(c, Math.round(fx) - 2, Math.round(fy) - 2, 5, 5, luva); px(c, Math.round(fx) - 1, Math.round(fy) - 2, 2, 1, claro(luva, 0.4)); }
+      }
+      for (let k = 0; k < 6; k++) { const h = ((vez + k * 13) * 40503) >>> 0; px(c, cx - 30 + (h % 60), cy + 8 + ((h >> 6) % 6), 1, 1, "#b9b3a6"); }   // poeirinha embaixo
+      // onomatopeia: uma de cada vez, pulando de um lado e do outro da nuvem (parada no movimento reduzido)
+      const n = parado ? 0 : Math.floor(t / 520), h = (n * 2246822519) >>> 0, txt = ONOMATOPEIAS[h % ONOMATOPEIAS.length];
+      const tx = cx + (parado ? 1 : (h >> 4) % 2 ? 1 : -1) * (40 + ((h >> 8) % 6)), ty = cy + 4 - ((h >> 12) % 8);   // dos lados: em cima ficam os nomes
+      c.save(); c.font = "8px Silkscreen, monospace"; c.textAlign = "center"; c.textBaseline = "alphabetic";
+      c.lineWidth = 3; c.lineJoin = "round"; c.strokeStyle = "#1b1622"; c.strokeText(txt, tx, ty); c.fillStyle = h % 2 ? "#ffd36b" : "#ff9a4d"; c.fillText(txt, tx, ty);
+      c.restore();
+      if (!parado && Math.floor(t / 260) % 2) { estrela(c, cx - 22, cy - 12, "#ffd36b"); estrela(c, cx + 24, cy - 9, "#ffffff"); }
+    }
+    for (const b of mundo.bonecos.values()) { // estrelinhas girando em volta da cabeça de quem perdeu
+      if (!(b.tonto > agora) || b.x < -20) continue;
+      for (let k = 0; k < 3; k++) {
+        const a = (parado ? 0 : t / 260) + (k * Math.PI * 2) / 3;
+        estrela(c, Math.round(b.x + Math.cos(a) * 8), Math.round(b.y - 18 + Math.sin(a) * 2.5), k === 1 ? "#ffffff" : "#ffd36b");
+      }
+    }
+  }
+
+  // faixa "VENCEU: <nome>" acima do ringue, pelos 6 s do resultado: por cima dos nomes e dos emotes; os balões desviam dela.
+  // O nome do vencedor só aparece aqui (UI), nunca num balão; com menos movimento, a faixa fica parada
+  function faixaVencedor(c, mundo, t) {
+    const cs = mundo.cenaSocial, parado = calmo.matches;
+    if (cs && cs.fase === "resultado" && cs.vencedor) { // faixa "VENCEU: <nome>" acima do ringue, pelos 6 s do resultado (o nome só aqui, nunca no balão)
+      const v = mundo.bonecos.get(cs.vencedor), nome = v ? (v.nome.length > 16 ? v.nome.slice(0, 15).trimEnd() + "…" : v.nome) : "";
+      if (nome) {
+        c.save(); c.font = "8px Silkscreen, monospace"; c.textAlign = "center"; c.textBaseline = "alphabetic";
+        const txt = `VENCEU: ${nome.toUpperCase()}`, w = Math.ceil(c.measureText(txt).width) + 12, x = Math.round(cs.x - w / 2), y = Math.round(cs.y) - 50 + (parado ? 0 : Math.round(Math.sin(t / 320)));
+        px(c, x - 5, y + 3, 6, 9, "#c98f2a"); px(c, x + w - 1, y + 3, 6, 9, "#c98f2a");                 // pontas da faixa
+        px(c, x - 5, y + 11, 2, 2, "#c98f2a"); px(c, x + w + 3, y + 11, 2, 2, "#c98f2a");
+        px(c, x - 1, y - 1, w + 2, 14, "#1b1622"); px(c, x, y, w, 12, "#ffd36b"); px(c, x, y, w, 1, "#fff3c4"); px(c, x, y + 11, w, 1, "#e0a93b");
+        c.fillStyle = "#1b1622"; c.fillText(txt, cs.x, y + 9);
+        c.restore();
+        return { x: x - 5, y: y - 2, w: w + 10, h: 16 };   // o app.js tira os balões de cima da faixa
+      }
+    }
+    return null;
+  }
+
+  // quadro do placar na parede do ringue (o mapa.js pinta a moldura): título, o top 3 da semana e o campeão da semana
+  // passada; sem placar (modo sério, Simulação, servidor sem vida social), "FECHADO". Só quem está no escritório aparece
+  function placar(c, q, pl, mundo) {
+    c.save(); c.font = "8px Silkscreen, monospace"; c.textBaseline = "alphabetic";
+    c.textAlign = "center"; c.fillStyle = Mapa.cor("destaque"); c.fillText("RINGUE", q.x + q.w / 2, q.y + 9);
+    const corta = (txt, max) => { if (c.measureText(txt).width <= max) return txt; while (txt.length > 1 && c.measureText(txt + "…").width > max) txt = txt.slice(0, -1); return txt + "…"; };
+    const nome = id => { const b = mundo.bonecos.get(id); return b ? b.nome.toUpperCase() : null; };
+    if (!pl) { c.fillStyle = "#f08a80"; c.fillText("FECHADO", q.x + q.w / 2, q.y + 26); c.restore(); return; }
+    const top = (Array.isArray(pl.top) ? pl.top : []).filter(r => r && nome(r.id)).slice(0, 3);
+    if (!top.length) { c.fillStyle = "#a3a39e"; c.fillText("SEM LUTAS", q.x + q.w / 2, q.y + 22); c.fillText("AINDA", q.x + q.w / 2, q.y + 30); }
+    top.forEach((r, i) => {
+      const y = q.y + 18 + i * 6, v = String(Math.max(0, Math.min(999, Math.round(Number(r.v) || 0))));
+      c.textAlign = "left"; c.fillStyle = ["#ffd36b", "#c9ced8", "#e0a95a"][i]; c.fillText(String(i + 1), q.x + 4, y);
+      c.textAlign = "right"; c.fillStyle = "#8affc1"; c.fillText(v, q.x + q.w - 4, y);
+      c.textAlign = "left"; c.fillStyle = "#efefec"; c.fillText(corta(nome(r.id), q.w - 22 - c.measureText(v).width), q.x + 11, y);
+    });
+    const ant = pl.anterior && nome(pl.anterior.id);
+    if (ant) { // coroa de pixel na frente do campeão da semana passada
+      const kx = q.x + 4, ky = q.y + 32;
+      for (const dx of [0, 2, 4]) px(c, kx + dx, ky, 1, 1, "#ffd36b");
+      px(c, kx, ky + 1, 5, 3, "#ffd36b"); px(c, kx, ky + 3, 5, 1, "#c98f2a"); px(c, kx + 2, ky + 2, 1, 1, "#d23c3c");
+      c.textAlign = "left"; c.fillStyle = "#ffd36b"; c.fillText(corta(ant, q.w - 16), q.x + 11, q.y + 37); }
+    c.restore();
+  }
+
   // objetos arremessados pela vida.js (bolinha de papel, aviãozinho): arco curto de ~0,6 s; com menos movimento, já no destino
   const voos = [];
   function lancar(x0, y0, x1, y1, tipo) { voos.push({ x0, y0, x1, y1, tipo, ini: performance.now() }); }
@@ -548,7 +654,7 @@ const Efeitos = (() => {
   // H) onde está o robô aspirador agora (null de dia ou fora da sala comunal)
   const posAspirador = () => (aspirador ? { x: aspirador.x, y: aspirador.y } : null);
 
-  return { lancar, aspirador: posAspirador, tela, objeto, animado, iniciar, exterior, luzesNoite, depoisObjeto, chapeu, emote, particulas, robo, painelLogo, festaChao, festaAr };
+  return { lancar, aspirador: posAspirador, tela, objeto, animado, iniciar, exterior, luzesNoite, depoisObjeto, chapeu, emote, particulas, robo, painelLogo, festaChao, festaAr, cena, faixaVencedor, placar };
 })();
 
 window.Efeitos = Efeitos;

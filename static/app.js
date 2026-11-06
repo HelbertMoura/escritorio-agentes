@@ -130,9 +130,11 @@ async function buscar() {
     const mesas = new Map();
     for (const s of predio.salas) for (const m of s.mesas || []) if (m.handle) mesas.set(m.handle, m);
     Vida.sincronizar(mundo, estado.agentes || [], estado.trabalhos || [], mesas, aparencia, novo);
+    Vida.social(mundo, !naSimulacao() && estado.social && typeof estado.social === "object" ? estado.social : null);   // null desliga a camada
     falhou = false;
     desenharPainel(); desenharEventos(); mostrarConexao(); paginaConversas();
     if (!$("ficha").hidden) renderFicha();
+    vigiarSocial();
   } catch (e) {
     falhou = true; mostrarConexao();
   }
@@ -228,11 +230,13 @@ function desenharCena(t) {
   Efeitos.festaChao(ctx, festa);
   Efeitos.robo(ctx, dtQuadro, t, ceu);
   for (const a of predio.animados) if (a.parede) desenharAnimado(a, ta);
+  if (predio.ringue && predio.ringue.quadro) Efeitos.placar(ctx, predio.ringue.quadro, placarDaTela(), mundo);   // top 3 da semana na parede do ringue
   const cena = [];
   for (const o of predio.objetos) cena.push({ chave: o.chave, desenha: () => desenharObjeto(o, ta) });
   for (const a of predio.animados) if (!a.parede) cena.push({ chave: a.chave, desenha: () => desenharAnimado(a, ta) });
   for (const s of [...predio.salas, ...predio.baixo]) if (s.placa) cena.push({ chave: s.placa.y + Mapa.PLACA_H, desenha: () => { desenharPlaca(s); } });
-  for (const b of mundo.bonecos.values()) if (visivel(b)) cena.push({ chave: b.chave ?? b.y + 0.5, desenha: () => desenharBoneco(b, t) });
+  const cs = mundo.cenaSocial, naNuvem = b => !!cs && cs.fase === "luta" && (b.id === cs.a || b.id === cs.b);   // na luta, a nuvem cobre os dois (Efeitos.cena)
+  for (const b of mundo.bonecos.values()) if (visivel(b) && !naNuvem(b)) cena.push({ chave: b.chave ?? b.y + 0.5, desenha: () => desenharBoneco(b, t) });
   cena.sort((a, b) => a.chave - b.chave).forEach(c => c.desenha());
   desenharPortas(t);
   Clima.desenhar(ctx, predio, dtQuadro, t, Som.ligado ? Som : null);
@@ -240,10 +244,13 @@ function desenharCena(t) {
   Efeitos.luzesNoite(ctx, ceu);
   Efeitos.festaAr(ctx, festa, t, dtQuadro, ceu);
   Efeitos.particulas(ctx, dtQuadro, mundo, t);
+  Efeitos.cena(ctx, mundo, t);   // nuvem da briga e estrelinhas de quem perdeu, embaixo dos nomes e dos balões
+  anunciarVencedor();
   const visiveis = [...mundo.bonecos.values()].filter(visivel);
   const ocupadas = [];
   visiveis.sort((a, b) => b.y - a.y || a.x - b.x).forEach(b => desenharEtiqueta(b, t, ocupadas));
   for (const b of visiveis) Efeitos.emote(ctx, b, t, ceu.escuro);
+  const faixa = Efeitos.faixaVencedor(ctx, mundo, t); if (faixa) ocupadas.push(faixa);   // os balões desviam da faixa do vencedor
   for (const b of visiveis.filter(b => b.fala).sort((a, b) => b.y - a.y || a.x - b.x)) desenharBalao(b, ocupadas);
   Brincar.desenhar(ctx);   // realce, reações dos objetos e a festa do Konami
 }
@@ -820,6 +827,8 @@ function focarAgente(b, { seguir: seg = false, foco = false } = {}) {
 function abrirFicha(b, foco) {
   fecharConversa(false);
   selecionado = b.id; assinaturaFicha = "";
+  if (!amizades || amizades.id !== b.id) amizades = null;
+  if (socialLigada() && !Brincar.demo) carregarAmizades(b.id);
   renderFicha();
   $("ficha").hidden = false; $("cartao-agente").hidden = true;
   if (foco) $("ficha").focus({ preventScroll: true });
@@ -833,8 +842,9 @@ function fecharFicha() {
 function renderFicha() {
   const f = $("ficha"), b = boneco(selecionado);
   if (!b) { if (!f.hidden) fecharFicha(); return; }
-  const t = b.trabalho, resp = itemParaResponder(b);
-  const chave = [b.id, t && t.status, t && t.rotulo, t && t.url, ondeEsta(b), seguir === b.id, resp && resp.id].join("|");
+  const t = b.trabalho, resp = itemParaResponder(b), social = socialLigada(), motivo = social ? motivoRingue(b) : "";
+  const chave = [b.id, t && t.status, t && t.rotulo, t && t.url, ondeEsta(b), seguir === b.id, resp && resp.id,
+    social && (amizades && amizades.id === b.id ? amizades.v : 0), motivo].join("|");
   if (chave === assinaturaFicha) { const q = f.querySelector(".ficha-tempo"); if (q && t) q.textContent = tempoNoEstado(t); return; }
   assinaturaFicha = chave;
   f.tabIndex = -1;
@@ -848,6 +858,7 @@ function renderFicha() {
   linha("Estado", chip, ...(t ? [document.createTextNode(" "), elem("span", "ficha-tempo suave", tempoNoEstado(t))] : []));
   if (t) linha("Fazendo", document.createTextNode(t.rotulo || "Tarefa sem descrição"));
   linha("Onde", document.createTextNode(ondeEsta(b)));
+  if (social && !Brincar.demo) linha("Amizades", secaoAmizades(b));   // a demonstração não tem amizades: nada vai ao servidor
   const acoes = elem("div", "acoes");
   if (resp) { // uma caixa só: a resposta mora na página Conversas, e a ficha leva até ela
     const rb = elem("button", "botao", "Responder"); rb.type = "button"; rb.setAttribute("aria-label", `Responder ${b.nome} na página Conversas`);
@@ -865,8 +876,185 @@ function renderFicha() {
     const vc = elem("button", "botao fantasma ver-conversa", "Ver conversa"); vc.type = "button"; vc.setAttribute("aria-haspopup", "dialog");
     vc.addEventListener("click", () => abrirConversa(b)); acoes.append(vc);
   }
-  f.replaceChildren(topo, dl, acoes);
+  const fim = [];
+  if (social) { // o motivo fica à vista embaixo do botão desabilitado (o servidor confere tudo de novo no envio)
+    const rg = elem("button", "botao fantasma ringue", "Mandar pro ringue"); rg.type = "button"; rg.setAttribute("aria-haspopup", "dialog");
+    if (motivo) { rg.disabled = true; rg.setAttribute("aria-describedby", "ficha-motivo"); const p = elem("p", "ficha-motivo", motivo); p.id = "ficha-motivo"; fim.push(p); }
+    rg.addEventListener("click", () => abrirRingue(b, rg)); acoes.append(rg);
+  }
+  f.replaceChildren(topo, dl, acoes, ...fim);
 }
+
+// ---------- vida social na ficha (contrato S, fatia 1): amizades pelo GET /api/social e "Mandar pro ringue" pelo POST
+// /api/social/briga. É diversão: some sem o bloco social (servidor antigo), no modo sério, na demonstração e na Simulação.
+const naSimulacao = () => ["data", "hora", "clima"].some(k => new URLSearchParams(location.search).has(k));
+const socialLigada = () => !!estado && !!estado.social && typeof estado.social === "object" && estado.social.serio !== true && !naSimulacao();
+const nomeAgente = id => { const b = boneco(id); return b ? b.nome : (((estado && estado.agentes) || []).find(a => a.id === id) || {}).nome || "Agente"; };
+let amizades = null, pedidoAmizades = 0, cenaVista = null, releitura = 0, releituraPlacar = 0, ringueDe = null, ringueOrigem = null;   // amizades: { id, d, erro, lida, v } da ficha aberta
+async function carregarAmizades(id) {
+  const n = ++pedidoAmizades;
+  let r = null, d = null;
+  try { r = await fetch(`api/social?agente=${encodeURIComponent(id)}`, { cache: "no-store", credentials: "same-origin" }); d = await r.json().catch(() => null); }
+  catch (e) { r = null; }
+  if (n !== pedidoAmizades || selecionado !== id) return;   // fechou ou trocou de agente enquanto esperava
+  if (r && r.status === 401) { location.href = "/entrar"; return; }
+  const ok = !!r && r.ok && !!d && Array.isArray(d.amigos) && Array.isArray(d.rivais);
+  amizades = { id, d: ok ? d : null, erro: ok ? "" : r && r.status === 404 ? "sem" : "falhou", lida: performance.now(), v: ((amizades && amizades.v) || 0) + 1 };
+  renderFicha();
+}
+// a cada leitura: relê as amizades da ficha aberta no fim de cada cena, de novo uns 70 s depois do fim (o servidor só conta a
+// briga no passo seguinte, de 60 s) e a cada 60 s; o prazo sai da diferença para o social.agora, nunca do relógio da máquina
+function vigiarSocial() {
+  const c = socialLigada() && estado.social.cena, cena = c ? c.id : null, acabou = !!cenaVista && cenaVista !== cena;
+  if (c && cena !== cenaVista) { const falta = Date.parse(c.fim) - Date.parse(estado.social.agora); if (Number.isFinite(falta)) releitura = releituraPlacar = performance.now() + falta + 70000; }
+  cenaVista = cena;
+  if (releituraPlacar && performance.now() >= releituraPlacar) { releituraPlacar = 0; if ($("dlg-placar").open) carregarPlacar(); }   // a briga entra no placar no passo seguinte
+  if (Brincar.demo || $("ficha").hidden || !selecionado || !socialLigada()) return;   // na demonstração não há amizades (nada vai ao servidor)
+  const tarde = releitura && performance.now() >= releitura;
+  if (tarde) releitura = 0;
+  if (!amizades || amizades.id !== selecionado || acabou || tarde || performance.now() - amizades.lida > 60000) carregarAmizades(selecionado);
+}
+function secaoAmizades(b) {
+  const caixa = elem("div", "amizades"), a = amizades && amizades.id === b.id ? amizades : null;
+  if (!a || !a.d) { caixa.append(elem("p", "suave", !a ? "Carregando…" : a.erro === "sem" ? "Nada para mostrar agora." : "Não deu para ler as amizades agora.")); return caixa; }
+  const d = a.d, valor = v => Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
+  if (Number.isFinite(d.media)) caixa.append(elem("p", "amz-media", `Média com a equipe: ${valor(d.media)} de 100`));
+  const lista = (titulo, itens, vazio, tipo) => {
+    caixa.append(elem("p", "amz-titulo", titulo));
+    itens = itens.filter(it => it && typeof it.id === "string").slice(0, 3);
+    if (!itens.length) { caixa.append(elem("p", "amz-vazio", vazio)); return; }
+    const ul = elem("ul", `amz-lista ${tipo}`);
+    for (const it of itens) { // barra e número: a informação não fica só na cor
+      const v = valor(it.valor), barra = elem("span", "amz-barra"), cheio = elem("span"), num = elem("span", "amz-valor", String(v)), li = elem("li");
+      cheio.style.width = `${v}%`; barra.append(cheio); barra.setAttribute("aria-hidden", "true"); num.append(elem("span", "oculto", " de 100"));
+      li.append(elem("span", "amz-nome", nomeAgente(it.id)), barra, num); ul.append(li);
+    }
+    caixa.append(ul);
+  };
+  lista("Melhores amigos", d.amigos, "Ainda sem melhores amigos.", "amigos");
+  lista("Rivais", d.rivais, "Nenhum rival por enquanto.", "rivais");
+  const br = d.ultima_briga;
+  caixa.append(elem("p", "amz-briga", br && typeof br.contra === "string"
+    ? `Última briga hoje: ${br.venceu ? "venceu" : "perdeu para"} ${nomeAgente(br.contra)}${br.em ? ` às ${horaDe(br.em)}` : ""}.` : "Nenhuma briga hoje."));
+  return caixa;
+}
+function motivoRingue(b) { // por que o botão está desabilitado agora ("" = pode mandar)
+  if (Expediente.fora(Ceu.agora().h)) return "Fora do expediente: o ringue está fechado.";
+  if (b.trabalho) return /^waiting_/.test(b.trabalho.status) ? `${b.nome} está esperando você agora.` : `${b.nome} está trabalhando agora.`;
+  if (situacao(b) === "fora") return `${b.nome} não está no escritório agora.`;
+  if (estado.social.cena) return "Já tem briga no ringue; espere acabar.";
+  return "";
+}
+// seletor do par: só quem está livre e no escritório (o servidor confere de novo); Esc fecha e o foco volta ao botão
+function abrirRingue(b, origem) {
+  const d = $("dlg-ringue"); if (!d.showModal) return;
+  ringueDe = b.id; ringueOrigem = origem;
+  const livres = [...mundo.bonecos.values()].filter(o => o.id !== b.id && situacao(o) === "livres").sort((x, y) => x.nome.localeCompare(y.nome, "pt-BR"));
+  textoSe($("ringue-texto"), `Escolha quem enfrenta ${b.nome}. A briga começa em uns 15 segundos e aparece em todas as telas. É só diversão: não muda nada no trabalho dos agentes.`);
+  $("ringue-lista").replaceChildren(...(livres.length ? livres.map(o => {
+    const l = elem("label", "ringue-op"), i = elem("input"); i.type = "radio"; i.name = "rival"; i.value = o.id;
+    l.append(i, mini(o.ap), elem("span", "ringue-nome", o.nome), elem("span", "ringue-onde", ondeEsta(o))); return l;
+  }) : [elem("p", "suave", `Ninguém livre agora para enfrentar ${b.nome}.`)]));
+  $("ringue-aviso").textContent = "";
+  $("ringue-mandar").disabled = !livres.length;
+  d.showModal();
+  ($("ringue-lista").querySelector("input") || $("ringue-cancelar")).focus();
+}
+function aplicarCena(cena) { // a resposta do POST já traz a cena: a tela não espera a próxima leitura (que traz a mesma, pelo id)
+  estado.social = { ...estado.social, cena };
+  Vida.social(mundo, { v: 1, cena, eventos: [] });   // sem o "agora": o vida.js usa o desvio de relógio da última leitura
+  renderFicha();
+}
+const ERROS_RINGUE = { origem: "Não deu para mandar desta página. Recarregue e tente de novo.", formato: "Não deu para mandar agora. Recarregue a página e tente de novo.",
+  pedido: "Não deu para mandar agora. Recarregue a página e tente de novo." };
+function textoErroRingue(r) {
+  if (r.status === 0) return "Sem conexão com o escritório. Tente de novo.";
+  const e = r.d && r.d.erro;
+  return ERROS_RINGUE[e] || mensagemDe(r, r.status === 429 ? "O ringue já teve brigas demais hoje; volta amanhã."
+    : r.status === 409 ? "O ringue não está livre agora. Tente daqui a pouco." : "Não deu para mandar pro ringue agora. Tente de novo.");
+}
+$("form-ringue").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const bt = $("ringue-mandar"), aviso = $("ringue-aviso"), rival = $("form-ringue").querySelector("input[name=rival]:checked");
+  if (bt.disabled || bt.getAttribute("aria-disabled") === "true") return;   // sem envio duplo
+  if (!rival) { aviso.textContent = "Escolha quem vai enfrentar."; return; }
+  bt.setAttribute("aria-disabled", "true"); bt.textContent = "Mandando…"; aviso.textContent = "";
+  const a = ringueDe, r = Brincar.demo ? Brincar.brigaDemo(a, rival.value) : await postarResposta("api/social/briga", { a, b: rival.value });   // demonstração: local, sem POST
+  bt.removeAttribute("aria-disabled"); bt.textContent = "Mandar pro ringue";
+  if (r.status === 401) { location.href = "/entrar"; return; }
+  if (estado && estado.social && r.d && r.d.cena && typeof r.d.cena === "object") aplicarCena(r.d.cena);   // o 200 e o 409 "ocupado" trazem a cena
+  if (r.status === 200) {
+    textoSe($("social-anuncio"), `Gongo! ${nomeAgente(a)} e ${nomeAgente(rival.value)} vão para o ringue.`);
+    $("dlg-ringue").close(); return;
+  }
+  if (r.d && r.d.erro === "modo_serio" && estado && estado.social) { estado.social.serio = true; renderFicha(); }
+  aviso.textContent = textoErroRingue(r);
+});
+// ---------- placar do ringue (adendo da fatia 1c): ranking semanal, com o campeão da semana passada
+const placarDaTela = () => (!naSimulacao() && estado && estado.social && estado.social.serio !== true && estado.social.placar) || null;   // null: "Ringue fechado"
+let vencedorDito = null;
+function anunciarVencedor() { // um aviso educado por cena, só quando o resultado chegou nesta tela
+  const cs = mundo.cenaSocial;
+  if (!cs || cs.fase !== "resultado" || !cs.vencedor || cs.id === vencedorDito) return;
+  vencedorDito = cs.id;
+  textoSe($("social-anuncio"), `${nomeAgente(cs.vencedor)} venceu ${nomeAgente(cs.vencedor === cs.a ? cs.b : cs.a)} no ringue.`);
+}
+let placarOrigem = null, placarVez = 0, placarTimer = 0;
+const semanaDe = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ""); return m ? `${Number(m[3])}/${Number(m[2])}` : ""; };
+function abrirPlacar() {
+  const d = $("dlg-placar"); if (!d.showModal || d.open) return;
+  placarOrigem = document.activeElement;
+  d.showModal(); $("placar-fechar").focus();
+  carregarPlacar();
+  clearInterval(placarTimer); placarTimer = setInterval(() => { if (d.open && !document.hidden) carregarPlacar(); }, 60000);   // a cada 60 s enquanto aberto
+}
+async function carregarPlacar() {
+  const n = ++placarVez, aviso = $("placar-aviso"), corpo = $("placar-corpo");
+  if (!socialLigada()) { $("placar-semana").textContent = ""; corpo.replaceChildren(); $("placar-tabela").hidden = true; $("placar-anterior").hidden = true; aviso.textContent = "Ringue fechado: o placar não aparece agora."; return; }
+  let r = null, d = null;
+  if (Brincar.demo) { r = { ok: true, status: 200 }; d = Brincar.placarDemo(); }   // demonstração: placar local, nada vai ao servidor
+  else {
+    aviso.textContent = "Carregando o placar…";
+    try { r = await fetch("api/social/placar", { cache: "no-store", credentials: "same-origin" }); d = await r.json().catch(() => null); } catch (e) { r = null; }
+    if (n !== placarVez || !$("dlg-placar").open) return;
+    if (r && r.status === 401) { location.href = "/entrar"; return; }
+  }
+  if (!r || !r.ok || !d || !Array.isArray(d.ranking)) { aviso.textContent = "Não deu para ler o placar agora. Tente de novo daqui a pouco."; return; }
+  const num = v => Math.max(0, Math.round(Number(v) || 0)), linhas = d.ranking.filter(x => x && typeof x.id === "string" && boneco(x.id));
+  const sem = semanaDe(d.semana);
+  $("placar-semana").textContent = sem ? `Semana que começou na segunda, ${sem}. Só aparece quem está no escritório e já lutou.` : "Só aparece quem está no escritório e já lutou.";
+  corpo.replaceChildren(...linhas.map((x, i) => {
+    const tr = elem("tr"), seq = Math.round(Number(x.seq) || 0), cel = (txt, cls) => { const td = elem("td", cls, txt); tr.append(td); return td; };
+    cel(String(i + 1), "pl-pos"); cel(nomeAgente(x.id), "pl-nome"); cel(String(num(x.v)), "pl-num"); cel(String(num(x.d)), "pl-num");
+    const sq = cel("", "pl-seq");
+    if (seq >= 2) { sq.append(elem("span", null, "🔥")); sq.firstChild.setAttribute("aria-hidden", "true"); sq.append(` ${seq}`, elem("span", "oculto", " vitórias seguidas")); }
+    else if (seq <= -2) { sq.append(`−${-seq}`, elem("span", "oculto", " derrotas seguidas")); }
+    else sq.textContent = "—";
+    return tr;
+  }));
+  $("placar-tabela").hidden = !linhas.length;
+  aviso.textContent = linhas.length ? "" : "Ninguém lutou nesta semana ainda.";
+  const ant = d.anterior && typeof d.anterior.id === "string" && boneco(d.anterior.id) ? d.anterior : null;   // ausente: a linha some
+  $("placar-anterior").hidden = !ant;
+  if (ant) { // a coroa é enfeite: o leitor de tela lê só o texto
+    const coroa = elem("span", null, "👑 "); coroa.setAttribute("aria-hidden", "true");
+    $("placar-anterior").replaceChildren(coroa, `Campeão da semana passada: ${nomeAgente(ant.id)} (${num(ant.v)} ${num(ant.v) === 1 ? "vitória" : "vitórias"}, ${num(ant.d)} ${num(ant.d) === 1 ? "derrota" : "derrotas"}).`);
+  }
+}
+$("placar-fechar").addEventListener("click", () => $("dlg-placar").close());
+$("dlg-placar").addEventListener("click", ev => { if (ev.target === $("dlg-placar")) $("dlg-placar").close(); });   // clique no fundo escurecido
+$("dlg-placar").addEventListener("close", () => { // Esc ou Fechar: para de reler e o foco volta para quem abriu
+  clearInterval(placarTimer); placarVez++;
+  const o = placarOrigem; placarOrigem = null;
+  (o && o.isConnected && o !== document.body ? o : tela).focus();
+});
+$("ringue-cancelar").addEventListener("click", () => $("dlg-ringue").close());
+$("dlg-ringue").addEventListener("click", ev => { if (ev.target === $("dlg-ringue")) $("dlg-ringue").close(); });   // clique no fundo escurecido
+$("dlg-ringue").addEventListener("close", () => { // o foco volta ao botão; a ficha pode ter sido refeita enquanto o diálogo estava aberto,
+  const o = ringueOrigem; ringueOrigem = null; ringueDe = null;   // e depois de um envio o botão novo vem desabilitado: o foco cai na ficha
+  const bt = o && o.isConnected ? o : $("ficha").querySelector(".ringue");
+  if ($("ficha").hidden) tela.focus(); else (bt && !bt.disabled ? bt : $("ficha")).focus();
+});
 
 // ---------- conversa do trabalho atual (contrato L, fase 1): só leitura pelo GET /api/conversa; texto puro, sem markdown
 // nem autolink. Aparece no lugar da ficha; o nome de pessoas nunca vem do servidor, então quem não é agente aparece como "Pessoa".
@@ -1698,7 +1886,7 @@ $("abrir-cheia").addEventListener("click", () => { telaCheia(true); $("tela-chei
 document.addEventListener("keydown", ev => {
   if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && ev.key.toLowerCase() === "k") { ev.preventDefault(); irParaBusca(); return; }
   if (ev.key === "Escape") {
-    if ($("dlg-senha").open) return;   // o próprio <dialog> fecha com o Esc
+    if ($("dlg-senha").open || $("dlg-ringue").open || $("dlg-placar").open) return;   // o próprio <dialog> fecha com o Esc
     if (!$("painel-som").hidden) { fecharPainelSom(true); return; }
     if (gavetaAberta()) { fecharGaveta(true); return; }
     if (!$("conversa").hidden) { fecharConversa(true); return; }

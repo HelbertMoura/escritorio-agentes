@@ -8,8 +8,8 @@ Não chama modelo de IA nenhum. Serve a página em 127.0.0.1; quem publica é a 
 só na rede privada da pessoa, com HTTPS. Na frente de tudo há login com usuário e senha (acesso.py).
 
 Rotas: /entrar /primeiro-acesso /sair /logo  /  /<estático>  /api/estado /api/config /api/conversa /api/marca
-       /api/logo /api/conversa/modo /api/conversa/modo/fechar /api/conversa/responder /oauth/conectar /oauth/retorno
-       (as quatro primeiras e os estáticos do login sem sessão)
+       /api/logo /api/conversa/modo /api/conversa/modo/fechar /api/conversa/responder /api/social /api/social/briga
+       /api/social/placar /oauth/conectar /oauth/retorno (as quatro primeiras e os estáticos do login sem sessão)
 Uso: python3 -I escritorio.py           serviço (variáveis no /etc/escritorio.env)
      python3 -I escritorio.py codigo    mostra o código de primeiro acesso, só lendo (sudo escritorio-codigo)
 Só biblioteca padrão do Python 3.
@@ -36,6 +36,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from acesso import (ARQ_CODIGO, ARQ_USUARIOS, Acesso, TentativasDemais, UsuariosIlegiveis, gravar, ler_codigo,  # noqa: E402
                     ler_usuarios)
+from social import PLACAR_BYTES, PLACAR_MAX, PLACAR_TETO, Social  # noqa: E402
 
 VERSAO = "1.0.0"
 MCP = os.environ.get("AGENTES_MCP", "https://app.agentes.chat/mcp")
@@ -1315,10 +1316,66 @@ def _ler_marca():
     return m if isinstance(m, dict) else {}
 
 
+def modo_serio(marca=None):
+    """Modo sério (Personalizar): pausa a vida social inteira. Só o true de JSON liga; o padrão é desligado."""
+    return (_ler_marca() if marca is None else marca).get("serio") is True
+
+
+ARQ_PLACAR = os.path.join(DADOS, "placar.json")   # placar semanal do ringue (vida social); só a thread do Social grava
+ID_PLACAR = re.compile(r"[A-Za-z0-9_-]{1,100}")
+
+
+def _numero(x, minimo):
+    if type(x) is not int or not minimo <= x <= PLACAR_TETO:   # type(): o True não vale como 1
+        raise ValueError("número fora da faixa")
+    return x
+
+
+def validar_placar(d):
+    """Tudo ou nada: o placar.json no formato exato do adendo da fatia 1c, ou ValueError."""
+    if not isinstance(d, dict) or set(d) != {"v", "semana", "placar", "anterior"} or type(d["v"]) is not int or d["v"] != 1:
+        raise ValueError("formato")
+    semana = d["semana"]
+    if not isinstance(semana, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", semana) or \
+            datetime.date.fromisoformat(semana).weekday() != 0:
+        raise ValueError("semana")
+    placar, anterior = d["placar"], d["anterior"]
+    if not isinstance(placar, dict) or len(placar) > PLACAR_MAX:
+        raise ValueError("placar")
+    limpo = {}
+    for i, x in placar.items():
+        if not ID_PLACAR.fullmatch(i) or not isinstance(x, dict) or set(x) != {"v", "d", "seq"}:
+            raise ValueError("entrada")
+        limpo[i] = {"v": _numero(x["v"], 0), "d": _numero(x["d"], 0), "seq": _numero(x["seq"], -PLACAR_TETO)}
+    if anterior is not None:
+        if not isinstance(anterior, dict) or set(anterior) != {"id", "v", "d"} or not isinstance(anterior["id"], str) or \
+                not ID_PLACAR.fullmatch(anterior["id"]):
+            raise ValueError("anterior")
+        anterior = {"id": anterior["id"], "v": _numero(anterior["v"], 0), "d": _numero(anterior["d"], 0)}
+    return {"semana": semana, "placar": limpo, "anterior": anterior}
+
+
+def ler_placar():
+    """dados/placar.json validado, ou None. Ausente vale vazio; ilegível, grande demais ou fora do formato também, com 1
+    linha de log: falha aberta, porque é diversão (o oposto do usuarios.json). Nunca derruba o serviço."""
+    try:
+        with open(ARQ_PLACAR, "rb") as f:
+            bruto = f.read(PLACAR_BYTES + 1)
+        if len(bruto) > PLACAR_BYTES:
+            raise ValueError("grande demais")
+        return validar_placar(json.loads(bruto))
+    except FileNotFoundError:
+        return None
+    except Exception as x:   # OSError, UTF-8, JSON, RecursionError, formato: tudo sobe vazio
+        log(evento="social", resultado="placar_invalido", detalhe=type(x).__name__)
+        return None
+
+
 def config_publica():
-    """times.json + o que a pessoa personalizou (nome, cor, expediente, logo)."""
+    """times.json + o que a pessoa personalizou (nome, cor, expediente, modo sério, logo)."""
     cfg = carregar_times()
     m = _ler_marca()
+    cfg["serio"] = modo_serio(m)
     if isinstance(m.get("empresa"), str) and ROTULO_OK.fullmatch(m["empresa"]):
         cfg["empresa"] = m["empresa"]
     if isinstance(m.get("cor"), str) and re.fullmatch(r"#[0-9a-fA-F]{6}", m["cor"]):
@@ -1338,17 +1395,23 @@ def config_publica():
     return cfg
 
 
-def salvar_marca(empresa, cor, expediente=None):
-    """expediente None mantém o que já estava salvo (a tela antiga não manda o campo)."""
+def salvar_marca(empresa, cor, expediente=None, serio=None):
+    """expediente e serio None mantêm o que já estava salvo (a tela antiga e as boas-vindas não mandam os campos)."""
     if not ROTULO_OK.fullmatch(empresa or ""):
         raise ValueError("nome da empresa: até 40 letras, números e . ' & -")
     if not re.fullmatch(r"#[0-9a-fA-F]{6}", cor or ""):
         raise ValueError("cor inválida")
-    novo = {"empresa": empresa, "cor": cor}
+    if serio is not None and not isinstance(serio, bool):   # só true ou false de JSON: o "true" em texto é recusado
+        raise ValueError("modo sério: true ou false")
+    novo, anterior = {"empresa": empresa, "cor": cor}, _ler_marca()
     if expediente is not None:
         novo["expediente"] = validar_expediente(expediente)
-    elif "expediente" in (anterior := _ler_marca()):
+    elif "expediente" in anterior:
         novo["expediente"] = anterior["expediente"]
+    if serio is not None:
+        novo["serio"] = serio
+    elif isinstance(anterior.get("serio"), bool):
+        novo["serio"] = anterior["serio"]
     gravar(ARQ_MARCA, json.dumps(novo).encode("utf-8"))
 
 
@@ -1519,14 +1582,41 @@ class Pagina(BaseHTTPRequestHandler):
             aceita = (lambda it: self.server.respostas.aceita(it, agora)) if pode else None
             conversas = conversas_publicas(do_dia(), agora, aceita) if do_dia and carregar_times()["conversas"] in MODOS_CONVERSA else []
             modo = self._modo_resposta() if pode else None   # só o da própria sessão, neste navegador
-            return self._json(200, {**leitor.foto(), "conversas": conversas, "clima": clima.foto() if clima else None,
-                                    "usuario": usuario, "modo_resposta": {"resta_s": modo[0], "teto_s": modo[1]} if modo else None})
+            estado = {**leitor.foto(), "conversas": conversas, "clima": clima.foto() if clima else None,
+                      "usuario": usuario, "modo_resposta": {"resta_s": modo[0], "teto_s": modo[1]} if modo else None}
+            social = getattr(self.server, "social", None)
+            if social:
+                try:   # a vida social nunca derruba o /api/estado: na falha, a resposta sai sem a chave
+                    # o modo sério lido a cada pedido; o top do placar só com quem está nesta leitura
+                    estado["social"] = social.foto(agora, modo_serio(), {a["id"] for a in estado.get("agentes", [])})
+                except Exception as x:   # 1 linha de log por tipo de erro, e não uma por tela a cada 10 s
+                    if type(x).__name__ not in social.erros:
+                        social.erros.add(type(x).__name__)
+                        log(evento="social", resultado="erro", detalhe=type(x).__name__)
+            return self._json(200, estado)
         if rota == "/api/config":
             cfg = config_publica()
             if self._previa():  # o front mostra a faixa "Prévia de desenvolvimento · dados fixos"
                 cfg["previa"] = True
             cfg["pode_responder"] = self._pode_responder()
             return self._json(200, cfg)
+        if rota == "/api/social":   # ficha: amizades e rivais de um agente presente, só ids e números
+            social = getattr(self.server, "social", None)
+            if not social:
+                return self._json(*erro(404, "social_desligado", "A vida social está desligada neste escritório."))
+            agente = urllib.parse.parse_qs(caminho.query, keep_blank_values=True).get("agente", [""])[0]
+            if not 0 < len(agente) <= 100:
+                return self._json(*erro(400, "pedido", "Pedido inválido."))
+            presentes = {a["id"] for a in self.server.leitor.foto().get("agentes", [])}
+            if agente not in presentes:
+                return self._json(*erro(404, "agente", "Esse agente não está no escritório."))
+            return self._json(200, social.amizades(agente, presentes))
+        if rota == "/api/social/placar":   # ranking da semana do ringue, só de presentes com pelo menos 1 luta
+            social = getattr(self.server, "social", None)
+            if not social:
+                return self._json(*erro(404, "social_desligado", "A vida social está desligada neste escritório."))
+            presentes = {a["id"] for a in self.server.leitor.foto().get("agentes", [])}
+            return self._json(200, social.ranking(time.time(), presentes))
         if rota == "/api/conversa":   # só o "id" ou o "agente" da query contam: o canal sai do que o servidor viu
             conversas = getattr(self.server, "conversas", None)
             if not conversas or carregar_times()["conversas"] not in MODOS_CONVERSA:
@@ -1554,6 +1644,8 @@ class Pagina(BaseHTTPRequestHandler):
                 self.server.leitor.zerar_memoria()
             if getattr(self.server, "conversas", None):   # nem as conversas que ela leu (cache de 60 s)
                 self.server.conversas.esquecer()
+            if getattr(self.server, "social", None):   # nem as amizades da vida social
+                self.server.social.zerar()
             log(evento="oauth", resultado="conectado", usuario=usuario)
             return self._envia(302, b"", extra={"Location": "/"})
         return self._estatico("index.html" if rota in ("/", "") else nome)
@@ -1618,11 +1710,39 @@ class Pagina(BaseHTTPRequestHandler):
             corpo = {**corpo, "resta_s": resta, "teto_s": teto}
         return self._json(st, corpo)
 
+    def _post_social(self, rota):
+        """"Mandar pro ringue": Origin obrigatório e igual à BASE (sem a volta para o Referer), sessão (ou a prévia) e
+        JSON exato de até 256 B. Nada aqui chama o Leitor, o MCP ou o agentes.chat."""
+        if self.headers.get("Origin") != BASE:
+            log(evento="http", rota=rota[:40], resultado="origem_recusada")
+            return self._json(*erro(403, "origem", "Origem não permitida."))
+        usuario = self._usuario()
+        if not usuario:
+            return self._json(401, {"erro": "entre de novo"})
+        if (self.headers.get("Content-Type") or "").split(";")[0].strip().lower() != "application/json":
+            return self._json(*erro(415, "formato", "Envie JSON (application/json)."))
+        try:
+            dados = json.loads(self._corpo(256))
+        except (ValueError, RecursionError):   # tamanho, UTF-8 ou JSON inválido
+            dados = None
+        if not isinstance(dados, dict) or set(dados) != {"a", "b"} or \
+                not all(isinstance(dados[k], str) and 0 < len(dados[k]) <= 100 for k in ("a", "b")):
+            return self._json(*erro(400, "pedido", "Pedido inválido."))
+        social = getattr(self.server, "social", None)
+        if not social:
+            return self._json(*erro(404, "social_desligado", "A vida social está desligada neste escritório."))
+        st, corpo = social.ordenar(dados["a"], dados["b"], time.time(), self.server.leitor.foto(), config_publica())
+        if st == 200:
+            log(evento="social", resultado="briga_ordem", usuario=usuario)
+        return self._json(st, corpo)
+
     def do_POST(self):
         rota = urllib.parse.urlsplit(self.path).path
         acesso = self.server.acesso
         if rota in ("/api/conversa/modo", "/api/conversa/modo/fechar", "/api/conversa/responder"):
             return self._post_resposta(rota)
+        if rota == "/api/social/briga":
+            return self._post_social(rota)
         if not self._mesma_origem():
             log(evento="http", rota=rota[:40], resultado="origem_recusada")
             return self._envia(403, "Origem não permitida.".encode())
@@ -1652,10 +1772,13 @@ class Pagina(BaseHTTPRequestHandler):
         if rota == "/api/marca":
             try:
                 dados = json.loads(self._corpo(2048))
-                salvar_marca(str(dados.get("empresa", "")), str(dados.get("cor", "")), dados.get("expediente"))
+                salvar_marca(str(dados.get("empresa", "")), str(dados.get("cor", "")), dados.get("expediente"), dados.get("serio"))
             except (ValueError, AttributeError) as e:
                 return self._json(400, {"erro": str(e)[:120]})
-            return self._json(200, config_publica())
+            cfg = config_publica()
+            if cfg["serio"] and getattr(self.server, "social", None):   # modo sério ligado: a cena em curso sai na hora
+                self.server.social.cancelar(time.time())
+            return self._json(200, cfg)
         if rota == "/api/logo":
             try:
                 dados = self._corpo(LOGO_MAX)
@@ -1697,6 +1820,9 @@ def main():
     srv.cred, srv.leitor, srv.acesso = cred, leitor, contas
     srv.conversas = Conversas(leitor)
     srv.respostas = Respostas(leitor, srv.conversas)
+    # vida social: na memória, sem rede; só o placar semanal vai para o disco, pelo gravar() atômico
+    srv.social = Social(leitor, config_publica, log, FUSO, guardar=lambda dados: gravar(ARQ_PLACAR, dados), placar=ler_placar())
+    srv.social.start()
     if contas.precisa_configurar():
         log(evento="acesso", resultado="aguardando_primeiro_usuario", ver_codigo="sudo escritorio-codigo")
     cl = carregar_times().get("clima")

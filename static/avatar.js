@@ -18,7 +18,7 @@ const Avatar = (() => {
   const TAM = 22;          // quadro do avatar
   const CORPO = { x: 4, y: 8, w: 14, h: 13 };
   const POSES = ["parado", "andando", "sentado", "digitando", "esperando", "cafe", "jogando", "fliperama", "raquete", "taco",
-    "pebolim", "tocando", "comemorando", "acenando", "carinho", "dormindo", "dancando", "violao", "arremesso"];
+    "pebolim", "tocando", "comemorando", "acenando", "carinho", "dormindo", "dancando", "violao", "arremesso", "tonto"];
   const DIRECOES = ["baixo", "cima", "esq", "dir"];
   const NUM_POSE = Object.fromEntries(POSES.map((p, i) => [p, i])), NUM_DIR = Object.fromEntries(DIRECOES.map((d, i) => [d, i]));
   const MADEIRA = "#c99a5b", ESCURO = "#2b2b34";
@@ -60,6 +60,9 @@ const Avatar = (() => {
         break;
       case "dots":
         for (const e of [e1, e2]) px(c, e + 1, y + 1, preto, 1, 2);
+        break;
+      case "tonto":   // x x (perdeu a briga; as estrelinhas em volta são do efeitos.js)
+        for (const e of [e1, e2]) { px(c, e, y, branco); px(c, e + 2, y, branco); px(c, e + 1, y + 1, branco); px(c, e, y + 2, branco); px(c, e + 2, y + 2, branco); }
         break;
       default:        // round
         for (const e of [e1, e2]) { px(c, e, y, branco, 2, 3); px(c, e + (dx < 0 ? 0 : 1), y + 1, preto, 1, 2); }
@@ -151,6 +154,7 @@ const Avatar = (() => {
         if (f) mao(c, p, 16, 9); else { mao(c, p, D, 3); px(c, 19, 0, "#f4f4f6", 3, 3); }
         break;
       case "esperando": case "sentado": case "dormindo": mao(c, p, 5, 17); mao(c, p, 14, 17); break;
+      case "tonto": mao(c, p, E - f, Y + 2); mao(c, p, D + 1 - f, Y + 1); break;   // braços largados, balançando
       default: mao(c, p, E, Y); mao(c, p, D, Y);
     }
   }
@@ -162,7 +166,7 @@ const Avatar = (() => {
     if (pose === "andando") pes(c, pal, f);
     corpo(c, pal, costas);
     if (!costas) {
-      const tipo = pose === "comemorando" ? "happy" : pose === "dormindo" || (pose === "cafe" && f) ? "fechados" : aparencia.eyes;
+      const tipo = pose === "comemorando" ? "happy" : pose === "tonto" ? "tonto" : pose === "dormindo" || (pose === "cafe" && f) ? "fechados" : aparencia.eyes;
       olhos(c, tipo, piscando, olha === "esq" ? -2 : olha === "dir" ? 2 : 0);
     }
     acessorio(c, aparencia.accessory, costas);
@@ -194,7 +198,7 @@ const Avatar = (() => {
 
   // ritmo de cada pose (ms por quadro); 0 = parado
   const RITMO = { andando: 160, digitando: 130, tocando: 220, pebolim: 150, jogando: 190, fliperama: 170, raquete: 380, taco: 600,
-    comemorando: 180, acenando: 260, carinho: 300, dancando: 240, violao: 300, arremesso: 350 };
+    comemorando: 180, acenando: 260, carinho: 300, dancando: 240, violao: 300, arremesso: 350, tonto: 420 };
 
   // Como o boneco b está no instante t (ms): pose, direção (com a olhadela para os lados), o quadro f do RITMO
   // (com o gole do café), o piscar e oy, quanto o corpo sobe em px (passo, pulinhos, dança, digitando, dormindo,
@@ -211,7 +215,7 @@ const Avatar = (() => {
     const ritmo = RITMO[pose] || 0;
     let f = ritmo && !(fixo && pose !== "andando") ? Math.floor(ts / ritmo) % 2 : 0;
     if (pose === "cafe") f = (ts % 5200) < 900 ? 1 : 0;   // um gole a cada 5 s
-    const piscando = pose !== "dormindo" && (Math.floor(ts / 1000) % 6 === 0) && (ts % 1000) < 130;
+    const piscando = pose !== "dormindo" && pose !== "tonto" && (Math.floor(ts / 1000) % 6 === 0) && (ts % 1000) < 130;
     let oy = 0;
     if (pose === "andando") oy = f;
     else if (pose === "comemorando" && !fixo) oy = Math.round(Math.abs(Math.sin(ts / 170)) * 4);   // pulinhos

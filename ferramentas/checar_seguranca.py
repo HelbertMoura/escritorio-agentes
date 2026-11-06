@@ -104,6 +104,15 @@ confere("cookie do modo SameSite=Strict, HttpOnly e sem Max-Age/Expires (some ao
 envio = json.dumps({"id": "abcdefghijkl", "run_id": "r1", "texto": "oi", "chave": "0b9c5c55-3b3a-4c7e-9a1e-2f6d1c8b7a10"}).encode()
 st, _ = req("/api/conversa/responder", {**sessao, "Origin": base, "Content-Type": "application/json"}, envio)
 confere("envio da mesma sessao sem o cookie do modo (outro navegador)", st, 403)
+
+print("== Vida social: mandar pro ringue (Origin obrigatorio, JSON exato)")
+briga = json.dumps({"a": "a1", "b": "a2"}).encode()
+confere("POST /api/social/briga sem Origin, com Referer valido (aqui o Referer nao conta)",
+        req("/api/social/briga", {**sessao, "Referer": base + "/", "Content-Type": "application/json"}, briga)[0], 403)
+confere("POST /api/social/briga com Origin: null", req("/api/social/briga", {**sessao, "Origin": "null", "Content-Type": "application/json"}, briga)[0], 403)
+confere("POST /api/social/briga em text/plain (formulario de outro site)",
+        req("/api/social/briga", {**sessao, "Origin": base, "Content-Type": "text/plain"}, briga)[0], 415)
+confere("GET /api/social/placar sem sessao", req("/api/social/placar")[0], 401)
 srv.shutdown()
 print("RESULTADO:", "tudo certo" if not falhas else "%d falha(s)" % len(falhas))
 sys.exit(1 if falhas else 0)

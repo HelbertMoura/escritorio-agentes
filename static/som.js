@@ -164,6 +164,10 @@ const Som = (() => {
     }],
     jukebox: ["ambiente", () => { tom(196, 0.45, "triangle", 0.05); [392, 494, 587, 784].forEach((f, i) => tom(f, 0.12, "square", 0.03, i * 0.09)); }],   // vinheta ao ligar
     camera: ["avisos", () => { estalo(3000, 0.12, 0.02, "highpass", 0, 0.7, 0.002); estalo(1800, 0.08, 0.04, "bandpass", 0.07, 1.5); }],   // obturador
+    // vida social (vida.js): o gongo chama para o ringue, os socos de desenho animado na nuvem e a torcida em volta
+    gongo: ["jogos", () => { const f = vari(196, 0.03); tom(f, 1.8, "sine", 0.1); tom(f * 2.4, 1.1, "sine", 0.04); tom(f * 4.2, 0.5, "sine", 0.02); }],
+    soco: ["jogos", () => { estalo(vari(160, 0.2), 0.14, 0.07, "lowpass"); estalo(vari(900, 0.2), 0.05, 0.03, "bandpass", 0.01, 2); }],   // "tchum" abafado
+    torcida: ["conversa", () => { chiado(700, 1100, 0.04, 1.4); chiado(1400, 900, 0.02, 1.1, 0.25); }],   // "uuuh" da plateia
     konami: ["jogos", () => { [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => tom(f, i === 6 ? 0.3 : 0.07, "square", 0.04, i * 0.07)); }],
   };
 

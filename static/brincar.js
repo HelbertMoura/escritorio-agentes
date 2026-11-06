@@ -38,6 +38,7 @@ const Brincar = (() => {
       else if (a.tipo === "gato") add("gato", "Gato", "fazer carinho", a, a);
     }
     for (const q of P.quadros || []) { const d = DO_QUADRO[q.nome]; if (d) add(d[0], d[1], d[2], q, q); }
+    if (P.ringue) add("placar", "Placar do ringue", "ver o ranking", P.ringue.quadro || P.ringue, P.ringue);   // sem quadro, o próprio ringue abre o ranking
     itens.sort((a, b) => a.y - b.y || a.x - b.x);   // ordem de leitura para o Tab
     montarCamada();
   }
@@ -108,6 +109,7 @@ const Brincar = (() => {
     gato: it => { som("ronrono"); reagir(it, "coracoes", 2400, "PRRR"); return "O gato ronronou"; },
     quadro_avisos: it => { abrirRecados(it); return "Quadro de avisos aberto"; },
     lousa: it => { const t = it.rotulo === "Lousa de código" ? PIADAS[Math.floor(Math.random() * PIADAS.length)] : it.rotulo === "Kanban" ? "3 FEITOS HOJE" : "INSPIRAÇÃO DO DIA"; reagir(it, "bolha", 3000, t.toUpperCase()); return `${it.rotulo}: ${t}`; },
+    placar: () => { abrirPlacar(); return "Placar do ringue aberto"; },   // diálogo do ranking (app.js)
     sino: it => { som("sino"); reagir(it, "ding", 1800, "DING!"); return "Sino tocado: venda fechada!"; },
     planta: it => { it.ref.agita = agora(); return "A planta balançou"; },
     expediente: it => { // fora da demonstração, abre o Personalizar no "Abre às" (app.js); na demonstração, só mostra o horário
@@ -276,11 +278,11 @@ const Brincar = (() => {
   const demoEstado = new Map();   // handle -> trabalho atual (ou null)
   function estadoDemo() {
     const h = Ceu.agora().h, expediente = h >= 8.5 && h < 19, almoco = h >= 12 && h < 13;
-    const trabalhos = [];
+    const trabalhos = [], noRingue = SOC.cena ? [SOC.cena.a, SOC.cena.b] : [];
     NOMES.forEach(([handle], i) => {
       let t = demoEstado.get(handle) || null;
       if (!expediente) t = null;
-      else if (Math.random() < 0.35) { // muda de estado de vez em quando
+      else if (!noRingue.includes(`demo-${handle}`) && Math.random() < 0.35) { // muda de estado de vez em quando (quem está no ringue espera a briga acabar)
         const sorte = Math.random();
         t = almoco && sorte < 0.6 ? null : sorte < 0.62 ? { status: "running" } : sorte < 0.72 ? { status: "waiting_approval" } : sorte < 0.8 ? { status: "waiting_input" } : null;
         if (t) Object.assign(t, { rotulo: TAREFAS[(i + Math.floor(h * 3)) % TAREFAS.length], inicio: new Date().toISOString(), run_id: `demo-${handle}-${Math.floor(agora())}` });
@@ -289,7 +291,57 @@ const Brincar = (() => {
       if (t) trabalhos.push({ agente_id: `demo-${handle}`, started_at: t.inicio, desde: t.inicio, url: "https://agentes.chat", ...t });
     });
     return { agentes: NOMES.map(([handle, nome, funcao]) => ({ id: `demo-${handle}`, nome, handle, funcao })), trabalhos, tarefas: [],
-      atualizado: new Date().toISOString(), erro: null, usuario: null, clima: { tipo: "limpo", codigo: 0, temperatura: 26, vento: 6, nuvens: 10, cidade: "Demonstração" } };
+      atualizado: new Date().toISOString(), erro: null, usuario: null, clima: { tipo: "limpo", codigo: 0, temperatura: 26, vento: 6, nuvens: 10, cidade: "Demonstração" },
+      social: socialDemo(trabalhos) };
+  }
+  // vida social da demonstração: o mesmo bloco do /api/estado (contrato S2), montado aqui; uma briga a cada uns 2 min
+  // e uns cafés e papos. Sem servidor, o sorteio é local; o vida.js encena do mesmo jeito
+  const SOC = { cena: null, eventos: [], proxima: Date.now() + 40000,   // o placar começa com umas lutas de mentira, para o quadro não nascer vazio
+    placar: { "demo-aurora": { v: 3, d: 1, seq: 2 }, "demo-gael": { v: 2, d: 0, seq: 2 }, "demo-jade": { v: 1, d: 2, seq: -1 } }, anterior: { id: "demo-hana", v: 6, d: 1 } };
+  const iso = ms => new Date(ms).toISOString().replace(/\.\d+Z$/, "Z");
+  const idDemo = () => Math.random().toString(36).slice(2, 10);
+  const livresDemo = trabalhos => NOMES.map(([h]) => `demo-${h}`).filter(id => !trabalhos.some(t => t.agente_id === id));
+  const noExpediente = (ms = 0) => !Expediente.fora(Ceu.agora().h + ms / 3600000);
+  function marcarDemo(a, b, origem) {
+    const inicio = Date.now() + 15000;
+    SOC.cena = { id: idDemo(), tipo: "briga", a, b, vencedor: Math.random() < 0.5 ? a : b, inicio: iso(inicio), fim: iso(inicio + 30000), origem };
+    return SOC.cena;
+  }
+  function socialDemo(trabalhos) {
+    const agora = Date.now(), livres = livresDemo(trabalhos), c = SOC.cena;
+    if (c && (agora > Date.parse(c.fim) + 10000 || (agora < Date.parse(c.inicio) && !(livres.includes(c.a) && livres.includes(c.b))))) { // acabou, ou um lutador pegou tarefa antes do gongo
+      if (agora > Date.parse(c.fim)) contarDemo(c);   // só a briga que chegou ao fim entra no placar
+      SOC.cena = null; SOC.proxima = agora + 120000;
+    }
+    if (!SOC.cena && agora >= SOC.proxima && livres.length >= 2 && noExpediente(60000)) {
+      const a = livres[Math.floor(Math.random() * livres.length)], resto = livres.filter(x => x !== a);
+      marcarDemo(a, resto[Math.floor(Math.random() * resto.length)], "auto");
+    }
+    if (livres.length >= 2 && Math.random() < 0.15) {
+      const a = livres[Math.floor(Math.random() * livres.length)], resto = livres.filter(x => x !== a);
+      SOC.eventos.unshift({ id: idDemo(), tipo: Math.random() < 0.5 ? "cafe" : "papo", a, b: resto[Math.floor(Math.random() * resto.length)], em: iso(agora) });
+    }
+    SOC.eventos = SOC.eventos.filter(e => agora - Date.parse(e.em) < 120000).slice(0, 10);
+    return { v: 1, agora: iso(agora), serio: false, cena: SOC.cena, eventos: SOC.eventos, placar: { semana: segundaDemo(), top: rankingDemo().slice(0, 3), anterior: SOC.anterior } };
+  }
+  function contarDemo(c) { // as mesmas contas do servidor (adendo, seção 1)
+    const perdeu = c.vencedor === c.a ? c.b : c.a, p = id => SOC.placar[id] || (SOC.placar[id] = { v: 0, d: 0, seq: 0 });
+    const g = p(c.vencedor), q = p(perdeu);
+    g.v++; g.seq = Math.max(g.seq, 0) + 1; q.d++; q.seq = Math.min(q.seq, 0) - 1;
+  }
+  const rankingDemo = () => Object.entries(SOC.placar).map(([id, x]) => ({ id, ...x })).filter(x => x.v + x.d > 0)
+    .sort((a, b) => b.v - a.v || a.d - b.d || (a.id < b.id ? -1 : 1));
+  function segundaDemo() { const d = new Date(Date.now() - 3 * 3600000); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); }   // segunda desta semana, em Brasília
+  const placarDemo = () => ({ semana: segundaDemo(), ranking: rankingDemo(), anterior: SOC.anterior });
+  // "Mandar pro ringue" na demonstração: as mesmas regras do POST, sem sair do navegador (resposta no formato do servidor)
+  function brigaDemo(a, b) {
+    const recusa = (status, erro, mensagem, extra) => ({ status, d: { erro, mensagem, ...extra } });
+    const ocupados = new Set([...demoEstado].filter(([, t]) => t).map(([h]) => `demo-${h}`));
+    if (a === b) return recusa(409, "mesmo_agente", "Escolha dois agentes diferentes.");
+    if (!noExpediente(47000)) return recusa(409, "fora_do_expediente", "Fora do expediente: o ringue está fechado.");
+    if (ocupados.has(a) || ocupados.has(b)) return recusa(409, "trabalhando", "Um dos dois está trabalhando agora.");
+    if (SOC.cena) return recusa(409, "ocupado", "Já tem briga no ringue; espere um minuto.", { cena: SOC.cena });
+    return { status: 200, d: { cena: marcarDemo(a, b, "ordem") } };
   }
 
   // ---------------- início: atalhos, faixa da demonstração e botão do modo foto
@@ -316,6 +368,6 @@ const Brincar = (() => {
     });
   }
 
-  return { demo, iniciar, montar, desenhar, sobre, tocar, configDemo, estadoDemo, surpresa, modoFoto };
+  return { demo, iniciar, montar, desenhar, sobre, tocar, configDemo, estadoDemo, brigaDemo, placarDemo, surpresa, modoFoto };
 })();
 window.Brincar = Brincar;

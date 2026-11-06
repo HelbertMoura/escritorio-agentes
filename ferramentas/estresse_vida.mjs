@@ -7,12 +7,20 @@
 //   - sem lugar: parado sem lugar nem rota;
 //   - vagas órfãs: reservadas por mais de 3 s para alguém que não está nela, nem indo, nem chamado para a roda;
 //   - espera fora da mesa: quem espera você (status waiting*) longe da mesa e sem ir para ela por mais de 3 s;
+//   - trabalho na cena: alguém com tarefa lutando ou parado na plateia do ringue (vida social: o trabalho real manda);
 //   - exceções no Vida.passo e erros ou avisos no console da página.
 // Com --acoes, depois do estresse confere também a interface das brincadeiras (Vida.objetoClicado, Vida.festaGeral e os sons).
 // Com --prints, tira um print de cada cena (campeonato, xadrez, piada na roda...) em .previa/telas/<prefixo>_<cena>.png.
+// Com --brigas N, força N brigas da vida social (uma de cada vez, no formato do servidor) entre dois livres e conta as que
+// lutaram e as que tiveram plateia; briga marcada que não chegou a lutar é achado. O par sai de todos os livres no prédio,
+// andando ou não, e em 2 de cada 3 brigas alguém (lutador ou plateia) pega tarefa no meio da luta: tem de ir para a mesa
+// em até 3 s (tarefaSemMesa). Com --longe, o par sai dos dois livres mais longe do ringue. Com --calmo, a página roda
+// com prefers-reduced-motion: reduce: ninguém pode correr (pressaNoCalmo), e o lutador que não chega andando aparece
+// direto no ponto de luta (conta em "diretos"). Com --times N (1 a 20), remonta o
+// prédio com N times, com os agentes repartidos entre eles. Durante o estresse, o Vida.social do app fica desligado.
 //
 // Uso (com a prévia no ar: python ferramentas/previa.py dados.json):
-//   node ferramentas/estresse_vida.mjs [url] [--minutos 40] [--acoes] [--prints <prefixo>] [--grande]
+//   node ferramentas/estresse_vida.mjs [url] [--minutos 40] [--acoes] [--prints <prefixo>] [--grande] [--brigas 10] [--longe] [--calmo] [--times 20]
 //   url padrão http://127.0.0.1:7372/?hora=10.5; outros cenários: ?demo=1, ?data=2026-11-06&hora=17 (sexta à tarde)
 //   --grande acrescenta 14 times vazios (prédio e salão largos) e procura uma marca com jukebox e xadrez
 //   NAVEGADOR=<caminho do executável> troca o navegador; sem ela, usa o Chrome e, na falta, o Edge.
@@ -27,6 +35,7 @@ const args = process.argv.slice(2);
 const opcao = nome => { const i = args.indexOf(nome); return i < 0 ? null : args.splice(i, 2)[1] ?? ""; };
 const flag = nome => { const i = args.indexOf(nome); return i >= 0 && !!args.splice(i, 1); };
 const MINUTOS = Number(opcao("--minutos") ?? 40), PREFIXO = opcao("--prints"), ACOES = flag("--acoes"), GRANDE = flag("--grande");
+const BRIGAS = Number(opcao("--brigas") ?? 0), TIMES = Number(opcao("--times") ?? 0), LONGE = flag("--longe"), CALMO = flag("--calmo");
 const URL_PAGINA = args[0] || "http://127.0.0.1:7372/?hora=10.5";
 const TELAS = fileURLToPath(new URL("../.previa/telas/", import.meta.url));
 const espera = ms => new Promise(r => setTimeout(r, ms));
@@ -41,6 +50,7 @@ const sair = async (codigo, msg) => {
 };
 process.on("exit", () => { try { nav && nav.exitCode === null && nav.kill(); } catch {} });   // falha no meio: não deixa navegador órfão
 if (!(MINUTOS > 0)) await sair(2, "--minutos precisa ser um número maior que zero");
+if (!Number.isInteger(BRIGAS) || BRIGAS < 0 || !Number.isInteger(TIMES) || TIMES < 0 || TIMES > 20) await sair(2, "--brigas precisa ser um inteiro >= 0 e --times, de 1 a 20");
 try { await (await fetch(URL_PAGINA)).arrayBuffer(); } catch { await sair(2, `prévia fora do ar em ${URL_PAGINA} (python ferramentas/previa.py dados.json)`); }
 
 const NAVEGADOR = [process.env.NAVEGADOR, "C:/Program Files/Google/Chrome/Application/chrome.exe", "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
@@ -74,9 +84,18 @@ const js = async expr => { const x = await cdp("Runtime.evaluate", { expression:
 await cdp("Runtime.enable"); await cdp("Log.enable"); await cdp("Page.enable");
 await cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
 
+if (CALMO) await cdp("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
 await cdp("Page.navigate", { url: URL_PAGINA });
 const carregou = async () => { for (let i = 0; i < 60; i++) { await espera(500); try { if (await js("typeof mundo !== 'undefined' && !!mundo && mundo.lista.length > 0")) return true; } catch {} } return false; };
 if (!await carregou()) await sair(2, `a página não montou o escritório (mundo vazio) em ${URL_PAGINA}\n${consoleMsgs.join("\n")}`);
+if (CALMO && !await js(`matchMedia("(prefers-reduced-motion: reduce)").matches`)) await sair(2, "--calmo: o navegador não aplicou o prefers-reduced-motion");
+if (TIMES) {   // os agentes repartidos em N times (1 time: uma sala só; 20: o prédio mais largo)
+  console.log("times:", await js(`(() => { const hs = estado.agentes.map(a => a.handle), base = config.times[0] || {};
+    config.times = Array.from({ length: ${TIMES} }, (_, i) => ({ ...base, nome: "Time " + (i + 1), tipo: "mesas", parede: i % 6, piso: i % 10,
+      agentes: hs.filter((_, j) => j % ${TIMES} === i) }));
+    assinatura = ""; montar(estado.agentes); return { times: config.times.length, ringue: !!predio.ringue }; })()`));
+  if (!await carregou()) await sair(2, "o prédio com --times não montou");
+}
 if (GRANDE) {
   console.log("grande:", await js(`(() => { config.times = [...config.times, ...Array.from({ length: 14 }, (_, i) => ({ ...config.times[0], nome: "Time extra " + (i + 1), agentes: [] }))];
     const nome0 = config.empresa;
@@ -97,7 +116,76 @@ await js(`(() => {
   window.requestAnimationFrame = f => desenhando ? raf(f) : 0;   // sem desenhar: o laço do app para no próximo quadro
   const solo = (x, y) => [...mundo.predio.salas, ...mundo.predio.baixo].some(s => x >= s.px + 5 && x <= s.px + s.pw - 5 && y >= s.chao + 5 && y <= s.py + s.ph - 3);
   const E = window.__E = { seg: 0, passos: 0, erros: [], invasaoParado: 0, invasaoAndando: 0, exInvasao: [], presos: 0, exPresos: [], semLugar: 0, exSemLugar: [],
-    orfas: 0, exOrfas: [], esperaFora: 0, exEsperaFora: [], eventos: {}, poses: {}, falas: {}, tiposVaga: {} };
+    orfas: 0, exOrfas: [], esperaFora: 0, exEsperaFora: [], trabalhoNaCena: 0, exTrabalhoNaCena: [], eventos: {}, poses: {}, falas: {}, tiposVaga: {} };
+  // vida social: o app.js não mexe na cena (a prévia manda o social de verdade a cada 10 s); as brigas forçadas usam o original
+  // As tarefas também ficam com o estresse: na regra dura, um lutador ou alguém da plateia pega tarefa no meio da luta
+  const social = Vida.social, sincronizar = Vida.sincronizar;
+  Vida.social = () => {}; Vida.sincronizar = () => {};
+  const B = E.brigas = { faltam: ${BRIGAS}, prox: virt / 1000 + 20, atual: null, n: 0, marcadas: 0, lutaram: 0, comPlateia: 0, maiorPlateia: 0,
+    tarefas: 0, semMesa: 0, exSemMesa: [], diretos: 0, pressaCalmo: 0, exPressaCalmo: [] };
+  const CALMO = ${CALMO}, LONGE = ${LONGE};
+  const noPredio = b => b.x >= 0 && (b.rota.length ? !(b.destino && b.destino.tipo === "fora") : !!b.lugar && b.lugar.tipo !== "fora");
+  const extras = [], STATUS = ["running", "waiting_input", "waiting_approval"];
+  const tarefas = () => {
+    const mesas = new Map();
+    for (const s of mundo.predio.salas) for (const k of s.mesas || []) if (k.handle) mesas.set(k.handle, k);
+    sincronizar(mundo, estado.agentes || [], [...(estado.trabalhos || []), ...extras], mesas, aparencia, false);
+  };
+  const iso = s => new Date(s * 1000).toISOString();
+  const plateia = id => mundo.lista.filter(o => !o.rota.length && o.lugar && o.lugar.vaga && o.lugar.vaga.tipo === "ringue" && o.lugar.vaga.dono === id).length;
+  const brigar = agora => {
+    const c = B.atual;
+    if (CALMO) for (const o of mundo.lista) if (o.pressa > 1) {   // movimento reduzido: ninguém corre, nem lutador nem plateia
+      B.pressaCalmo++; if (B.exPressaCalmo.length < 5) B.exPressaCalmo.push({ id: o.id, pressa: o.pressa, cena: c && c.id });
+    }
+    if (c) {
+      if (!c.chamado && mundo.cena && mundo.cena.id === c.id && mundo.cena.fase !== "espera") {   // primeiro instante depois do gongo
+        c.chamado = true;
+        for (const id of [c.a, mundo.cena.b]) { const o = mundo.bonecos.get(id);
+          if (o && !o.rota.length && o.lugar && o.lugar.vaga && o.lugar.vaga.tipo === "luta" && o.lugar.vaga.dono === c.id) B.diretos++; }
+      }
+      if (mundo.cenaSocial && mundo.cenaSocial.id === c.id && mundo.cenaSocial.fase === "luta") {
+        c.lutou = true; c.plateia = Math.max(c.plateia, plateia(c.id));
+        if (!c.dada && c.n % 3) {   // 2 de cada 3 brigas: tarefa (running ou waiting_*) para um lutador ou para alguém da plateia
+          const alvo = c.n % 3 === 1 ? mundo.bonecos.get(c.a)
+            : mundo.lista.find(o => !o.rota.length && o.lugar && o.lugar.vaga && o.lugar.vaga.tipo === "ringue" && o.lugar.vaga.dono === c.id);
+          if (alvo && alvo.mesa) {
+            c.dada = { id: alvo.id, em: agora, ok: false };
+            extras.push({ agente_id: alvo.id, run_id: "estresse-" + c.id, status: STATUS[B.tarefas++ % 3], rotulo: "Tarefa do estresse", url: "" });
+            tarefas();
+          }
+        }
+      }
+      if (c.dada && !c.dada.ok) {   // quem pegou a tarefa vai para a mesa em até 3 s
+        const b = mundo.bonecos.get(c.dada.id);
+        if (b && ((b.lugar && b.lugar.tipo === "mesa") || (b.destino && b.destino.tipo === "mesa"))) c.dada.ok = true;
+        else if (agora - c.dada.em > 3) {
+          c.dada.ok = true; B.semMesa++;
+          if (B.exSemMesa.length < 5) B.exSemMesa.push({ id: c.dada.id, cena: c.id, lugar: b && b.lugar && (b.lugar.vaga ? b.lugar.vaga.tipo : b.lugar.tipo) });
+        }
+      }
+      if (agora < c.fim + 10) return;
+      social(mundo, { v: 1, agora: iso(agora), serio: false, cena: null, eventos: [] });   // o servidor tira a cena no fim + 10 s
+      if (c.dada) { extras.length = 0; tarefas(); }   // a tarefa acaba: volta a ficar livre
+      B.lutaram += c.lutou; B.comPlateia += c.lutou && c.plateia > 0; B.maiorPlateia = Math.max(B.maiorPlateia, c.plateia);
+      B.atual = null; B.prox = agora + 20;
+      return;
+    }
+    if (!B.faltam || agora < B.prox) return;
+    // o par sai de todos os livres no prédio, andando ou não, como fazem o servidor e o seletor da ficha
+    const livres = mundo.lista.filter(b => !b.trabalho && !b.reuniao && noPredio(b)).sort(() => Math.random() - 0.5);
+    const r = mundo.predio.ringue, rx = r ? r.x + r.w / 2 : 0;
+    if (LONGE && r) livres.sort((p, q) => Math.abs(q.x - rx) - Math.abs(p.x - rx));   // os dois mais longe do ringue
+    if (livres.length < 2) { B.prox = agora + 15; return; }
+    const id = "estresse-" + ++B.n, [a, b] = livres;
+    // com --calmo, metade das brigas chega atrasada, no pior caso real: a tela lê o /api/estado a cada 10 s, então vê a cena
+    // até 10 s depois de marcada (gongo em 5 s, fim em 35 s). Aí o lutador longe não chega andando a 1x e tem de aparecer
+    // direto no ponto de luta
+    const [ini, fim] = CALMO && B.n % 2 === 0 ? [5, 35] : [15, 45];
+    B.atual = { id, n: B.n, a: a.id, fim: agora + fim, lutou: false, plateia: 0, dada: null }; B.faltam--; B.marcadas++;
+    social(mundo, { v: 1, agora: iso(agora), serio: false, eventos: [], cena: { id, tipo: "briga", a: a.id, b: b.id, vencedor: Math.random() < 0.5 ? a.id : b.id,
+      inicio: iso(agora + ini), fim: iso(agora + fim), origem: "ordem" } });
+  };
   const rastro = new Map(), orfaDesde = new Map(), foraDesde = new Map(), inicio = new Map(), feitas = new Set();
   let cena = null;
   const falasDe = Vida.FRASES;
@@ -116,6 +204,7 @@ await js(`(() => {
       if (k % 15) continue;   // conferências a cada 0,5 s
       E.seg += 0.5;
       const agora = virt / 1000;
+      const cs = mundo.cena && mundo.cena.fase !== "fim" && mundo.cena.fase !== "espera" ? mundo.cena : null;
       for (const b of mundo.lista) {
         E.poses[b.pose] = (E.poses[b.pose] || 0) + 1;
         const v = b.lugar && b.lugar.vaga;
@@ -147,6 +236,10 @@ await js(`(() => {
           const d = foraDesde.get(b.id) ?? agora; foraDesde.set(b.id, d);
           if (agora - d > 3) { E.esperaFora++; if (E.exEsperaFora.length < 5) E.exEsperaFora.push({ id: b.id, lugar: b.lugar && (b.lugar.vaga ? b.lugar.vaga.tipo : b.lugar.tipo) }); foraDesde.set(b.id, agora); }
         } else foraDesde.delete(b.id);
+        const dono = (v && v.dono) || (b.destino && b.destino.vaga && b.destino.vaga.dono);
+        if (cs && b.trabalho && (cs.lutadores.includes(b.id) || (dono === cs.id && !b.rota.length))) {
+          E.trabalhoNaCena++; if (E.exTrabalhoNaCena.length < 5) E.exTrabalhoNaCena.push({ id: b.id, cena: cs.id, fase: cs.fase });
+        }
       }
       for (const v of mundo.vagas) {
         const b = v.ocupante && mundo.bonecos.get(v.ocupante);
@@ -155,6 +248,7 @@ await js(`(() => {
         const d = orfaDesde.get(v) ?? agora; orfaDesde.set(v, d);
         if (agora - d > 3) { E.orfas++; if (E.exOrfas.length < 5) E.exOrfas.push({ tipo: v.tipo, x: v.x, y: v.y, ocupante: v.ocupante }); orfaDesde.set(v, agora); }
       }
+      brigar(agora);   // depois das conferências: a tarefa dada agora só é cobrada depois que o vida.js teve quadros para reagir
     }
     return { seg: E.seg, cena: null };
   };
@@ -189,12 +283,14 @@ const CENAS = {
   aviaozinho: `(() => { const b = mundo.lista.find(b => b.pose === "arremesso" && b.fala && Vida.FRASES.aviao.includes(b.fala)); return b ? [b.x, b.y] : null; })()`,
   guerra_de_papel: `(() => { const b = mundo.lista.find(b => b.pose === "arremesso" && b.fala && Vida.FRASES.guerra.includes(b.fala)); return b ? [b.x, b.y] : null; })()`,
 };
+if (BRIGAS) CENAS.briga_plateia = `(() => { const c = mundo.cenaSocial; return c && c.fase === "luta" && mundo.lista.filter(o => !o.rota.length && o.lugar && o.lugar.vaga
+  && o.lugar.vaga.tipo === "ringue" && o.lugar.vaga.dono === c.id).length >= 2 ? [c.x, c.y] : null; })()`;
 const feitas = new Set();
 if (PREFIXO !== null) await js(`window.__cenas = { ${Object.entries(CENAS).map(([n, c]) => `${n}: () => ${c}`).join(",\n")} }; true`);
 for (let seg = 0; seg < MINUTOS * 60;) {
   const r = await js("__simular(10)");
   seg = r.seg;
-  if (r.cena) { feitas.add(r.cena.nome); await fotografar(r.cena.nome, r.cena.p[0], r.cena.p[1]); }
+  if (r.cena) { feitas.add(r.cena.nome); await fotografar(r.cena.nome, r.cena.p[0], r.cena.p[1], r.cena.nome === "briga_plateia" ? 2.4 : undefined); }   // o ringue com a plateia em volta
 }
 await js("window.__cenas = {}; true");
 
@@ -296,10 +392,15 @@ if (ACOES) {
 
 const E = await js("window.__E");
 const achados = { erros: E.erros.length, invasaoParado: E.invasaoParado, invasaoAndando: E.invasaoAndando, presos: E.presos, semLugar: E.semLugar,
-  vagasOrfas: E.orfas, esperaForaDaMesa: E.esperaFora, console: consoleMsgs.length, acoes: falhasAcoes.length };
+  vagasOrfas: E.orfas, esperaForaDaMesa: E.esperaFora, trabalhoNaCena: E.trabalhoNaCena, console: consoleMsgs.length, acoes: falhasAcoes.length,
+  brigasSemLuta: E.brigas.marcadas - E.brigas.lutaram - (E.brigas.atual ? 1 : 0), brigasPendentes: E.brigas.faltam + (E.brigas.atual ? 1 : 0),
+  tarefaSemMesa: E.brigas.semMesa, pressaNoCalmo: E.brigas.pressaCalmo };
 const total = Object.values(achados).reduce((a, n) => a + n, 0);
 console.log("RESULTADO " + JSON.stringify({ url: URL_PAGINA, minutosVirtuais: E.seg / 60, agentes: await js("mundo.lista.length"), achados,
-  exemplos: { erros: E.erros, invasao: E.exInvasao, presos: E.exPresos, semLugar: E.exSemLugar, orfas: E.exOrfas, esperaFora: E.exEsperaFora, acoes: falhasAcoes },
+  exemplos: { erros: E.erros, invasao: E.exInvasao, presos: E.exPresos, semLugar: E.exSemLugar, orfas: E.exOrfas, esperaFora: E.exEsperaFora,
+    trabalhoNaCena: E.exTrabalhoNaCena, tarefaSemMesa: E.brigas.exSemMesa, pressaNoCalmo: E.brigas.exPressaCalmo, acoes: falhasAcoes },
+  brigas: BRIGAS ? { marcadas: E.brigas.marcadas, lutaram: E.brigas.lutaram, comPlateia: E.brigas.comPlateia, maiorPlateia: E.brigas.maiorPlateia,
+    tarefasNoMeio: E.brigas.tarefas, diretos: E.brigas.diretos } : null,
   cenasSemPrint: PREFIXO === null ? [] : Object.keys(CENAS).filter(c => !feitas.has(c)), eventos: E.eventos, falas: E.falas, poses: E.poses, vagas: E.tiposVaga }));
 console.log("CONSOLE:", consoleMsgs.length ? consoleMsgs.slice(0, 15).join("\n") : "limpo");
 console.log(total ? `${total} achado(s): ${Object.entries(achados).filter(([, n]) => n).map(([k, n]) => `${k} ${n}`).join(", ")}` : "0 achados");

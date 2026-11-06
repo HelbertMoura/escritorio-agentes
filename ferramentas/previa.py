@@ -8,6 +8,10 @@ Uso: python ferramentas/previa.py dados_brutos.json [--resolvidos]  ->  http://1
 Página Conversas: a lista do dia sai da mesma memória do servidor (com --resolvidos, também as terminadas) e cada
 conversa aberta é uma conversa fictícia, sempre a mesma, com horários relativos a agora (a última mensagem fica
 depois do fim das terminadas, para o corte do fim da tarefa aparecer). Liga com "conversas": "ler" no times.json.
+Vida social: o diretor do servidor (social.py) roda com a leitura deste arquivo, no expediente do Personalizar. Para
+forçar uma briga na hora (dois agentes sem tarefa, dentro do expediente), o mesmo POST do "Mandar pro ringue":
+  curl -H "Origin: http://127.0.0.1:7372" -H "Content-Type: application/json" -d '{"a": "<id>", "b": "<id>"}'
+       http://127.0.0.1:7372/api/social/briga
 """
 import json, os, sys, threading, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -107,6 +111,10 @@ if "--resolvidos" in sys.argv[1:]:
     srv.leitor.semear_resolvidos()
 srv.acesso = e.Acesso(os.environ["ESCRITORIO_DADOS"])
 srv.previa_sem_login = True  # prévia local, só em 127.0.0.1
+# o mesmo diretor do servidor, com a leitura do arquivo; o placar semanal vai para o placar.json da pasta temporária
+srv.social = e.Social(srv.leitor, e.config_publica, e.log, e.FUSO, guardar=lambda dados: e.gravar(e.ARQ_PLACAR, dados),
+                      placar=e.ler_placar())
+srv.social.start()
 cl = e.carregar_times().get("clima")
 if cl:
     srv.clima = e.Clima(cl["lat"], cl["lon"], cl["cidade"]); srv.clima.start()

@@ -1,12 +1,12 @@
 // Tela "Personalizar": nome, cor e logo da empresa (salvos no servidor), com prévia ao vivo
 // e checagem de contraste da cor escolhida (WCAG). A prévia mostra a placa da recepção e o painel
-// da sala comunal desenhados como no mapa. Tudo (nome, cor, logo e expediente) só vale ao clicar em "Salvar".
+// da sala comunal desenhados como no mapa. Tudo (nome, cor, logo, expediente e modo sério) só vale ao clicar em "Salvar".
 "use strict";
 const Personalizar = (() => {
   const $ = id => document.getElementById(id);
   const PALETA = [["#f5b83d", "Âmbar"], ["#f97316", "Laranja"], ["#e8587a", "Rosa"], ["#a855f7", "Roxo"], ["#3b82f6", "Azul"], ["#14b8a6", "Turquesa"], ["#22c55e", "Verde"], ["#e5e7eb", "Gelo"]];
   const FUNDO = "#0f0f11", LOGO_PADRAO = "logo.png", ESCALA = 3;
-  let salvo = null;          // { empresa, cor, logo, abre, fecha } como estão no servidor
+  let salvo = null;          // { empresa, cor, logo, abre, fecha, serio } como estão no servidor
   let logoNovo = null;       // arquivo escolhido, enviado só no "Salvar"
   let tirarLogo = false;     // "voltar ao logo padrão", também só no "Salvar"
   let urlLocal = null;       // endereço temporário do arquivo escolhido, para a prévia
@@ -95,10 +95,11 @@ const Personalizar = (() => {
     });
   }
 
+  const temSocial = () => !!configApp && typeof configApp.serio === "boolean" && !(window.Brincar && Brincar.demo);   // o /api/config manda "serio" quando há vida social
   function mostrarLogo(src) { $("m-previa").src = $("p-logo").src = src; }
   function alterado() {
     return !!salvo && ($("m-empresa").value.trim() !== salvo.empresa || $("m-cor").value.toLowerCase() !== salvo.cor.toLowerCase() || !!logoNovo || tirarLogo ||
-      $("m-abre").value !== salvo.abre || $("m-fecha").value !== salvo.fecha);
+      $("m-abre").value !== salvo.abre || $("m-fecha").value !== salvo.fecha || (temSocial() && $("m-serio").checked !== salvo.serio));
   }
 
   // expediente: abre == fecha não vale (o servidor recusa também); abre > fecha é o turno que vira a meia-noite
@@ -124,7 +125,7 @@ const Personalizar = (() => {
     $("m-contraste").classList.toggle("ruim", !ok);
     $("m-desfazer").hidden = !alterado();
     conferirExpediente();
-    const pendente = "Alterações ainda não salvas. Nome, cor, logo e expediente valem juntos ao clicar em Salvar.";
+    const pendente = "Alterações ainda não salvas. Tudo vale junto ao clicar em Salvar.";
     if (alterado()) aviso(pendente);
     else if ($("m-aviso").textContent === pendente) aviso("");   // desfez à mão até o valor salvo
     desenharMiniaturas();
@@ -138,8 +139,9 @@ const Personalizar = (() => {
     $("m-salvar").textContent = "Salvar";
     $("m-logo-ajuda").textContent = "PNG, JPEG ou WEBP, até 600 KB. Também dá para arrastar a imagem para cá. O logo novo aparece na prévia e só vale ao clicar em Salvar, junto com o nome e a cor.";
     esquecerLogo(); configApp = cfg;
-    salvo = { empresa: cfg.empresa || "", cor: cfg.cor || "#f5b83d", logo: cfg.logo || LOGO_PADRAO, abre: Expediente.abre, fecha: Expediente.fecha };
-    $("m-empresa").value = salvo.empresa; $("m-cor").value = salvo.cor; $("m-abre").value = salvo.abre; $("m-fecha").value = salvo.fecha;
+    salvo = { empresa: cfg.empresa || "", cor: cfg.cor || "#f5b83d", logo: cfg.logo || LOGO_PADRAO, abre: Expediente.abre, fecha: Expediente.fecha, serio: cfg.serio === true };
+    $("m-social").hidden = !temSocial();   // servidor sem a vida social (ou a demonstração): a caixa nem aparece
+    $("m-empresa").value = salvo.empresa; $("m-cor").value = salvo.cor; $("m-abre").value = salvo.abre; $("m-fecha").value = salvo.fecha; $("m-serio").checked = salvo.serio;
     mostrarLogo(salvo.logo);
     aviso(""); mudou();
   }
@@ -151,8 +153,9 @@ const Personalizar = (() => {
   $("m-cor").addEventListener("input", mudou);
   $("m-abre").addEventListener("input", mudou);
   $("m-fecha").addEventListener("input", mudou);
+  $("m-serio").addEventListener("change", mudou);
   $("m-desfazer").addEventListener("click", () => {
-    $("m-empresa").value = salvo.empresa; $("m-cor").value = salvo.cor; $("m-abre").value = salvo.abre; $("m-fecha").value = salvo.fecha;
+    $("m-empresa").value = salvo.empresa; $("m-cor").value = salvo.cor; $("m-abre").value = salvo.abre; $("m-fecha").value = salvo.fecha; $("m-serio").checked = salvo.serio;
     esquecerLogo(); mostrarLogo(salvo.logo);
     mudou(); aviso("Voltou ao que estava salvo.");
   });
@@ -169,13 +172,13 @@ const Personalizar = (() => {
         logoFoi = true; salvo.logo = configApp.logo = d.logo || LOGO_PADRAO;   // endereço do servidor, não o blob local
       }
       await enviar("/api/marca", JSON.stringify({ empresa: $("m-empresa").value.trim(), cor: $("m-cor").value,
-        expediente: { abre: $("m-abre").value, fecha: $("m-fecha").value } }), "application/json");
+        expediente: { abre: $("m-abre").value, fecha: $("m-fecha").value }, ...(temSocial() ? { serio: $("m-serio").checked } : {}) }), "application/json");
       esquecerLogo();
       aviso("Salvo. Recarregando para aplicar no mapa…", "ok"); setTimeout(() => location.reload(), 700);
     } catch (e) {
       if (logoFoi) { esquecerLogo(); mostrarLogo(salvo.logo); }   // o logo já foi; só o nome e a cor ficaram para trás
       bt.disabled = false; bt.textContent = "Salvar"; mudou();
-      aviso(`Não salvou${logoFoi ? " o nome, a cor e o expediente (o logo já foi salvo)" : ""}: ${e.message}`, "ruim");   // depois do mudou(), que reescreve o aviso
+      aviso(`Não salvou${logoFoi ? " o resto (o logo já foi salvo)" : ""}: ${e.message}`, "ruim");   // depois do mudou(), que reescreve o aviso
     }
   });
 

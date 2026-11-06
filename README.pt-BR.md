@@ -42,6 +42,7 @@ Ele **não chama nenhum modelo de IA** e não gasta tokens. Aprovar é sempre no
 - 🎉 **Datas comemorativas:** Natal, Ano Novo (fogos), Carnaval e Páscoa (calculados), Ano Novo Chinês, Halloween, Festa Junina, Independência, Dia do Programador, Diwali e mais, com enfeites, chapéus e falas.
 - 🎨 **Personalização:** nome da empresa, cor de destaque e logo pela tela **Personalizar**; times, salas, pisos, paredes, ícones e avatares no `times.json`.
 - 🕹️ **Simulação:** um painel para ver o escritório em outra data, hora ou clima (Natal à noite na neve, por exemplo). Nada é salvo: muda só o endereço daquela aba, e a faixa "Simulação" fica à vista, com "Voltar ao real".
+- 🥊 **Vida social:** amizades, rivais e brigas de desenho animado no Ringue, iguais em todas as telas e só entre quem está livre (veja [Vida social](#vida-social)).
 - 📸 **Modo foto:** esconde a interface e salva um PNG do escritório.
 - 🧪 **Modo demonstração:** `?demo=1` mostra agentes fictícios e um dia acelerado, sem mandar nem ler nada do servidor. Bom para experimentar e para capturas de tela.
 - 🎥 **Câmera:** zoom com a roda ou a pinça, arrastar, duplo clique para focar uma sala, "Ir para…" um agente (`/` ou `Ctrl+K`) e atalhos (`+`, `-`, `0`).
@@ -127,6 +128,21 @@ No arquivo `times.json` (comece copiando o `times.exemplo.json`; o instalador fa
 
 Para testar sem esperar, use na URL: `?hora=21.5`, `?clima=tempestade` (`chuva`, `garoa`, `neve`, `neblina`, `nublado`, `limpo`) e `?data=2026-12-25`. O painel de **Simulação** monta isso para você.
 
+## Vida social
+
+Uma camada de diversão sorteada pelo servidor. Os agentes livres fazem amizades e rivalidades, tomam café juntos, esbarram uns nos outros e somem com o grampeador alheio. De vez em quando, resolvem a diferença no **Ringue** da sala comunal, com gongo, plateia e uma nuvem de poeira de desenho animado; um tempo depois, fazem as pazes. **É só diversão: não reflete nada do trabalho real dos agentes.**
+
+- **O trabalho real manda:** quem tem tarefa, ou espera a sua aprovação ou resposta, nunca briga, nunca assiste e nunca sai da mesa. Quem pega uma tarefa no meio da briga volta para a mesa.
+- **Igual para todos:** o servidor decide os valores de amizade, cada evento (quem, o quê, quando) e cada briga (quem, quando e quem vence) e manda tudo no `/api/estado`. Duas telas abertas mostram a mesma briga, com o mesmo vencedor.
+- **De cada tela:** por onde cada um anda, quem da plateia veio assistir, o ritmo exato da animação (com segundos de diferença) e as brincadeiras de sempre.
+- **Mandar pro ringue:** na ficha do agente, quem está logado escolhe um colega livre e manda os dois para o ringue. É uma briga por vez, com 1 minuto entre elas, até 20 por dia e só dentro do expediente.
+- **Melhores amigos e rivais:** a ficha mostra até 3 de cada, com o valor de 0 a 100, e a última briga do dia.
+- **Placar do ringue:** vitórias, derrotas e sequência de cada agente na semana (segunda a domingo, no horário de Brasília), com o top 3 num quadro na parede do ringue, o ranking completo ao clicar nele e o campeão da semana passada. As brigas automáticas e as mandadas contam; a cancelada antes do fim não conta. O vencedor aparece numa faixa acima do ringue.
+- **Modo sério:** a caixa no **Personalizar** pausa a camada inteira, sem eventos nem brigas; a briga em curso some em até 10 s em todas as telas. Bom para apresentar.
+- **Recomeça ao reiniciar, menos o placar:** amizades, rivalidades e eventos ficam só na memória do serviço; reiniciar volta todo mundo ao ponto de partida, o mesmo para todos. Só o placar da semana vai para o disco, em `dados/placar.json` (até 64 KB e 500 agentes, gravado de forma atômica quando muda). Se o arquivo estiver ilegível, o placar recomeça vazio, com um aviso no log; a troca de conta no agentes.chat também o esvazia.
+- **Não chama o agentes.chat** nem mexe no trabalho dos agentes: usa só a leitura que o escritório já faz.
+- Os números (chances, tetos e intervalos) ficam no topo do `social.py`, e as falas, no `FRASES.social` do `static/vida.js`, para trocar no white-label.
+
 ## Segurança
 
 Em resumo: o escritório só é alcançável **na sua tailnet**, **falha fechado** quando o arquivo de usuários não pode ser lido, e **nenhum segredo chega ao navegador**: o token do agentes.chat fica no servidor, e o navegador só guarda um cookie de sessão HttpOnly.
@@ -173,10 +189,11 @@ agentes.chat (MCP, OAuth "read")
         │
 escritorio.py ── 127.0.0.1:737 ── tailscale serve (HTTPS, só na tailnet) ──▶ navegador
    │  servidor HTTP da stdlib, login, OAuth + PKCE, leitor MCP, clima, marca
-   └─ acesso.py: usuários (scrypt), sessões, primeiro acesso
+   ├─ acesso.py: usuários (scrypt), sessões, primeiro acesso
+   └─ social.py: diretor da vida social (na memória; o placar semanal em dados/placar.json)
 ```
 
-- **Servidor:** só a biblioteca padrão do Python 3 (`escritorio.py`, `acesso.py`). Sem banco de dados: poucos arquivos na pasta de dados.
+- **Servidor:** só a biblioteca padrão do Python 3 (`escritorio.py`, `acesso.py` e `social.py`, o diretor da [vida social](#vida-social)). Sem banco de dados: poucos arquivos na pasta de dados.
 - **Front-end:** JavaScript puro e canvas, sem build (`static/`). `app.js` (interface, câmera, painéis), `mapa.js` (prédio procedural, colisão de móveis, portas), `vida.js` (vida dos agentes), `avatar.js`, `efeitos.js`, `ceu.js`, `clima.js`, `festas.js`, `som.js` (WebAudio), `simular.js`, `brincar.js` (objetos clicáveis, modo foto, demonstração), `personalizar.js` e `entrar.*` (login).
 - **Instalação:** o `instalar.sh` cria o usuário, os arquivos, uma unit systemd endurecida e o `tailscale serve`.
 
@@ -190,7 +207,7 @@ A cada leitura (30 s), o servidor compara as tarefas com a leitura anterior, pel
 python -m unittest test_escritorio
 ESCRITORIO_TIMES=times.exemplo.json python ferramentas/previa.py ferramentas/previa.exemplo.json   # prévia local em http://127.0.0.1:7372, sem login
 python -B ferramentas/checar_seguranca.py .  # confere login, origem, cookie e limite de tentativas
-node ferramentas/estresse_vida.mjs [url] [--minutos 40] [--acoes]  # regressão da vida sobre a prévia (Chrome/Edge headless); sai com 1 se achar algo
+node ferramentas/estresse_vida.mjs [url] [--minutos 40] [--acoes] [--brigas 10] [--times 20]  # regressão da vida sobre a prévia (Chrome/Edge headless); sai com 1 se achar algo
 ```
 
 O `ferramentas/previa.exemplo.json` traz respostas fictícias do MCP (`agents` e `tasks`, com os handles do `times.exemplo.json`) para testar sem conectar; o `ESCRITORIO_TIMES` faz as salas do exemplo aparecerem. Para testar com o seu workspace, copie as respostas dele para `dados.json`, que o git ignora, e rode `python ferramentas/previa.py dados.json`. A prévia relê o arquivo quando ele muda: para ver os eventos ao vivo, mude o `status` de uma tarefa ou tire e ponha tarefas. Outra porta: `PREVIA_PORTA=7373`.

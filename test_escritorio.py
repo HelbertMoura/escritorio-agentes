@@ -1,9 +1,11 @@
 import collections
 import contextlib
+import datetime
 import hashlib
 import io
 import json
 import os
+import random
 import re
 import shutil
 import socket
@@ -27,6 +29,7 @@ with open(os.environ["ESCRITORIO_TIMES"], "w", encoding="utf-8") as _f:
 os.environ["AGENTES_ORG"] = "00000000-0000-4000-8000-000000000000"  # org fictícia
 import acesso  # noqa: E402
 import escritorio as e  # noqa: E402
+import social  # noqa: E402
 from acesso import Acesso  # noqa: E402
 
 AG = [{"id": "a1", "name": "Pixel", "handle": "pixel", "role": "Conteúdo"},
@@ -2437,6 +2440,698 @@ class Previa(unittest.TestCase):
         finally:
             p.kill()
             p.communicate(timeout=10)
+            shutil.rmtree(pasta, ignore_errors=True)
+
+
+
+# ---------------------------------------------------------------- vida social (contrato S, fatia 1)
+
+EXP_DIA = {"abre": "07:00", "fecha": "20:00"}
+CFG_SOCIAL = {"serio": False, "expediente": EXP_DIA, "times": []}
+CFG_SOZINHOS = {**CFG_SOCIAL, "times": [{"nome": i, "agentes": [i]} for i in ("ag-a", "ag-b", "ag-c", "ag-d")]}   # sem colegas
+
+
+def em_bsb(hhmm, dia=9):
+    """Instante de novembro de 2026 no fuso de Brasília ("HH:MM" ou "HH:MM:SS")."""
+    partes = [int(x) for x in hhmm.split(":")] + [0]
+    return datetime.datetime(2026, 11, dia, partes[0], partes[1], partes[2], tzinfo=e.FUSO).timestamp()
+
+
+def leitura(ids, ocupados=(), erro=None):
+    return {"agentes": [{"id": i, "nome": "Bot", "handle": i} for i in ids],
+            "trabalhos": [{"agente_id": i, "run_id": f"r-{i}", "status": "running"} for i in ocupados], "erro": erro}
+
+
+def diretor(semente=1):
+    return social.Social(None, None, e.log, e.FUSO, random.Random(semente))
+
+
+def com_valor(s, a, b, valor):
+    """Põe o par no valor pedido (pelo delta, como um evento faria)."""
+    s.deltas[social._par(a, b)] = valor - social.base(a, b)
+
+
+class SocialDiretor(unittest.TestCase):
+    IDS = ["ag-a", "ag-b", "ag-c", "ag-d"]
+
+    def test_base_simetrica_de_25_a_90_e_igual_em_duas_instancias(self):
+        ids = [f"{n:08x}-0000-4000-8000-{n:012x}" for n in range(40)]
+        um, outro, vistos = diretor(1), diretor(2), set()
+        for a in ids:
+            for b in ids:
+                if a != b:
+                    v = social.base(a, b)
+                    self.assertEqual(v, social.base(b, a))
+                    self.assertTrue(25 <= v <= 90, v)
+                    self.assertEqual(um.valor(a, b), outro.valor(b, a))   # duas instâncias: o mesmo que um reinício
+                    vistos.add(v)
+        self.assertGreater(len(vistos), 40)   # espalhada pela faixa
+        self.assertEqual((social.base("a1", "a2"), social.base("pixel", "orbita")), (86, 47))   # fixa entre instalações
+
+    def test_expediente_igual_ao_expediente_js(self):
+        casos = [("07:00", "20:00", h, dentro) for h, dentro in (("06:59:59", False), ("07:00", True), ("12:00", True),
+                                                                  ("19:59:59", True), ("20:00", False), ("00:00", False))]
+        casos += [("22:00", "06:00", h, dentro) for h, dentro in (("21:59:59", False), ("22:00", True), ("23:59:59", True),
+                                                                   ("00:00", True), ("05:59:59", True), ("06:00", False), ("12:00", False))]
+        for abre, fecha, h, dentro in casos:
+            with self.subTest(turno=f"{abre}-{fecha}", h=h):
+                fim = social.fechamento(em_bsb(h), {"abre": abre, "fecha": fecha}, e.FUSO)
+                self.assertEqual(fim is not None, dentro)
+        self.assertEqual(social.fechamento(em_bsb("12:00"), EXP_DIA, e.FUSO), em_bsb("20:00"))
+        noite = {"abre": "22:00", "fecha": "06:00"}
+        self.assertEqual(social.fechamento(em_bsb("23:00"), noite, e.FUSO), em_bsb("06:00", dia=10))   # vira a meia-noite
+        self.assertEqual(social.fechamento(em_bsb("01:00"), noite, e.FUSO), em_bsb("06:00"))
+        if shutil.which("node"):   # a tabela acima é a do expediente.js de verdade
+            with open(os.path.join(e.ESTATICO, "expediente.js"), encoding="utf-8") as f:
+                fonte = f.read()
+            horas = [[a, b, sum(int(x) / 60 ** i for i, x in enumerate(h.split(":")))] for a, b, h, _ in casos]
+            js = ("const E = new Function('window', require('fs').readFileSync(0, 'utf8') + '\\nreturn Expediente;')({});"
+                  f"console.log(JSON.stringify({json.dumps(horas)}.map(([a, f, h]) => !E.fora(h, a, f))));")
+            saida = subprocess.run(["node", "-e", js], input=fonte, capture_output=True, text=True, encoding="utf-8", timeout=30)
+            self.assertEqual(json.loads(saida.stdout), [c[3] for c in casos], saida.stderr)
+
+    def dia_simulado(self, n):
+        """20 dias de 07:00 às 20:00 com n agentes e tarefas sorteadas, passos de 60 s. Confere os invariantes a cada passo e
+        devolve (brigas automáticas por dia, tipos de evento vistos, fração das automáticas depois das 13 h)."""
+        ids = [f"{n:08x}-0000-4000-8000-{n:012x}" for n in range(n)]
+        cfg = {"serio": False, "expediente": EXP_DIA,
+               "times": [{"nome": f"Time {t}", "agentes": ids[t * 6:t * 6 + 6]} for t in range(10)]}
+        autos_por_dia, tipos, tarde = [], set(), 0
+        for semente in range(20):
+            s, tarefas, ocupados = diretor(semente), random.Random(1000 + semente), set()
+            vistas, eventos_vistos, inicios, pares = set(), set(), [], []
+            for minuto in range(24 * 60):
+                agora = em_bsb("00:00") + minuto * 60
+                for i in ids:   # tarefas sorteadas: ~27% do time ocupado
+                    if i in ocupados and tarefas.random() < 0.08:
+                        ocupados.discard(i)
+                    elif i not in ocupados and tarefas.random() < 0.03:
+                        ocupados.add(i)
+                livres = set(ids) - ocupados
+                s.passo(agora, leitura(ids, sorted(ocupados)), cfg)
+                for par, d in s.deltas.items():
+                    self.assertTrue(0 <= social.base(*par) + d <= 100)
+                self.assertLessEqual(len(s.deltas), social.DELTAS_MAX)
+                fecha = social.fechamento(agora, EXP_DIA, e.FUSO)
+                for ev in s.eventos:
+                    if ev["id"] not in eventos_vistos:
+                        eventos_vistos.add(ev["id"]); tipos.add(ev["tipo"])
+                        self.assertTrue({ev["a"], ev["b"]} <= livres, ev)   # só entre livres presentes
+                        self.assertIsNotNone(fecha)
+                c = s.cena
+                if c and c["id"] not in vistas:
+                    vistas.add(c["id"])
+                    self.assertEqual(c["origem"], "auto")
+                    self.assertTrue({c["a"], c["b"]} <= livres, c)   # ninguém ocupado no agendamento
+                    self.assertIsNotNone(fecha)
+                    self.assertLessEqual(c["fim"], fecha - social.MARGEM_FECHA)
+                    self.assertLess(s.valor(c["a"], c["b"]), social.LIMIAR_BRIGA)
+                    inicios.append(c["inicio"]); pares.append(social._par(c["a"], c["b"]))
+            self.assertLessEqual(len(inicios), social.BRIGAS_AUTO_DIA)
+            self.assertEqual(len(set(pares)), len(pares), pares)   # o par que brigou hoje não volta ao ringue automático
+            tarde += sum(i >= em_bsb("13:00") for i in inicios)
+            self.assertTrue(all(b - a >= social.ENTRE_AUTO for a, b in zip(inicios, inicios[1:])), inicios)
+            autos_por_dia.append(len(inicios))
+        return autos_por_dia, tipos, tarde / max(1, sum(autos_por_dia))
+
+    def test_dia_simulado_67_agentes_20_sementes(self):
+        autos, tipos, tarde = self.dia_simulado(67)
+        self.assertTrue(1 <= sum(autos) / len(autos) <= 4, autos)   # sem nenhuma, a função morre; com mais, vira ruído
+        self.assertGreaterEqual(tarde, 0.35, autos)   # espalhadas pelo dia, e não só de manhã
+        self.assertEqual(tipos, {"cafe", "papo", "esbarrao", "grampeador", "pazes"})
+
+    def test_dia_simulado_9_agentes_20_sementes(self):   # o escritório pequeno, como o da prévia
+        autos, _, tarde = self.dia_simulado(9)
+        self.assertTrue(1 <= sum(autos) / len(autos) <= 4, autos)
+        self.assertGreaterEqual(tarde, 0.35, autos)
+
+    def test_briga_automatica_respeita_a_margem_do_fechamento(self):
+        for hora, marca in (("19:57:10", True), ("19:57:20", False)):   # o fim cairia às 19:57:55 e às 19:58:05 (fecha às 20:00)
+            with self.subTest(hora=hora):
+                s = diretor()
+                com_valor(s, "ag-a", "ag-b", 5)
+                s.passo(em_bsb(hora), leitura(["ag-a", "ag-b"]), CFG_SOZINHOS)
+                self.assertEqual(s.cena is not None and s.cena["origem"] == "auto", marca)
+
+    def test_teto_de_pares_tira_os_mais_perto_de_zero(self):
+        s = diretor()
+        s.deltas = {(f"a{n:02d}", f"b{n:02d}"): (n + 1) * (-1) ** n for n in range(social.DELTAS_MAX + 3)}
+        s._podar()
+        self.assertEqual(len(s.deltas), social.DELTAS_MAX)
+        self.assertNotIn(("a00", "b00"), s.deltas)   # |1|, |2| e |3| saem
+        self.assertNotIn(("a02", "b02"), s.deltas)
+        self.assertIn(("a03", "b03"), s.deltas)
+
+    def test_reconciliacao_com_o_tempo(self):
+        s, t = diretor(), em_bsb("21:00")   # fora do expediente: só o decaimento
+        com_valor(s, "ag-a", "ag-b", social.base("ag-a", "ag-b") - 3)
+        com_valor(s, "ag-c", "ag-d", social.base("ag-c", "ag-d") + 2)
+        s.passo(t, leitura(self.IDS), CFG_SOCIAL)
+        for minutos in (10, 20, 30, 60):
+            s.passo(t + minutos * 60, leitura(self.IDS), CFG_SOCIAL)
+        self.assertEqual(s.deltas, {})   # −3 subiu 1 a cada 10 min; +2 desceu 1 a cada 30 min; o 0 sai do dicionário
+
+    def test_modo_serio_sem_eventos_nem_cena(self):
+        s, t, serio = diretor(), em_bsb("10:00"), {**CFG_SOCIAL, "serio": True}
+        com_valor(s, "ag-a", "ag-b", 5)
+        self.assertEqual(s.ordenar("ag-c", "ag-d", t, leitura(self.IDS), CFG_SOCIAL)[0], 200)
+        s.passo(t + 1, leitura(self.IDS), serio)   # o passo no modo sério tira a cena em curso
+        self.assertIsNone(s.cena)
+        for minuto in range(1, 300):
+            s.passo(t + minuto * 60, leitura(self.IDS), serio)
+        self.assertEqual((s.cena, list(s.eventos)), (None, []))
+        self.assertGreater(s.valor("ag-a", "ag-b"), 5)   # só a reconciliação continua
+        self.assertEqual(s.ordenar("ag-a", "ag-b", t, leitura(self.IDS), serio), (409, {
+            "erro": "modo_serio", "mensagem": "O modo sério está ligado: o ringue está fechado."}))
+        self.assertEqual(s.foto(t, True)["cena"], None)
+        s._evento(t, "cafe", "ag-a", "ag-b")   # evento que já existia não sai no modo sério
+        self.assertEqual((len(s.foto(t, False)["eventos"]), s.foto(t, True)["eventos"]), (1, []))
+
+    def test_leitura_com_erro_nao_cria_nada(self):
+        s, t = diretor(), em_bsb("10:00")
+        com_valor(s, "ag-a", "ag-b", 5)
+        for minuto in range(120):
+            s.passo(t + minuto * 60, leitura(self.IDS, erro="agentes.chat não respondeu"), CFG_SOCIAL)
+        self.assertEqual((s.cena, list(s.eventos)), (None, []))
+
+    def test_validacoes_do_ringue_e_teto_do_dia(self):
+        s, t, lt = diretor(), em_bsb("09:00"), leitura(self.IDS, ocupados=["ag-d"])
+        casos = ((("ag-a", "ag-a", t, lt), 409, "mesmo_agente"), (("ag-a", "zz", t, lt), 404, "agente"),
+                 (("ag-a", "ag-d", t, lt), 409, "trabalhando"), (("ag-a", "ag-b", em_bsb("21:00"), lt), 409, "fora_do_expediente"),
+                 (("ag-a", "ag-b", em_bsb("06:59"), lt), 409, "fora_do_expediente"),
+                 (("ag-a", "ag-b", em_bsb("19:57:20"), lt), 409, "fora_do_expediente"))   # o fim passaria de 19:58
+        for args, status, codigo in casos:
+            with self.subTest(codigo=codigo, args=args[:2]):
+                st, corpo = s.ordenar(*args, CFG_SOCIAL)
+                self.assertEqual((st, corpo["erro"]), (status, codigo))
+        self.assertEqual(s.ordenar("ag-a", "ag-b", em_bsb("19:57:10"), lt, CFG_SOCIAL)[0], 200)   # o fim cai às 19:57:55
+        s = diretor()
+        st, corpo = s.ordenar("ag-a", "ag-b", t, lt, CFG_SOCIAL)
+        self.assertEqual((st, set(corpo["cena"])), (200, {"id", "tipo", "a", "b", "vencedor", "inicio", "fim", "origem"}))
+        st, ocupado = s.ordenar("ag-b", "ag-c", t + 5, lt, CFG_SOCIAL)
+        self.assertEqual((st, ocupado["erro"], ocupado["cena"]), (409, "ocupado", corpo["cena"]))   # com a cena no corpo
+        self.assertEqual(s.ordenar("ag-b", "ag-c", t + 45 + 59, lt, CFG_SOCIAL)[1], {   # 60 s depois do fim, sem cena à vista
+            "erro": "ocupado", "mensagem": "Acabou de ter briga; espere um minuto.", "cena": None})
+        pares = [("ag-a", "ag-b"), ("ag-a", "ag-c"), ("ag-b", "ag-c")]
+        for n in range(1, social.ORDENS_DIA):
+            self.assertEqual(s.ordenar(*pares[n % 3], t + n * 120, lt, CFG_SOCIAL)[0], 200, n)
+        st, corpo = s.ordenar("ag-a", "ag-b", t + 21 * 120, lt, CFG_SOCIAL)   # a 21ª do dia
+        self.assertEqual((st, corpo["erro"]), (429, "teto_dia"))
+        self.assertEqual(len(s.brigas_hoje), social.ORDENS_DIA)   # cada briga assentada no fim
+
+    def test_resultado_da_briga_e_pazes(self):
+        s, t = diretor(), em_bsb("10:00")
+        antes = s.valor("ag-a", "ag-b")
+        cena = s.ordenar("ag-a", "ag-b", t, leitura(self.IDS), CFG_SOCIAL)[1]["cena"]
+        s.passo(t + 30, leitura(self.IDS, ocupados=["ag-a"]), CFG_SOCIAL)   # pegou tarefa depois do início: vale o resultado
+        self.assertIsNotNone(s.foto(t + 30, False)["cena"])
+        self.assertEqual(s.foto(t + 54, False)["cena"]["id"], cena["id"])   # à vista até o fim + 10 s
+        self.assertIsNone(s.foto(t + 55, False)["cena"])
+        s.passo(t + 60, leitura(self.IDS, ocupados=["ag-a"]), CFG_SOCIAL)
+        self.assertEqual((s.valor("ag-a", "ag-b"), s.cena), (antes - social.PERDE_BRIGA, None))
+        self.assertIn(("ag-a", "ag-b"), s.pares_hoje)
+        ficha = s.amizades("ag-a", set(self.IDS))
+        self.assertEqual(ficha["ultima_briga"], {"contra": "ag-b", "venceu": cena["vencedor"] == "ag-a", "em": cena["fim"]})
+        s.brigas_hoje[0]["pazes"] = t + 3700   # o horário sorteado das pazes
+        s.passo(t + 3700, leitura(self.IDS), CFG_SOCIAL)
+        pazes = [ev for ev in s.eventos if ev["tipo"] == "pazes"]
+        self.assertEqual([(ev["a"], ev["b"]) for ev in pazes], [("ag-a", "ag-b")])
+        s.passo(t + 3760, leitura(self.IDS), CFG_SOCIAL)
+        self.assertEqual(len([ev for ev in s.eventos if ev["tipo"] == "pazes"]), 1)   # uma vez por par por dia
+
+    def test_agente_que_some_cancela_a_cena_e_volta_com_o_mesmo_valor(self):
+        s, t = diretor(), em_bsb("10:00")
+        com_valor(s, "ag-a", "ag-b", 30)   # sem colegas de time e com no máximo 1 livre: nenhum sorteio mexe no par
+        self.assertEqual(s.ordenar("ag-a", "ag-b", t, leitura(self.IDS), CFG_SOZINHOS)[0], 200)
+        s.passo(t + 5, leitura(["ag-b", "ag-c", "ag-d"], ocupados=["ag-c", "ag-d"]), CFG_SOZINHOS)   # sumiu antes do início
+        self.assertIsNone(s.cena)
+        self.assertEqual(s.valor("ag-a", "ag-b"), 30)   # cancelada sem efeito
+        self.assertNotIn("ag-b", [r["id"] for r in s.amizades("ag-a", {"ag-a", "ag-c"})["rivais"]])   # quem sumiu sai da ficha
+        self.assertEqual(s.ordenar("ag-c", "ag-d", t + 10, leitura(self.IDS), CFG_SOZINHOS)[0], 200)
+        s.passo(t + 12, leitura(self.IDS, ocupados=["ag-a", "ag-b", "ag-d"]), CFG_SOZINHOS)   # pegou tarefa antes do início
+        self.assertIsNone(s.cena)
+        s.passo(t + 120, leitura(self.IDS, ocupados=self.IDS), CFG_SOZINHOS)   # voltou no mesmo dia
+        self.assertEqual(s.valor("ag-a", "ag-b"), 30)
+        self.assertEqual(s.amizades("ag-a", set(self.IDS))["rivais"][0], {"id": "ag-b", "valor": 30})
+
+    def test_virada_da_meia_noite_de_brasilia_zera_os_tetos(self):
+        s, lt = diretor(), leitura(self.IDS, ocupados=self.IDS)
+        s.passo(em_bsb("19:00"), lt, CFG_SOCIAL)
+        s.ordens_hoje, s.autos_hoje, s.pares_hoje = social.ORDENS_DIA, social.BRIGAS_AUTO_DIA, {("ag-a", "ag-b")}
+        s.passo(em_bsb("21:30"), lt, CFG_SOCIAL)   # já é o dia seguinte em UTC, ainda não em Brasília
+        self.assertEqual((s.ordens_hoje, s.autos_hoje), (social.ORDENS_DIA, social.BRIGAS_AUTO_DIA))
+        self.assertEqual(s.ordenar("ag-a", "ag-b", em_bsb("21:31"), leitura(self.IDS), CFG_SOCIAL)[1]["erro"], "fora_do_expediente")
+        s.passo(em_bsb("00:01", dia=10), lt, CFG_SOCIAL)
+        self.assertEqual((s.ordens_hoje, s.autos_hoje, s.pares_hoje), (0, 0, set()))
+        s.ordens_hoje = social.ORDENS_DIA
+        self.assertEqual(s.ordenar("ag-a", "ag-b", em_bsb("09:00", dia=11), leitura(self.IDS), CFG_SOCIAL)[0], 200)   # sem passo
+
+    def test_ficha_amigos_rivais_e_media(self):
+        s = diretor()
+        for b, v in (("ag-b", 95), ("ag-c", 10), ("ag-d", 61)):
+            com_valor(s, "ag-a", b, v)
+        com_valor(s, "ag-a", "ag-e", 2)   # ausente: não entra
+        f = s.amizades("ag-a", set(self.IDS))
+        self.assertEqual(f, {"agente": "ag-a", "media": 55, "amigos": [{"id": "ag-b", "valor": 95}, {"id": "ag-d", "valor": 61}],
+                             "rivais": [{"id": "ag-c", "valor": 10}], "ultima_briga": None})
+        self.assertEqual(s.amizades("ag-a", {"ag-a"})["media"], None)
+
+
+class SocialHttp(unittest.TestCase):
+    """As rotas da vida social no servidor de verdade: /api/estado, /api/social, /api/social/briga e o modo sério."""
+    req, entrar = Http.req, Http.entrar
+    IDS = ["s1", "s2", "s3", "s4"]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.pasta = tempfile.mkdtemp(prefix="escritorio-social-")
+
+        class Leitor:
+            def __init__(self):
+                self.ids, self.ocupados = list(SocialHttp.IDS), set()
+
+            def foto(self):
+                agentes = [{"id": i, "name": f"Bot {i}", "handle": f"bot-{i}"} for i in self.ids]
+                tarefas = [{"run_id": f"r-{i}", "agent": {"id": i}, "status": "running"} for i in sorted(self.ocupados)]
+                return {**e.resumir(agentes, tarefas), "atualizado": None, "erro": None}
+        cls.srv = e.Servidor(("127.0.0.1", 0), e.Pagina)
+        cls.srv.leitor, cls.srv.cred, cls.srv.acesso = Leitor(), None, Acesso(cls.pasta)
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        cls.base = "http://127.0.0.1:%d" % cls.srv.server_address[1]
+        with open(os.path.join(cls.pasta, "codigo-primeiro-acesso.txt")) as f:
+            codigo = f.read().strip()
+        cls.srv.acesso.criar_primeiro(codigo, "dono", "senha-bem-grande")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+        shutil.rmtree(cls.pasta, ignore_errors=True)
+
+    def setUp(self):
+        self.antes = e.BASE, e.ARQ_MARCA
+        e.BASE, e.ARQ_MARCA = self.base, os.path.join(self.pasta, "marca.json")
+        agora = datetime.datetime.now(e.FUSO)   # expediente em volta de agora: o teste vale a qualquer hora
+        self.expediente({"abre": (agora - datetime.timedelta(hours=1)).strftime("%H:%M"),
+                         "fecha": (agora + datetime.timedelta(hours=2)).strftime("%H:%M")})
+        self.srv.leitor.ids, self.srv.leitor.ocupados = list(self.IDS), set()
+        self.srv.social = social.Social(self.srv.leitor, e.config_publica, e.log, e.FUSO, random.Random(7))
+        self.sessao = None
+        self.saida = io.StringIO()
+        self.log = contextlib.redirect_stdout(self.saida)
+        self.log.__enter__()
+
+    def tearDown(self):
+        self.log.__exit__(None, None, None)
+        e.BASE, e.ARQ_MARCA = self.antes
+        if os.path.exists(os.path.join(self.pasta, "marca.json")):
+            os.unlink(os.path.join(self.pasta, "marca.json"))
+
+    def expediente(self, exp, serio=None):
+        with open(os.path.join(self.pasta, "marca.json"), "w", encoding="utf-8") as f:
+            json.dump({"empresa": "Acme", "cor": "#112233", "expediente": exp, **({} if serio is None else {"serio": serio})}, f)
+
+    def briga(self, corpo, cab=None, sessao=True):
+        if sessao and not self.sessao:
+            self.sessao = self.entrar()
+        cab = {"Origin": self.base, "Content-Type": "application/json", **(self.sessao if sessao else {}), **(cab or {})}
+        st, dados, _ = self.req("/api/social/briga", {k: v for k, v in cab.items() if v is not None},
+                                corpo if isinstance(corpo, bytes) else json.dumps(corpo).encode())
+        return st, json.loads(dados)
+
+    def social_do_estado(self, cab):
+        st, corpo, _ = self.req("/api/estado", cab)
+        self.assertEqual(st, 200)
+        return json.loads(corpo).get("social", "ausente")
+
+    def test_barreiras_do_post(self):
+        par = {"a": "s1", "b": "s2"}
+        for cab, sessao, status in (({"Origin": None}, True, 403), ({"Origin": "https://outro.example"}, True, 403),
+                                    ({"Origin": None, "Referer": self.base + "/"}, True, 403),   # o Referer não substitui o Origin
+                                    ({"Origin": "null"}, True, 403), ({}, False, 401),
+                                    ({"Content-Type": "text/plain"}, True, 415)):
+            with self.subTest(cab=cab, sessao=sessao):
+                self.assertEqual(self.briga(par, cab, sessao)[0], status)
+        self.assertIn('"resultado": "origem_recusada"', self.saida.getvalue())
+        grande = json.dumps(par).encode() + b" " * 300   # JSON válido, acima de 256 B
+        for corpo in (grande, {**par, "c": "x"}, {"a": "s1"}, {"a": "s1", "b": 2}, {"a": "", "b": "s2"}, {"a": "x" * 101, "b": "s2"},
+                      b"[]", b"{nao e json"):
+            with self.subTest(corpo=str(corpo)[:40]):
+                self.assertEqual(self.briga(corpo), (400, {"erro": "pedido", "mensagem": "Pedido inválido."}))
+        self.assertEqual(self.briga({"a": "s1", "b": "zz"})[1]["erro"], "agente")
+        antes, self.srv.social = self.srv.social, None
+        try:
+            self.assertEqual(self.briga(par), (404, {"erro": "social_desligado",
+                                                     "mensagem": "A vida social está desligada neste escritório."}))
+        finally:
+            self.srv.social = antes
+        self.assertIsNone(self.srv.social.cena)
+        self.assertNotIn("briga_ordem", self.saida.getvalue())   # recusa não loga, fora a de origem
+
+    def test_ordem_aceita_aparece_no_estado_de_outra_sessao(self):
+        st, corpo = self.briga({"a": "s1", "b": "s2"})
+        self.assertEqual((st, corpo["cena"]["origem"], {corpo["cena"]["a"], corpo["cena"]["b"]}), (200, "ordem", {"s1", "s2"}))
+        self.assertIn('"resultado": "briga_ordem", "usuario": "dono"', self.saida.getvalue())
+        outra = self.entrar()   # outra sessão (outra tela): a mesma cena, igual para todos
+        self.assertEqual(self.social_do_estado(outra)["cena"], corpo["cena"])
+        st, ocupado = self.briga({"a": "s3", "b": "s4"})
+        self.assertEqual((st, ocupado["erro"], ocupado["cena"]), (409, "ocupado", corpo["cena"]))
+        self.srv.leitor.ocupados = {"s3"}   # a tarefa vem antes da cena na ordem das recusas
+        self.assertEqual(self.briga({"a": "s3", "b": "s4"}), (409, {"erro": "trabalhando",
+                                                                    "mensagem": "Um dos dois está trabalhando agora."}))
+        self.assertEqual(self.briga({"a": "s1", "b": "s1"})[1]["erro"], "mesmo_agente")
+        self.srv.social.cena = self.srv.social.fim_ultima = None
+        self.srv.social.dia, self.srv.social.ordens_hoje = datetime.datetime.now(e.FUSO).date(), social.ORDENS_DIA
+        st, corpo = self.briga({"a": "s1", "b": "s2"})
+        self.assertEqual((st, corpo["erro"]), (429, "teto_dia"))
+
+    def test_fora_do_expediente(self):
+        agora = datetime.datetime.now(e.FUSO)
+        self.expediente({"abre": (agora + datetime.timedelta(hours=1)).strftime("%H:%M"),
+                         "fecha": (agora + datetime.timedelta(hours=2)).strftime("%H:%M")})
+        st, corpo = self.briga({"a": "s1", "b": "s2"})
+        self.assertEqual((st, corpo["erro"]), (409, "fora_do_expediente"))
+
+    def test_modo_serio_pelo_personalizar(self):
+        cab = {**self.entrar(), "Origin": self.base, "Content-Type": "application/json"}
+        self.assertEqual(self.briga({"a": "s1", "b": "s2"})[0], 200)
+        self.assertFalse(self.social_do_estado(cab)["serio"])
+        marca = lambda **campos: self.req("/api/marca", cab, json.dumps({"empresa": "Acme", "cor": "#112233", **campos}).encode())
+        st, corpo, _ = marca(serio=True)
+        self.assertEqual((st, json.loads(corpo)["serio"]), (200, True))
+        self.assertIsNone(self.srv.social.cena)   # a cena em curso sai na hora
+        bloco = self.social_do_estado(cab)
+        self.assertEqual(bloco, {"v": 1, "agora": bloco["agora"], "serio": True, "cena": None, "eventos": [], "placar": None})
+        self.assertEqual(self.briga({"a": "s1", "b": "s2"})[1]["erro"], "modo_serio")
+        self.assertEqual(marca(serio=False)[0], 200)
+        self.assertFalse(self.social_do_estado(cab)["serio"])   # a outra tela vê na leitura seguinte
+
+    def test_serio_no_marca_json(self):
+        cab = {**self.entrar(), "Origin": self.base, "Content-Type": "application/json"}
+        marca = lambda **campos: self.req("/api/marca", cab, json.dumps({"empresa": "Acme", "cor": "#112233", **campos}).encode())
+
+        def salvo():
+            with open(e.ARQ_MARCA, encoding="utf-8") as f:
+                return json.load(f).get("serio", "sem")
+        for valor in (True, False, True):
+            self.assertEqual(marca(serio=valor)[0], 200)
+            self.assertEqual(salvo(), valor)
+        for ruim in ("true", 1, "false", [], {}):
+            with self.subTest(ruim=ruim):
+                st, corpo, _ = marca(serio=ruim)
+                self.assertEqual((st, json.loads(corpo)), (400, {"erro": "modo sério: true ou false"}))
+                self.assertIs(salvo(), True)   # recusado não grava nada
+        self.assertEqual(marca(expediente={"abre": "08:00", "fecha": "18:00"})[0], 200)   # sem o campo, o valor salvo fica
+        self.assertIs(salvo(), True)
+        st, _, _ = self.req("/api/marca", cab, json.dumps({"empresa": "Acme", "cor": "#445566"}).encode())   # boas-vindas
+        self.assertEqual((st, salvo()), (200, True))
+        self.assertTrue(json.loads(self.req("/api/config", cab)[1])["serio"])
+        os.unlink(e.ARQ_MARCA)
+        self.assertFalse(e.config_publica()["serio"])   # o padrão é desligado
+
+    def test_estado_com_campos_exatos_e_ate_4_kb(self):
+        ids = [f"{n:08x}-0000-4000-8000-{n:012x}" for n in range(67)]
+        self.srv.leitor.ids = ids
+        s, agora = self.srv.social, time.time()
+        s.ordenar(ids[0], ids[1], agora, self.srv.leitor.foto(), e.config_publica())
+        for n in range(social.HISTORICO):   # o histórico cheio, com os tipos de nome mais longo
+            s._evento(agora - n, "grampeador", ids[n % 67], ids[(n + 1) % 67])
+        maximo = {"v": social.PLACAR_TETO, "d": social.PLACAR_TETO, "seq": -social.PLACAR_TETO}   # o placar com os maiores números
+        s.placar, s.anterior = {i: dict(maximo) for i in ids}, {"id": ids[5], "v": social.PLACAR_TETO, "d": social.PLACAR_TETO}
+        cab = self.entrar()
+        bloco = self.social_do_estado(cab)
+        self.assertEqual(set(bloco), {"v", "agora", "serio", "cena", "eventos", "placar"})
+        self.assertEqual((set(bloco["placar"]), len(bloco["placar"]["top"])), ({"semana", "top", "anterior"}, 3))
+        self.assertEqual(set(bloco["cena"]), {"id", "tipo", "a", "b", "vencedor", "inicio", "fim", "origem"})
+        self.assertEqual(len(bloco["eventos"]), social.EVENTOS_NO_ESTADO)
+        self.assertTrue(all(set(ev) == {"id", "tipo", "a", "b", "em"} for ev in bloco["eventos"]))
+        self.assertLessEqual(len(json.dumps(bloco, ensure_ascii=False).encode()), 4096)
+        self.assertRegex(bloco["agora"], r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
+        antes = s.foto
+        s.foto = lambda *a: 1 / 0   # a vida social nunca derruba o /api/estado
+        try:
+            self.assertEqual((self.social_do_estado(cab), self.social_do_estado(cab)), ("ausente", "ausente"))
+            self.assertEqual(self.saida.getvalue().count('"evento": "social", "resultado": "erro", "detalhe": "ZeroDivisionError"'), 1)   # 1 por tipo
+        finally:
+            s.foto = antes
+        self.srv.social = None
+        self.assertEqual(self.social_do_estado(cab), "ausente")   # sem o diretor no servidor, a chave não vai
+
+    def test_ficha_social(self):
+        self.assertEqual(self.req("/api/social?agente=s1")[0], 401)
+        cab = self.entrar()
+        com_valor(self.srv.social, "s1", "s2", 99)
+        st, corpo, _ = self.req("/api/social?agente=s1", cab)
+        self.assertEqual((st, json.loads(corpo)["amigos"][0]), (200, {"id": "s2", "valor": 99}))
+        for q, status, codigo in (("agente=", 400, "pedido"), ("", 400, "pedido"), ("agente=" + "x" * 101, 400, "pedido"),
+                                  ("agente=zz", 404, "agente")):
+            with self.subTest(q=q):
+                st, corpo, _ = self.req(f"/api/social?{q}", cab)
+                self.assertEqual((st, json.loads(corpo)["erro"]), (status, codigo))
+        self.srv.social = None
+        st, corpo, _ = self.req("/api/social?agente=s1", cab)
+        self.assertEqual((st, json.loads(corpo)["erro"]), (404, "social_desligado"))
+
+    def test_placar_do_ringue(self):
+        self.assertEqual(self.req("/api/social/placar")[0], 401)
+        cab = self.entrar()
+        s = self.srv.social
+        s.placar = {"s1": {"v": 3, "d": 0, "seq": 3}, "s2": {"v": 1, "d": 2, "seq": -1}, "fora": {"v": 9, "d": 0, "seq": 9}}
+        s.anterior = {"id": "s3", "v": 4, "d": 1}
+        st, corpo, _ = self.req("/api/social/placar", cab)
+        dados = json.loads(corpo)
+        self.assertEqual((st, set(dados), dados["anterior"]), (200, {"semana", "ranking", "anterior"}, {"id": "s3", "v": 4, "d": 1}))
+        self.assertEqual([r["id"] for r in dados["ranking"]], ["s1", "s2"])   # quem não está na leitura não sai
+        self.assertEqual([r["id"] for r in self.social_do_estado(cab)["placar"]["top"]], ["s1", "s2"])
+        self.srv.social = None
+        st, corpo, _ = self.req("/api/social/placar", cab)
+        self.assertEqual((st, json.loads(corpo)["erro"]), (404, "social_desligado"))
+
+    def test_troca_de_conta_no_oauth_zera_o_social(self):
+        class Cred:
+            def concluir(self, code, state):
+                pass
+        com_valor(self.srv.social, "s1", "s2", 5)
+        self.srv.social.ordenar("s3", "s4", time.time(), self.srv.leitor.foto(), e.config_publica())
+        self.srv.cred = Cred()
+        try:
+            self.assertEqual(self.req("/oauth/retorno?code=c&state=s", self.entrar())[0], 302)
+        finally:
+            self.srv.cred = None
+        self.assertEqual((self.srv.social.deltas, self.srv.social.cena, self.srv.social.ordens_hoje), ({}, None, 0))
+
+
+def placar_valido(**muda):
+    return {"v": 1, "semana": "2026-11-09", "placar": {"ag-a": {"v": 2, "d": 1, "seq": 1}, "ag-b": {"v": 1, "d": 2, "seq": -2}},
+            "anterior": {"id": "ag-c", "v": 7, "d": 2}, **muda}
+
+
+class SocialPlacar(unittest.TestCase):
+    """Fatia 1c: placar semanal do ringue, com o campeão da semana passada, gravado em dados/placar.json."""
+    IDS = ["ag-a", "ag-b", "ag-c", "ag-d"]
+
+    def setUp(self):
+        self.gravados, self.saida = [], io.StringIO()
+        self.log = contextlib.redirect_stdout(self.saida)
+        self.log.__enter__()
+
+    def tearDown(self):
+        self.log.__exit__(None, None, None)
+
+    def diretor(self, placar=None, guardar=None):
+        return social.Social(None, None, e.log, e.FUSO, random.Random(3), guardar=guardar or self.gravados.append, placar=placar)
+
+    def briga(self, s, a, b, vencedor, t):
+        """Uma briga mandada e assentada no passo seguinte (ninguém ocupado, sem colegas: nenhum sorteio mexe no resto)."""
+        self.assertEqual(s.ordenar(a, b, t, leitura(self.IDS), CFG_SOZINHOS)[0], 200)
+        s.cena["vencedor"] = vencedor
+        s.passo(t + 60, leitura(self.IDS, ocupados=self.IDS), CFG_SOZINHOS)
+
+    def test_conta_ranking_e_sequencia(self):
+        s, t = self.diretor(), em_bsb("09:00")
+        self.briga(s, "ag-a", "ag-b", "ag-a", t)
+        self.briga(s, "ag-a", "ag-c", "ag-a", t + 120)
+        self.briga(s, "ag-b", "ag-c", "ag-b", t + 240)
+        self.assertEqual(s.placar, {"ag-a": {"v": 2, "d": 0, "seq": 2}, "ag-b": {"v": 1, "d": 1, "seq": 1},
+                                    "ag-c": {"v": 0, "d": 2, "seq": -2}})
+        r = s.ranking(t, {"ag-a", "ag-c", "ag-d"})   # só presentes, e só quem lutou
+        self.assertEqual(r, {"semana": "2026-11-09", "anterior": None,
+                             "ranking": [{"id": "ag-a", "v": 2, "d": 0, "seq": 2}, {"id": "ag-c", "v": 0, "d": 2, "seq": -2}]})
+        self.assertEqual(s.foto(t, False, set(self.IDS))["placar"]["top"][1], {"id": "ag-b", "v": 1, "d": 1, "seq": 1})
+        self.assertIsNone(s.foto(t, True, set(self.IDS))["placar"])   # modo sério: placar null, nada muda no guardado
+        self.assertEqual(len(s.placar), 3)
+
+    def test_cena_cancelada_nao_conta(self):
+        s, t = self.diretor(), em_bsb("09:00")
+        s.ordenar("ag-a", "ag-b", t, leitura(self.IDS), CFG_SOZINHOS)
+        s.passo(t + 5, leitura(self.IDS, ocupados=["ag-a", "ag-c", "ag-d"]), CFG_SOZINHOS)   # pegou tarefa antes do início
+        s.ordenar("ag-c", "ag-d", t + 10, leitura(self.IDS), CFG_SOZINHOS)
+        s.cancelar(t + 30)   # modo sério no meio da luta
+        s.passo(t + 120, leitura(self.IDS, ocupados=self.IDS), CFG_SOZINHOS)
+        self.assertEqual((s.placar, self.gravados), ({}, []))
+
+    def test_virada_da_semana_na_segunda_de_brasilia(self):
+        s, domingo = self.diretor(), em_bsb("10:00", dia=15)
+        self.briga(s, "ag-a", "ag-b", "ag-b", domingo)
+        self.briga(s, "ag-c", "ag-d", "ag-c", domingo + 120)
+        self.briga(s, "ag-b", "ag-c", "ag-b", domingo + 240)
+        gravados = len(self.gravados)
+        s.passo(em_bsb("22:30", dia=15), leitura(self.IDS, ocupados=self.IDS), CFG_SOZINHOS)   # já é segunda em UTC
+        self.assertEqual((s.semana.isoformat(), len(s.placar), len(self.gravados)), ("2026-11-09", 4, gravados))
+        s.passo(em_bsb("00:00", dia=16), leitura(self.IDS, ocupados=self.IDS), CFG_SOZINHOS)
+        self.assertEqual((s.semana.isoformat(), s.placar, s.anterior), ("2026-11-16", {}, {"id": "ag-b", "v": 2, "d": 0}))
+        self.assertEqual(json.loads(self.gravados[-1]), {"v": 1, "semana": "2026-11-16", "placar": {}, "anterior": {"id": "ag-b", "v": 2, "d": 0}})
+        s.passo(em_bsb("00:00", dia=23), leitura(self.IDS, ocupados=self.IDS), CFG_SOZINHOS)
+        self.assertIsNone(s.anterior)   # semana sem luta: ninguém é campeão
+        self.assertEqual(social.campeao({"b": {"v": 1, "d": 0, "seq": 1}, "a": {"v": 1, "d": 0, "seq": 1}, "c": {"v": 1, "d": 1, "seq": 1}}),
+                         {"id": "a", "v": 1, "d": 0})   # empate: menos derrotas, depois o menor id
+
+    def test_teto_de_500_entradas(self):
+        s, t = self.diretor(), em_bsb("09:00")
+        s.passo(t - 60, leitura(self.IDS, ocupados=self.IDS), CFG_SOZINHOS)
+        s.placar = {f"x{n:03d}": {"v": 2, "d": 0, "seq": 2} for n in range(social.PLACAR_MAX - 2)}
+        s.placar.update({"a000": {"v": 1, "d": 0, "seq": 1}, "a001": {"v": 0, "d": 1, "seq": -1}})
+        self.briga(s, "ag-a", "ag-b", "ag-a", t)   # 502 entradas: saem as 2 de menos lutas, com empate pelo id
+        self.assertEqual(len(s.placar), social.PLACAR_MAX)
+        self.assertEqual({"a000", "a001"} & set(s.placar), set())
+        self.assertTrue({"ag-a", "ag-b"} <= set(s.placar))
+
+    def test_so_grava_quando_o_placar_muda_e_tenta_de_novo_na_falha(self):
+        s, t, lt = self.diretor(), em_bsb("09:00"), leitura(self.IDS, ocupados=self.IDS)
+        for minuto in range(5):
+            s.passo(t + minuto * 60, lt, CFG_SOZINHOS)
+        self.assertEqual(self.gravados, [])   # nada mudou: não grava
+        self.briga(s, "ag-a", "ag-b", "ag-a", t + 600)
+        self.assertEqual(len(self.gravados), 1)
+        self.assertEqual(json.loads(self.gravados[0])["placar"]["ag-a"], {"v": 1, "d": 0, "seq": 1})
+        s.passo(t + 720, lt, CFG_SOZINHOS)
+        self.assertEqual(len(self.gravados), 1)   # placar limpo: o passo seguinte não grava de novo
+        tentativas = []
+
+        def falha(dados):
+            tentativas.append(dados)
+            if len(tentativas) < 3:
+                raise OSError("disco cheio")
+            self.gravados.append(dados)
+        s.guardar = falha
+        self.briga(s, "ag-c", "ag-d", "ag-d", t + 900)
+        s.passo(t + 1020, lt, CFG_SOZINHOS)
+        s.passo(t + 1080, lt, CFG_SOZINHOS)
+        self.assertEqual((len(tentativas), len(self.gravados)), (3, 2))   # tentou de novo a cada passo até gravar
+        self.assertEqual(self.saida.getvalue().count('"resultado": "placar_nao_gravou"'), 1)   # 1 linha por episódio
+        s.guardar = self.gravados.append
+        s.zerar()   # troca de conta: o passo seguinte grava o vazio
+        s.passo(t + 1140, lt, CFG_SOZINHOS)
+        self.assertEqual(json.loads(self.gravados[-1]), {"v": 1, "semana": "2026-11-09", "placar": {}, "anterior": None})
+
+    def test_get_e_post_nunca_gravam_so_o_passo(self):
+        s, t, lt = self.diretor(), em_bsb("09:00"), leitura(self.IDS, ocupados=self.IDS)
+        s.passo(t - 60, lt, CFG_SOZINHOS)   # semana alinhada e nada sujo
+        self.assertEqual(s.ordenar("ag-a", "ag-b", t, leitura(self.IDS), CFG_SOZINHOS)[0], 200)
+        s.cancelar(t + social.AVISO + social.LUTA)   # depois do fim: a briga conta fora do passo e o placar fica sujo
+        self.assertEqual((s.sujo, sorted(s.placar)), (True, ["ag-a", "ag-b"]))
+        for agora in (t + 50, t + 120):   # com o placar sujo, GET e POST (409 da folga e 200) não gravam
+            s.foto(agora, False, set(self.IDS))
+            s.foto(agora, True, set(self.IDS))
+            s.ranking(agora, set(self.IDS))
+            s.ordenar("ag-c", "ag-d", agora, leitura(self.IDS), CFG_SOZINHOS)
+        self.assertIsNotNone(s.cena)
+        s.cancelar(t + 125)   # antes do fim: sai sem contar
+        self.assertEqual((self.gravados, s.sujo), ([], True))
+        s.passo(t + 180, lt, CFG_SOZINHOS)
+        s.passo(t + 240, lt, CFG_SOZINHOS)
+        self.assertEqual(len(self.gravados), 1)   # só o passo grava, e uma vez
+        self.assertEqual(sorted(json.loads(self.gravados[0])["placar"]), ["ag-a", "ag-b"])
+
+    def test_id_fora_do_padrao_nao_entra_no_placar(self):
+        s, t, ids = self.diretor(), em_bsb("09:00"), self.IDS + ["id com espaço"]
+        self.assertEqual(s.ordenar("ag-a", "id com espaço", t, leitura(ids), CFG_SOZINHOS)[0], 200)
+        s.cena["vencedor"] = "id com espaço"
+        s.passo(t + 60, leitura(ids, ocupados=ids), CFG_SOZINHOS)
+        self.assertEqual(s.placar, {"ag-a": {"v": 0, "d": 1, "seq": -1}})   # o outro lado conta
+        self.assertEqual(e.validar_placar(json.loads(self.gravados[-1]))["placar"], s.placar)   # o arquivo segue legível
+
+    def test_alinhamento_ao_subir(self):
+        t, lt = em_bsb("09:00", dia=16), leitura(self.IDS, ocupados=self.IDS)
+        mesma = e.validar_placar(placar_valido(semana="2026-11-16"))
+        s = self.diretor(mesma)
+        s.passo(t, lt, CFG_SOZINHOS)
+        self.assertEqual((s.placar["ag-a"], s.anterior, self.gravados), ({"v": 2, "d": 1, "seq": 1}, {"id": "ag-c", "v": 7, "d": 2}, []))
+        s = self.diretor(e.validar_placar(placar_valido()))   # a semana passada vira o anterior e o placar começa vazio
+        s.passo(t, lt, CFG_SOZINHOS)
+        self.assertEqual((s.placar, s.anterior, len(self.gravados)), ({}, {"id": "ag-a", "v": 2, "d": 1}, 1))
+        for semana in ("2026-11-02", "2026-11-23"):   # mais velha ou no futuro: vazio
+            with self.subTest(semana=semana):
+                s = self.diretor(e.validar_placar(placar_valido(semana=semana)))
+                s.passo(t, lt, CFG_SOZINHOS)
+                self.assertEqual((s.placar, s.anterior), ({}, None))
+
+    def test_500_entradas_nos_maiores_numeros_cabem_em_64_kb(self):
+        s = self.diretor()
+        s.semana = datetime.date(2026, 11, 9)
+        maximo = {"v": social.PLACAR_TETO, "d": social.PLACAR_TETO, "seq": -social.PLACAR_TETO}
+        s.placar = {f"{n:08x}-0000-4000-8000-{n:012x}": dict(maximo) for n in range(social.PLACAR_MAX)}   # ids do agentes.chat
+        s.anterior = {"id": "00000000-0000-4000-8000-000000000000", "v": social.PLACAR_TETO, "d": social.PLACAR_TETO}
+        dados = s._serializar()
+        self.assertLessEqual(len(dados), social.PLACAR_BYTES)
+        self.assertEqual(len(e.validar_placar(json.loads(dados))["placar"]), social.PLACAR_MAX)
+        s.placar = {f"{n:03d}" + "x" * 97: dict(maximo) for n in range(social.PLACAR_MAX)}   # ids de 100: corta até caber
+        dados = s._serializar()
+        self.assertLessEqual(len(dados), social.PLACAR_BYTES)
+        e.validar_placar(json.loads(dados))
+
+    def test_ler_placar_tudo_ou_nada(self):
+        antes = e.ARQ_PLACAR
+        pasta = tempfile.mkdtemp(prefix="escritorio-placar-")
+        e.ARQ_PLACAR = os.path.join(pasta, "placar.json")
+        try:
+            self.assertIsNone(e.ler_placar())   # ausente: vazio, sem log
+            self.assertNotIn("placar_invalido", self.saida.getvalue())
+            s, t = self.diretor(guardar=lambda dados: e.gravar(e.ARQ_PLACAR, dados)), em_bsb("09:00")
+            self.briga(s, "ag-a", "ag-b", "ag-b", t)
+            lido = e.ler_placar()   # ida e volta pelo disco, como num reinício
+            self.assertEqual(lido, {"semana": "2026-11-09", "anterior": None,
+                                    "placar": {"ag-a": {"v": 0, "d": 1, "seq": -1}, "ag-b": {"v": 1, "d": 0, "seq": 1}}})
+            outro = self.diretor(lido)
+            outro.passo(t + 120, leitura(self.IDS, ocupados=self.IDS), CFG_SOZINHOS)
+            self.assertEqual(outro.ranking(t, set(self.IDS)), s.ranking(t, set(self.IDS)))
+            entrada = {"v": 1, "d": 0, "seq": 1}
+            ruins = {"json quebrado": b'{"v": 1, ', "não é objeto": b"[]", "v 2": placar_valido(v=2), "v true": placar_valido(v=True),
+                     "semana fora do formato": placar_valido(semana="2026-11-9"), "semana numa terça": placar_valido(semana="2026-11-10"),
+                     "data que não existe": placar_valido(semana="2026-02-30"),
+                     "booleano no número": placar_valido(placar={"ag-a": {"v": True, "d": 0, "seq": 1}}),
+                     "negativo": placar_valido(placar={"ag-a": {"v": -1, "d": 0, "seq": 1}}),
+                     "grande demais": placar_valido(placar={"ag-a": {"v": social.PLACAR_TETO + 1, "d": 0, "seq": 1}}),
+                     "seq fora": placar_valido(placar={"ag-a": {"v": 1, "d": 0, "seq": -social.PLACAR_TETO - 1}}),
+                     "fração": placar_valido(placar={"ag-a": {"v": 1.0, "d": 0, "seq": 1}}),
+                     "chave a mais": {**placar_valido(), "x": 1}, "chave a menos": {k: v for k, v in placar_valido().items() if k != "anterior"},
+                     "entrada com chave a mais": placar_valido(placar={"ag-a": {**entrada, "x": 1}}),
+                     "entrada com chave a menos": placar_valido(placar={"ag-a": {"v": 1, "d": 0}}),
+                     "id com controle": placar_valido(placar={"ag\x01a": entrada}), "id com quebra": placar_valido(placar={"ag-a\n": entrada}),
+                     "id de 101": placar_valido(placar={"a" * 101: entrada}), "id vazio": placar_valido(placar={"": entrada}),
+                     "501 entradas": placar_valido(placar={f"a{n}": entrada for n in range(social.PLACAR_MAX + 1)}),
+                     "anterior sem d": placar_valido(anterior={"id": "ag-c", "v": 7}),
+                     "anterior com id ruim": placar_valido(anterior={"id": "a b", "v": 7, "d": 2}),
+                     "anterior texto": placar_valido(anterior="ag-c")}
+            for nome, conteudo in ruins.items():
+                with self.subTest(nome=nome):
+                    with open(e.ARQ_PLACAR, "wb") as f:
+                        f.write(conteudo if isinstance(conteudo, bytes) else json.dumps(conteudo).encode())
+                    antes_log = self.saida.getvalue().count('"resultado": "placar_invalido"')
+                    self.assertIsNone(e.ler_placar())
+                    self.assertEqual(self.saida.getvalue().count('"resultado": "placar_invalido"'), antes_log + 1)
+            with open(e.ARQ_PLACAR, "w", encoding="utf-8") as f:
+                json.dump(placar_valido(), f)
+            self.assertEqual(e.ler_placar()["anterior"], {"id": "ag-c", "v": 7, "d": 2})
+            valido = json.dumps(placar_valido()).encode()   # o teto é do tamanho: o mesmo JSON válido, completado com espaços
+            for tamanho, aceito in ((social.PLACAR_BYTES, True), (social.PLACAR_BYTES + 1, False)):
+                with self.subTest(tamanho=tamanho):
+                    with open(e.ARQ_PLACAR, "wb") as f:
+                        f.write(valido + b" " * (tamanho - len(valido)))
+                    antes_log = self.saida.getvalue().count('"resultado": "placar_invalido"')
+                    self.assertEqual(e.ler_placar() is not None, aceito)
+                    self.assertEqual(self.saida.getvalue().count('"resultado": "placar_invalido"'), antes_log + (not aceito))
+        finally:
+            e.ARQ_PLACAR = antes
             shutil.rmtree(pasta, ignore_errors=True)
 
 

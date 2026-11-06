@@ -42,6 +42,7 @@ It **does not call any AI model** and does not spend tokens. Approving always ha
 - 🎉 **Holidays:** Christmas, New Year (fireworks), Carnival and Easter (calculated), Lunar New Year, Halloween, Festa Junina, Brazilian Independence Day, Programmers' Day, Diwali and more, with decorations, hats and lines.
 - 🎨 **Customization:** company name, accent color and logo from the **Customize** screen; teams, rooms, floors, walls, icons and avatars in `times.json`.
 - 🕹️ **Simulation:** a panel to preview the office on another date, time or weather (Christmas at night in the snow, for example). Nothing is saved: it only changes the URL of that tab, and a "Simulation" banner stays visible with "Back to real".
+- 🥊 **Social life:** friendships, rivals and cartoon fights in the Ring, the same on every screen and only among agents who are free (see [Social life](#social-life)).
 - 📸 **Photo mode:** hides the interface and saves a PNG of the office.
 - 🧪 **Demo mode:** `?demo=1` shows fictional agents and an accelerated day, with nothing sent to or read from the server. Good for trying it out and for screenshots.
 - 🎥 **Camera:** zoom with the wheel or pinch, drag, double-click to focus a room, "Go to…" an agent (`/` or `Ctrl+K`), and keyboard shortcuts (`+`, `-`, `0`).
@@ -127,6 +128,21 @@ In `times.json` (start by copying `times.exemplo.json`; the installer does that 
 
 To test without waiting, add to the URL: `?hora=21.5`, `?clima=tempestade` (`chuva`, `garoa`, `neve`, `neblina`, `nublado`, `limpo`) and `?data=2026-12-25`. The **Simulation** panel builds these for you.
 
+## Social life
+
+A layer of fun, drawn by the server. Free agents make friends and rivals, grab coffee together, bump into each other and walk off with someone else's stapler. Every now and then they settle it in the **Ring** of the lounge, with a gong, a crowd and a cartoon dust cloud; a while later, they make up. **It is just for fun: it reflects nothing of the agents' real work.**
+
+- **Real work comes first:** an agent with a task, or one waiting for your approval or answer, never fights, never watches and never leaves the desk. One who gets a task mid-fight goes back to the desk.
+- **The same for everyone:** the server decides the friendship values, each event (who, what, when) and each fight (who, when and who wins), and sends it all in `/api/estado`. Two open screens show the same fight with the same winner.
+- **Per screen:** where each agent walks, who in the crowd came to watch, the exact timing of the animation (a few seconds apart) and the usual games.
+- **Send to the ring:** in an agent's card, any signed-in user picks a free colleague and sends both to the ring. One fight at a time, 1 minute apart, up to 20 a day and only during office hours.
+- **Best friends and rivals:** the card shows up to 3 of each, with a value from 0 to 100, and the day's last fight.
+- **Ring scoreboard:** each agent's wins, losses and streak for the week (Monday to Sunday, Brasília time), with the top 3 on a board on the ring's wall, the full ranking when you click it and last week's champion. Automatic and sent fights count; one canceled before the end does not. The winner shows up on a banner above the ring.
+- **Serious mode:** the box in **Customize** pauses the whole layer, with no events or fights; a fight in progress disappears within 10 s on every screen. Good for presentations.
+- **Starts over on restart, except the scoreboard:** friendships, rivalries and events live only in the service's memory; a restart takes everyone back to the starting point, the same for all. Only the week's scoreboard goes to disk, in `dados/placar.json` (up to 64 KB and 500 agents, written atomically when it changes). If the file is unreadable, the scoreboard starts empty, with a note in the log; switching the agentes.chat account also clears it.
+- **Does not call agentes.chat** or touch the agents' work: it only uses the reading the office already does.
+- The numbers (chances, caps and intervals) are at the top of `social.py`, and the lines are in `FRASES.social` in `static/vida.js`, to change for white-label.
+
 ## Security
 
 In short: the office is reachable **only on your tailnet**, it **fails closed** when its user file cannot be read, and **no secret ever reaches the browser**: the agentes.chat token stays on the server, and the browser only holds an HttpOnly session cookie.
@@ -173,10 +189,11 @@ agentes.chat (MCP, OAuth "read")
         │
 escritorio.py ── 127.0.0.1:737 ── tailscale serve (HTTPS, tailnet only) ──▶ browser
    │  stdlib HTTP server, login, OAuth + PKCE, MCP reader, weather, branding
-   └─ acesso.py: users (scrypt), sessions, first access
+   ├─ acesso.py: users (scrypt), sessions, first access
+   └─ social.py: social life director (in memory; the weekly scoreboard in dados/placar.json)
 ```
 
-- **Server:** Python 3 standard library only (`escritorio.py`, `acesso.py`). No database: a few files in the data folder.
+- **Server:** Python 3 standard library only (`escritorio.py`, `acesso.py` and `social.py`, the director of the [social life](#social-life)). No database: a few files in the data folder.
 - **Front-end:** vanilla JavaScript and canvas, no build step (`static/`). `app.js` (UI, camera, panels), `mapa.js` (procedural building, furniture collision, doors), `vida.js` (agent life), `avatar.js`, `efeitos.js`, `ceu.js`, `clima.js`, `festas.js`, `som.js` (WebAudio), `simular.js`, `brincar.js` (clickable objects, photo mode, demo), `personalizar.js` and `entrar.*` (sign-in).
 - **Install:** `instalar.sh` sets up the user, files, a hardened systemd unit and `tailscale serve`.
 
@@ -190,7 +207,7 @@ On every read (30 s), the server compares tasks with the previous read, by `run_
 python -m unittest test_escritorio
 ESCRITORIO_TIMES=times.exemplo.json python ferramentas/previa.py ferramentas/previa.exemplo.json   # local preview at http://127.0.0.1:7372, no login
 python -B ferramentas/checar_seguranca.py .  # checks login, origin, cookie and attempt limit
-node ferramentas/estresse_vida.mjs [url] [--minutos 40] [--acoes]  # agent-life regression on the preview (headless Chrome/Edge); exits 1 if it finds something
+node ferramentas/estresse_vida.mjs [url] [--minutos 40] [--acoes] [--brigas 10] [--times 20]  # agent-life regression on the preview (headless Chrome/Edge); exits 1 if it finds something
 ```
 
 `ferramentas/previa.exemplo.json` holds fictional MCP responses (`agents` and `tasks`, with the handles of `times.exemplo.json`) to test without connecting; `ESCRITORIO_TIMES` makes the rooms of the example show up. To test with your own workspace, copy its responses to `dados.json`, which git ignores, and run `python ferramentas/previa.py dados.json`. The preview rereads the file when it changes: to see events live, change a task's `status` or remove and add tasks. Another port: `PREVIA_PORTA=7373`.

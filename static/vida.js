@@ -80,6 +80,21 @@ const Vida = (() => {
       quadro_avisos: ["Tem aviso novo?", "Já li esse aviso"], relogio: ["Já é hora do café?", "O dia tá voando"],
       luminaria: ["Agora sim, iluminou", "Clima de foco"], planta: ["Alguém regou a planta?", "Que planta bonita"],
       sino: ["Venda fechada!", "Bateu a meta!", "🔔 Bora comemorar!"] },
+    // vida social (o servidor decide quem e quando; aqui só o "como"). Sem nome no balão, sem xingamento, humor de escritório
+    social: {
+      desafio: ["Pro ringue, agora!", "Isso vai ter volta!", "Vem resolver no ringue!"],
+      chega: ["Briga no ringue!", "Vai começar!", "Separa! Separa!", "Alguém chama o RH!"],
+      luta: ["Separa! Separa!", "Alguém chama o RH!", "Uuuh!", "Que confusão!", "Isso é hora?"],
+      vitoria: ["Venci!", "Campeão do ringue!", "Ninguém mexe no meu grampeador!"],
+      final: ["É campeão!", "👏👏", "Que luta!"],
+      tonto: ["Vi estrelinhas…", "Onde eu tô?", "Revanche na sexta!"],
+      trabalho: "Opa, chegou trabalho!",
+      cafe: [["Bora um café?", "Bora!"], ["Pausa pro café?", "Só se for agora"]],
+      papo: [["E aí, tudo certo?", "Tudo ótimo!"], ["Viu o post novo?", "Vi, ficou top"], ["Bom te ver!", "Igualmente!"]],
+      esbarrao: [["Opa, foi mal!", "Olha o café!"], ["Ei, cuidado!", "Desculpa, desculpa!"]],
+      grampeador: [["Quem pegou meu grampeador?!", "Não fui eu!"], ["Cadê meu grampeador?", "Nem sei do que você tá falando"]],
+      pazes: [["Foi mal pelo ringue", "Tranquilo. Café?"], ["Sem ressentimentos?", "Que nada, toca aqui ✋"]],
+    },
   };
   // função do agente (texto livre do agentes.chat) -> grupo de balões de trabalho
   const PAPEIS = [[/qa|revis|teste|complian|lgpd/i, "qa"], [/dev|c[oó]dig|full|front|back|tech|arquitet|program/i, "dev"],
@@ -113,7 +128,8 @@ const Vida = (() => {
     const vagas = predio.vagas.map(v => ({ ...v, ocupante: null }));
     const m = { predio, vagas, bonecos: new Map(), lista: [], grades: new Map(), eventos: [], roda: null,
       proxPapo: 4, proxTrabalho: 10, proxJogo: 0, proxVisita: entre(12, 25), proxRoda: entre(40, 80), proxGato: entre(30, 60), proxRobo: 1, proxPasso: 0,
-      proxToca: 0.4, proxMusica: 2, proxViolao: entre(30, 60), proxPapel: entre(20, 40), proxAviao: entre(40, 80), proxGuerra: 8 };
+      proxToca: 0.4, proxMusica: 2, proxViolao: entre(30, 60), proxPapel: entre(20, 40), proxAviao: entre(40, 80), proxGuerra: 8,
+      cena: null, cenaSocial: null, vistos: new Set() };   // vida social: a cena desta tela, o que o efeitos.js desenha e os eventos já encenados
     for (const v of vagas) {   // a mesa de xadrez vem do mapa com duas vagas de papo: aqui viram partida (a cópia é da vida.js)
       if (v.tipo === "papo" && movelPerto(predio, v, /^mesa_xadrez/, 40)) v.tipo = "xadrez";
       if (v.tipo === "musica") v.jukebox = !!movelPerto(predio, v, /^jukebox/, 48);
@@ -369,14 +385,15 @@ const Vida = (() => {
     return op.sort((a, b) => Math.hypot(a.x - v.x, a.y - v.y) - Math.hypot(b.x - v.x, b.y - v.y))[0] || null;
   }
 
-  const livreParaConvite = (b, agora) => !b.trabalho && !b.reuniao && !b.grupo && !b.parceiro && !b.rota.length && b.lugar && b.lugar.tipo === "vaga"
-    && !b.lugar.vaga.temp && agora - b.desde > 6;
+  // quem está numa briga da vida social (lutador já chamado ou esperando o gongo, ou plateia) não é convidado para nada
+  const livreParaConvite = (m, b, agora) => !b.trabalho && !b.reuniao && !b.grupo && !b.parceiro && !b.rota.length && b.lugar && b.lugar.tipo === "vaga"
+    && !b.lugar.vaga.temp && agora - b.desde > 6 && !naCena(m, b);
 
   // chama um colega livre para a mesma atividade
   function chamarParceiro(m, b, v, agora) {
     if (!EM_DUPLA.has(v.tipo) || b.reuniao) return;
     const irma = vagaIrma(m, v); if (!irma) return;
-    const cand = m.lista.filter(o => o !== b && livreParaConvite(o, agora));
+    const cand = m.lista.filter(o => o !== b && livreParaConvite(m, o, agora));
     if (!cand.length || Math.random() < 0.25) return;
     const o = sorteia(cand);
     irPara(m, o, { tipo: "vaga", vaga: irma });
@@ -401,7 +418,7 @@ const Vida = (() => {
   // --- iniciativas: visita, roda de café, gato e robô --------------------------------------
   function visitar(m, agora) {
     const alvos = m.lista.filter(o => trabalhando(o) && !o.reuniao && !o.rota.length && o.lugar && o.lugar.tipo === "mesa" && !m.lista.some(x => x.visita === o.id));
-    const quem = m.lista.filter(b => livreParaConvite(b, agora));
+    const quem = m.lista.filter(b => livreParaConvite(m, b, agora));
     if (!alvos.length || !quem.length) return;
     const b = sorteia(quem), o = sorteia(alvos), k = o.lugar.mesa;
     b.visita = o.id;
@@ -428,7 +445,7 @@ const Vida = (() => {
 
   // torcida (jogo em dupla) e plateia (violão): até "max" livres vêm assistir em volta e saem quando acaba
   function chamarPublico(m, dono, cx, cy, rx, ry, tipo, max, agora) {
-    const cand = m.lista.filter(o => o !== dono && livreParaConvite(o, agora) && Math.hypot(o.x - cx, o.y - cy) < 600);
+    const cand = m.lista.filter(o => o !== dono && livreParaConvite(m, o, agora) && Math.hypot(o.x - cx, o.y - cy) < 600);
     if (!cand.length) return;
     const ocupadas = m.vagas.filter(v => v.ocupante && v.sala === dono.lugar.vaga.sala);
     const pts = pontosEmVolta(m, dono.lugar.vaga.sala, cx, cy, rx, ry, tipo, [...m.lista.filter(o => o.lugar && o.lugar.vaga && o.lugar.vaga.sala === dono.lugar.vaga.sala), ...ocupadas])
@@ -454,7 +471,7 @@ const Vida = (() => {
     if (m.roda) return true;
     // parados e quem está a caminho de uma vaga comum (esse termina o trecho e segue para a roda)
     const aCaminho = b => b.rota.length && b.destino && b.destino.vaga && !b.destino.vaga.temp;
-    const quem = m.lista.filter(b => livreParaConvite(b, agora) || (m.mo && !b.trabalho && !b.grupo && !b.reuniao && !b.visita
+    const quem = m.lista.filter(b => livreParaConvite(m, b, agora) || (m.mo && !b.trabalho && !b.grupo && !b.reuniao && !b.visita && !naCena(m, b)
       && ((!b.rota.length && b.lugar && b.lugar.tipo === "vaga") || aCaminho(b))));
     if (quem.length < 3) return (m.rodaMotivo = `só ${quem.length} livres`);
     // centro: o café da cozinha; se ali não couberem 3, o café da sala comunal
@@ -514,7 +531,7 @@ const Vida = (() => {
   }
 
   function verGato(m, agora) {
-    const g = m.predio.animados.find(a => a.tipo === "gato"), quem = m.lista.filter(b => livreParaConvite(b, agora));
+    const g = m.predio.animados.find(a => a.tipo === "gato"), quem = m.lista.filter(b => livreParaConvite(m, b, agora));
     if (!g || !quem.length || m.lista.some(b => b.lugar && b.lugar.vaga && b.lugar.vaga.tipo === "gato")) return;
     const s = [...m.predio.salas, ...m.predio.baixo].find(x => g.x >= x.px && g.x <= x.px + x.pw && g.y >= x.py && g.y <= x.py + x.ph);
     if (!s) return;
@@ -553,6 +570,7 @@ const Vida = (() => {
     }
     duplas(m, dt, agora);
     cuidarDaRoda(m, dt, agora);
+    cuidarDaCena(m, dt, agora);
     if (!m.fora) {
       if ((m.proxVisita -= dt) <= 0) { m.proxVisita = entre(25, 50); visitar(m, agora); }
       if ((m.proxGato -= dt) <= 0) { m.proxGato = entre(45, 90); verGato(m, agora); }
@@ -591,12 +609,19 @@ const Vida = (() => {
       if (Math.random() < dt * 0.2) { const v = vagaLivre(m, b); if (v) { irPara(m, b, { tipo: "vaga", vaga: v }); b.chegou = true; } }
       return;
     }
+    // lutador de uma briga ainda não chamada: quem parou fica, até o outro parar e o gongo tocar (o trabalho real já passou acima)
+    if (m.cena && m.cena.fase === "espera" && m.cena.lutadores.includes(b.id)) return;
     if (l.tipo === "mesa") { // comemora antes de levantar; sem vaga livre, tenta de novo daqui a pouco
       if (b.festa < agora && agora > (b.espera || 0)) { const v = vagaLivre(m, b); if (v) irPara(m, b, { tipo: "vaga", vaga: v }); else b.espera = agora + entre(3, 6); }
       return;
     }
     const v = l.vaga;
     if (b.emReuniao) { b.emReuniao = false; b.fica = 0; }
+    if (v.tipo === "luta" || v.tipo === "ringue") {   // vida social: fica enquanto a cena dura; depois, o lutador volta um tempo para a mesa
+      if (cenaAtiva(m, v.dono)) return;
+      if (v.tipo === "luta" && b.mesa) { irPara(m, b, { tipo: "mesa", mesa: b.mesa }); b.espera = agora + entre(20, 35); return; }
+      b.fica = Math.min(b.fica, agora - b.desde + (v.tipo === "ringue" ? entre(1, 3) : 0));   // a plateia aplaude e sai
+    }
     if (v.tipo === "visita") { const o = m.bonecos.get(b.visita); if (!o || !o.lugar || o.lugar.mesa !== v.mesa || !o.trabalho) b.fica = Math.min(b.fica, agora - b.desde); }
     if (v.dono) {   // torcida e plateia: acabou o jogo (ou a música), vão embora logo
       const d = m.bonecos.get(v.dono), ativo = d && (v.tipo === "torcida" ? !!d.parceiro : d.violao > agora - 5);   // 5 s para aplaudir no fim
@@ -623,7 +648,7 @@ const Vida = (() => {
 
   function andar(m, b, dt, agora) {
     if (b.pausa > agora) return;   // parou um instante no caminho (high-five)
-    let resto = VEL * dt;
+    let resto = VEL * (b.pressa || 1) * dt;   // pressa: a plateia do ringue vem correndo
     while (resto > 0 && b.rota.length) {
       const [tx, ty] = b.rota[0], dx = tx - b.x, dy = ty - b.y, d = Math.hypot(dx, dy);
       if (d > 0.5) b.olha = rumo(dx, dy);
@@ -646,7 +671,7 @@ const Vida = (() => {
 
   function chegar(m, b, agora) {
     const d = b.destino; b.destino = null;
-    b.lugar = d; b.desde = agora; b.fica = entre(25, 70);
+    b.lugar = d; b.desde = agora; b.fica = entre(25, 70); b.pressa = 0;
     if (b.irRoda && !b.trabalho) { const v = b.irRoda; b.irRoda = null; if (b.grupo && b.grupo.vagas.get(b.id) === v) { irPara(m, b, { tipo: "vaga", vaga: v }); return; } }   // chamado para a roda no caminho
     if (b.chegou && d.tipo !== "fora") { falar(b, sorteia(FRASES.chegada), 3); b.aceno = agora + 1.5; b.chegou = false; }
     if (!d.vaga) return;
@@ -659,9 +684,9 @@ const Vida = (() => {
       b.fica = entre(9, 14);
     } else if (tipo === "festa") {
       festejar(m, b, agora); b.fica = 3.2;
-    } else if (tipo === "torcida" || tipo === "plateia") {
-      if (Math.random() < 0.4) falar(b, sorteia(tipo === "torcida" ? FRASES.torcida.chega : FRASES.plateia), 2.6);
-      b.fica = 120;   // fica até o jogo ou a música acabar (decidir)
+    } else if (tipo === "torcida" || tipo === "plateia" || tipo === "ringue") {
+      if (Math.random() < 0.4) falar(b, sorteia(tipo === "torcida" ? FRASES.torcida.chega : tipo === "ringue" ? FRASES.social.chega : FRASES.plateia), 2.6);
+      b.fica = 120;   // fica até o jogo, a música ou a briga acabar (decidir)
     } else if (tipo === "aquario") {
       falar(b, sorteia(FRASES.objeto.aquario), 3); b.fica = entre(7, 11);
     } else if (tipo === "gato") {
@@ -687,10 +712,11 @@ const Vida = (() => {
     const v = l.vaga;
     b.olha = v.olha || "baixo"; b.chave = v.chave || b.chave;
     if (b.festa > agora) b.pose = "comemorando";
+    else if (b.tonto > agora) b.pose = "tonto";   // perdeu a briga: as estrelinhas são do efeitos.js
     else if (b.arremesso > agora) b.pose = "arremesso";
     else if (b.violao > agora) b.pose = "violao";
     else if (b.aceno > agora) b.pose = v.senta ? "sentado" : "acenando";
-    else if (b.danca > agora && !v.senta) b.pose = "dancando";
+    else if (b.danca > agora && !v.senta && v.tipo !== "luta") b.pose = "dancando";
     else if (POSE[v.tipo]) b.pose = POSE[v.tipo];
     else if (v.senta) b.pose = m.noite > 0.6 && v.tipo !== "reuniao" ? "dormindo" : "sentado";
     else b.pose = "parado";
@@ -816,7 +842,7 @@ const Vida = (() => {
   // alguém sentado num pufe, poltrona ou sofá pega o violão; até 2 colegas vêm ouvir
   function violao(m, agora) {
     if (m.lista.some(b => b.violao > agora)) return;
-    const quem = m.lista.filter(b => livreParaConvite(b, agora) && b.lugar.vaga.senta && ["pufe", "poltrona", "papo", "tv"].includes(b.lugar.vaga.tipo));
+    const quem = m.lista.filter(b => livreParaConvite(m, b, agora) && b.lugar.vaga.senta && ["pufe", "poltrona", "papo", "tv"].includes(b.lugar.vaga.tipo));
     if (!quem.length) return;
     const b = sorteia(quem);
     b.violao = agora + entre(25, 40); falar(b, sorteia(FRASES.violao), 3);
@@ -837,7 +863,7 @@ const Vida = (() => {
 
   // aviãozinho (qualquer hora) ou guerra de bolinha (sexta à tarde, com revide) entre dois livres da mesma sala
   function lancarPapel(m, agora, modo) {
-    const quem = m.lista.filter(b => livreParaConvite(b, agora) && !b.fala);
+    const quem = m.lista.filter(b => livreParaConvite(m, b, agora) && !b.fala);
     for (const a of quem.sort(() => Math.random() - 0.5)) {
       const alvo = quem.find(o => o !== a && o.lugar.vaga.sala === a.lugar.vaga.sala && Math.abs(Math.hypot(o.x - a.x, o.y - a.y) - 95) < 65);
       if (!alvo) continue;
@@ -848,6 +874,189 @@ const Vida = (() => {
       m.eventos.push({ nome: "papel" });
       return;
     }
+  }
+
+  // --- vida social (contrato S): o servidor decide quem briga, quando e quem vence; aqui só se encena ----------------
+  // Vida.social(m, social) a cada leitura (null desliga: Simulação, servidor antigo). Os horários valem pela diferença
+  // para o social.agora (o relógio da máquina não importa). Quem tem tarefa, ou espera você, nunca briga nem assiste:
+  // o trabalho real manda, e o lutador que pega tarefa vai para a mesa pelo alvoDe de sempre.
+  // Para o efeitos.js: m.cenaSocial = { id, tipo, x, y, fase ("chamado", "luta" ou "resultado"), ate, a, b, vencedor } ou null
+  // e b.tonto (até quando o perdedor fica tonto, no relógio do performance.now). Sons: gongo, soco e torcida.
+  const calmo = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : { matches: false };
+  const PRESSA = 1.6, PRESSA_MAX = 3, LUTA_MIN = 12, PLATEIA_MAX = 10, RESULTADO = 6, CHEGAR_ATE = 8, EVENTO_IDADE = 60;
+  const noPredio = b => b.x >= 0 && (b.rota.length ? !(b.destino && b.destino.tipo === "fora") : !!b.lugar && b.lugar.tipo !== "fora");
+  const livreSocial = b => !!b && !b.trabalho && !b.reuniao && noPredio(b);
+  const cenaAtiva = (m, id) => !!m.cena && m.cena.id === id && m.cena.fase !== "fim";
+  const donoDe = b => (b.lugar && b.lugar.vaga && b.lugar.vaga.dono) || (b.destino && b.destino.vaga && b.destino.vaga.dono) || null;
+  const naCena = (m, b) => !!m.cena && m.cena.fase !== "fim" && (m.cena.lutadores.includes(b.id) || donoDe(b) === m.cena.id);
+
+  function social(m, s) {
+    if (!m) return;
+    const agora = performance.now() / 1000;
+    if (s && typeof s.agora === "string" && Number.isFinite(Date.parse(s.agora))) m.desvio = agora - Date.parse(s.agora) / 1000;
+    // sem o "agora" (a resposta do "Mandar pro ringue"), vale o desvio da última leitura
+    const c = s && !s.serio && m.desvio !== undefined && s.cena && s.cena.tipo === "briga" ? s.cena : null;
+    if (!c) { encerrarCena(m); m.cena = null; }
+    else if (!m.cena || m.cena.id !== c.id) { encerrarCena(m); m.cena = novaCena(m, c); }
+    if (!s || s.serio || m.desvio === undefined || !Array.isArray(s.eventos)) return;
+    const servidor = agora - m.desvio;
+    for (const ev of s.eventos) {
+      if (!ev || typeof ev.id !== "string" || m.vistos.has(ev.id)) continue;
+      m.vistos.add(ev.id);
+      const idade = servidor - Date.parse(ev.em) / 1000;
+      if (idade >= -5 && idade <= EVENTO_IDADE) encenarEvento(m, ev, agora);
+    }
+    if (m.vistos.size > 300) m.vistos = new Set([...m.vistos].slice(-100));
+  }
+
+  function novaCena(m, c) {
+    const local = t => Date.parse(t) / 1000 + m.desvio, inicio = local(c.inicio), fim = local(c.fim);
+    const ok = typeof c.id === "string" && typeof c.a === "string" && typeof c.b === "string" && c.a !== c.b && [c.a, c.b].includes(c.vencedor)
+      && Number.isFinite(inicio) && Number.isFinite(fim) && fim > inicio;
+    return { id: c.id, a: c.a, b: c.b, vencedor: c.vencedor, inicio, fim, lutadores: [c.a, c.b], fase: ok ? "espera" : "fim" };
+  }
+
+  // a cena acaba nesta tela: quem está no ringue ou na plateia segue pelo decidir (a vaga sem cena ativa manda embora)
+  function encerrarCena(m) { if (m.cena) m.cena.fase = "fim"; m.cenaSocial = null; }
+
+  // onde é o ringue: o cantinho do mapa.js (predio.ringue) ou, sem ele, o meio da sala comunal, sem cordas
+  function ringue(m) {
+    const p = m.predio, r = p.ringue;
+    if (r) return { sala: r.sala, cx: r.x + r.w / 2, cy: (r.pontos[0][1] + r.pontos[1][1]) / 2, pontos: r.pontos, plateia: r.plateia };
+    const s = p.lounge;
+    if (!s) return null;
+    const cx = Math.round(s.px + s.pw / 2), cy = Math.round((s.chao + s.py + s.ph) / 2), pontos = [[cx - 19, cy], [cx + 19, cy]];
+    return pontos.every(([x, y]) => !p.livre || p.livre(x, y)) ? { sala: s, cx, cy, pontos } : null;
+  }
+
+  // gongo: os dois andam até os pontos de luta e até 10 livres (os mais perto primeiro) vêm correndo assistir
+  function chamar(m, c, a, b, agora) {
+    const r = ringue(m);
+    if (!r) return false;
+    const lutas = r.pontos.map(([x, y], i) => ({ sala: r.sala, x, y, tipo: "luta", olha: i ? "esq" : "dir", chave: y + 0.5, temp: true, dono: c.id }));
+    if (!lutas.every(v => alcanca(m, v))) return false;
+    for (const [l, v] of [[a, lutas[0]], [b, lutas[1]]]) {
+      if (l.rota.length) {   // vinha andando pelo corredor: solta a vaga reservada no destino; sem lugar, o caminho parte do corredor
+        for (const r of [l.destino && l.destino.vaga, l.irRoda]) if (r && r.ocupante === l.id) r.ocupante = null;
+        l.irRoda = null;
+      }
+      irPara(m, l, { tipo: "vaga", vaga: v });
+    }
+    // quem está longe apressa o passo (até 3×) para chegar ao gongo ou, no mais tardar, a tempo de lutar uns segundos:
+    // sem isso, no prédio largo o lutador chegava depois do fim e a briga contada não aparecia. Com movimento reduzido
+    // ninguém corre: quem não chega a tempo andando aparece direto no ponto de luta (a vaga já é dele desde o irPara)
+    const prazo = Math.max(1, Math.max(c.inicio, c.fim - LUTA_MIN) - agora);
+    for (const l of [a, b]) {
+      let d = 0, x = l.x, y = l.y;
+      for (const [px, py] of l.rota) { d += Math.hypot(px - x, py - y); x = px; y = py; }
+      if (!calmo.matches) { l.pressa = Math.min(PRESSA_MAX, Math.max(1, d / (VEL * prazo))); continue; }
+      l.pressa = 1;
+      if (d > VEL * prazo) { l.x = l.destino.vaga.x; l.y = l.destino.vaga.y; l.rota = []; chegar(m, l, agora); }
+    }
+    falar(a, sorteia(FRASES.social.desafio), 3);
+    m.eventos.push({ nome: "gongo" });
+    c.r = r; c.cx = r.cx; c.cy = r.cy; c.lutas = lutas; c.proxPlateia = 0;
+    return true;
+  }
+
+  // até 10 livres (os mais perto primeiro), parados numa vaga comum ou na própria mesa; quem fica livre durante o chamado
+  // e a luta também vem (o cuidarDaCena chama de novo a cada 1 s)
+  function chamarPlateia(m, c, agora) {
+    const r = c.r, ja = m.lista.filter(o => !c.lutadores.includes(o.id) && donoDe(o) === c.id).length;
+    const quem = m.lista.filter(o => !c.lutadores.includes(o.id) && !o.trabalho && !o.reuniao && !o.rota.length && o.lugar && o.lugar.tipo !== "fora"
+      && !(o.lugar.vaga && o.lugar.vaga.temp) && !(o.violao > agora) && !(o.festa > agora) && noPredio(o))
+      .sort((p, q) => Math.hypot(p.x - r.cx, p.y - r.cy) - Math.hypot(q.x - r.cx, q.y - r.cy)).slice(0, Math.max(0, PLATEIA_MAX - ja));
+    if (!quem.length) return;
+    // pontos de chão livre fora das cordas, longe de quem já está ou vai estar por ali e uns dos outros; o alcance só é medido
+    // nos sorteados
+    const perto = [...m.lista.map(o => (o.destino && o.destino.vaga) || (o.lugar && o.lugar.vaga)).filter(v => v && v.sala === r.sala),
+      ...m.vagas.filter(v => v.ocupante && v.sala === r.sala), ...c.lutas];
+    const brutos = (r.plateia || pontosEmVolta(m, r.sala, r.cx, r.cy, 62, 44, "ringue").map(v => [v.x, v.y])).slice().sort(() => Math.random() - 0.5);
+    const pts = [];
+    for (const [x, y] of brutos) {
+      if (pts.length >= quem.length * 2) break;
+      if (perto.some(o => Math.hypot(o.x - x, o.y - y) < 16) || pts.some(o => Math.hypot(o.x - x, o.y - y) < 14)) continue;
+      const v = { sala: r.sala, x, y, tipo: "ringue", olha: rumo(r.cx - x, r.cy - y), chave: y + 0.5, temp: true, dono: c.id };
+      if ((!m.predio.livre || m.predio.livre(x, y)) && alcanca(m, v)) pts.push(v);
+    }
+    for (const o of quem) {
+      if (!pts.length) break;
+      const v = pts.reduce((x, y) => (Math.hypot(y.x - o.x, y.y - o.y) < Math.hypot(x.x - o.x, x.y - o.y) ? y : x));
+      pts.splice(pts.indexOf(v), 1);
+      irPara(m, o, { tipo: "vaga", vaga: v });
+      o.pressa = calmo.matches ? 1 : PRESSA;   // movimento reduzido: ninguém corre
+    }
+  }
+
+  const plateiaDe = (m, c) => m.lista.filter(o => !o.rota.length && o.lugar && o.lugar.vaga && o.lugar.vaga.tipo === "ringue" && o.lugar.vaga.dono === c.id);
+
+  function cuidarDaCena(m, dt, agora) {
+    const c = m.cena;
+    if (!c || c.fase === "fim") { m.cenaSocial = null; return; }
+    if (agora >= c.fim + RESULTADO) { encerrarCena(m); return; }
+    const a = m.bonecos.get(c.a), b = m.bonecos.get(c.b);
+    if (c.fase === "espera") {   // só encena com os dois livres e no prédio nesta tela; ninguém é teletransportado
+      if (agora >= c.fim - CHEGAR_ATE) { encerrarCena(m); return; }
+      // pronto: parado num lugar ou andando no corredor (de lá a rota até o ringue é a de sempre); quem está numa sala
+      // termina o trecho, que é curto. Sem isso, quem cruzava o prédio largo só parava depois da hora da briga
+      const pronto = l => (!l.rota.length && !!l.lugar) || (!l.lugar && l.rota.length > 0 && Math.abs(l.y - m.predio.corredorY) < 0.5);
+      if (m.fora || !livreSocial(a) || !livreSocial(b) || !pronto(a) || !pronto(b)) return;
+      if (!chamar(m, c, a, b, agora)) { encerrarCena(m); return; }
+      c.fase = "chamado";
+    }
+    for (const l of [a, b]) if (!l || l.trabalho) {   // o trabalho real manda: a cena termina nesta tela
+      if (l) falar(l, FRASES.social.trabalho, 3);
+      encerrarCena(m); return;
+    }
+    if (c.fase !== "resultado" && agora < c.fim && (c.proxPlateia -= dt) <= 0) { c.proxPlateia = 1; chamarPlateia(m, c, agora); }
+    const chegou = l => !l.rota.length && l.lugar && l.lugar.vaga && l.lugar.vaga.tipo === "luta" && l.lugar.vaga.dono === c.id;
+    if (c.fase === "chamado" && agora >= c.inicio && chegou(a) && chegou(b)) {
+      c.fase = "luta"; c.proxSoco = 0; c.proxGrito = entre(1, 2);
+      m.eventos.push({ nome: "torcida" });
+    }
+    if (c.fase === "luta" && agora < c.fim) {
+      if ((c.proxSoco -= dt) <= 0) { c.proxSoco = entre(0.35, 0.8); m.eventos.push({ nome: "soco" }); }
+      if ((c.proxGrito -= dt) <= 0) {
+        c.proxGrito = entre(2, 3.5);
+        const quem = plateiaDe(m, c).filter(o => !o.fala);
+        if (quem.length) falar(sorteia(quem), sorteia(FRASES.social.luta), 2.4);
+      }
+    }
+    if (c.fase !== "resultado" && agora >= c.fim) {   // quem não chegou vê o resultado de onde estiver
+      c.fase = "resultado";
+      const ganhou = c.vencedor === a.id ? a : b, perdeu = ganhou === a ? b : a, ate = c.fim + RESULTADO;
+      ganhou.festa = ate; perdeu.tonto = ate;
+      falar(ganhou, sorteia(FRASES.social.vitoria), 3);
+      perdeu.responde = { em: agora + 1.4, texto: sorteia(FRASES.social.tonto) };
+      m.eventos.push({ nome: "vitoria" });
+      let som = true;
+      for (const o of plateiaDe(m, c)) if (Math.random() < 0.9) {
+        o.responde = { em: agora + entre(0.3, 1.1), texto: sorteia(FRASES.social.final), aceno: true, som: som ? "aplauso" : undefined }; som = false;
+      }
+    }
+    const ate = c.fase === "chamado" ? c.inicio : c.fase === "luta" ? c.fim : c.fim + RESULTADO;
+    const cs = m.cenaSocial && m.cenaSocial.id === c.id ? m.cenaSocial : (m.cenaSocial = { id: c.id, tipo: "briga", a: c.a, b: c.b, vencedor: c.vencedor });
+    cs.x = c.cx; cs.y = c.cy; cs.fase = c.fase; cs.ate = ate;
+  }
+
+  // evento do servidor: café junto (vaga irmã), os outros num balão onde estão. Sem os dois livres e no prédio, é ignorado
+  function encenarEvento(m, ev, agora) {
+    const a = m.bonecos.get(ev.a), b = m.bonecos.get(ev.b), falas = Object.hasOwn(FRASES.social, ev.tipo) && FRASES.social[ev.tipo];
+    if (!Array.isArray(falas) || !Array.isArray(falas[0]) || !a || !b || a === b || ![a, b].every(o => livreSocial(o) && !naCena(m, o))) return;
+    const [fala, volta] = sorteia(falas);
+    falar(a, fala, 3); m.eventos.push({ nome: "conversa", voz: a.handle });
+    const parados = [a, b].every(o => !o.rota.length && o.lugar && !(o.lugar.vaga && o.lugar.vaga.temp));
+    if (ev.tipo === "cafe" && parados) {
+      const v = m.vagas.filter(x => x.tipo === "cafe" && !x.ocupante && !x.fechada).sort((x, y) => Math.hypot(x.x - a.x, x.y - a.y) - Math.hypot(y.x - a.x, y.y - a.y))[0];
+      const irma = v && vagaIrma(m, v);
+      if (irma) {
+        falar(b, volta, 3);
+        irPara(m, a, { tipo: "vaga", vaga: v }); irPara(m, b, { tipo: "vaga", vaga: irma });
+        a.parceiro = b.id; b.parceiro = a.id; a.vez = 0; b.vez = 1;   // chegam e conversam, como a dupla do café
+        return;
+      }
+    }
+    b.responde = { em: agora + 1.6, texto: volta };
   }
 
   // --- interface do brincar.js (Front): objeto clicado no mapa e festa geral (Konami) --------
@@ -955,7 +1164,7 @@ const Vida = (() => {
     return n;
   }
 
-  return { criarMundo, sincronizar, passo, digitando, momento, objetoClicado, festaGeral, FRASES };
+  return { criarMundo, sincronizar, passo, digitando, momento, objetoClicado, festaGeral, social, FRASES };
 })();
 
 window.Vida = Vida;
