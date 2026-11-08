@@ -129,8 +129,7 @@ const TV = (() => {
       if (atual && atual.agente && !api.temAgente(atual.agente)) ate = 0;   // o agente saiu do mapa: próxima cena
       return;
     }
-    const n = fila.shift();
-    if (n && mostrar(n, agora)) return;
+    for (let n; (n = fila.shift());) if (mostrar(n, agora)) return;   // a de agente fora do mapa cai e passa a próxima, sem trocar o passeio
     passear(agora);
   }
 
