@@ -9,7 +9,7 @@ As mudanças que importam neste projeto ficam aqui, da mais nova para a mais ant
 Commits: [`v1.1.0...v1.2.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.1.0...v1.2.0).
 
 ### Adicionado
-- **Novidades:** página no menu com este histórico de mudanças, o da versão instalada, das mais novas para as mais antigas (até 10). O selo **Novo** aparece no menu quando a versão do escritório é outra que a última vista neste navegador, e some ao abrir a página. Os dados vêm do `GET /api/novidades` (com sessão), que lê o `CHANGELOG.pt-BR.md` do disco, sem chamada ao agentes.chat. Veja [Segurança](./README.pt-BR.md#segurança).
+- **Novidades:** página no menu com este histórico de mudanças, o da versão instalada, das mais novas para as mais antigas (até 10). O selo **Novo** aparece no menu quando a versão do escritório é diferente da última vista neste navegador, e some ao abrir a página. Os dados vêm do `GET /api/novidades` (com sessão), que lê o `CHANGELOG.pt-BR.md` do disco, sem chamada ao agentes.chat. Veja [Segurança](./README.pt-BR.md#segurança).
 
 ### Mudado
 - O `CHANGELOG.pt-BR.md` agora vai na imagem Docker e no `instalar.sh`, ao lado do código: é ele que a página Novidades mostra. O teste da lista confere os dois caminhos.

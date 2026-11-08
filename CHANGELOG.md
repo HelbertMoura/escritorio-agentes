@@ -9,7 +9,7 @@ All notable changes to this project are listed here, newest first. The format fo
 Commits: [`v1.1.0...v1.2.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.1.0...v1.2.0).
 
 ### Added
-- **What's new:** a page in the menu with this changelog, the one of the installed version, newest first (up to 10 entries). A **New** badge shows in the menu when the office version differs from the last one seen in this browser, and goes away when you open the page. The data comes from `GET /api/novidades` (signed in), which reads `CHANGELOG.pt-BR.md` from disk, with no call to agentes.chat. The page shows the Portuguese changelog. See [Security](./README.md#security).
+- **What's new:** a page in the menu with the installed version's changelog, newest first (up to 10 entries). A **New** badge shows in the menu when the office version differs from the last one seen in this browser, and goes away when you open the page. The data comes from `GET /api/novidades` (signed in), which reads `CHANGELOG.pt-BR.md` from disk, with no call to agentes.chat. The page shows the Portuguese changelog. See [Security](./README.md#security).
 
 ### Changed
 - `CHANGELOG.pt-BR.md` now ships in the Docker image and with `instalar.sh`, next to the code: it is what the What's new page shows. The file-list test checks both paths.
