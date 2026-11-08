@@ -63,6 +63,7 @@
           <a href="#conversas" data-rota="conversas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"></path></svg><span>Conversas</span><span class="contador" id="nav-conversas" hidden></span></a>
           <a href="#jornal" data-rota="jornal"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h13v14H6a2 2 0 0 1-2-2zM17 9h3v8a2 2 0 0 1-2 2M8 9h5M8 13h5"></path></svg><span>Jornal</span></a>
           <a href="#personalizar" data-rota="personalizar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4l6 6-9 9H5v-6z"></path></svg><span>Personalizar</span></a>
+          <a href="#novidades" data-rota="novidades"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM18.5 15.5v5M16 18h5"></path></svg><span>Novidades</span><span class="contador novo" id="nav-novidades" hidden>Novo</span></a>
           <a href="#ajuda" data-rota="ajuda"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6M12 17h.01"></path></svg><span>Ajuda</span></a>
         </div>
         <section class="lat-secao">
@@ -360,6 +361,11 @@
         <p id="jornal-aviso" class="jornal-aviso" role="status" hidden></p>
         <article id="jornal" class="cartao jornal" aria-labelledby="t-jornal" hidden></article>
       </section>
+      <section id="v-novidades" class="visao" hidden>
+        <div class="cabeca"><h1>Novidades</h1><p class="resumo">O que mudou em cada versão do escritório, da mais nova para a mais antiga.</p></div>
+        <div class="nv-estado"><p id="novidades-aviso" class="jornal-aviso" role="status" hidden></p><button id="novidades-tentar" class="botao secundario" type="button" hidden>Tentar de novo</button></div>
+        <div id="novidades" class="nv-lista" hidden></div>
+      </section>
       <section id="v-ajuda" class="visao" hidden>
         <div class="cabeca"><h1>Ajuda</h1><p class="resumo">Perguntas frequentes e atalhos.</p></div>
         <div class="ajuda-busca"><label class="oculto" for="faq-busca">Procurar na ajuda</label><span class="ic busca-ic" data-icone="lupa" aria-hidden="true"></span><input id="faq-busca" type="search" placeholder="Procurar na ajuda" autocomplete="off"></div>
@@ -562,6 +568,7 @@
   <script src="brincar.js?v=99"></script>
   <script src="tv.js?v=99"></script>
   <script src="jornal.js?v=99"></script>
+  <script src="novidades.js?v=99"></script>
   <script src="timelapse.js?v=99"></script>
   <script src="avisar.js?v=99"></script>
   <script src="app.js?v=99"></script>

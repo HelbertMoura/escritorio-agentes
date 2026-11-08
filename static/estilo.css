@@ -892,6 +892,31 @@ body.modo-foto .controles, body.modo-foto .selo-vivo, body.modo-foto .dica-mapa,
 .jn-tabela .mini { width: 28px; height: 28px; image-rendering: pixelated; }
 .jn-vazio { margin: 0; padding: 28px 0 8px; text-align: center; color: var(--tinta2); }
 
+/* Novidades (novidades.js): uma entrada do histórico por cartão; a versão em pixel à esquerda no computador */
+.contador.novo { font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; }
+.nv-estado { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 12px; }
+.nv-estado:not(:has(> :not([hidden]))) { display: none; }
+.nv-estado .jornal-aviso { margin: 0; }
+.nv-lista { display: grid; gap: 14px; }
+.nv-entrada { display: grid; gap: 10px 32px; padding: 20px; }
+.nv-lado { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.nv-versao { margin: 0; font: 400 21px/1.1 Silkscreen, monospace; color: var(--texto); }
+.nv-data { font-size: 13.5px; color: var(--suave); }
+.nv-instalada { margin: 0; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--borda-forte); color: var(--texto2); font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.nv-corpo { min-width: 0; }
+.nv-titulo { margin: 0; font-size: clamp(19px, 2.3vw, 23px); line-height: 1.2; font-weight: 750; text-wrap: balance; }
+.nv-secao { margin-top: 18px; }
+.nv-secao h3 { margin: 0 0 8px; font: 650 12px "Source Sans 3", system-ui, sans-serif; letter-spacing: .5px; text-transform: uppercase; color: var(--suave); }
+.nv-secao ul { margin: 0; padding-left: 18px; display: grid; gap: 8px; color: var(--texto2); font-size: 15px; line-height: 1.5; max-width: 76ch; }
+.nv-secao li { overflow-wrap: anywhere; }
+.nv-secao li::marker { color: var(--suave); }
+.nv-corpo strong { color: var(--texto); font-weight: 700; }
+.nv-corpo code { font: 13px ui-monospace, "Cascadia Mono", Consolas, monospace; padding: 1px 3px; border-radius: 6px; background: var(--cartao3); color: var(--texto); }
+@media (min-width: 760px) {
+  .nv-entrada { grid-template-columns: 156px minmax(0, 1fr); padding: 26px 30px; }
+  .nv-lado { flex-direction: column; align-items: flex-start; align-self: start; gap: 6px; }
+}
+
 /* Visitantes: quantas pessoas olham o escritório agora e a opção de aparecer no mapa */
 .olhando { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 6px 0 0; font-size: 14px; color: var(--suave); }
 .olhando-led { width: 7px; height: 7px; border-radius: 2px; background: var(--azul); }

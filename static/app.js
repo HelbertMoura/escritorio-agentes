@@ -2182,13 +2182,14 @@ aplicarLateral();
 function rota() {
   if (gavetaAberta()) { fecharGaveta(); $("principal").focus({ preventScroll: true }); }   // item do menu na gaveta: o foco vai ao conteúdo
   const r = (location.hash || "#escritorio").slice(1);
-  const TELAS = ["escritorio", "conversas", "aprovacoes", "jornal", "personalizar", "ajuda"];
+  const TELAS = ["escritorio", "conversas", "aprovacoes", "jornal", "personalizar", "novidades", "ajuda"];
   // na demonstração o Personalizar não existe: ele grava a marca no servidor de verdade
   const valida = TELAS.includes(r) && !(r === "personalizar" && Brincar.demo) ? r : "escritorio";
   for (const v of TELAS) $(`v-${v}`).hidden = v !== valida;
   if (valida === "personalizar" && window.Personalizar) { Personalizar.abrir(config); if (window.Ajustes) Ajustes.abrir(config); }
   if (valida === "conversas") paginaConversas();
   if (valida === "jornal") Jornal.abrir();
+  if (valida === "novidades") Novidades.abrir(); else Novidades.fechar();
   document.querySelectorAll("[data-rota]").forEach(a => { if (a.dataset.rota === valida) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
   if (valida !== "escritorio") { TV.desligar(); telaCheia(false); }
   else ajustarEscala();
@@ -2266,6 +2267,8 @@ Jornal.iniciar({
   demo: () => Brincar.demo,
   socialLigada, mini,
 });
+// novidades (novidades.js): o histórico de mudanças e o selo "Novo" no menu
+Novidades.iniciar();
 
 pintarIcones(document);
 window.addEventListener("hashchange", rota);
