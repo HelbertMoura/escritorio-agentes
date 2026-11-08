@@ -11,7 +11,7 @@ Na frente de tudo há login com usuário e senha (acesso.py).
 Rotas: /entrar /primeiro-acesso /sair /logo  /  /<estático>  /api/estado /api/config /api/conversa /api/marca
        /api/logo /api/conversa/modo /api/conversa/modo/fechar /api/conversa/responder /api/social /api/social/briga
        /api/social/greve/atender /api/social/placar /api/planta /api/clima /api/clima/busca /api/festas
-       /api/equipe /api/sair-todos /oauth/conectar /oauth/retorno
+       /api/equipe /api/sair-todos /api/jornal /oauth/conectar /oauth/retorno
        (as quatro primeiras e os estáticos do login sem sessão)
 Uso: python3 -I escritorio.py           serviço (variáveis no /etc/escritorio.env)
      python3 -I escritorio.py codigo    mostra o código de primeiro acesso, só lendo (sudo escritorio-codigo)
@@ -43,6 +43,7 @@ from acesso import (ARQ_CODIGO, ARQ_USUARIOS, Acesso, NaoGravou, TentativasDemai
 import ajustes  # noqa: E402
 from ajustes import (ACESSORIOS, CLIMA_BYTES, CORES, EQUIPE_BYTES, FESTAS_BYTES, HANDLE_OK, ICONES_OK, OLHOS,  # noqa: E402
                      ROTULO_OK, limpa_texto)
+from jornal import JORNAL_BYTES, Jornal, validar as validar_jornal  # noqa: E402
 from planta import PLANTA_BYTES, Planta, validar_planta  # noqa: E402
 from social import PLACAR_BYTES, PLACAR_MAX, PLACAR_TETO, Social  # noqa: E402
 
@@ -106,6 +107,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "construir.js": "text/javascript; charset=utf-8", "construir.css": "text/css; charset=utf-8",
     "ajustes.js": "text/javascript; charset=utf-8", "assistente.js": "text/javascript; charset=utf-8",
     "tv.js": "text/javascript; charset=utf-8", "sw.js": "text/javascript; charset=utf-8",
+    "jornal.js": "text/javascript; charset=utf-8", "timelapse.js": "text/javascript; charset=utf-8",
     "manifest.webmanifest": "application/manifest+json", "icone-180.png": "image/png", "icone-192.png": "image/png",
     "icone-512.png": "image/png", "icone-mascara-512.png": "image/png",
 }
@@ -525,6 +527,7 @@ class Diario:
     def __init__(self):
         self.runs = {}  # run_id -> {"status", "desde", "agente", "inicio", "rotulo"}
         self.eventos = collections.deque(maxlen=self.LIMITE)  # do mais novo para o mais velho
+        self.novos = []   # os eventos só da última leitura, como (tipo, id do agente): o jornal da semana conta por id
         self.resolvidos = collections.deque(maxlen=self.LIMITE)  # (instante, item), do mais novo para o mais velho
         self.base = False
 
@@ -545,6 +548,7 @@ class Diario:
         agora = time.time() if agora is None else agora
         em = _iso(agora)
         vistos = set()
+        self.novos = []
         for t in tarefas:
             rid, st = t["run_id"], t["status"]
             if rid in vistos:  # run_id repetido na mesma leitura: vale o primeiro (a cópia leva o mesmo "desde")
@@ -555,32 +559,34 @@ class Diario:
             if not antes or self.PEDIDO.get(antes["status"]) != self.PEDIDO.get(st):  # running e still_running são o mesmo estado
                 agente = handles.get(t["agente_id"], "")
                 if self.base:
-                    self._transicao(em, agente, rid, antes and antes["status"], st)
+                    self._transicao(em, agente, t["agente_id"], rid, antes and antes["status"], st)
                     if antes and antes["status"] in self.PEDIDO:
                         self._resolvido(agora, antes, rid, "outro_pedido" if st in self.PEDIDO else "voltou_a_trabalhar")
-                antes = self.runs[rid] = {"status": st, "desde": em, "agente": agente, "inicio": not self.base, "rotulo": ""}
+                antes = self.runs[rid] = {"status": st, "desde": em, "agente": agente, "agente_id": t["agente_id"],
+                                          "inicio": not self.base, "rotulo": ""}
             if st in self.PEDIDO and rid in (rotulos or {}):   # o rótulo do pedido, enquanto ele espera
                 antes["rotulo"] = rotulos[rid]
             t["desde"] = antes["desde"]
         for rid in [r for r in self.runs if r not in vistos] if completa else []:
             if self.base:
-                self._evento(em, "terminou", self.runs[rid]["agente"], rid)
+                self._evento(em, "terminou", self.runs[rid]["agente"], rid, self.runs[rid]["agente_id"])
                 if self.runs[rid]["status"] in self.PEDIDO:
                     self._resolvido(agora, self.runs[rid], rid, "terminou")
             del self.runs[rid]
         self.base = True
         return list(self.eventos)
 
-    def _transicao(self, em, agente, rid, antes, agora):
+    def _transicao(self, em, agente, agente_id, rid, antes, agora):
         if antes is None:
-            self._evento(em, "comecou", agente, rid)
+            self._evento(em, "comecou", agente, rid, agente_id)
         if agora in self.PEDIDO:
-            self._evento(em, self.PEDIDO[agora], agente, rid)
+            self._evento(em, self.PEDIDO[agora], agente, rid, agente_id)
         elif antes in self.PEDIDO:
-            self._evento(em, "voltou_a_trabalhar", agente, rid)
+            self._evento(em, "voltou_a_trabalhar", agente, rid, agente_id)
 
-    def _evento(self, em, tipo, agente, rid):
+    def _evento(self, em, tipo, agente, rid, agente_id):
         self.eventos.appendleft({"em": em, "tipo": tipo, "agente": agente, "run_id": rid})
+        self.novos.append((tipo, agente_id))
 
     def _resolvido(self, agora, pedido, rid, desfecho):
         self.resolvidos.appendleft((agora, {"run_id": rid, "agente": pedido["agente"], "tipo": self.TIPO[pedido["status"]],
@@ -670,6 +676,8 @@ class Leitor(threading.Thread):
         self.trava = threading.Lock()
         self.acordado = threading.Event()   # acordar(): a volta do OAuth não espera o resto do intervalo
         self.diario = Diario()
+        self.diario_novo = False   # conta nova no OAuth: o próximo ciclo recomeça o Diario
+        self.jornal = None   # o Jornal da semana, posto pelo main(); conta a cada leitura que deu certo
         self.agentes, self.agentes_ok, self.agentes_em = None, True, 0.0   # list_agents guardado entre as recargas
         self.seguidos_429 = self.seguidos_erro = 0
         self.pausa_ate = 0.0   # fim da pausa pedida por um 429; as rotas que chamam o MCP consultam pausado()
@@ -746,10 +754,15 @@ class Leitor(threading.Thread):
             with self.trava:
                 self.estado = {**self.estado, "erro": PAUSA_429, "conexao": "pausa"}
             return self.pausa_ate - agora
+        with self.trava:
+            if self.diario_novo:   # sem os "terminou" da conta velha nem os pedidos da nova contados como novos
+                self.diario, self.diario_novo = Diario(), False
         antes, inicio = self.mcp.pedidos, self.relogio()
         try:
             novo, completa, itens = self.ler(agora)
             self.diario.aplicar(novo, completa)
+            if self.jornal:   # nunca levanta: o jornal não derruba a leitura
+                self.jornal.ler(self.diario.novos, novo, agora)
             novo.update(atualizado=_iso(agora), erro=None, conexao="conectado")
             with self.trava:
                 if self.zerar_conversas:   # conta nova no OAuth: a lista da conta anterior não fica à vista
@@ -815,6 +828,7 @@ class Leitor(threading.Thread):
     def zerar_memoria(self):
         with self.trava:
             self.conversas, self.zerar_conversas, self.respondidos = {"por_id": {}, "mudou": {}}, True, {}
+            self.diario_novo = True
 
     def marcar_respondido(self, id_conversa, agora):
         """Envio que deu certo (M2): até a meia-noite, a leitura desse item sai sem o limite A1. O run de uma resposta
@@ -1168,6 +1182,12 @@ class Respostas:
             return mcp.ferramenta(nome, args, token)
 
 
+def ler_jornal():
+    """dados/jornal.json validado (as semanas), ou None. Ilegível, grande demais ou fora do formato sobe vazio, com 1 linha
+    de log: falha aberta, como o placar."""
+    return ajustes.ler(ARQ_JORNAL, JORNAL_BYTES, validar_jornal, log, "jornal")
+
+
 # ---------------------------------------------------------------- clima real (Open-Meteo, sem chave)
 
 def tipo_do_clima(codigo, nuvens):
@@ -1457,6 +1477,7 @@ def modo_serio(marca=None):
 ARQ_PLACAR = os.path.join(DADOS, "placar.json")   # placar semanal do ringue (vida social); só a thread do Social grava
 ID_PLACAR = re.compile(r"[A-Za-z0-9_-]{1,100}")
 ARQ_PLANTA = os.path.join(DADOS, "planta.json")   # modo construção; só o POST /api/planta grava, sob a trava da Planta
+ARQ_JORNAL = os.path.join(DADOS, "jornal.json")   # jornal da semana (jornal.py); só a leitura grava, no máximo 1 vez por minuto
 
 
 def _numero(x, minimo):
@@ -2000,6 +2021,12 @@ class Pagina(BaseHTTPRequestHandler):
                 return self._json(*erro(404, "social_desligado", "A vida social está desligada neste escritório."))
             presentes = {a["id"] for a in self.server.leitor.foto().get("agentes", [])}
             return self._json(200, social.ranking(time.time(), presentes))
+        if rota == "/api/jornal":   # a semana atual e a anterior, só ids de presentes e números (as frases são do navegador)
+            jornal = getattr(self.server, "jornal", None)
+            if not jornal:
+                return self._json(*erro(404, "jornal_desligado", "O jornal está desligado neste escritório."))
+            presentes = {a["id"] for a in self.server.leitor.foto().get("agentes", [])}
+            return self._json(200, jornal.publico(time.time(), presentes))
         if rota == "/api/conversa":   # só o "id" ou o "agente" da query contam: o canal sai do que o servidor viu
             conversas = getattr(self.server, "conversas", None)
             if not conversas or carregar_times()["conversas"] not in MODOS_CONVERSA:
@@ -2031,6 +2058,8 @@ class Pagina(BaseHTTPRequestHandler):
                 self.server.conversas.esquecer()
             if getattr(self.server, "social", None):   # nem as amizades da vida social
                 self.server.social.zerar()
+            if getattr(self.server, "jornal", None):   # nem os números da semana
+                self.server.jornal.zerar()
             if hasattr(self.server.leitor, "acordar"):   # a primeira leitura com a conexão nova sai agora
                 self.server.leitor.acordar()
             log(evento="oauth", resultado="conectado", usuario=usuario)
@@ -2338,20 +2367,26 @@ def main():
         sys.exit(str(x))
     cred = Credenciais(ARQ_TOKEN)
     leitor = Leitor(cred)
+    clima = Clima(lambda: clima_vigente()[0])   # nasce sempre: a cidade pode chegar pela tela depois
+    # jornal da semana: só ids e números, gravado de forma atômica; o clima do meio-dia sai do mesmo Clima da página
+    leitor.jornal = Jornal(log, FUSO, lambda dados: gravar(ARQ_JORNAL, dados), ler_jornal(),
+                           lambda: (clima.foto() or {}).get("tipo"))
     leitor.start()
     srv = Servidor((BIND, PORTA), Pagina)  # 127.0.0.1: a Tailscale (serve) publica só na rede privada
     srv.cred, srv.leitor, srv.acesso = cred, leitor, contas
     srv.conversas = Conversas(leitor)
     srv.respostas = Respostas(leitor, srv.conversas)
+    srv.jornal = leitor.jornal
     # vida social: na memória, sem rede; só o placar semanal vai para o disco, pelo gravar() atômico
-    srv.social = Social(leitor, config_publica, log, FUSO, guardar=lambda dados: gravar(ARQ_PLACAR, dados), placar=ler_placar())
+    srv.social = Social(leitor, config_publica, log, FUSO, guardar=lambda dados: gravar(ARQ_PLACAR, dados), placar=ler_placar(),
+                        contar_jornal=srv.jornal.contar)
     srv.social.start()
     srv.planta = Planta(ARQ_PLANTA, log, lambda dados: gravar(ARQ_PLANTA, dados))   # planta ilegível sobe vazia, com 1 log
     srv.visitantes = Visitantes()
     if contas.precisa_configurar():
         ver = "docker exec -it <container> python3 -I -B escritorio.py codigo" if BIND == "0.0.0.0" else "sudo escritorio-codigo"
         log(evento="acesso", resultado="aguardando_primeiro_usuario", ver_codigo=ver)   # o código em si nunca vai ao log
-    srv.clima = Clima(lambda: clima_vigente()[0])   # nasce sempre: a cidade pode chegar pela tela depois
+    srv.clima = clima
     srv.clima.start()
     if BIND == "0.0.0.0":
         log(evento="inicio", aviso="use só em container, atrás de um proxy HTTPS")

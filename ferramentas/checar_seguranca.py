@@ -209,6 +209,12 @@ confere("... o id nao sai do token nem do sha da sessao", v[0]["id"] in tok + ha
 confere("... a propria sessao nao se ve (so a outra)", [x["id"] == v[0]["id"] for x in vis(sessao)], [False])
 tv = {"Cookie": req("/entrar", {"Origin": base}, form)[1]["Set-Cookie"].split(";")[0]}
 confere("... com ?invisivel=1 uma sessao nova olha sem aparecer", (len(vis(tv, "?invisivel=1")), len(vis(sessao))), (2, 1))
+print("== Jornal (GET com sessao, so ids de presentes e numeros)")
+srv.jornal = e.Jornal(e.log, e.FUSO)
+srv.jornal.ler([("terminou", "agente-1")], {"tarefas": []}, time.time())
+confere("GET /api/jornal sem sessao", req("/api/jornal")[0], 401)
+st, _, corpo = req_corpo("/api/jornal", sessao)
+confere("GET /api/jornal com sessao, sem o agente que nao esta na leitura", (st, json.loads(corpo)["semana"]["agentes"]), (200, []))
 print("== Sair de todos os aparelhos (Origin obrigatorio, JSON exato, senha no balde do login)")
 sj = lambda senha: json.dumps({"senha": senha}).encode()
 confere("POST /api/sair-todos sem Origin, com Referer valido (aqui o Referer nao conta)",

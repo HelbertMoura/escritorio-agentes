@@ -6,11 +6,18 @@ All notable changes to this project are listed here, newest first. The format fo
 
 ## Unreleased · TV mode, visitors and newspaper
 
-Not committed yet.
+`config_v` and the visitors in commit [`89873f5`](https://github.com/HelbertMoura/escritorio-agentes/commit/89873f5); the newspaper in the next commit.
 
 ### Added
 - `/api/estado` gained `config_v`: 12 hex characters that change when a configuration file changes (`times.json` and, in `dados/`, the brand, logo, floor plan, weather, holidays and team). It comes only from each file's size and date, without reading its contents. TV mode reloads the page when it changes.
 - **Visitors:** `/api/estado` gained `visitantes`, the list of who else has the office open, with only an anonymous id and a color (`?invisivel=1` watches without showing up). See [Security](./README.md#security). The preview gained `--visitantes N`.
+- **Weekly newspaper:** `jornal.py` and `GET /api/jornal`, with this week's and last week's numbers (tasks, approvals, answers and minutes per agent; weather, strikes and fights per day), in `dados/jornal.json`, with only ids and numbers. See [Security](./README.md#security). The preview counts its own reads and gained `--jornal`, which starts with both weeks filled in.
+
+### Changed
+- Switching the agentes.chat account also restarts the event list and the day's resolved requests, as a restart would: nothing from the previous account stays on screen or goes into the newspaper.
+
+### Fixed
+- `instalar.sh` now installs and compiles `ajustes.py` (since Settings, the service it installed failed to start) and `jornal.py`, and copies `manifest.webmanifest`.
 
 ## Unreleased · Connect, Docker and Settings
 

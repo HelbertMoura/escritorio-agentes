@@ -45,7 +45,7 @@ AG =[{"id": "a1", "name": "Pixel", "handle": "pixel", "role": "Conteúdo"},
 ORG_URL = f"https://app.agentes.chat/org/{e.ORG}/c/11111111-2222-4333-8444-555555555555"
 # arquivos da lista fechada que chegam com o land do floor das telas (uau-telas); até lá, o servidor responde 404
 PWA = {"manifest.webmanifest", "sw.js", "icone-180.png", "icone-192.png", "icone-512.png", "icone-mascara-512.png"}
-DO_FRONT = {"tv.js"} | PWA
+DO_FRONT = {"tv.js", "jornal.js", "timelapse.js"} | PWA
 
 
 def servidos():
@@ -647,7 +647,7 @@ class Http(unittest.TestCase):
             self.assertIn(outro[0]["cor"], e.CORES_VISITANTE)
             self.assertEqual(set(outro[0]), {"id", "cor"})   # sem usuário, aparelho nem nada da sessão
             sessao_um = um["Cookie"].partition("=")[2]
-            self.assertNotIn(outro[0]["id"], (sessao_um, hashlib.sha256(sessao_um.encode()).hexdigest()))
+            self.assertNotIn(outro[0]["id"], sessao_um + hashlib.sha256(sessao_um.encode()).hexdigest())   # nem pedaço
             self.assertEqual(len(ver(tv, "?invisivel=1")), 2)   # a TV vê os dois...
             self.assertEqual(ver(um), [v for v in ver(tv, "?invisivel=1") if v != outro[0]])   # ...e ninguém vê a TV
         finally:
@@ -2143,9 +2143,13 @@ class Conectar(unittest.TestCase):
 
     def test_volta_certa_conecta_e_acorda_o_leitor(self):
         antes = self.srv.leitor.acordou
+        self.srv.jornal = e.Jornal(e.log, e.FUSO)   # com uma contagem da conta anterior
+        self.addCleanup(delattr, self.srv, "jornal")
+        self.srv.jornal.ler([("terminou", "agente-velho")], {"tarefas": []}, time.time())
         estado = self.conectar()
         st, _, h = self.req(f"/oauth/retorno?code=codigo-secreto&state={estado}", self.cab)
         self.assertEqual((st, h["Location"]), (302, "/"))
+        self.assertEqual(self.srv.jornal.publico(time.time(), {"agente-velho"})["semana"]["agentes"], [])   # zerado
         self.assertEqual((self.srv.cred.token(), self.srv.leitor.acordou), ("AC-novo", antes + 1))
         texto = self.pagina(f"/oauth/retorno?code=codigo-secreto&state={estado}", 400)   # o mesmo state de novo
         self.assertIn("venceu (vale 10 minutos) ou já foi usado", texto)
@@ -2345,6 +2349,22 @@ class Configuracoes(unittest.TestCase):
         with open(e.TIMES, "w", encoding="utf-8") as f:   # o times.json editado à mão também conta
             f.write("{}")
         self.assertNotEqual(v(), v0)
+
+    def test_config_v_cobre_os_sete_arquivos(self):
+        """Cada um dos 7 arquivos muda o config_v: aparecer, mudar só o mtime e sumir (volta ao valor de antes)."""
+        v = lambda: json.loads(self.req("/api/estado", self.cab)[1])["config_v"]
+        for arq in (e.TIMES, e.ARQ_MARCA, e.ARQ_LOGO, e.ARQ_PLANTA, e.ARQ_CLIMA, e.ARQ_FESTAS, e.ARQ_EQUIPE):
+            with self.subTest(arq=os.path.basename(arq)):
+                antes, existia = v(), os.path.exists(arq)
+                if existia:
+                    st = os.stat(arq)
+                    os.utime(arq, ns=(st.st_atime_ns, st.st_mtime_ns + 10**9))
+                else:
+                    open(arq, "wb").close()
+                self.assertNotEqual(v(), antes)
+                if not existia:
+                    os.remove(arq)
+                    self.assertEqual(v(), antes)
 
     def test_clima_recusa_sem_ecoar_e_sem_gravar(self):
         acordou = self.srv.clima.acordou
@@ -2709,7 +2729,8 @@ class Busca(unittest.TestCase):
 
 class Docker(unittest.TestCase):
     def test_copy_leva_todo_modulo_local_que_o_servidor_importa(self):
-        # um módulo novo importado pelo escritorio.py e fora do COPY sobe no PC e cai no container
+        # um módulo novo importado pelo escritorio.py e fora do COPY sobe no PC e cai no container (e, fora do instalar.sh,
+        # na VPS: o ajustes.py ficou de fora do install e do py_compile até a Fase 2)
         raiz = os.path.dirname(os.path.abspath(e.__file__))
         with open(os.path.join(raiz, "Dockerfile"), encoding="utf-8") as f:
             copiados = {p for linha in f if linha.startswith("COPY ") for p in linha.split()[1:-1] if p.endswith(".py")}
@@ -2728,9 +2749,15 @@ class Docker(unittest.TestCase):
                     [no.module] if isinstance(no, ast.ImportFrom) and no.module else []
                 pendentes += [n for n in nomes if os.path.isfile(os.path.join(raiz, n + ".py"))]
         esperados = {n + ".py" for n in locais}
-        self.assertEqual(esperados, {"escritorio.py", "acesso.py", "social.py", "planta.py", "ajustes.py"})
+        self.assertEqual(esperados, {"escritorio.py", "acesso.py", "social.py", "planta.py", "ajustes.py", "jornal.py"})
         self.assertLessEqual(esperados, copiados)
         self.assertLessEqual(esperados, liberados)
+        with open(os.path.join(raiz, "instalar.sh"), encoding="utf-8") as f:
+            linhas = f.read().replace("\\\n", " ").splitlines()   # junta as linhas continuadas com \
+        instalados = {p for linha in linhas if linha.startswith("install ") and linha.endswith(" /opt/escritorio/")
+                      for p in linha.split() if p.endswith(".py")}
+        compilados = {os.path.basename(p) for linha in linhas if "py_compile" in linha for p in linha.split() if p.endswith(".py")}
+        self.assertEqual((instalados, compilados), (esperados, esperados))
 
 
 class ModoResposta(unittest.TestCase):
@@ -3289,6 +3316,12 @@ class Previa(unittest.TestCase):
                            env={**os.environ, "TEMP": tmp, "TMP": tmp, "TMPDIR": tmp})
         self.assertEqual((r.returncode, os.listdir(tmp)), (1, []))
         self.assertIn("--visitantes", r.stderr)
+
+    def test_previa_com_jornal_semeado(self):
+        base = self.subir("--jornal", os.path.join("ferramentas", "previa.exemplo.json"))
+        j = json.loads(urllib.request.urlopen(base + "/api/jornal", timeout=10).read())
+        self.assertEqual((len(j["semana"]["agentes"]), len(j["anterior"]["agentes"]), len(j["anterior"]["dias"])), (7, 7, 7))
+        self.assertEqual(set(j["semana"]["agentes"][0]), {"id", "tarefas", "aprovacoes", "respostas", "minutos"})
 
     def test_previa_com_cada_estado_de_conexao(self):
         exemplo = os.path.join("ferramentas", "previa.exemplo.json")

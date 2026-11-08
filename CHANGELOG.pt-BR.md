@@ -6,11 +6,18 @@ As mudanças que importam neste projeto ficam aqui, da mais nova para a mais ant
 
 ## Ainda não publicado · Modo TV, visitantes e jornal
 
-Sem commit ainda.
+O `config_v` e os visitantes no commit [`89873f5`](https://github.com/HelbertMoura/escritorio-agentes/commit/89873f5); o jornal no commit seguinte.
 
 ### Adicionado
 - O `/api/estado` ganhou o `config_v`: 12 hex que mudam quando muda um arquivo de configuração (`times.json` e, em `dados/`, a marca, o logo, a planta, o clima, as datas e a equipe). Sai só do tamanho e da data de cada arquivo, sem ler o conteúdo. O modo TV recarrega a página quando ele muda.
 - **Visitantes:** o `/api/estado` ganhou o `visitantes`, a lista de quem mais está com o escritório aberto, só com um id anônimo e uma cor (`?invisivel=1` olha sem aparecer). Veja [Segurança](./README.pt-BR.md#segurança). A prévia ganhou o `--visitantes N`.
+- **Jornal da semana:** `jornal.py` e `GET /api/jornal`, com os números da semana atual e da anterior (tarefas, aprovações, respostas e minutos por agente; clima, greves e brigas por dia), em `dados/jornal.json`, só com ids e números. Veja [Segurança](./README.pt-BR.md#segurança). A prévia conta as leituras dela e ganhou o `--jornal`, que sobe com as duas semanas preenchidas.
+
+### Mudado
+- Trocar a conta no agentes.chat também recomeça a lista de eventos e os resolvidos do dia, como num reinício: nada da conta anterior fica à vista nem entra no jornal.
+
+### Corrigido
+- O `instalar.sh` passa a instalar e compilar o `ajustes.py` (desde as Configurações, o serviço instalado por ele caía ao subir) e o `jornal.py`, e copia o `manifest.webmanifest`.
 
 ## Ainda não publicado · Conectar, Docker e Configurações
 

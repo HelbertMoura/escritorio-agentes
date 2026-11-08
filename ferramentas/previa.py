@@ -22,8 +22,11 @@ Configurações: o clima e as datas salvos pela tela vão para a pasta temporár
 de verdade, com o mesmo limite do servidor. PREVIA_ESTATICO=<pasta static> serve as telas de outro floor.
 --visitantes N (0 a 8): a prévia não tem sessão, então ninguém vira visitante; com N, o "visitantes" do /api/estado traz N
 visitantes fixos, com id e cor pelo mesmo cálculo do servidor.
+Jornal: o mesmo jornal.py do servidor conta as leituras deste arquivo (e as brigas e greves da vida social) e grava o
+jornal.json na pasta temporária. --jornal: sobe com a semana atual (até hoje) e a anterior já preenchidas, com números
+sorteados (semente fixa) para os agentes do arquivo, pela mesma validação do jornal.json.
 """
-import atexit, json, os, shutil, signal, sys, threading, time
+import atexit, datetime, json, os, random, shutil, signal, sys, threading, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import tempfile
 os.environ["ESCRITORIO_DADOS"] = tempfile.mkdtemp(prefix="escritorio-previa-")
@@ -38,6 +41,7 @@ PORTA = int(os.environ.get("PREVIA_PORTA", "7372"))
 os.environ["ESCRITORIO_BASE"] = f"http://127.0.0.1:{PORTA}"
 import escritorio as e
 import social
+from jornal import CLIMAS as jornal_climas, segunda as jornal_segunda
 
 # PREVIA_ESTATICO=<pasta static de outro floor>: as telas de um floor contra o servidor deste (sem cópia de arquivo)
 if os.environ.get("PREVIA_ESTATICO"):
@@ -71,12 +75,14 @@ class Falso:
     def __init__(self, arquivo):
         self.arquivo, self.marca = arquivo, None
         self.estado = {"agentes": [], "trabalhos": [], "tarefas": [], "eventos": [], "resolvidos": []}
-        self.diario, self.trava = e.Diario(), threading.Lock()
+        self.diario, self.trava, self.jornal = e.Diario(), threading.Lock(), None
         self.memoria, self.conversas, self.cred = e.ConversasDoDia(), {"por_id": {}, "mudou": {}}, Token()
 
     def _ler(self, bruto, tarefas, agora=None):
-        """Uma "leitura": o Diario e a memória da página Conversas, como no Leitor.ciclo()."""
+        """Uma "leitura": o Diario, o jornal e a memória da página Conversas, como no Leitor.ciclo()."""
         estado = self.diario.aplicar(e.resumir(bruto["agents"], tarefas), agora=agora)
+        if self.jornal:
+            self.jornal.ler(self.diario.novos, estado, time.time() if agora is None else agora)
         self.conversas = self.memoria.atualizar(e.normalizar(bruto["agents"], tarefas)[1],
                                                 {t["run_id"]: t.get("desde") for t in estado["tarefas"]}, True,
                                                 time.time() if agora is None else agora)
@@ -135,6 +141,22 @@ class Falso:
             textos = {"recusada": e.texto_recusa(403), "pausa": e.PAUSA_429, "falha": e.FALHA_LEITURA}
             return {**self.estado, "atualizado": agora, "erro": textos.get(CONEXAO, erro), "conexao": CONEXAO}
 
+def semear_jornal(jornal, arquivo):
+    """--jornal: números sorteados para a semana atual (até hoje) e a anterior, com os agentes do arquivo."""
+    with open(arquivo, encoding="utf-8") as f:
+        agentes = [a["id"] for a in json.load(f)["agents"]]
+    rng, hoje = random.Random(7), datetime.datetime.now(e.FUSO).date()
+    semanas = {}
+    for inicio in (jornal_segunda(hoje) - datetime.timedelta(days=7), jornal_segunda(hoje)):
+        dias = [inicio + datetime.timedelta(days=n) for n in range(7) if inicio + datetime.timedelta(days=n) <= hoje]
+        semanas[inicio.isoformat()] = {
+            "agentes": {a: [rng.randint(0, 30), rng.randint(0, 8), rng.randint(0, 8), rng.randint(0, 900)] for a in agentes},
+            "dias": {d.isoformat(): {"clima": rng.choice(sorted(jornal_climas)), "greves": int(rng.random() < 0.2),
+                                     "brigas": rng.randint(0, 3)} for d in dias}}
+    with jornal.trava:
+        jornal.semanas, jornal.sujo = e.validar_jornal({"v": 1, "semanas": semanas}), True
+
+
 class VisitantesDaPrevia(e.Visitantes):
     """--visitantes N: N marcas fixas, renovadas a cada pedido, no lugar das sessões que a prévia não tem."""
     def ver(self, token, agora, marcar=True):
@@ -161,6 +183,13 @@ class ConversasFicticias(e.Conversas):
 srv = e.Servidor(("127.0.0.1", PORTA), e.Pagina)
 srv.leitor, srv.cred = Falso([a for a in ARGS if not a.startswith("--")][0]), None
 srv.conversas = ConversasFicticias(srv.leitor)
+# clima vivo, como no servidor: a cidade salva pela tela vai para o clima.json da pasta temporária (sobe mais abaixo)
+srv.clima = e.Clima(lambda: e.clima_vigente()[0])
+# o jornal da semana, como no servidor: o jornal.json vai para a pasta temporária; o clima do meio-dia sai do clima vivo
+srv.jornal = srv.leitor.jornal = e.Jornal(e.log, e.FUSO, lambda dados: e.gravar(e.ARQ_JORNAL, dados), e.ler_jornal(),
+                                          lambda: (srv.clima.foto() or {}).get("tipo"))
+if "--jornal" in ARGS:
+    semear_jornal(srv.jornal, [a for a in ARGS if not a.startswith("--")][0])
 if "--resolvidos" in ARGS:
     srv.leitor.semear_resolvidos()
 srv.acesso = e.Acesso(os.environ["ESCRITORIO_DADOS"])
@@ -168,15 +197,14 @@ srv.previa_sem_login = True  # prévia local, só em 127.0.0.1
 srv.visitantes = VisitantesDaPrevia()
 # o mesmo diretor do servidor, com a leitura do arquivo; o placar semanal vai para o placar.json da pasta temporária
 srv.social = e.Social(srv.leitor, e.config_publica, e.log, e.FUSO, guardar=lambda dados: e.gravar(e.ARQ_PLACAR, dados),
-                      placar=e.ler_placar())
+                      placar=e.ler_placar(), contar_jornal=srv.jornal.contar)
 if "--greve" in ARGS:   # o dia já começa com as reclamações; a greve sai no primeiro passo (com 3 livres ou mais)
     srv.social.dia = e.datetime.datetime.now(e.FUSO).date()
     srv.social.reclamaram_hoje = ["previa"] * social.GREVE_RECLAMACOES
 srv.social.start()
 # modo construção: a planta salva vai para o planta.json da pasta temporária (some ao fechar a prévia)
 srv.planta = e.Planta(e.ARQ_PLANTA, e.log, lambda dados: e.gravar(e.ARQ_PLANTA, dados))
-# clima vivo, como no servidor: a cidade salva pela tela vai para o clima.json da pasta temporária
-srv.clima = e.Clima(lambda: e.clima_vigente()[0]); srv.clima.start()
+srv.clima.start()
 print(e.BASE, flush=True)
 print("dados temporários:", os.environ["ESCRITORIO_DADOS"], flush=True)   # somem ao sair
 try:
