@@ -114,7 +114,15 @@
           </div>
         </div>
         <section id="palco-cartao" class="cartao palco-cartao" aria-label="Mapa do escritório">
-          <div id="faixa-erro" class="faixa-erro" role="alert" hidden><span id="faixa-erro-txt"></span><button id="tentar" type="button">Tentar agora</button></div>
+          <div id="faixa-erro" class="faixa-erro" role="alert" hidden>
+            <p class="faixa-erro-txt"><strong id="faixa-base" hidden></strong><span id="faixa-erro-txt"></span></p>
+            <div class="faixa-acoes">
+              <a id="conectar" class="botao" href="/oauth/conectar" hidden>Conectar ao agentes.chat</a>
+              <button id="copiar-link" class="secundario" type="button" hidden>Copiar o link</button>
+              <button id="tentar" type="button">Tentar agora</button>
+            </div>
+            <p id="faixa-link" class="faixa-link" hidden><label for="faixa-link-campo">Copie o endereço e abra na barra do navegador:</label><input id="faixa-link-campo" type="text" readonly spellcheck="false" autocomplete="off"></p>
+          </div>
           <p id="faixa-fora" class="faixa-fora" role="status" hidden><i class="led fora" aria-hidden="true"></i><span><strong id="faixa-fora-txt"></strong><span class="faixa-fora-mais"> · quem está sem tarefa foi para casa</span></span><a id="faixa-fora-mudar" href="#personalizar">Mudar o horário</a></p>
           <div id="palco" class="palco">
             <canvas id="tela" tabindex="0" aria-label="Mapa do escritório. Arraste para mover, use a roda ou a pinça para dar zoom e toque num agente para ver o que ele está fazendo."></canvas>
@@ -177,7 +185,7 @@
         </div>
       </section>
       <section id="v-personalizar" class="visao" hidden>
-        <div class="cabeca"><h1>Personalizar</h1><p class="resumo">A marca do seu escritório. Vale para todo mundo que abre este endereço.</p></div>
+        <div class="cabeca cabeca-pers"><div><h1>Personalizar</h1><p class="resumo">A marca, o clima, as datas e os times do seu escritório. Vale para todo mundo que abre este endereço.</p></div><button id="abrir-assistente" class="botao secundario" type="button">Assistente de instalação</button></div>
         <div class="personalizar">
           <form id="form-marca" class="cartao form-marca">
             <fieldset>
@@ -238,6 +246,92 @@
             <div class="previa-corpo"></div>
           </aside>
         </div>
+        <div class="ajustes">
+          <section id="a-clima" class="cartao ajuste" aria-labelledby="t-clima">
+            <h2 id="t-clima">Clima</h2>
+            <p class="ajuda">A chuva, a neve e o céu lá fora seguem o tempo desta cidade, atualizado a cada 15 minutos. Muda sem recarregar.</p>
+            <dl class="clima-agora">
+              <div><dt>Cidade</dt><dd id="clima-cidade">—</dd></div>
+              <div><dt>Agora</dt><dd id="clima-tempo">—</dd></div>
+            </dl>
+            <p id="clima-origem" class="origem"></p>
+            <div class="clima-busca">
+              <label for="clima-q">Buscar outra cidade</label>
+              <input id="clima-q" type="search" maxlength="60" autocomplete="off" spellcheck="false" placeholder="Ex.: Belo Horizonte" aria-describedby="clima-fonte" aria-controls="clima-lista">
+              <p id="clima-fonte" class="ajuda">Busca e tempo vêm do <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a> (uso não comercial), pelo servidor do escritório. A cidade não vai para o agentes.chat.</p>
+            </div>
+            <p id="clima-status" class="ajuda" role="status"></p>
+            <ul id="clima-lista" class="clima-lista" aria-label="Cidades encontradas"></ul>
+            <div class="acoes"><button id="clima-sem" class="botao fantasma" type="button">Sem clima</button><button id="clima-arquivo" class="link-botao" type="button" hidden>Voltar ao times.json</button></div>
+            <p id="clima-aviso" class="aviso-form" role="status"></p>
+          </section>
+          <section id="a-datas" class="cartao ajuste" aria-labelledby="t-datas">
+            <h2 id="t-datas">Datas comemorativas</h2>
+            <p class="ajuda">Na época de cada data o escritório ganha enfeites, chapéus e falas. Uma data sua vale mais que a do calendário no mesmo dia.</p>
+            <h3 class="ajuste-sub">Suas datas</h3>
+            <p id="datas-vazio" class="ajuda">Nenhuma data sua ainda. Que tal o aniversário da empresa?</p>
+            <ul id="datas-proprias" class="datas-lista"></ul>
+            <button id="datas-nova" class="botao secundario" type="button" aria-expanded="false" aria-controls="form-data">Nova data</button>
+            <form id="form-data" class="form-data" hidden novalidate aria-labelledby="t-form-data">
+              <h4 id="t-form-data">Nova data</h4>
+              <label for="d-nome">Nome</label>
+              <input id="d-nome" maxlength="40" required autocomplete="off" aria-describedby="d-nome-ajuda">
+              <p id="d-nome-ajuda" class="ajuda">Até 40 caracteres. Aparece na faixa do mapa.</p>
+              <fieldset class="d-repete">
+                <legend>Repete</legend>
+                <label class="marcar"><input type="radio" name="d-repete" value="anual" checked><span>Todo ano</span></label>
+                <label class="marcar"><input type="radio" name="d-repete" value="unica"><span>Uma vez só</span></label>
+              </fieldset>
+              <div class="d-linha">
+                <div><label for="d-data">Começa em</label><input id="d-data" type="date" min="2000-01-01" max="2100-12-31" required></div>
+                <div><label for="d-dias">Dias</label><input id="d-dias" type="number" min="1" max="14" step="1" value="1" required inputmode="numeric"></div>
+              </div>
+              <label for="d-tema">Tema</label>
+              <select id="d-tema" aria-describedby="d-tema-desc"></select>
+              <div class="d-tema-previa">
+                <canvas id="d-chapeu" width="66" height="78" aria-hidden="true"></canvas>
+                <div><span id="d-cores" class="d-cores" aria-hidden="true"></span><p id="d-tema-desc" class="ajuda"></p></div>
+              </div>
+              <fieldset class="d-falas">
+                <legend>Falas (opcional)</legend>
+                <p id="d-falas-ajuda" class="ajuda">Até 3, de até 80 caracteres. Sem falas suas, valem as do tema.</p>
+                <label class="oculto" for="d-fala-0">Fala 1</label><input id="d-fala-0" maxlength="80" autocomplete="off" aria-describedby="d-falas-ajuda">
+                <label class="oculto" for="d-fala-1">Fala 2</label><input id="d-fala-1" maxlength="80" autocomplete="off" aria-describedby="d-falas-ajuda">
+                <label class="oculto" for="d-fala-2">Fala 3</label><input id="d-fala-2" maxlength="80" autocomplete="off" aria-describedby="d-falas-ajuda">
+              </fieldset>
+              <p id="d-erro" class="aviso-form ruim" role="alert"></p>
+              <div class="acoes"><button id="d-pronto" class="botao" type="submit">Pôr na lista</button><button id="d-cancelar" class="botao fantasma" type="button">Cancelar</button></div>
+            </form>
+            <h3 class="ajuste-sub">Do calendário</h3>
+            <p class="ajuda">Desmarque as que não combinam com a sua empresa.</p>
+            <ul id="datas-embutidas" class="datas-lista embutidas"></ul>
+            <p id="datas-aviso" class="aviso-form" role="status"></p>
+            <div class="acoes"><button id="datas-salvar" class="botao" type="button">Salvar datas</button><button id="datas-desfazer" class="botao fantasma" type="button">Desfazer</button></div>
+          </section>
+          <section id="a-equipe" class="cartao ajuste" aria-labelledby="t-equipe">
+            <h2 id="t-equipe">Times e aparência</h2>
+            <p class="ajuda">Cada time ganha uma sala no prédio, com a cor e o ícone da placa. Quem não está em nenhum time senta na sala “Novos”. Tipo de sala: “Mesas” para um time comum, “Ops” com sala de servidores e telas de monitoramento, “Gabinete” sem divisórias e com tapete. A pintura e os móveis de cada sala são do Modo construção.</p>
+            <p id="equipe-origem" class="origem"></p>
+            <h3 class="ajuste-sub">Times</h3>
+            <p id="equipe-sem-times" class="ajuda">Nenhum time ainda: todo mundo fica na sala “Novos”.</p>
+            <ol id="equipe-times" class="times-lista"></ol>
+            <button id="equipe-novo" class="botao secundario" type="button">Novo time</button>
+            <h3 class="ajuste-sub">Agentes</h3>
+            <p id="equipe-agentes-ajuda" class="ajuda">Escolha o time de cada agente. Em “Aparência”, a cor, os olhos e o acessório do boneco; na automática, cada um ganha uma aparência própria.</p>
+            <ul id="equipe-agentes" class="agentes-lista" aria-describedby="equipe-agentes-ajuda"></ul>
+            <p id="equipe-aviso" class="aviso-form" role="status"></p>
+            <div class="acoes"><button id="equipe-salvar" class="botao" type="button">Salvar times</button><button id="equipe-desfazer" class="botao fantasma" type="button">Desfazer</button><button id="equipe-arquivo" class="link-botao" type="button" hidden>Voltar ao times.json</button></div>
+          </section>
+          <section id="a-acesso" class="cartao ajuste" aria-labelledby="t-acesso">
+            <h2 id="t-acesso">Acesso</h2>
+            <p id="st-ajuda" class="ajuda">Ficou um aparelho com o escritório aberto, ou a senha pode ter vazado? Encerre todas as sessões de uma vez, inclusive esta. Depois é só entrar de novo com o usuário e a senha.</p>
+            <form id="form-sair-todos" class="sair-todos" novalidate>
+              <label for="st-senha">Sua senha</label>
+              <div class="st-linha"><input id="st-senha" type="password" autocomplete="current-password" maxlength="256" required aria-describedby="st-ajuda st-aviso"><button id="st-sair" class="botao secundario" type="submit">Sair de todos os aparelhos</button></div>
+              <p id="st-aviso" class="aviso-form" role="status"></p>
+            </form>
+          </section>
+        </div>
       </section>
       <section id="v-ajuda" class="visao" hidden>
         <div class="cabeca"><h1>Ajuda</h1><p class="resumo">Perguntas frequentes e atalhos.</p></div>
@@ -280,10 +374,10 @@
           <h2 class="faq-grupo">Segurança e instalação</h2>
           <div class="cartao faq-lista">
             <details><summary>Isso gasta tokens ou usa IA?</summary><p>Não. O servidor só lê o agentes.chat a cada 30 segundos pelo conector de apps externos (MCP), com permissão só de leitura (escrita só no modo <code>"responder"</code>, se ligado). Tudo o que você vê (animações, conversas, sons) é desenhado no seu navegador, sem modelo de IA.</p></details>
-            <details><summary>Quem consegue abrir o escritório?</summary><p>Só aparelhos da sua rede Tailscale, e mesmo assim com usuário e senha. No celular, basta ligar o app da Tailscale e abrir o endereço.</p></details>
-            <details><summary>Esqueci a senha. E agora?</summary><p>No servidor, apague o usuário e as sessões e reinicie o serviço:</p><p class="comandos"><code class="cmd">sudo rm /var/lib/escritorio/usuarios.json /var/lib/escritorio/sessoes.json</code> <code class="cmd">sudo systemctl restart escritorio</code></p><p>Depois leia o novo código e crie o usuário de novo:</p><p class="comandos"><code class="cmd">sudo cat /var/lib/escritorio/codigo-primeiro-acesso.txt</code></p></details>
-            <details><summary>Como conecto (ou reconecto) ao agentes.chat?</summary><p>Use <a href="/oauth/conectar">Conectar ao agentes.chat</a> (ou abra <code>/oauth/conectar</code>) e autorize. Com as conversas desligadas ou em <code>"ler"</code>, o escritório só pede leitura; se o agentes.chat conceder mais que isso, a conexão é recusada. Com <code>"responder"</code>, ele pede também escrita (“Lê e manda tarefas”, na tela de autorização), para mandar as mensagens que você escrever na página Conversas; permissão de administrar é recusada sempre. Trocar de modo pede uma conexão nova. Os detalhes estão na seção Segurança do README.</p></details>
-            <details><summary>O que fica guardado no servidor?</summary><p>Em <code>/var/lib/escritorio</code> (só o serviço lê): o token do agentes.chat, o hash da sua senha, as sessões (só o hash), a marca e o logo. Nenhuma conversa é gravada; o estado dos agentes fica só na memória.</p></details>
+            <details><summary>Quem consegue abrir o escritório?</summary><p>Quem chega ao endereço e tem usuário e senha. Instalado com o <code>instalar.sh</code>, o escritório fica só na sua rede Tailscale: no celular, basta ligar o app da Tailscale e abrir o endereço.</p><p>Num endereço público (Docker ou Coolify), qualquer pessoa vê a tela de entrar, com o nome e o logo, e a senha passa a ser a única barreira. Use uma senha longa (14 caracteres ou mais, ou uma frase) e crie o usuário logo depois de instalar. Se puder, ponha uma camada na frente, como Cloudflare Access, Tailscale ou uma lista de IPs no proxy. Os detalhes estão na seção Segurança do README.</p></details>
+            <details><summary>Esqueci a senha. E agora?</summary><p>Apague o usuário e as sessões, reinicie o serviço e leia o novo código de primeiro acesso para criar o usuário de novo.</p><p>Instalado com o <code>instalar.sh</code>:</p><p class="comandos"><code class="cmd">sudo rm /var/lib/escritorio/usuarios.json /var/lib/escritorio/sessoes.json</code> <code class="cmd">sudo systemctl restart escritorio</code> <code class="cmd">sudo cat /var/lib/escritorio/codigo-primeiro-acesso.txt</code></p><p>No Docker, troque <code>&lt;container&gt;</code> pelo nome que aparece em <code>docker ps</code> (no Coolify, rode no Terminal do serviço só o que vem depois de <code>&lt;container&gt;</code> e reinicie pelo painel):</p><p class="comandos"><code class="cmd">docker exec &lt;container&gt; rm /dados/usuarios.json /dados/sessoes.json</code> <code class="cmd">docker restart &lt;container&gt;</code> <code class="cmd">docker exec -it &lt;container&gt; python3 -I -B escritorio.py codigo</code></p></details>
+            <details><summary>Como conecto (ou reconecto) ao agentes.chat?</summary><p>Enquanto o escritório não estiver conectado, a faixa acima do mapa traz o botão “Conectar ao agentes.chat”. Ele também está aqui: <a href="/oauth/conectar">Conectar ao agentes.chat</a>. Autorize com uma conta da organização do escritório; na volta, a primeira leitura sai na hora. “Copiar o link” serve para abrir a conexão em outra aba ou navegador.</p><p>Se a faixa disser que o agentes.chat recusou a leitura (HTTP 401, 402 ou 403), confira se a conta conectada é da organização e se o plano permite apps externos, e use “Reconectar”. O endereço que você abre precisa ser o mesmo de <code>ESCRITORIO_BASE</code>, porque é para lá que o agentes.chat devolve você; se não for, a faixa avisa.</p><p>Com as conversas desligadas ou em <code>"ler"</code>, o escritório só pede leitura; se o agentes.chat conceder mais que isso, a conexão é recusada. Com <code>"responder"</code>, ele pede também escrita (“Lê e manda tarefas”, na tela de autorização), para mandar as mensagens que você escrever na página Conversas; permissão de administrar é recusada sempre. Trocar de modo pede uma conexão nova. Os detalhes estão na seção Segurança do README.</p></details>
+            <details><summary>O que fica guardado no servidor?</summary><p>Na pasta de dados, que só o serviço lê (<code>/var/lib/escritorio</code> com o <code>instalar.sh</code>, o volume <code>/dados</code> no Docker): o token do agentes.chat, o hash da sua senha, as sessões (só o hash), a marca, o logo e a planta. Nenhuma conversa é gravada; o estado dos agentes fica só na memória. No Docker, faça backup cifrado do volume e nunca o deixe público.</p></details>
             <details><summary>É open source? Posso usar na minha empresa?</summary><p>Sim. Cada empresa instala o seu, com a própria marca, times, clima e sons. A arte dos móveis foi gerada para o projeto, os pisos, paredes e avatares são desenhados em código e as fontes são de licença livre. Veja o README para instalar e personalizar.</p></details>
           </div>
         </div>
@@ -326,11 +420,33 @@
       <footer class="parceria"><p>Uma parceria <a href="https://agentes.chat" target="_blank" rel="noopener noreferrer" aria-label="agentes.chat (abre em nova aba)">agentes.chat</a> + <a href="https://devmaniacs.com.br" target="_blank" rel="noopener noreferrer" aria-label="Dev Maniac's (abre em nova aba)">Dev Maniac's</a> <span id="fonte-par" class="par-fonte" hidden>· <a id="fonte" target="_blank" rel="noopener" aria-label="Código-fonte, licença AGPL-3.0 (abre em nova aba)">Código-fonte (AGPL-3.0)</a></span></p></footer>
     </main>
   </div>
-  <dialog id="boas-vindas" class="boas-vindas" aria-labelledby="bv-titulo" aria-describedby="bv-texto">
-    <form id="form-bv" class="form-bv">
+  <!-- assistente de instalação (assistente.js): uma vez por sessão enquanto o nome é o de exemplo ou não há conexão;
+       reabre pelo Personalizar. Cada passo salva na hora, pela própria rota, e todos têm "Pular" -->
+  <dialog id="assistente" class="boas-vindas assistente" aria-labelledby="as-titulo">
+    <div class="form-bv as-cabeca">
       <img src="logo.png" alt="" width="52" height="52" class="bv-logo">
-      <h2 id="bv-titulo">Como se chama a sua empresa?</h2>
-      <p id="bv-texto" class="ajuda">O nome, a cor e o logo aparecem no menu, no mapa e na tela de entrada. Tudo muda depois em Personalizar.</p>
+      <p id="as-progresso" class="as-progresso"></p>
+      <h2 id="as-titulo" tabindex="-1"></h2>
+    </div>
+    <section class="form-bv as-passo" data-passo="conectar" hidden>
+      <p class="ajuda">Conecte ao agentes.chat para os seus agentes aparecerem no mapa. Você autoriza na tela do agentes.chat e volta para cá, neste passo.</p>
+      <p id="as-conexao" class="as-status" role="status"></p>
+      <p id="as-base" class="as-alerta" hidden></p>
+      <div class="acoes"><a id="as-conectar" class="botao" href="/oauth/conectar">Conectar ao agentes.chat</a><button class="botao fantasma" type="button" data-seguir>Pular</button></div>
+    </section>
+    <section class="form-bv as-passo" data-passo="cidade" hidden>
+      <p class="ajuda">O céu, a chuva e a noite lá fora seguem o tempo da cidade do escritório.</p>
+      <p id="as-cidade" class="as-status" role="status"></p>
+      <label for="as-q">Buscar cidade</label>
+      <input id="as-q" class="as-campo" type="search" maxlength="60" autocomplete="off" spellcheck="false" placeholder="Ex.: Belo Horizonte" aria-describedby="as-q-fonte" aria-controls="as-q-lista">
+      <p id="as-q-fonte" class="ajuda">Dados do Open-Meteo, pelo servidor do escritório. A cidade não vai para o agentes.chat.</p>
+      <p id="as-q-status" class="ajuda" role="status"></p>
+      <ul id="as-q-lista" class="clima-lista" aria-label="Cidades encontradas"></ul>
+      <p id="as-cidade-aviso" class="aviso-form" role="status"></p>
+      <div class="acoes"><button class="botao fantasma" type="button" data-seguir>Pular</button></div>
+    </section>
+    <form id="form-bv" class="form-bv as-passo" data-passo="marca" hidden>
+      <p id="bv-texto" class="ajuda">O nome, a cor e o logo aparecem no menu, no mapa e na tela de entrada.</p>
       <label for="bv-empresa">Nome da empresa</label>
       <input id="bv-empresa" name="empresa" maxlength="40" required autocomplete="organization">
       <fieldset><legend>Cor de destaque</legend><div id="bv-paleta" class="paleta"></div></fieldset>
@@ -338,8 +454,17 @@
       <div class="bv-logo-linha"><label class="botao secundario" for="bv-logo">Escolher imagem</label><input id="bv-logo" class="arquivo" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="bv-logo-ajuda bv-logo-nome"><span id="bv-logo-nome" class="suave">Nenhuma imagem escolhida</span></div>
       <p id="bv-logo-ajuda" class="ajuda">PNG, JPEG ou WEBP, até 600 KB. Sem logo, fica o padrão.</p>
       <p id="bv-aviso" class="aviso-form" role="status"></p>
-      <div class="acoes"><button id="bv-salvar" class="botao" type="submit">Salvar</button><button id="bv-pular" class="botao fantasma" type="button">Pular</button></div>
+      <div class="acoes"><button id="bv-salvar" class="botao" type="submit">Salvar e seguir</button><button class="botao fantasma" type="button" data-seguir>Pular</button></div>
     </form>
+    <section class="form-bv as-passo" data-passo="times" hidden>
+      <p id="as-times-texto" class="ajuda"></p>
+      <div class="acoes"><button id="as-montar" class="botao" type="button">Montar os times</button><button class="botao fantasma" type="button" data-seguir>Usar o automático</button></div>
+    </section>
+    <section class="form-bv as-passo" data-passo="pronto" hidden>
+      <p class="ajuda">Tudo isto muda depois em Personalizar, onde também ficam as datas comemorativas e o assistente.</p>
+      <p id="as-construcao" class="ajuda" hidden>No computador, o <a href="construir.html">Modo construção</a> pinta as salas e arruma os móveis.</p>
+      <div class="acoes"><button id="as-fim" class="botao" type="button">Ir para o escritório</button></div>
+    </section>
   </dialog>
   <!-- senha do modo resposta (fase R): confirmada uma vez, abre o modo no servidor; o campo é limpo logo depois do envio -->
   <dialog id="dlg-senha" class="boas-vindas dlg-senha" aria-labelledby="senha-titulo" aria-describedby="senha-texto">
@@ -391,5 +516,7 @@
   <script src="brincar.js?v=96"></script>
   <script src="app.js?v=96"></script>
   <script src="personalizar.js?v=96"></script>
+  <script src="ajustes.js?v=96"></script>
+  <script src="assistente.js?v=96"></script>
 </body>
 </html>

@@ -39,6 +39,7 @@ async function iniciar() {
   // (mesmo se o salvar do nome e da cor falhar depois), sem esperar recarregar
   let logoAtual = config.logo;
   Object.defineProperty(config, "logo", { configurable: true, enumerable: true, get: () => logoAtual, set: v => { logoAtual = v; trocarLogo(v); } });
+  Festas.configurar(config.festas, config.cor);   // datas próprias e festas desligadas (Personalizar)
   festa = Festas.ativa();
   aplicarMarca();
   paginaConversas();
@@ -46,9 +47,9 @@ async function iniciar() {
   medirFaixa();
   if (Brincar.demo) Ceu.acelerar(8, 26);   // um dia de expediente em uns 6 minutos
   try { await document.fonts.load(Mapa.PLACA_FONTE); } catch (e) { /* sem a fonte, a placa usa a reserva monoespaçada */ }
-  if (!$("v-personalizar").hidden) Personalizar.abrir(config);   // abriu direto em #personalizar
-  else Personalizar.boasVindas(config);                             // nome de exemplo: pergunta o da empresa (uma vez por sessão)
+  if (!$("v-personalizar").hidden) { Personalizar.abrir(config); Ajustes.abrir(config); }   // abriu direto em #personalizar
   await buscar();
+  Assistente.talvez(config, () => estado);   // nome de exemplo ou sem conexão: o assistente (uma vez por sessão, e na volta do OAuth)
   setInterval(buscar, 10000);
   requestAnimationFrame(quadro);
 }
@@ -1801,26 +1802,66 @@ function desenharEventos() {
 $("agora-tudo").addEventListener("click", () => { eventosTodos = !eventosTodos; $("eventos").dataset.chave = ""; desenharEventos(); });
 
 // ---------- conexão: ao vivo, aviso do agentes.chat e sem conexão --------------------
+// estado.conexao (escritorio.py): o que o pé da lateral diz, o texto da faixa e o que ela oferece.
+// "recusada" e "pausa" mostram o texto do servidor (nosso, em pt-BR; o do agentes.chat fica só no log)
+const CONEXAO = {
+  carregando:  { rotulo: "Conectando…" },
+  conectado:   { rotulo: "Conectado" },
+  sem_conexao: { rotulo: "Não conectado", texto: "O escritório ainda não está conectado ao agentes.chat.", conectar: "Conectar ao agentes.chat" },
+  recusada:    { rotulo: "Conexão recusada", texto: "O agentes.chat recusou a leitura: confira se a conta conectada é da organização e se o plano permite apps externos.", doServidor: true, conectar: "Reconectar" },
+  pausa:       { rotulo: "Em pausa", texto: "O agentes.chat pediu uma pausa. Mostrando a última leitura.", doServidor: true, tentar: true },
+  falha:       { rotulo: "agentes.chat sem resposta", texto: "O agentes.chat não respondeu agora. Mostrando a última leitura.", tentar: true },
+};
+const capitular = t => t.charAt(0).toUpperCase() + t.slice(1).replace(/\.?$/, ".");
+// o link que o "Copiar o link" leva: o endereço configurado (ESCRITORIO_BASE), para onde o agentes.chat devolve
+const linkConectar = () => (typeof config?.base === "string" && config.base ? config.base : location.origin) + "/oauth/conectar";
+// aberto por um endereço diferente da BASE: o retorno do OAuth cai na BASE, não aqui
+function enderecoTrocado() {
+  if (typeof config?.base !== "string" || !config.base) return "";
+  let origem; try { origem = new URL(config.base).origin; } catch (e) { return ""; }
+  return origem === location.origin ? "" : `Este escritório está configurado para ${config.base}, mas foi aberto por ${location.origin}. O agentes.chat vai devolver você para ${config.base}: ajuste ESCRITORIO_BASE no servidor.`;
+}
 let falhou = false;
 function mostrarConexao() {
   const at = $("atualizado"), faixa = $("faixa-erro"), aoVivo = $("ao-vivo");
   if (falhou) {
     textoSe(at, "Sem conexão com o servidor"); at.classList.add("erro"); aoVivo.classList.add("erro");
     estadoUsuario("Sem conexão", true);
-    faixa.hidden = false; faixa.classList.remove("aviso-ambar"); textoSe($("faixa-erro-txt"), predio ? "Sem conexão. Mostrando a última leitura e tentando de novo a cada 10 s." : "Não consegui carregar o escritório. Tentando de novo a cada 10 s.");
+    faixa.hidden = false; faixa.classList.remove("aviso-ambar"); $("faixa-base").hidden = true;
+    textoSe($("faixa-erro-txt"), predio ? "Sem conexão. Mostrando a última leitura e tentando de novo a cada 10 s." : "Não consegui carregar o escritório. Tentando de novo a cada 10 s.");
+    acoesDaFaixa({ tentar: true });
     return;
   }
   if (!estado) return;
   const erro = typeof estado.erro === "string" ? estado.erro : "";
-  const semConexao = /^o escritório ainda não está conectado/i.test(erro);   // sem OAuth (escritorio.py, PermissaoNegada)
-  const pausa = /^o agentes\.chat pediu uma pausa/i.test(erro);              // 429 do agentes.chat (escritorio.py, PAUSA_429)
-  const doServidor = semConexao || pausa ? erro.charAt(0).toUpperCase() + erro.slice(1).replace(/\.?$/, ".") : "";
-  at.classList.toggle("erro", !!estado.erro); aoVivo.classList.toggle("erro", !!estado.erro);
-  textoSe(at, doServidor || (estado.erro ? "O agentes.chat não respondeu na última leitura" : `Ao vivo · atualizado ${tempoDesde(estado.atualizado)}`));   // role=status: só anuncia quando muda
-  estadoUsuario(semConexao ? "Não conectado" : pausa ? "Em pausa" : estado.erro ? "agentes.chat sem resposta" : "Conectado", !!estado.erro);
-  faixa.hidden = !estado.erro; faixa.classList.add("aviso-ambar");
-  if (estado.erro) textoSe($("faixa-erro-txt"), doServidor || "O agentes.chat não respondeu agora. Mostrando a última leitura.");   // textContent: o texto do servidor nunca vira HTML
+  const chave = Object.hasOwn(CONEXAO, estado.conexao) ? estado.conexao : erro ? "falha" : "conectado";   // sem o campo: demonstração
+  const c = CONEXAO[chave], ruim = !!c.texto, troca = enderecoTrocado();
+  const texto = c.texto ? (c.doServidor && erro ? capitular(erro) : c.texto) : "";   // textContent: o texto do servidor nunca vira HTML
+  at.classList.toggle("erro", ruim); aoVivo.classList.toggle("erro", ruim);
+  textoSe(at, texto || (chave === "carregando" ? "Conectando ao agentes.chat…" : `Ao vivo · atualizado ${tempoDesde(estado.atualizado)}`));   // role=status: só anuncia quando muda
+  estadoUsuario(c.rotulo, ruim);
+  faixa.hidden = !ruim && !troca; faixa.classList.add("aviso-ambar");
+  $("faixa-base").hidden = !troca; textoSe($("faixa-base"), troca);   // o endereço trocado vem antes de tudo
+  textoSe($("faixa-erro-txt"), texto);
+  acoesDaFaixa(c);
 }
+// sem conexão ou recusada: "Conectar" (na mesma aba) e "Copiar o link" no lugar do "Tentar agora"
+function acoesDaFaixa(c) {
+  const conectar = $("conectar");
+  conectar.hidden = $("copiar-link").hidden = !c.conectar;
+  if (c.conectar) textoSe(conectar, c.conectar);
+  else $("faixa-link").hidden = true;
+  $("tentar").hidden = !c.tentar;
+}
+$("copiar-link").addEventListener("click", async () => {
+  const bt = $("copiar-link"), link = linkConectar();
+  let ok = !!navigator.clipboard;   // fora de https (ou de 127.0.0.1) o navegador não oferece a área de transferência
+  if (ok) try { await navigator.clipboard.writeText(link); } catch (e) { ok = false; }
+  if (ok) { bt.textContent = "Copiado"; setTimeout(() => { bt.textContent = "Copiar o link"; }, 1600); return; }
+  const campo = $("faixa-link-campo"); campo.value = link; $("faixa-link").hidden = false;   // sem cópia: o endereço fica à vista, já selecionado
+  campo.focus(); campo.select();
+});
+$("faixa-link-campo").addEventListener("focus", ev => ev.target.select());
 // pé da lateral: quem entrou e o estado da conexão
 function estadoUsuario(texto, ruim) {
   const e = $("usuario-estado"); if (e.textContent !== texto) e.textContent = texto;
@@ -2073,7 +2114,7 @@ function rota() {
   // na demonstração o Personalizar não existe: ele grava a marca no servidor de verdade
   const valida = TELAS.includes(r) && !(r === "personalizar" && Brincar.demo) ? r : "escritorio";
   for (const v of TELAS) $(`v-${v}`).hidden = v !== valida;
-  if (valida === "personalizar" && window.Personalizar) Personalizar.abrir(config);
+  if (valida === "personalizar" && window.Personalizar) { Personalizar.abrir(config); if (window.Ajustes) Ajustes.abrir(config); }
   if (valida === "conversas") paginaConversas();
   document.querySelectorAll("[data-rota]").forEach(a => { if (a.dataset.rota === valida) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
   if (valida !== "escritorio") telaCheia(false);

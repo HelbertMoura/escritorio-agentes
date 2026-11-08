@@ -271,11 +271,21 @@ h2 { font-size: 15px; margin: 0; font-weight: 600; }
 .abrir-cheia, .so-celular { display: none; }
 .dica-mapa { position: absolute; right: 14px; bottom: 14px; z-index: 3; height: 28px; padding: 0 11px; border-radius: 999px; background: rgba(15, 15, 14, .82); border: 1px solid rgba(255, 255, 255, .12);
   display: inline-flex; align-items: center; font-size: 12.5px; font-weight: 600; color: var(--texto2); pointer-events: none; }
-.faixa-erro { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 8px 6px 14px; min-height: 52px;
+.faixa-erro { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 6px 8px 6px 14px; min-height: 52px;
   background: #3b1212; border-bottom: 1px solid #7f1d1d; color: var(--erro-texto); font-size: 14px; font-weight: 600; animation: surgir var(--medio); }
 .faixa-erro.aviso-ambar { background: var(--ambar-fundo); border-color: color-mix(in srgb, var(--ambar) 45%, var(--fundo)); color: var(--ambar-texto); }
-.faixa-erro button { min-height: 40px; padding: 0 12px; border-radius: 8px; border: 0; background: #fca5a5; color: #3b1212; font-weight: 800; flex: none; }
-.faixa-erro.aviso-ambar button { background: var(--ambar); color: var(--ambar-sobre); }
+.faixa-erro-txt { flex: 1 1 260px; min-width: 0; margin: 0; }
+.faixa-erro-txt strong { display: block; margin-bottom: 2px; font-weight: 700; }   /* endereço trocado: antes do resto */
+.faixa-acoes { display: flex; flex-wrap: wrap; gap: 8px; flex: none; }
+.faixa-erro button, .faixa-erro .botao { display: inline-flex; align-items: center; min-height: 40px; padding: 0 12px; border-radius: 8px; border: 0; background: #fca5a5; color: #3b1212; font-weight: 800; font-size: 14px; flex: none; text-decoration: none; }
+.faixa-erro.aviso-ambar button, .faixa-erro.aviso-ambar .botao { background: var(--ambar); color: var(--ambar-sobre); box-shadow: none; }
+.faixa-erro.aviso-ambar button.secundario { background: transparent; color: var(--ambar-texto); border: 1px solid color-mix(in srgb, var(--ambar) 60%, transparent); font-weight: 700; }
+.faixa-erro.aviso-ambar button.secundario:hover { background: color-mix(in srgb, var(--ambar) 14%, transparent); }
+.faixa-erro button:focus-visible, .faixa-erro .botao:focus-visible, .faixa-link input:focus-visible { outline: 2px solid var(--ambar-texto); outline-offset: 2px; }
+@media (pointer: coarse) { .faixa-erro button, .faixa-erro .botao { min-height: 44px; } }
+.faixa-link { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 4px; font-weight: 600; }
+.faixa-link input { flex: 1 1 240px; min-width: 0; min-height: 40px; padding: 0 10px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--ambar) 60%, transparent); background: rgba(15, 15, 14, .6); color: var(--texto); font: 14px ui-monospace, Consolas, monospace; }
+@media (max-width: 520px) { .faixa-acoes { flex: 1 1 100%; } .faixa-acoes > * { flex: 1 1 auto; justify-content: center; } }
 /* fora do expediente: neutra e fina, acima do mapa (nunca por cima dele); o âmbar fica só para "esperando você" */
 .faixa-fora { margin: 0; display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 4px 8px 4px 14px; background: var(--cartao2); border-bottom: 1px solid var(--borda);
   color: var(--suave); font-size: 13px; }
@@ -500,6 +510,96 @@ button.linha-resolvido:hover { background: rgba(255, 255, 255, .04); }
 .aviso-form.ok { color: var(--verde-texto); } .aviso-form.ruim { color: var(--erro-texto); }
 .acoes { display: flex; gap: 8px; flex-wrap: wrap; }
 .form-marca > .acoes { margin-top: 6px; }
+/* Personalizar > Clima e Datas comemorativas (ajustes.js): cartões abaixo da marca, na largura dela + prévia */
+.ajustes { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; max-width: 996px; }
+.ajuste { padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 10px; }
+.ajuste h2 { margin: 0; font-size: 18px; }
+.ajuste-sub { margin: 10px 0 0; font: 650 12px "Source Sans 3", system-ui, sans-serif; color: var(--suave); text-transform: uppercase; letter-spacing: .5px; }
+.ajuste label { font-size: 14px; font-weight: 600; }
+.ajuste input:not([type=checkbox]):not([type=radio]), .ajuste select { min-height: 44px; border-radius: var(--r-item); border: 1px solid var(--borda-forte); background: var(--campo); color: var(--texto); padding: 0 12px; font-size: 15px; min-width: 0; }
+.ajuste input:focus-visible, .ajuste select:focus-visible { outline: none; border-color: color-mix(in srgb, var(--destaque) 60%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--destaque) 35%, transparent); }
+.ajuste .aviso-form { margin: 0; }
+.ajuste .acoes .botao { min-height: 44px; }
+.origem { margin: 0; font-size: 13px; color: var(--texto2); }
+.origem:empty { display: none; }
+.clima-agora { margin: 0; display: flex; flex-wrap: wrap; gap: 8px 28px; }
+.clima-agora dt { font-size: 12px; color: var(--suave); }
+.clima-agora dd { margin: 0; font-size: 15px; font-weight: 650; }
+.clima-busca { display: flex; flex-direction: column; gap: 6px; max-width: 520px; }
+.clima-lista, .datas-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.clima-lista:empty { display: none; }
+.clima-lista li, .datas-lista li { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--borda); min-width: 0; }
+.clima-lista li:first-child, .datas-lista li:first-child { border-top: 0; }
+.clima-res, .datas-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.clima-res .suave, .datas-txt .suave { font-size: 13px; }
+.clima-lista .botao { flex: none; min-height: 44px; }
+.datas-acoes { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 8px; flex: none; }
+.datas-acoes .botao { min-height: 40px; padding: 0 10px; }
+.datas-lista.embutidas li { padding: 2px 0; flex-wrap: wrap; }   /* em 320 px o "Ver no mapa" desce, em vez de passar da borda */
+.datas-lista.embutidas .link-suave { margin-left: auto; }
+.datas-lista.embutidas .marcar { flex: 1 1 auto; min-width: 0; align-items: center; padding-top: 0; }
+.datas-lista .link-suave { flex: none; }
+.d-cores { display: inline-flex; flex: none; gap: 2px; }
+.d-cores i { width: 10px; height: 22px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .25); }
+.datas-lista .d-cores { width: 60px; }   /* até 5 cores: os nomes ficam alinhados */
+.ajuste .aviso-form:empty, #clima-status:empty { display: none; }
+.ajuste .acoes:not(:has(> :not([hidden]))) { display: none; }
+#datas-nova { align-self: flex-start; min-height: 44px; }
+.form-data { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 6px; padding: 16px; border: 1px solid var(--borda-forte); border-radius: var(--r-item); background: var(--cartao2); max-width: 560px; }
+.form-data h4 { margin: 0 0 4px; font-size: 15px; }
+.form-data fieldset { border: 0; margin: 4px 0 0; padding: 0; min-width: 0; display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.form-data legend { font-size: 14px; font-weight: 600; padding: 0; margin-bottom: 4px; }
+.form-data .d-falas { flex-direction: column; flex-wrap: nowrap; gap: 6px; }
+.d-linha { display: flex; flex-wrap: wrap; gap: 12px; }
+.d-linha > div { display: flex; flex-direction: column; gap: 6px; }
+.d-linha #d-dias { width: 96px; }
+.d-tema-previa { display: flex; align-items: center; gap: 14px; }
+.d-tema-previa canvas { flex: none; width: 66px; height: 78px; image-rendering: pixelated; background: var(--campo); border-radius: 8px; }
+.d-tema-previa .ajuda { margin-top: 6px; }
+.ajuste .campo { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ajuste .campo label { font-size: 12.5px; color: var(--texto2); }
+.times-lista, .agentes-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.time-linha { display: grid; grid-template-columns: 22px minmax(140px, 1.6fr) minmax(130px, 1fr) 64px minmax(120px, 1fr) 78px auto; align-items: end; gap: 10px; padding: 10px 0; border-top: 1px solid var(--borda); }
+.time-linha:first-child { border-top: 0; }
+.time-n { align-self: center; font: 700 13px "Source Sans 3", system-ui, sans-serif; color: var(--suave); text-align: center; }
+.time-qtd { align-self: center; font-size: 13px; white-space: nowrap; }
+.time-linha input[type=color] { width: 64px; padding: 4px; cursor: pointer; }
+.time-linha .botao { min-height: 44px; }
+#equipe-novo { align-self: flex-start; min-height: 44px; }
+.agente-linha { display: grid; grid-template-columns: 44px minmax(0, 1fr) minmax(150px, 220px); grid-template-areas: "fig txt time" "fig ap ap"; align-items: center; column-gap: 12px; padding: 10px 0; border-top: 1px solid var(--borda); }
+.agente-linha:first-child { border-top: 0; }
+.agente-linha .boneco { grid-area: fig; align-self: start; width: 44px; height: 44px; image-rendering: pixelated; }
+.agente-txt { grid-area: txt; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; overflow-wrap: anywhere; }
+.agente-txt .suave { font-size: 13px; }
+.agente-linha > .campo { grid-area: time; }
+.agente-linha .aparencia { grid-area: ap; margin-top: 4px; }
+.aparencia summary { display: inline-flex; align-items: center; min-height: 32px; font-size: 13px; font-weight: 600; color: var(--texto2); cursor: pointer; }
+.aparencia[open] summary { color: var(--texto); }
+.aparencia-campos { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 2px; }
+.aparencia-campos .campo { flex: 1 1 130px; max-width: 200px; }
+.sair-todos { display: flex; flex-direction: column; gap: 6px; max-width: 560px; }
+.st-linha { display: flex; flex-wrap: wrap; gap: 8px; }
+.st-linha input { flex: 1 1 220px; }
+.st-linha .botao { min-height: 44px; flex: none; }
+.selo-nao-visto { height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; display: inline-flex; align-items: center; background: var(--cartao3); color: var(--texto2); }
+@media (max-width: 900px) {
+  .time-linha { grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: none; align-items: end; }
+  .time-linha > .campo:nth-of-type(1) { grid-column: 2 / 4; }
+  .time-linha .time-n { grid-row: 1; }
+  .time-linha .time-qtd, .time-linha .botao { grid-column: auto; }
+}
+@media (pointer: coarse) { .aparencia summary { min-height: 44px; } }
+@media (max-width: 520px) {
+  .ajuste { padding: 16px 14px 18px; }
+  .time-linha { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .time-linha .time-n { display: none; }
+  .time-linha > .campo:nth-of-type(1) { grid-column: 1 / 3; }
+  .agente-linha { grid-template-columns: 44px minmax(0, 1fr); grid-template-areas: "fig txt" "fig time" "fig ap"; row-gap: 8px; }
+  .datas-lista li:not(:has(.marcar)) { flex-wrap: wrap; }
+  .datas-acoes { width: 100%; justify-content: flex-start; }
+  .datas-lista.embutidas .d-cores { display: none; }   /* decorativas: no celular estreito o nome e o "Ver no mapa" ficam com a linha */
+  .clima-lista li { flex-wrap: wrap; } .clima-lista .botao { width: 100%; }
+}
 .expediente { display: flex; flex-wrap: wrap; gap: 12px; }
 .campo-hora { display: flex; flex-direction: column; gap: 6px; flex: 1 1 140px; max-width: 200px; }
 .campo-hora input { height: 46px; border-radius: var(--r-item); border: 1px solid var(--borda-forte); background: var(--campo); color: var(--texto); padding: 0 12px; font: inherit; font-size: 15px;
@@ -828,6 +928,22 @@ body:has(.sim-aviso) main { padding-bottom: calc(96px + env(safe-area-inset-bott
 .bv-logo-linha .suave { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .bv-logo-linha label.botao:has(+ .arquivo:focus-visible) { outline: 2px solid var(--destaque); outline-offset: 2px; }
 .form-bv .acoes { margin-top: 6px; }
+/* assistente de instalação (assistente.js): a caixa das boas-vindas, com o cabeçalho fixo e um passo por vez */
+.assistente .as-cabeca { padding-bottom: 0; gap: 4px; }
+.assistente .as-passo { padding-top: 10px; }
+.assistente .as-passo::before { display: none; }
+.as-progresso { margin: 6px 0 0; font: 650 12px "Source Sans 3", system-ui, sans-serif; color: var(--suave); text-transform: uppercase; letter-spacing: .5px; }
+.assistente h2:focus { outline: none; }
+.assistente h2:focus-visible { outline: 2px solid var(--destaque); outline-offset: 4px; border-radius: 4px; }
+.as-status { margin: 4px 0 0; font-size: 15px; font-weight: 650; }
+.as-alerta { margin: 0; padding: 10px 12px; border-radius: var(--r-item); background: var(--ambar-fundo); color: var(--ambar-texto); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.form-bv .as-campo { height: 46px; border-radius: var(--r-item); border: 1px solid var(--borda-forte); background: var(--campo); color: var(--texto); padding: 0 12px; font-size: 15px; min-width: 0; }
+.form-bv .as-campo:focus-visible { outline: none; border-color: color-mix(in srgb, var(--destaque) 60%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--destaque) 35%, transparent); }
+.assistente .clima-lista li { padding: 6px 0; }
+.assistente .acoes .botao { min-height: 44px; display: inline-flex; align-items: center; }
+.assistente .aviso-form:empty, .assistente #as-q-status:empty { display: none; }
+.cabeca-pers { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.cabeca-pers .botao { min-height: 44px; flex: none; }
 /* senha do modo resposta (app.js): o mesmo diálogo das boas-vindas */
 .dlg-senha { width: min(440px, calc(100vw - 24px)); }
 .form-bv input[name=senha] { height: 46px; border-radius: var(--r-item); border: 1px solid var(--borda-forte); background: var(--campo); color: var(--texto); padding: 0 12px; font-size: 15px; }
