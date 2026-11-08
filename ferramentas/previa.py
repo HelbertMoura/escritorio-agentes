@@ -18,16 +18,28 @@ dentro do expediente; para atender, o clique na plaquinha ou o POST /api/social/
 sem_conexao, recusada (HTTP 403), pausa (429) ou falha. Os dois primeiros e o sem_conexao saem sem agentes, como no
 servidor antes da primeira leitura; os outros mantêm a leitura do arquivo, como o servidor mantém a última. O "erro"
 traz o mesmo texto do servidor. A prévia não tem conexão: o /oauth/conectar dela cai na página de erro e não sai daqui.
+Configurações: o clima e as datas salvos pela tela vão para a pasta temporária; a busca de cidade chama o Open-Meteo
+de verdade, com o mesmo limite do servidor. PREVIA_ESTATICO=<pasta static> serve as telas de outro floor.
 """
-import json, os, sys, threading, time
+import atexit, json, os, shutil, signal, sys, threading, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import tempfile
 os.environ["ESCRITORIO_DADOS"] = tempfile.mkdtemp(prefix="escritorio-previa-")
+# a pasta temporária sai junto com a prévia (Ctrl+C, SIGTERM, Ctrl+Break ou erro na subida); o Stop-Process do Windows, que
+# encerra sem aviso, é o único que deixa a pasta para trás
+atexit.register(shutil.rmtree, os.environ["ESCRITORIO_DADOS"], ignore_errors=True)
+for sinal in (signal.SIGTERM, getattr(signal, "SIGBREAK", None)):   # SIGBREAK: o Ctrl+Break do Windows
+    if sinal:
+        signal.signal(sinal, lambda *_: sys.exit(0))
 PORTA = int(os.environ.get("PREVIA_PORTA", "7372"))
 # A checagem de origem dos POST compara com a BASE: a prévia declara a própria, antes do import.
 os.environ["ESCRITORIO_BASE"] = f"http://127.0.0.1:{PORTA}"
 import escritorio as e
 import social
+
+# PREVIA_ESTATICO=<pasta static de outro floor>: as telas de um floor contra o servidor deste (sem cópia de arquivo)
+if os.environ.get("PREVIA_ESTATICO"):
+    e.ESTATICO = os.path.abspath(os.environ["PREVIA_ESTATICO"])
 
 ARGS = sys.argv[1:]
 CONEXAO = "conectado"
@@ -144,8 +156,11 @@ if "--greve" in ARGS:   # o dia já começa com as reclamações; a greve sai no
 srv.social.start()
 # modo construção: a planta salva vai para o planta.json da pasta temporária (some ao fechar a prévia)
 srv.planta = e.Planta(e.ARQ_PLANTA, e.log, lambda dados: e.gravar(e.ARQ_PLANTA, dados))
-cl = e.carregar_times().get("clima")
-if cl:
-    srv.clima = e.Clima(cl["lat"], cl["lon"], cl["cidade"]); srv.clima.start()
+# clima vivo, como no servidor: a cidade salva pela tela vai para o clima.json da pasta temporária
+srv.clima = e.Clima(lambda: e.clima_vigente()[0]); srv.clima.start()
 print(e.BASE, flush=True)
-srv.serve_forever()
+print("dados temporários:", os.environ["ESCRITORIO_DADOS"], flush=True)   # somem ao sair
+try:
+    srv.serve_forever()
+except KeyboardInterrupt:   # Ctrl+C: sai sem traceback, e o atexit apaga a pasta
+    pass

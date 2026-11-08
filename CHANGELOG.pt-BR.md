@@ -4,13 +4,17 @@
 
 As mudanças que importam neste projeto ficam aqui, da mais nova para a mais antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). O projeto ainda não tem número de versão: cada entrada é um marco, com a data e os commits.
 
-## Ainda não publicado · Conectar e Docker
+## Ainda não publicado · Conectar, Docker e Configurações
 
-Sem commit ainda.
+O Conectar e o Docker no commit [`cf29e8c`](https://github.com/HelbertMoura/escritorio-agentes/commit/cf29e8c); o clima e as datas no [`13b91a2`](https://github.com/HelbertMoura/escritorio-agentes/commit/13b91a2); os times e o Sair de todos, sem commit ainda.
 
 ### Adicionado
 - **Conectar pela tela:** o `/api/estado` ganhou o campo `conexao` (`carregando`, `conectado`, `sem_conexao`, `recusada`, `pausa` ou `falha`), e o `/api/config` ganhou o `base`. Na volta da autorização, a primeira leitura sai na hora. Veja [Conectar ao agentes.chat](./README.pt-BR.md#conectar-ao-agenteschat).
 - **Docker e Coolify:** `Dockerfile`, `.dockerignore` (lista de permissão) e `docker-compose.yml` sem portas publicadas, com a variável nova `ESCRITORIO_BIND` (`127.0.0.1` ou `0.0.0.0`). Veja [Docker e Coolify](./README.pt-BR.md#docker-e-coolify).
+- **Cidade do clima pela tela:** busca pelo nome (geocoding do Open-Meteo, pelo servidor, com 10 buscas por minuto e 200 por dia), **Sem clima** e **Voltar ao times.json**, em `dados/clima.json`. Trocar a cidade não pede mais reinício.
+- **Datas comemorativas pela tela:** desligar as 13 embutidas e criar até 24 próprias (todo ano ou uma vez, de 1 a 14 dias, com tema e falas), em `dados/festas.json`.
+- **Times e aparência pela tela**, em `dados/equipe.json` (substituem os do `times.json`; **Voltar ao times.json** apaga o arquivo).
+- **Sair de todos os aparelhos**: com a senha de novo, encerra todas as sessões.
 - `ferramentas/agentes_falso.py`: um agentes.chat de mentira, só em `127.0.0.1`, para testar o Conectar inteiro e cada falha sem a conta de verdade. A prévia ganhou o `--conexao <estado>`.
 
 ### Mudado
@@ -21,6 +25,7 @@ Sem commit ainda.
 
 ### Segurança
 - O `error_description` e o corpo das respostas do agentes.chat nunca chegam à tela, e o log guarda só o código do erro.
+- `POST /api/clima` e `POST /api/festas` no molde do `POST /api/planta`: origem estrita, sessão, só JSON, teto de corpo, tudo ou nada (sem `NaN`, `Infinity` nem `true` no lugar de número) e gravação atômica sob trava; as datas com `rev`. A busca de cidade fala só com o Open-Meteo, sem redirecionamento, e o log não guarda a cidade nem a busca.
 - Com `ESCRITORIO_BIND=0.0.0.0`, a `ESCRITORIO_BASE` é obrigatória. A imagem roda com usuário próprio, sem shell, e o compose roda só de leitura, sem capacidades e com memória limitada. O README ganhou o que muda com um [endereço público](./README.pt-BR.md#endereço-público).
 
 ## 2026-11-06 · Modo construção v1

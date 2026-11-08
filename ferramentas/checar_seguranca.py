@@ -1,7 +1,7 @@
 """Confere no servidor de verdade (rotas reais, sem rede) as regras de login, origem, cookie e limite de tentativas.
 Uso: python -B ferramentas/checar_seguranca.py <pasta do projeto>   (sai com 1 se algo falhar)
 """
-import json, os, sys, tempfile, threading, time, urllib.parse, urllib.request, urllib.error
+import json, os, shutil, sys, tempfile, threading, time, urllib.parse, urllib.request, urllib.error
 PROJ = sys.argv[1]
 os.environ["ESCRITORIO_DADOS"] = tempfile.mkdtemp(prefix="esc-verif-")
 os.environ["ESCRITORIO_TIMES"] = os.path.join(os.environ["ESCRITORIO_DADOS"], "times.json")  # nunca o times.json real
@@ -148,6 +148,39 @@ confere("POST /api/planta com rev velho", req("/api/planta", jp, pl(0))[0], 409)
 st, h = req("/construir.html")
 confere("GET /construir.html sem sessao cai no login", (st, h.get("Location")), (302, "/entrar"))
 
+print("== Configuracoes: clima e datas (Origin obrigatorio, JSON exato, numero de verdade, teto, rev)")
+e.ARQ_CLIMA = os.path.join(os.environ["ESCRITORIO_DADOS"], "clima.json")
+e.ARQ_FESTAS = os.path.join(os.environ["ESCRITORIO_DADOS"], "festas.json")
+e.ARQ_EQUIPE = os.path.join(os.environ["ESCRITORIO_DADOS"], "equipe.json")
+eq = lambda rev, **x: json.dumps({"rev": rev, "times": [], "aparencia": {}, **x}).encode()
+cl = lambda **x: json.dumps({"clima": {"cidade": "Cidade de teste", "lat": -8.05, "lon": -34.88, **x}}).encode()
+fe = lambda rev: json.dumps({"rev": rev, "proprias": [], "desligadas": []}).encode()
+for rota, bom in (("/api/clima", cl()), ("/api/festas", fe(0)), ("/api/equipe", eq(0))):
+    confere("POST %s sem Origin, com Referer valido (aqui o Referer nao conta)" % rota,
+            req(rota, {**sessao, "Referer": base + "/", "Content-Type": "application/json"}, bom)[0], 403)
+    confere("POST %s com Origin: null" % rota, req(rota, {**sessao, "Origin": "null", "Content-Type": "application/json"}, bom)[0], 403)
+    confere("POST %s com Origin de outro site" % rota, req(rota, {**jp, "Origin": "https://outro.exemplo"}, bom)[0], 403)
+    confere("POST %s em text/plain (formulario de outro site)" % rota, req(rota, {**jp, "Content-Type": "text/plain"}, bom)[0], 415)
+    confere("POST %s sem sessao" % rota, req(rota, {"Origin": base, "Content-Type": "application/json"}, bom)[0], 401)
+    teto = {"/api/clima": e.CLIMA_BYTES, "/api/festas": e.FESTAS_BYTES, "/api/equipe": e.EQUIPE_BYTES}[rota]
+    confere("POST %s com JSON valido acima do teto (%d B)" % (rota, teto), req(rota, jp, bom[:-1] + b" " * teto + b"}")[0], 400)
+for rotulo, corpo in (("NaN", b'{"clima": {"cidade": "X", "lat": NaN, "lon": 1}}'), ("Infinity", b'{"clima": {"cidade": "X", "lat": Infinity, "lon": 1}}'),
+                      ("1e400", b'{"clima": {"cidade": "X", "lat": 1e400, "lon": 1}}'),
+                      ("um inteiro de 400 digitos", b'{"clima": {"cidade": "X", "lat": 1' + b"0" * 399 + b', "lon": 1}}'), ("true", cl(lat=True)), ("fora da faixa", cl(lon=181))):
+    confere("POST /api/clima com %s no lugar de numero" % rotulo, req("/api/clima", jp, corpo)[0], 400)
+confere("POST /api/clima certo", req("/api/clima", jp, cl())[0], 200)
+confere("POST /api/festas com dias=true", req("/api/festas", jp, json.dumps({"rev": 0, "proprias": [{"nome": "X", "data": "01-01", "dias": True, "tema": "natal"}], "desligadas": []}).encode())[0], 400)
+confere("POST /api/festas com rev certo", req("/api/festas", jp, fe(0))[0], 200)
+confere("POST /api/festas com rev velho", req("/api/festas", jp, fe(0))[0], 409)
+time_ = {"nome": "Dev", "tipo": "mesas", "cor": None, "icone": None, "parede": 9, "piso": 0, "agentes": []}
+confere("POST /api/equipe com parede fora da faixa", req("/api/equipe", jp, eq(0, times=[time_]))[0], 400)
+confere("POST /api/equipe com parede=true", req("/api/equipe", jp, eq(0, times=[{**time_, "parede": True}]))[0], 400)
+confere("POST /api/equipe com o modo de conversas (fica no servidor)", req("/api/equipe", jp, eq(0, conversas="responder"))[0], 400)
+confere("POST /api/equipe com rev certo", req("/api/equipe", jp, eq(0, times=[{**time_, "parede": 5}]))[0], 200)
+confere("POST /api/equipe com rev velho", req("/api/equipe", jp, eq(0))[0], 409)
+confere("GET /api/clima/busca sem sessao", req("/api/clima/busca?q=Recife")[0], 401)
+confere("GET /api/clima/busca com 1 letra (recusa antes de qualquer rede)", req("/api/clima/busca?q=R", sessao)[0], 400)
+
 print("== Vida social: mandar pro ringue (Origin obrigatorio, JSON exato)")
 briga = json.dumps({"a": "a1", "b": "a2"}).encode()
 confere("POST /api/social/briga sem Origin, com Referer valido (aqui o Referer nao conta)",
@@ -164,6 +197,20 @@ confere("POST /api/social/greve/atender com Origin: null",
 confere("POST /api/social/greve/atender em text/plain",
         req("/api/social/greve/atender", {**sessao, "Origin": base, "Content-Type": "text/plain"}, greve)[0], 415)
 confere("POST /api/social/greve/atender sem sessao", req("/api/social/greve/atender", {"Origin": base, "Content-Type": "application/json"}, greve)[0], 401)
+print("== Sair de todos os aparelhos (Origin obrigatorio, JSON exato, senha no balde do login)")
+sj = lambda senha: json.dumps({"senha": senha}).encode()
+confere("POST /api/sair-todos sem Origin, com Referer valido (aqui o Referer nao conta)",
+        req("/api/sair-todos", {**sessao, "Referer": base + "/", "Content-Type": "application/json"}, sj("senha-bem-grande"))[0], 403)
+confere("POST /api/sair-todos com Origin: null", req("/api/sair-todos", {**sessao, "Origin": "null", "Content-Type": "application/json"}, sj("senha-bem-grande"))[0], 403)
+confere("POST /api/sair-todos em text/plain", req("/api/sair-todos", {**jp, "Content-Type": "text/plain"}, sj("senha-bem-grande"))[0], 415)
+confere("POST /api/sair-todos sem sessao", req("/api/sair-todos", {"Origin": base, "Content-Type": "application/json"}, sj("senha-bem-grande"))[0], 401)
+confere("POST /api/sair-todos com a senha errada", req("/api/sair-todos", jp, sj("errada-errada"))[0], 403)
+confere("... a sessao continua depois da senha errada", req("/api/estado", sessao)[0], 200)
+st, h = req("/api/sair-todos", jp, sj("senha-bem-grande"))
+confere("POST /api/sair-todos com a senha certa apaga os dois cookies", (st, len(h.get_all("Set-Cookie") or [])), (200, 2))
+confere("... e a sessao deixa de valer", req("/api/estado", sessao)[0], 401)
 srv.shutdown()
+for pasta in (os.environ["ESCRITORIO_DADOS"], a2.pasta):   # as pastas temporárias não ficam no %TEMP%
+    shutil.rmtree(pasta, ignore_errors=True)
 print("RESULTADO:", "tudo certo" if not falhas else "%d falha(s)" % len(falhas))
 sys.exit(1 if falhas else 0)

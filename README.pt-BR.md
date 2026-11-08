@@ -181,7 +181,7 @@ O repositório traz um `Dockerfile` e um `docker-compose.yml`. Não há imagem p
 **Fora do Coolify**, atrás do seu próprio proxy HTTPS, na mesma rede do Docker: `ESCRITORIO_BASE=https://... AGENTES_ORG=... docker compose up -d`. O primeiro acesso sai com `docker exec -it <container> python3 -I -B escritorio.py codigo`. O compose não publica porta nenhuma: publicada, a porta serve HTTP sem TLS, com a senha em texto puro. Para testar só na sua máquina, descomente o `127.0.0.1:7381:7371` e use `ESCRITORIO_BASE=http://127.0.0.1:7381`.
 
 - **O volume `/dados`** guarda o token do agentes.chat, os usuários, as sessões, a marca e a planta. Faça backup cifrado e nunca o deixe público. Com o `docker-compose.yml` do repositório, o container roda com o sistema de arquivos só de leitura, sem capacidades e com 256 MB de memória.
-- **`conversas`** (ler ou responder) e os times ainda saem do `times.json`: crie o `/dados/times.json` no volume, por exemplo com `docker exec -i <container> sh -c 'cat > /dados/times.json' < times.json`. Ele vale sem reiniciar. O nome, a cor, o logo e o expediente já vão pela tela **Personalizar**.
+- **`conversas`** (ler ou responder) ainda sai do `times.json`: crie o `/dados/times.json` no volume, por exemplo com `docker exec -i <container> sh -c 'cat > /dados/times.json' < times.json`. Ele vale sem reiniciar. O nome, a cor, o logo, o expediente, a cidade do clima, as datas comemorativas, os times e a aparência já vão pela tela **Personalizar**.
 - **Atualizar** é fazer o redeploy. O volume fica.
 - **Trocar de domínio** pede ajustar a `ESCRITORIO_BASE` e conectar de novo.
 - **Esqueceu a senha:** `docker exec <container> rm /dados/usuarios.json /dados/sessoes.json`, depois `docker restart <container>` e `docker exec -it <container> python3 -I -B escritorio.py codigo` para o código novo. No Coolify, pelo Terminal do serviço.
@@ -189,7 +189,13 @@ O repositório traz um `Dockerfile` e um `docker-compose.yml`. Não há imagem p
 
 ## Personalizar (white-label)
 
-Pela tela **Personalizar**: nome da empresa, cor de destaque e logo (PNG, JPEG ou WEBP).
+Pela tela **Personalizar**: nome da empresa, cor de destaque e logo (PNG, JPEG ou WEBP), e mais:
+
+- **Cidade do clima:** busque pelo nome. A busca passa pelo servidor, que pergunta ao geocoding do Open-Meteo (dados do Open-Meteo, com os mesmos termos do clima, em [Terceiros](#terceiros)), com no máximo 10 buscas por minuto e 200 por dia, para o escritório inteiro. Escolha **Usar esta**, **Sem clima** ou **Voltar ao times.json**. A cidade nova vale sem reiniciar nem recarregar; o tempo dela aparece em até 1 minuto. Fica em `dados/clima.json`, com as coordenadas em 2 casas (cerca de 1 km).
+- **Datas comemorativas:** ligue e desligue cada uma das 13 datas embutidas e crie até 24 datas próprias, com nome, dia (todo ano, ou uma vez só), de 1 a 14 dias, um tema (as cores, os enfeites e o chapéu de uma das festas, ou o genérico) e até 3 falas. Ficam em `dados/festas.json`.
+- **Times e aparência:** nome, tipo, cor e ícone de cada time (até 12), os agentes de cada um (cada agente num time só) e a aparência de cada agente. Ficam em `dados/equipe.json` e substituem inteiros os `times` e a `aparencia` do `times.json`; **Voltar ao times.json** apaga o arquivo. Renomear um time tira da sala dele a pintura e os móveis do modo construção: a tela avisa antes de salvar.
+
+O que a tela salva vale mais que o `times.json`, e a tela diz de onde vem o que está valendo.
 
 No arquivo `times.json` (comece copiando o `times.exemplo.json`; o instalador faz isso se não houver um `times.json`):
 
@@ -198,7 +204,7 @@ No arquivo `times.json` (comece copiando o `times.exemplo.json`; o instalador fa
 | `empresa`, `cor` | nome e cor padrão (a tela Personalizar sobrepõe). Sem nome em lugar nenhum, a página mostra um nome provisório com a etiqueta "exemplo" |
 | `times[]` | `nome`, `tipo` (`mesas`, `ops`, `gabinete`), `cor`, `icone` (`codigo`, `megafone`, `servidor`, `coroa`, `grafico`, `pincel`, `estrela`…), `parede` (0–5), `piso` (0–9) e `agentes` (handles do agentes.chat) |
 | `aparencia` | por handle: `color`, `eyes`, `accessory`, iguais aos do agentes.chat. Quem não está aqui ganha uma aparência própria automática |
-| `clima` | `cidade`, `lat`, `lon` para o clima real, do Open-Meteo (veja os termos em [Terceiros](#terceiros)). Sem `clima`, o clima fica desligado e o céu, limpo |
+| `clima` | `cidade`, `lat`, `lon` para o clima real, do Open-Meteo (veja os termos em [Terceiros](#terceiros)). Sem `clima`, o clima fica desligado e o céu, limpo. A cidade escolhida pela tela vale mais |
 | `expediente` | horário do escritório, `{"abre": "07:00", "fecha": "20:00"}` (HH:MM, o padrão). Fora dele, quem está sem tarefa vai para casa e uma faixa avisa quando o escritório abre. `abre` depois de `fecha` é um turno que vira a meia-noite (`22:00` às `06:00`); a tela Personalizar sobrepõe |
 | `conversas` | `"ler"` acrescenta **Ver conversa** à ficha do agente e a página **Conversas**, com as tarefas em andamento e as que terminaram hoje: as 20 mensagens mais recentes da conversa de cada uma (a thread da tarefa; se ninguém escreveu nela, as mensagens soltas da conversa), lidas só a pedido (`read_conversation`, ainda com o escopo `read`). Vem desligado; leia o aviso em [Segurança](#segurança) antes de ligar. `"responder"` faz o mesmo e deixa **mandar mensagens** aos agentes nas conversas diretas do dia, pela página Conversas (escopo `read write`; veja [Segurança](#segurança)) |
 
@@ -244,7 +250,7 @@ Em resumo: com o instalador, o escritório só é alcançável **na sua tailnet*
   - a senha fica guardada como hash scrypt (N=2^15, r=8, p=1), e a sessão vai num cookie `__Host-esc_sessao`, HttpOnly, SameSite=Lax e Secure;
   - todo envio de formulário é conferido pela origem;
   - há limite de tentativas: 8 erros a cada 15 minutos por usuário (os usuários que não existem dividem um limite só, e o primeiro acesso tem o seu). O contador fica na memória, então reiniciar o serviço o zera.
-- **Revogar sessões** (por exemplo, depois de trocar de computador ou de suspeitar de roubo):
+- **Revogar sessões** (por exemplo, depois de trocar de computador ou de suspeitar de roubo): o caminho mais simples é o botão **Sair de todos os aparelhos**, no **Personalizar**, em **Acesso** (abaixo). Sem acesso à tela, pelo servidor:
 
   ```bash
   sudo systemctl stop escritorio
@@ -268,6 +274,8 @@ Em resumo: com o instalador, o escritório só é alcançável **na sua tailnet*
   - **Desligar na hora** (por exemplo, se uma mensagem cair no lugar errado): 1) "Fechar agora" no selo do modo; 2) `"ler"` no `times.json`, que vale sem reiniciar; 3) em **Settings › AI apps**, no agentes.chat, desconecte o "Escritório dos agentes".
   - **Voltar ao só leitura:** troque para `"ler"` (ou `"desligado"`) no `times.json`. O escritório revoga o token de escrita e pede uma nova conexão, só de leitura; até lá, a leitura também para. Um `times.json` ilegível ou com erro de digitação não revoga nada (só bloqueia os envios). Depois, desconecte o app antigo em **Settings › AI apps**, no agentes.chat.
 - **Modo construção (`POST /api/planta`):** quem está logado edita, a mesma regra do **Personalizar** (só existe uma conta). A rota exige o `Origin` igual ao endereço do servidor (sem cair para o `Referer`), sessão, `application/json` (senão, 415), corpo de até 64 KB e o `rev` atual da planta (409 quando outra tela salvou antes). A planta é validada tudo ou nada, do mesmo jeito no salvar e na leitura, e gravada de forma atômica (0600), sob uma trava, em `dados/planta.json`; o log guarda contagens, nunca o conteúdo. Um arquivo ilegível ou inválido volta ao prédio automático, com uma linha no log. O servidor confere só o formato e os limites: a lista de peças é um catálogo fechado no navegador, e uma planta ruim nunca derruba a página.
+- **Sair de todos os aparelhos** (`POST /api/sair-todos`): pede a senha de novo, que conta no mesmo limite de tentativas do login, encerra todas as sessões e os modos resposta e apaga os cookies deste navegador. Use depois de perder um aparelho ou de suspeitar que alguém tem a senha. Ainda não há tela para trocar a senha: para isso, recomece do zero (apague `usuarios.json` e `sessoes.json` e crie o usuário de novo com o código de primeiro acesso), como em **Esqueceu a senha** e em **Revogar sessões**.
+- **Configurações (`POST /api/clima`, `POST /api/festas` e `POST /api/equipe`):** as mesmas regras do modo construção: `Origin` igual ao endereço do servidor, sessão, só JSON, teto de corpo (512 B, 16 KB e 32 KB), validação tudo ou nada (`NaN`, `Infinity` e `true` não passam por número) e gravação atômica, sob trava. As datas e os times usam o `rev` (409 quando outra tela salvou antes). A tela de times não aceita `conversas`, `clima`, `empresa` nem outro campo: o modo de conversas muda o escopo OAuth e fica só no servidor. Um arquivo ilegível vale como ausente, com uma linha no log. O log nunca guarda a cidade, as coordenadas nem o que foi buscado. A busca de cidade (`GET /api/clima/busca`) exige sessão e fala só com `geocoding-api.open-meteo.com`, sem seguir redirecionamento. Nada disso vai para o agentes.chat.
 - **Rotas da vida social:** o **Mandar pro ringue** (`POST /api/social/briga`) e o **Atender o pedido** (`POST /api/social/greve/atender`) seguem as mesmas regras de origem estrita e só JSON. O placar semanal (`dados/placar.json`) guarda só ids de agentes e números.
 - **Corpo dos POST:** todo `POST` lê o corpo (até 128 KB) antes de responder, para a recusa (origem errada, tipo errado, grande demais) chegar ao cliente em vez de a conexão cair. Cada rota mantém o seu teto de tamanho; acima de 128 KB, só o envio do logo lê o corpo.
 - **Marca na tela de entrar:** o nome, a cor e o logo da empresa aparecem para quem alcança a página na tailnet (ou na internet, com endereço público), antes do login. O logo aceita só PNG, JPEG e WEBP, de até 600 KB. Prefira uma imagem sem metadados sensíveis (EXIF, GPS).
@@ -304,10 +312,11 @@ escritorio.py ── 127.0.0.1:737 ── tailscale serve (HTTPS, só na tailnet
    │  servidor HTTP da stdlib, login, OAuth + PKCE, leitor MCP, clima, marca
    ├─ acesso.py: usuários (scrypt), sessões, primeiro acesso
    ├─ social.py: diretor da vida social (na memória; o placar semanal em dados/placar.json)
-   └─ planta.py: planta do modo construção (validação, trava e rev; dados/planta.json)
+   ├─ planta.py: planta do modo construção (validação, trava e rev; dados/planta.json)
+   └─ ajustes.py: validação das configurações (dados/clima.json e dados/festas.json)
 ```
 
-- **Servidor:** só a biblioteca padrão do Python 3 (`escritorio.py`, `acesso.py`, `social.py`, o diretor da [vida social](#vida-social), e `planta.py`, a planta do [modo construção](#modo-construção)). Sem banco de dados: poucos arquivos na pasta de dados.
+- **Servidor:** só a biblioteca padrão do Python 3 (`escritorio.py`, `acesso.py`, `social.py`, o diretor da [vida social](#vida-social), `planta.py`, a planta do [modo construção](#modo-construção), e `ajustes.py`, a validação das configurações salvas pela tela). Sem banco de dados: poucos arquivos na pasta de dados.
 - **Front-end:** JavaScript puro e canvas, sem build (`static/`). `app.js` (interface, câmera, painéis), `mapa.js` (prédio procedural, colisão de móveis, portas e a planta aplicada por cima), `vida.js` (vida dos agentes), `avatar.js`, `efeitos.js`, `ceu.js`, `clima.js`, `festas.js`, `expediente.js`, `som.js` (WebAudio), `simular.js`, `brincar.js` (objetos clicáveis, modo foto, demonstração), `personalizar.js`, `planta.js` e `construir.*` (editor do modo construção) e `entrar.*` (login).
 - **Instalação:** o `instalar.sh` cria o usuário, os arquivos, uma unit systemd endurecida e o `tailscale serve`. Ou, em container, o `Dockerfile` e o `docker-compose.yml` (veja [Docker e Coolify](#docker-e-coolify)).
 
@@ -318,14 +327,14 @@ A cada leitura (30 s), o servidor compara as tarefas com a leitura anterior, pel
 ## Desenvolvimento
 
 ```bash
-python -m unittest test_escritorio test_planta
+python -m unittest test_escritorio test_planta test_ajustes
 ESCRITORIO_TIMES=times.exemplo.json python ferramentas/previa.py ferramentas/previa.exemplo.json   # prévia local em http://127.0.0.1:7372, sem login
 python -B ferramentas/checar_seguranca.py .  # confere login, origem, cookie, limite de tentativas e as rotas POST
 node ferramentas/estresse_vida.mjs [url] [--minutos 40] [--acoes] [--brigas 10] [--times 20]  # regressão da vida sobre a prévia (Chrome/Edge headless); sai com 1 se achar algo
 node ferramentas/checar_planta_mapa.mjs [url] [--ref main] [--prints]  # modo construção: com a planta vazia, o prédio fica idêntico ao da referência; plantas de exemplo e adulteradas
 ```
 
-Na prévia, o modo construção grava numa pasta temporária (some quando a prévia para); o `--greve` começa uma greve no primeiro passo do diretor da vida social; o `--conexao <estado>` (`carregando`, `sem_conexao`, `recusada`, `pausa` ou `falha`) mostra a faixa de cada estado da conexão, sem OAuth.
+Na prévia, o modo construção grava numa pasta temporária (a prévia mostra o caminho ao subir, e a pasta some quando ela para); o `--greve` começa uma greve no primeiro passo do diretor da vida social; o `--conexao <estado>` (`carregando`, `sem_conexao`, `recusada`, `pausa` ou `falha`) mostra a faixa de cada estado da conexão, sem OAuth.
 
 Para testar o **Conectar** inteiro sem o agentes.chat de verdade, use o servidor falso: `python -I -B ferramentas/agentes_falso.py --escritorio`. Ele sobe o falso em `127.0.0.1:7390` (consentimento com **Autorizar** e **Recusar**, token com PKCE e um `/mcp` com os dados do `previa.exemplo.json`) e o escritório em `http://127.0.0.1:7381`, com uma pasta de dados temporária. O `--modo` (ou, com tudo aberto, `curl -d mcp_403 http://127.0.0.1:7390/_modo`) simula cada falha: registro fora do ar ou recusado, consentimento recusado, troca do código recusada, escopo a mais e o `/mcp` respondendo 401, 402, 403 ou 429. Outra porta para o escritório: `--porta-escritorio`.
 
@@ -344,7 +353,7 @@ A arte (`arte/pixellab` e `static/tema`) sai sob a mesma licença do projeto, a 
 ## Terceiros
 
 - **Fontes** Figtree, Silkscreen, Source Sans 3 e Doto: SIL Open Font License 1.1 (`static/fontes`, licenças em `static/fontes/OFL-*.txt`).
-- **Clima:** [Open-Meteo](https://open-meteo.com) (sem chave), com dados sob CC BY 4.0. A API gratuita é **só para uso não comercial** ([termos](https://open-meteo.com/en/terms)): uma empresa, ou um site com assinatura ou anúncios, precisa de um plano pago do Open-Meteo ou de um servidor Open-Meteo próprio ([código aberto](https://github.com/open-meteo/open-meteo)). Este servidor chama o endereço gratuito (`api.open-meteo.com`, na classe `Clima` do `escritorio.py`), então qualquer das duas opções pede trocar esse endereço (e acrescentar a chave do plano). Senão, desligue o clima: tire o `clima` do `times.json` (`/opt/escritorio/times.json` depois de instalar) e reinicie o serviço.
+- **Clima:** [Open-Meteo](https://open-meteo.com) (sem chave), com dados sob CC BY 4.0. A API gratuita é **só para uso não comercial** ([termos](https://open-meteo.com/en/terms)): uma empresa, ou um site com assinatura ou anúncios, precisa de um plano pago do Open-Meteo ou de um servidor Open-Meteo próprio ([código aberto](https://github.com/open-meteo/open-meteo)). A busca de cidade usa o geocoding do mesmo Open-Meteo (`geocoding-api.open-meteo.com`), com os mesmos termos. Este servidor chama os endereços gratuitos (nas classes `Clima` e `BuscaCidades` do `escritorio.py`), então qualquer das duas opções pede trocar esses endereços (e acrescentar a chave do plano). Senão, desligue o clima: **Sem clima** no **Personalizar**, ou tire o `clima` do `times.json`.
 
 ## Licença
 

@@ -181,7 +181,7 @@ The repository ships a `Dockerfile` and a `docker-compose.yml`. There is no publ
 **Outside Coolify**, behind your own HTTPS proxy on the same Docker network: `ESCRITORIO_BASE=https://... AGENTES_ORG=... docker compose up -d`. The first-access code comes from `docker exec -it <container> python3 -I -B escritorio.py codigo`. The compose file publishes no port: a published port serves HTTP without TLS, with the password in plain text. To test on your own machine only, uncomment the `127.0.0.1:7381:7371` line and use `ESCRITORIO_BASE=http://127.0.0.1:7381`.
 
 - **The `/dados` volume** holds the agentes.chat token, the users, the sessions, the branding and the floor plan. Keep an encrypted backup and never make it public. With the repository's `docker-compose.yml`, the container runs with a read-only file system, no capabilities and 256 MB of memory.
-- **`conversas`** (read or reply) and the teams still come from `times.json`: create `/dados/times.json` in the volume, for example with `docker exec -i <container> sh -c 'cat > /dados/times.json' < times.json`. It applies without a restart. Name, color, logo and office hours already go through the **Customize** screen.
+- **`conversas`** (read or reply) still comes from `times.json`: create `/dados/times.json` in the volume, for example with `docker exec -i <container> sh -c 'cat > /dados/times.json' < times.json`. It applies without a restart. Name, color, logo, office hours, the weather city, the holidays, the teams and the appearance already go through the **Customize** screen.
 - **Updating** is a redeploy. The volume stays.
 - **Changing the domain** means updating `ESCRITORIO_BASE` and connecting again.
 - **Forgot the password:** `docker exec <container> rm /dados/usuarios.json /dados/sessoes.json`, then `docker restart <container>` and `docker exec -it <container> python3 -I -B escritorio.py codigo` for the new code. On Coolify, through the service Terminal.
@@ -189,7 +189,13 @@ The repository ships a `Dockerfile` and a `docker-compose.yml`. There is no publ
 
 ## Customize (white-label)
 
-From the **Customize** screen: company name, accent color and logo (PNG, JPEG or WEBP).
+From the **Customize** screen: company name, accent color and logo (PNG, JPEG or WEBP), plus:
+
+- **Weather city:** search by name. The search goes through the server, which asks Open-Meteo's geocoding (Open-Meteo data, under the same terms as the weather, in [Third-party](#third-party)), with at most 10 searches per minute and 200 per day for the whole office. Pick **Usar esta** (use this one), **Sem clima** (no weather) or **Voltar ao times.json** (back to times.json). The new city applies without a restart or reload; its weather shows up within 1 minute. It lives in `dados/clima.json`, with the coordinates rounded to 2 decimals (about 1 km).
+- **Holidays:** turn each of the 13 built-in dates on or off and create up to 24 of your own, with a name, a day (every year, or just once), 1 to 14 days, a theme (the colors, decorations and hat of one of the holidays, or the generic one) and up to 3 lines. They live in `dados/festas.json`.
+- **Teams and appearance:** name, type, color and icon of each team (up to 12), the agents in each one (each agent in one team only) and each agent's appearance. They live in `dados/equipe.json` and fully replace `times` and `aparencia` from `times.json`; **Voltar ao times.json** (back to times.json) deletes the file. Renaming a team removes the construction mode paint and furniture from its room: the screen warns before saving.
+
+What the screen saves overrides `times.json`, and the screen says where the current value comes from.
 
 In `times.json` (start by copying `times.exemplo.json`; the installer does that if there is no `times.json`):
 
@@ -198,7 +204,7 @@ In `times.json` (start by copying `times.exemplo.json`; the installer does that 
 | `empresa`, `cor` | default name and color (the Customize screen overrides them). Without a name anywhere, the page shows a placeholder name tagged "example" |
 | `times[]` | `nome`, `tipo` (`mesas`, `ops`, `gabinete`), `cor`, `icone` (`codigo`, `megafone`, `servidor`, `coroa`, `grafico`, `pincel`, `estrela`…), `parede` (0–5), `piso` (0–9) and `agentes` (agentes.chat handles) |
 | `aparencia` | per handle: `color`, `eyes`, `accessory`, the same as in agentes.chat. Anyone not listed gets an automatic look of their own |
-| `clima` | `cidade`, `lat`, `lon` for real weather, from Open-Meteo (see the terms in [Third-party](#third-party)). Without `clima`, the weather is off and the sky stays clear |
+| `clima` | `cidade`, `lat`, `lon` for real weather, from Open-Meteo (see the terms in [Third-party](#third-party)). Without `clima`, the weather is off and the sky stays clear. The city chosen on screen overrides it |
 | `expediente` | office hours, `{"abre": "07:00", "fecha": "20:00"}` (HH:MM, the default). Outside them, agents without a task go home and a banner says when the office opens. `abre` later than `fecha` is a shift past midnight (`22:00` to `06:00`); the Customize screen overrides it |
 | `conversas` | `"ler"` adds **See conversation** to an agent's card and the **Conversations** page, with the tasks in progress and the ones that ended today: the latest 20 messages of each one's conversation (the task's thread; if no one wrote in it, the conversation's loose messages), read on demand (`read_conversation`, still the `read` scope). Off by default; read the warning in [Security](#security) before turning it on. `"responder"` does the same and lets you **send messages** to the agents in the day's direct conversations, from the Conversations page (`read write` scope; see [Security](#security)) |
 
@@ -244,7 +250,7 @@ In short: with the installer, the office is reachable **only on your tailnet** (
   - passwords are stored as scrypt hashes (N=2^15, r=8, p=1), and the session travels in a `__Host-esc_sessao` cookie, HttpOnly, SameSite=Lax and Secure;
   - every form submission is checked by origin;
   - there is an attempt limit: 8 errors every 15 minutes per user (non-existent users share one limit, and the first access has its own). The counter lives in memory, so restarting the service resets it.
-- **Revoke sessions** (for example, after changing computers or suspecting theft):
+- **Revoke sessions** (for example, after changing computers or suspecting theft): the simplest way is the **Sign out of all devices** button, in **Customize**, under **Access** (below). Without the screen, on the server:
 
   ```bash
   sudo systemctl stop escritorio
@@ -268,6 +274,8 @@ In short: with the installer, the office is reachable **only on your tailnet** (
   - **Turn it off right away** (for example, if a message lands in the wrong place): 1) "Close now" on the mode badge; 2) `"ler"` in `times.json`, which applies without a restart; 3) in **Settings › AI apps**, on agentes.chat, disconnect "Escritório dos agentes".
   - **Back to read-only:** switch to `"ler"` (or `"desligado"`) in `times.json`. The office revokes the write token and asks for a new, read-only connection; until then, reading stops too. An unreadable `times.json` or a typo revokes nothing (it only blocks sending). Then disconnect the old app in **Settings › AI apps**, on agentes.chat.
 - **Construction mode (`POST /api/planta`):** whoever is signed in can edit, the same rule as **Customize** (there is a single account). The route requires an `Origin` equal to the server address (with no fallback to the `Referer`), a session, `application/json` (otherwise 415), a body of up to 64 KB and the plan's current `rev` (409 when another screen saved first). The plan is validated all or nothing, the same way on save and on read, and written atomically (0600), under a lock, to `dados/planta.json`; the log keeps counts, never the content. An unreadable or invalid file falls back to the automatic building, with one line in the log. The server only checks the format and the limits: the list of pieces is a closed catalog in the browser, and a bad plan never takes the page down.
+- **Sign out of all devices** (`POST /api/sair-todos`): asks for the password again, which counts toward the same attempt limit as the sign-in, ends every session and reply mode and deletes this browser's cookies. Use it after losing a device or suspecting someone has the password. There is no screen to change the password yet: to do that, start from scratch (delete `usuarios.json` and `sessoes.json` and create the user again with the first-access code), as in **Forgot the password** and **Revoke sessions**.
+- **Settings (`POST /api/clima`, `POST /api/festas` and `POST /api/equipe`):** the same rules as the construction mode: `Origin` equal to the server address, a session, JSON only, a body cap (512 B, 16 KB and 32 KB), all-or-nothing validation (`NaN`, `Infinity` and `true` do not pass as numbers) and an atomic write, under a lock. The holidays and the teams use the `rev` (409 when another screen saved first). The teams screen does not accept `conversas`, `clima`, `empresa` or any other field: the conversations mode changes the OAuth scope and stays on the server only. An unreadable file counts as absent, with one log line. The log never keeps the city, the coordinates or the search terms. The city search (`GET /api/clima/busca`) requires a session and only talks to `geocoding-api.open-meteo.com`, without following redirects. None of this goes to agentes.chat.
 - **Social life routes:** **Send to the ring** (`POST /api/social/briga`) and **Atender o pedido** (`POST /api/social/greve/atender`) follow the same strict origin and JSON-only rules. The weekly scoreboard (`dados/placar.json`) holds only agent ids and numbers.
 - **POST bodies:** every `POST` reads its body (up to 128 KB) before answering, so a refusal (wrong origin, wrong type, too big) reaches the client instead of a connection reset. Each route keeps its own size cap; above 128 KB, only the logo upload reads the body.
 - **Branding on the sign-in screen:** the company name, color and logo are shown to anyone who reaches the page on the tailnet (or on the internet, with a public address), before login. The logo only accepts PNG, JPEG and WEBP, up to 600 KB. Prefer an image without sensitive metadata (EXIF, GPS).
@@ -304,10 +312,11 @@ escritorio.py ── 127.0.0.1:737 ── tailscale serve (HTTPS, tailnet only) 
    │  stdlib HTTP server, login, OAuth + PKCE, MCP reader, weather, branding
    ├─ acesso.py: users (scrypt), sessions, first access
    ├─ social.py: social life director (in memory; the weekly scoreboard in dados/placar.json)
-   └─ planta.py: construction mode plan (validation, lock and rev; dados/planta.json)
+   ├─ planta.py: construction mode plan (validation, lock and rev; dados/planta.json)
+   └─ ajustes.py: settings validation (dados/clima.json and dados/festas.json)
 ```
 
-- **Server:** Python 3 standard library only (`escritorio.py`, `acesso.py`, `social.py`, the director of the [social life](#social-life), and `planta.py`, the plan of the [construction mode](#construction-mode)). No database: a few files in the data folder.
+- **Server:** Python 3 standard library only (`escritorio.py`, `acesso.py`, `social.py`, the director of the [social life](#social-life), `planta.py`, the plan of the [construction mode](#construction-mode), and `ajustes.py`, the validation of the settings saved on screen). No database: a few files in the data folder.
 - **Front-end:** vanilla JavaScript and canvas, no build step (`static/`). `app.js` (UI, camera, panels), `mapa.js` (procedural building, furniture collision, doors, and the plan applied on top), `vida.js` (agent life), `avatar.js`, `efeitos.js`, `ceu.js`, `clima.js`, `festas.js`, `expediente.js`, `som.js` (WebAudio), `simular.js`, `brincar.js` (clickable objects, photo mode, demo), `personalizar.js`, `planta.js` and `construir.*` (construction mode editor) and `entrar.*` (sign-in).
 - **Install:** `instalar.sh` sets up the user, files, a hardened systemd unit and `tailscale serve`. Or, in a container, the `Dockerfile` and `docker-compose.yml` (see [Docker and Coolify](#docker-and-coolify)).
 
@@ -318,14 +327,14 @@ On every read (30 s), the server compares tasks with the previous read, by `run_
 ## Development
 
 ```bash
-python -m unittest test_escritorio test_planta
+python -m unittest test_escritorio test_planta test_ajustes
 ESCRITORIO_TIMES=times.exemplo.json python ferramentas/previa.py ferramentas/previa.exemplo.json   # local preview at http://127.0.0.1:7372, no login
 python -B ferramentas/checar_seguranca.py .  # checks login, origin, cookie, attempt limit and the POST routes
 node ferramentas/estresse_vida.mjs [url] [--minutos 40] [--acoes] [--brigas 10] [--times 20]  # agent-life regression on the preview (headless Chrome/Edge); exits 1 if it finds something
 node ferramentas/checar_planta_mapa.mjs [url] [--ref main] [--prints]  # construction mode: with an empty plan the building is identical to the reference; example and tampered plans
 ```
 
-In the preview, the construction mode saves to a temporary folder (gone when the preview stops); `--greve` starts a strike at the first step of the social life director; `--conexao <state>` (`carregando`, `sem_conexao`, `recusada`, `pausa` or `falha`) shows the bar for each connection state, with no OAuth.
+In the preview, the construction mode saves to a temporary folder (the preview prints its path on startup, and the folder is gone when it stops); `--greve` starts a strike at the first step of the social life director; `--conexao <state>` (`carregando`, `sem_conexao`, `recusada`, `pausa` or `falha`) shows the bar for each connection state, with no OAuth.
 
 To test the whole **Connect** flow without the real agentes.chat, use the fake server: `python -I -B ferramentas/agentes_falso.py --escritorio`. It starts the fake on `127.0.0.1:7390` (consent with **Autorizar** and **Recusar**, token with PKCE and an `/mcp` with the `previa.exemplo.json` data) and the office on `http://127.0.0.1:7381`, with a temporary data folder. `--modo` (or, with everything running, `curl -d mcp_403 http://127.0.0.1:7390/_modo`) simulates each failure: registration down or refused, consent refused, code exchange refused, extra scope and `/mcp` answering 401, 402, 403 or 429. Another port for the office: `--porta-escritorio`.
 
@@ -344,7 +353,7 @@ The art (`arte/pixellab` and `static/tema`) is released under the same license a
 ## Third-party
 
 - **Fonts** Figtree, Silkscreen, Source Sans 3 and Doto: SIL Open Font License 1.1 (`static/fontes`, licenses in `static/fontes/OFL-*.txt`).
-- **Weather:** [Open-Meteo](https://open-meteo.com) (no key), with data under CC BY 4.0. Its free API is **for non-commercial use only** ([terms](https://open-meteo.com/en/terms)): a company, or a site with subscriptions or ads, needs a paid Open-Meteo plan or its own Open-Meteo server ([open source](https://github.com/open-meteo/open-meteo)). This server calls the free address (`api.open-meteo.com`, in the `Clima` class of `escritorio.py`), so either option means changing that address (and adding the plan's key). Otherwise, turn the weather off: remove `clima` from `times.json` (`/opt/escritorio/times.json` after installing) and restart the service.
+- **Weather:** [Open-Meteo](https://open-meteo.com) (no key), with data under CC BY 4.0. Its free API is **for non-commercial use only** ([terms](https://open-meteo.com/en/terms)): a company, or a site with subscriptions or ads, needs a paid Open-Meteo plan or its own Open-Meteo server ([open source](https://github.com/open-meteo/open-meteo)). The city search uses Open-Meteo's geocoding (`geocoding-api.open-meteo.com`), under the same terms. This server calls the free addresses (in the `Clima` and `BuscaCidades` classes of `escritorio.py`), so either option means changing those addresses (and adding the plan's key). Otherwise, turn the weather off: **Sem clima** on **Customize**, or remove `clima` from `times.json`.
 
 ## License
 
