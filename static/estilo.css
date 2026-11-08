@@ -893,6 +893,7 @@ body.modo-foto .controles, body.modo-foto .selo-vivo, body.modo-foto .dica-mapa,
 .jn-vazio { margin: 0; padding: 28px 0 8px; text-align: center; color: var(--tinta2); }
 
 /* Novidades (novidades.js): uma entrada do histórico por cartão; a versão em pixel à esquerda no computador */
+#t-novidades:focus { outline: none; }   /* recebe o foco do "Tentar de novo" (como o h2 do assistente) */
 .contador.novo { font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; }
 .nv-estado { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 12px; }
 .nv-estado:not(:has(> :not([hidden]))) { display: none; }

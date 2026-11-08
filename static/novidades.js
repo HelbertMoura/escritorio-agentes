@@ -14,7 +14,11 @@ const Novidades = (() => {
   let dados = null, lido = 0, pedido = 0, aberta = false, vistaAqui = null;   // vistaAqui: sem localStorage, vale nesta visita
 
   function iniciar() {
-    $("novidades-tentar").addEventListener("click", () => { dados = null; abrir(); });
+    $("novidades-tentar").addEventListener("click", async () => {
+      $("t-novidades").focus();   // o botão some durante a busca: o foco vai ao título, não ao body
+      await abrir();
+      if (!$("novidades-tentar").hidden) $("novidades-tentar").focus();   // falhou de novo: volta ao botão
+    });
     ler().then(r => { if (r.ok) selo(); }).catch(() => {});   // só para o selo: sem sessão ou sem rede, o menu fica como está
   }
 
@@ -37,7 +41,8 @@ const Novidades = (() => {
 
   async function abrir() {
     aberta = true;
-    if (dados && performance.now() - lido < 60000) { desenhar(); return; }   // voltou para a página logo depois: sem pedir de novo
+    if (dados) desenhar();   // o que já veio fica na tela enquanto busca de novo
+    if (dados && performance.now() - lido < 60000) return;   // voltou para a página logo depois: sem pedir de novo
     const n = ++pedido;
     if (!dados) estado("Carregando as novidades…");
     const r = await ler();
