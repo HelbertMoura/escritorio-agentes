@@ -11,7 +11,7 @@ Na frente de tudo há login com usuário e senha (acesso.py).
 Rotas: /entrar /primeiro-acesso /sair /logo  /  /<estático>  /api/estado /api/config /api/conversa /api/marca
        /api/logo /api/conversa/modo /api/conversa/modo/fechar /api/conversa/responder /api/social /api/social/briga
        /api/social/greve/atender /api/social/placar /api/planta /api/clima /api/clima/busca /api/festas
-       /api/equipe /api/sair-todos /api/jornal /api/push/chave /api/push/assinar /api/push/sair /api/avisos
+       /api/equipe /api/sair-todos /api/jornal /api/novidades /api/push/chave /api/push/assinar /api/push/sair /api/avisos
        /oauth/conectar /oauth/retorno
        (as quatro primeiras e os estáticos do login sem sessão)
 Uso: python3 -I escritorio.py           serviço (variáveis no /etc/escritorio.env)
@@ -48,6 +48,7 @@ from ajustes import (ACESSORIOS, CLIMA_BYTES, CORES, EQUIPE_BYTES, FESTAS_BYTES,
 from avisos import (CORPO_MAX as PUSH_CORPO, PUSH_BYTES, Avisos, EndpointInvalido, validar_arquivo as validar_push,  # noqa: E402
                     validar_assinatura, validar_saida)
 from jornal import JORNAL_BYTES, Jornal, validar as validar_jornal  # noqa: E402
+from novidades import Novidades  # noqa: E402
 from planta import PLANTA_BYTES, Planta, validar_planta  # noqa: E402
 from social import PLACAR_BYTES, PLACAR_MAX, PLACAR_TETO, Social  # noqa: E402
 
@@ -112,7 +113,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "ajustes.js": "text/javascript; charset=utf-8", "assistente.js": "text/javascript; charset=utf-8",
     "tv.js": "text/javascript; charset=utf-8", "sw.js": "text/javascript; charset=utf-8",
     "jornal.js": "text/javascript; charset=utf-8", "timelapse.js": "text/javascript; charset=utf-8",
-    "avisar.js": "text/javascript; charset=utf-8",
+    "avisar.js": "text/javascript; charset=utf-8", "novidades.js": "text/javascript; charset=utf-8",
     "manifest.webmanifest": "application/manifest+json", "icone-180.png": "image/png", "icone-192.png": "image/png",
     "icone-512.png": "image/png", "icone-mascara-512.png": "image/png",
 }
@@ -1365,6 +1366,8 @@ class BuscaCidades:
 
 
 BUSCA = BuscaCidades()   # o limite é global: vale para todas as sessões juntas
+# página Novidades: o changelog da versão instalada, ao lado do código (imagem e instalar.sh), relido só quando muda
+NOVIDADES = Novidades(os.path.join(os.path.dirname(os.path.abspath(__file__)), "CHANGELOG.pt-BR.md"), log)
 
 
 def _opcional(x):
@@ -2066,6 +2069,8 @@ class Pagina(BaseHTTPRequestHandler):
                 return self._json(*erro(404, "jornal_desligado", "O jornal está desligado neste escritório."))
             presentes = {a["id"] for a in self.server.leitor.foto().get("agentes", [])}
             return self._json(200, jornal.publico(time.time(), presentes))
+        if rota == "/api/novidades":   # do disco, sem chamar o agentes.chat; ausente ou ilegível sai com entradas: []
+            return self._json(200, {"versao": VERSAO, "entradas": NOVIDADES.publico()})
         if rota in ("/api/push/chave", "/api/avisos"):   # o aviso no celular (avisos.py); o rótulo da tarefa nunca sai
             avisos = getattr(self.server, "avisos", None)
             if not avisos:

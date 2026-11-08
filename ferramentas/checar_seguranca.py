@@ -10,6 +10,7 @@ with open(os.environ["ESCRITORIO_TIMES"], "w", encoding="utf-8") as f:
 sys.path.insert(0, PROJ)
 import escritorio as e
 from acesso import Acesso, LIMITE
+import novidades
 from http.server import ThreadingHTTPServer
 
 class L:
@@ -215,6 +216,16 @@ srv.jornal.ler([("terminou", "agente-1")], {"tarefas": []}, time.time())
 confere("GET /api/jornal sem sessao", req("/api/jornal")[0], 401)
 st, _, corpo = req_corpo("/api/jornal", sessao)
 confere("GET /api/jornal com sessao, sem o agente que nao esta na leitura", (st, json.loads(corpo)["semana"]["agentes"]), (200, []))
+print("== Novidades (GET com sessao, o changelog do disco, links so do repositorio)")
+confere("GET /api/novidades sem sessao", req("/api/novidades")[0], 401)
+st, _, corpo = req_corpo("/api/novidades", sessao)
+nov = json.loads(corpo)
+confere("GET /api/novidades com sessao, da versao instalada", (st, nov["versao"], nov["entradas"][0]["versao"]), (200, e.VERSAO, e.VERSAO))
+urls = [m.group(2) for x in nov["entradas"] for s in x["secoes"] for i in s["itens"] for m in novidades.LINK.finditer(i)]
+confere("... todo link do changelog sai para o repositorio (nenhum relativo, nenhum de fora)",
+        (bool(urls), [u for u in urls if not u.startswith(novidades.REPO)]), (True, []))
+confere("POST /api/novidades com sessao e Origin certo (so GET)",
+        req("/api/novidades", {**sessao, "Origin": base, "Content-Type": "application/json"}, b"{}")[0], 404)
 print("== Aviso no celular (push): sessao, Origin estrito, so JSON, 2 KB e lista fechada de hosts")
 srv.avisos = e.Avisos("CHAVE", lambda endpoint, agora: "vapid t=x, k=y", e.log, e.FUSO)
 pj = {**sessao, "Origin": base, "Content-Type": "application/json"}

@@ -46,7 +46,7 @@ AG =[{"id": "a1", "name": "Pixel", "handle": "pixel", "role": "Conteúdo"},
 ORG_URL = f"https://app.agentes.chat/org/{e.ORG}/c/11111111-2222-4333-8444-555555555555"
 # arquivos da lista fechada que chegam com o land do floor das telas (uau-telas); até lá, o servidor responde 404
 PWA = {"manifest.webmanifest", "sw.js", "icone-180.png", "icone-192.png", "icone-512.png", "icone-mascara-512.png"}
-DO_FRONT = {"tv.js", "jornal.js", "timelapse.js", "avisar.js"} | PWA
+DO_FRONT = {"tv.js", "jornal.js", "timelapse.js", "avisar.js", "novidades.js"} | PWA
 
 
 def servidos():
@@ -2758,7 +2758,7 @@ class Docker(unittest.TestCase):
                 pendentes += [n for n in nomes if os.path.isfile(os.path.join(raiz, n + ".py"))]
         esperados = {n + ".py" for n in locais}
         self.assertEqual(esperados, {"escritorio.py", "acesso.py", "social.py", "planta.py", "ajustes.py", "jornal.py",
-                                     "avisos.py", "vapid.py"})
+                                     "avisos.py", "vapid.py", "novidades.py"})
         self.assertLessEqual(esperados, copiados)
         self.assertLessEqual(esperados, liberados)
         with open(os.path.join(raiz, "instalar.sh"), encoding="utf-8") as f:
@@ -2767,6 +2767,19 @@ class Docker(unittest.TestCase):
                       for p in linha.split() if p.endswith(".py")}
         compilados = {os.path.basename(p) for linha in linhas if "py_compile" in linha for p in linha.split() if p.endswith(".py")}
         self.assertEqual((instalados, compilados), (esperados, esperados))
+
+    def test_changelog_vai_junto_para_a_pagina_novidades(self):
+        # o /api/novidades lê o CHANGELOG.pt-BR.md ao lado do escritorio.py: fora da imagem ou do instalar.sh, a página fica vazia
+        raiz = os.path.dirname(os.path.abspath(e.__file__))
+        self.assertEqual(os.path.dirname(e.NOVIDADES.caminho), raiz)
+        nome = os.path.basename(e.NOVIDADES.caminho)
+        with open(os.path.join(raiz, "Dockerfile"), encoding="utf-8") as f:
+            self.assertIn(f"COPY {nome} ./\n", f.read())
+        with open(os.path.join(raiz, ".dockerignore"), encoding="utf-8") as f:
+            self.assertIn("!" + nome, f.read().splitlines())
+        with open(os.path.join(raiz, "instalar.sh"), encoding="utf-8") as f:
+            linhas = f.read().replace("\\\n", " ").splitlines()
+        self.assertTrue(any(linha.startswith("install ") and linha.rstrip().endswith(f" {nome} /opt/escritorio/") for linha in linhas))
 
 
 class ModoResposta(unittest.TestCase):
