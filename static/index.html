@@ -417,6 +417,12 @@
       </section>
       <section id="v-aprovacoes" class="visao" hidden>
         <div class="cabeca"><h1>Aprovações</h1><p id="resumo-aprov" class="resumo">Aprovar acontece no agentes.chat; o botão abre o pedido certo.</p></div>
+        <!-- avisar.js: o aviso no celular deste aparelho (a caixa só aparece quando o servidor tem o push) -->
+        <section id="avisar" class="cartao avisar" aria-labelledby="t-avisar" hidden>
+          <span class="avisar-ic" data-icone="sino" aria-hidden="true"></span>
+          <div class="avisar-txt"><h2 id="t-avisar">Avisar no celular</h2><p id="avisar-estado" role="status"></p></div>
+          <button id="avisar-bt" class="botao" type="button" aria-describedby="avisar-estado">Avisar no celular</button>
+        </section>
         <div class="aprov-barra">
           <div class="busca-pedidos">
             <label class="oculto" for="busca-pedidos">Buscar pedidos</label>
@@ -557,6 +563,7 @@
   <script src="tv.js?v=98"></script>
   <script src="jornal.js?v=98"></script>
   <script src="timelapse.js?v=98"></script>
+  <script src="avisar.js?v=98"></script>
   <script src="app.js?v=98"></script>
   <script src="personalizar.js?v=98"></script>
   <script src="ajustes.js?v=98"></script>

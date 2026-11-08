@@ -49,6 +49,7 @@ async function iniciar() {
   try { await document.fonts.load(Mapa.PLACA_FONTE); } catch (e) { /* sem a fonte, a placa usa a reserva monoespaçada */ }
   if (!$("v-personalizar").hidden) { Personalizar.abrir(config); Ajustes.abrir(config); }   // abriu direto em #personalizar
   await buscar();
+  irAoAgentePedido();
   ligarTV();
   Assistente.talvez(config, () => estado);   // nome de exemplo ou sem conexão: o assistente (uma vez por sessão, e na volta do OAuth)
   setInterval(buscar, 10000);
@@ -2237,6 +2238,18 @@ function buscarNaAjuda() {
 $("faq-busca").addEventListener("input", buscarNaAjuda);
 buscarNaAjuda();
 
+// aviso no celular (avisar.js e sw.js): o toque abre /?agente=<id>; aqui o mapa vai até ele
+function irAoAgente(id) {
+  if (location.hash && location.hash !== "#escritorio") { location.hash = "#escritorio"; rota(); }
+  const b = boneco(id); if (b) focarAgente(b, { seguir: true, foco: true });
+}
+function irAoAgentePedido() {
+  const u = new URL(location.href), id = u.searchParams.get("agente");
+  if (!id) return;
+  u.searchParams.delete("agente"); history.replaceState(history.state, "", u);   // recarregar não volta a abrir
+  irAoAgente(id);
+}
+Avisar.iniciar({ demo: () => Brincar.demo });
 Timelapse.iniciar({
   fotografar,
   podeGravar: () => !!predio && !naSimulacao() && !Brincar.demo && !Expediente.fora(Ceu.agora().h),
@@ -2260,4 +2273,8 @@ window.addEventListener("resize", () => { medirFaixa(); ajustarEscala(); });
 rota();
 iniciar().catch(() => { falhou = true; mostrarConexao(); setTimeout(() => location.reload(), 10000); });
 // PWA (ícone na tela de início): o sw.js não guarda nada; sem ele (http fora do localhost, servidor antigo), o app abre igual
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+  // toque no aviso com esta aba aberta: o sw.js foca a aba e manda ir ao agente
+  navigator.serviceWorker.addEventListener("message", ev => { if (ev.data && ev.data.tipo === "agente" && typeof ev.data.agente === "string") irAoAgente(ev.data.agente); });
+}

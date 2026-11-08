@@ -842,6 +842,20 @@ body.lateral-recolhida .modo-resposta { top: calc(var(--faixa, 0px) + 60px); }
 .barra-foto button.primario:hover { filter: brightness(1.08); }
 .barra-foto button:focus-visible { outline: 2px solid var(--destaque); outline-offset: 2px; }
 body.modo-foto .controles, body.modo-foto .selo-vivo, body.modo-foto .dica-mapa, body.modo-foto .cartao-agente, body.modo-foto .ficha, body.modo-foto .conversa { display: none !important; }
+/* Avisar no celular (avisar.js), na página Aprovações */
+.avisar { display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin-bottom: 16px; }
+.avisar-ic { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--ambar-fundo); color: var(--ambar); }
+.avisar-ic svg { width: 20px; height: 20px; }
+.avisar[data-estado="ligado"] .avisar-ic { background: var(--verde-fundo); color: var(--verde); }
+.avisar:is([data-estado="negado"], [data-estado="cheio"], [data-estado="invalido"], [data-estado="falha"], [data-estado="servico"], [data-estado="precisa_https"]) .avisar-ic { background: var(--erro-fundo); color: var(--erro-texto); }
+.avisar-txt { flex: 1; min-width: 0; }
+.avisar-txt h2 { margin: 0 0 2px; font-size: 15px; font-weight: 700; }
+.avisar-txt p { margin: 0; color: var(--suave); font-size: 14px; }
+.avisar .botao { flex: none; min-height: 40px; }
+.avisar .botao[aria-disabled="true"] { opacity: .7; cursor: progress; }
+@media (pointer: coarse) { .avisar .botao { min-height: 44px; } }
+@media (max-width: 560px) { .avisar { flex-wrap: wrap; } .avisar-txt { flex-basis: calc(100% - 54px); } .avisar .botao { width: 100%; justify-content: center; } }
+
 /* Time-lapse do dia (timelapse.js) */
 .dlg-timelapse { width: min(460px, calc(100vw - 24px)); }
 .tl-aviso { margin: 0; padding: 10px 12px; border-radius: var(--r-item); background: var(--ambar-fundo); color: var(--ambar-texto); font-size: 14px; }
