@@ -23,17 +23,28 @@ const Timelapse = (() => {
     $("tl-baixar").addEventListener("click", baixar);
     $("tl-apagar").addEventListener("click", async () => { await limpar(() => true); proximo = 0; mostrar("Quadros apagados."); });
     if (!suporta || api.demo()) return;   // navegador sem as peças, ou demonstração: só o diálogo explica
+    limparVelhos();   // quem abre no dia seguinte fora do expediente também não fica com os quadros de ontem
     pegarVez(false);
     setInterval(() => { if (gravando && Date.now() >= proximo && api.podeGravar()) pedido = true; }, 15000);
   }
 
   // ---------- quem grava ----------------------------------------------------------------
-  // a trava fica presa enquanto a aba vive; roubada (a TV ligou noutra aba), volta para a fila
+  // a trava fica presa enquanto a aba vive; roubada (a TV ligou noutra aba), volta para a fila. Só um pedido por aba
+  // na fila: o da TV cancela o que esperava aqui antes de roubar
+  let naFila = null;
   function pegarVez(roubar) {
-    navigator.locks.request(TRAVA, roubar ? { steal: true } : {}, () => {
-      gravando = true;
+    if (naFila) { naFila.abort(); naFila = null; }
+    const ctl = roubar ? null : new AbortController();
+    naFila = ctl;
+    let segurou = false;
+    navigator.locks.request(TRAVA, roubar ? { steal: true } : { signal: ctl.signal }, () => {
+      if (naFila === ctl) naFila = null;
+      segurou = gravando = true;
       return new Promise(() => {});   // só solta quando a aba fecha (ou quando outra rouba)
-    }).catch(() => {}).finally(() => { gravando = false; setTimeout(() => pegarVez(false), 1000); });
+    }).catch(() => {}).finally(() => {
+      if (segurou) gravando = false;
+      if (!(ctl && ctl.signal.aborted)) setTimeout(() => pegarVez(false), 1000);   // cancelado aqui mesmo: já há outro pedido
+    });
   }
   function preferir() { if (suporta && !api.demo() && !gravando) pegarVez(true); }   // a TV: grava aqui, de preferência
 
@@ -61,6 +72,7 @@ const Timelapse = (() => {
     return fica;
   }
   async function quadros() { return pronto((await loja("readonly")).getAll()); }
+  const limparVelhos = () => limpar(q => q.dia !== hojeEm()).catch(() => []);   // a virada do dia, mesmo sem gravar
 
   // ---------- captura (chamada pelo laço do app.js, logo depois de desenhar) --------------
   function quadro() {
@@ -97,7 +109,7 @@ const Timelapse = (() => {
     if (!suporta) { est.textContent = "Este navegador não grava o time-lapse (falta IndexedDB, Web Locks ou MediaRecorder)."; $("tl-baixar").disabled = $("tl-apagar").disabled = true; return; }
     if (api.demo()) { est.textContent = "Na demonstração o time-lapse não grava: abra o escritório de verdade."; $("tl-baixar").disabled = $("tl-apagar").disabled = true; return; }
     let lista = [];
-    try { lista = (await quadros()).filter(q => q.dia === hojeEm()); } catch (e) { est.textContent = "Não deu para ler os quadros deste navegador."; return; }
+    try { await limparVelhos(); lista = (await quadros()).filter(q => q.dia === hojeEm()); } catch (e) { est.textContent = "Não deu para ler os quadros deste navegador."; return; }
     const n = lista.length, desde = n ? new Date(lista[0].em).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }) : "";
     const quem = gravando ? "Esta aba grava o time-lapse" : "Outra aba deste navegador grava o time-lapse";
     const quando = api.podeGravar() ? "um quadro a cada 2 minutos do expediente" : "em pausa agora (fora do expediente ou numa simulação)";
@@ -111,7 +123,9 @@ const Timelapse = (() => {
     return null;
   }
   async function baixar() {
-    const f = formato(); if (!f || montando) return;
+    const f = formato();
+    if (!f) { $("tl-progresso").textContent = "Este navegador não grava vídeo (nem MP4 nem WebM)."; return; }
+    if (montando) return;
     const lista = (await quadros()).filter(q => q.dia === hojeEm());
     if (lista.length < 2) return mostrar();
     montando = true; $("tl-baixar").disabled = $("tl-apagar").disabled = true;

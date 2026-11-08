@@ -1,6 +1,7 @@
 // Modo TV: o mapa sozinho numa tela da sala, com um diretor de câmera que corre para o que acontece.
 // Abre por ?tv=1 ou pelo botão do mapa. O app.js entrega a câmera em TV.iniciar(api); aqui só se decide
 // para onde olhar e por quanto tempo. Sem som próprio (o som segue a escolha de quem liga).
+// A TV é o mapa: ligar leva ao #escritorio, então /?tv=1#jornal abre a TV (o hash de outra página é trocado).
 "use strict";
 
 const TV = (() => {
@@ -14,7 +15,7 @@ const TV = (() => {
   const menosMovimento = matchMedia("(prefers-reduced-motion: reduce)");
   const $ = id => document.getElementById(id);
 
-  let api = null, ligada = false, relogio = 0, wake = null, configV = null;
+  let api = null, ligada = false, relogio = 0, wake = null, pedindoWake = false, parado = 0, configV = null;
   let fila = [], atual = null, ate = 0, pausaAte = 0, passeio = { sala: -1, geral: true };
   const vistos = new Set();     // eventos e cenas já mostrados (ou que já existiam quando a TV ligou)
 
@@ -29,7 +30,6 @@ const TV = (() => {
     document.addEventListener("fullscreenchange", () => { $("tv-cheia").hidden = !ligada || telaCheiaDoNavegador(); });
     document.addEventListener("visibilitychange", pedirWake);
     // mouse parado: some o cursor e o botão de sair (o teclado continua achando o botão pelo foco)
-    let parado = 0;
     document.addEventListener("pointermove", () => {
       if (!ligada) return;
       document.body.classList.remove("tv-quieto"); clearTimeout(parado);
@@ -42,6 +42,7 @@ const TV = (() => {
   function ligar(gesto) {
     if (ligada) return;
     ligada = true;
+    api.irAoMapa();
     if (!urlTv()) { const u = new URL(location.href); u.searchParams.set("tv", "1"); history.replaceState(history.state, "", u); }   // recarregar continua na TV
     document.body.classList.add("tv", "tv-quieto");
     api.fecharFicha(); api.telaCheia(true);
@@ -57,7 +58,7 @@ const TV = (() => {
   function desligar() {
     if (!ligada) return;
     ligada = false;
-    clearInterval(relogio); relogio = 0;
+    clearInterval(relogio); relogio = 0; clearTimeout(parado);
     if (wake) { wake.release().catch(() => {}); wake = null; }
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     const u = new URL(location.href); u.searchParams.delete("tv"); history.replaceState(history.state, "", u);
@@ -75,11 +76,14 @@ const TV = (() => {
 
   // Wake Lock: a tela não apaga; o navegador solta ao esconder a aba, então pede de novo na volta
   async function pedirWake() {
-    if (!ligada || wake || document.visibilityState !== "visible" || !("wakeLock" in navigator)) return;
+    if (!ligada || wake || pedindoWake || document.visibilityState !== "visible" || !("wakeLock" in navigator)) return;
+    pedindoWake = true;
     try {
-      wake = await navigator.wakeLock.request("screen");
-      wake.addEventListener("release", () => { wake = null; });
-    } catch (e) { wake = null; }   // bateria fraca ou sem permissão: a TV segue, só sem a trava
+      const w = await navigator.wakeLock.request("screen");
+      if (!ligada) { w.release().catch(() => {}); return; }   // saiu da TV enquanto o pedido corria: não deixa a tela presa acesa
+      wake = w;
+      w.addEventListener("release", () => { if (wake === w) wake = null; });
+    } catch (e) { /* bateria fraca ou sem permissão: a TV segue, só sem a trava */ } finally { pedindoWake = false; }
   }
 
   // ---------- fila de notícias ------------------------------------------------------
@@ -119,8 +123,8 @@ const TV = (() => {
     const agora = performance.now();
     if (agora < pausaAte) return;
     fila = fila.filter(n => agora - n.entrou < VELHO);
-    // notícia mais importante passa na frente de uma menor que já teve 4 s de tela
-    const furar = atual && fila.length && fila[0].prio > atual.prio && agora - atual.desde > 4000;
+    // notícia entra na hora durante o passeio; durante outra notícia, só se for mais importante e a outra já teve 4 s de tela
+    const furar = fila.length > 0 && (!atual || (fila[0].prio > atual.prio && agora - atual.desde > 4000));
     if (agora < ate && !furar) {
       if (atual && atual.agente && !api.temAgente(atual.agente)) ate = 0;   // o agente saiu do mapa: próxima cena
       return;

@@ -11,6 +11,7 @@ const Jornal = (() => {
   const NOME_CLIMA = { limpo: "céu limpo", nublado: "nublado", neblina: "neblina", garoa: "garoa", chuva: "chuva", neve: "neve", tempestade: "tempestade" };
 
   let api = null, dados = null, placar = null, qual = "semana", pedido = 0, lido = 0;
+  let desenhado = "";   // o que está na tela: sem mudança, nada é recriado (a rolagem da tabela e o leitor de tela ficam onde estão)
 
   function iniciar(a) {
     api = a;
@@ -19,7 +20,7 @@ const Jornal = (() => {
 
   // ---------- leitura -----------------------------------------------------------------
   async function abrir() {
-    if (api.demo()) { aviso("Na demonstração não há jornal: ele junta as tarefas da semana do escritório de verdade."); $("jornal").hidden = true; return; }
+    if (api.demo()) return esconder("Na demonstração não há jornal: ele junta as tarefas da semana do escritório de verdade.");
     if (dados && performance.now() - lido < 60000) { desenhar(); return; }   // voltou para a página logo depois: sem pedir de novo
     const n = ++pedido;
     if (!dados) aviso("Carregando o jornal…");
@@ -27,8 +28,8 @@ const Jornal = (() => {
     try { r = await fetch("api/jornal", { cache: "no-store", credentials: "same-origin" }); d = await r.json().catch(() => null); } catch (e) { r = null; }
     if (n !== pedido) return;
     if (r && r.status === 401) { location.href = "/entrar"; return; }
-    if (r && r.status === 404 && d && d.erro === "jornal_desligado") { dados = null; $("jornal").hidden = true; aviso("O jornal está desligado neste escritório."); return; }
-    if (!r || !r.ok || !valido(d)) { if (!dados) { $("jornal").hidden = true; aviso("Não deu para ler o jornal agora. Tente de novo daqui a pouco."); } return; }
+    if (r && r.status === 404 && d && d.erro === "jornal_desligado") { dados = null; return esconder("O jornal está desligado neste escritório."); }
+    if (!r || !r.ok || !valido(d)) { if (!dados) esconder("Não deu para ler o jornal agora. Tente de novo daqui a pouco."); return; }
     dados = d; lido = performance.now();
     placar = api.socialLigada() ? await lerPlacar() : null;   // o "Campeão do ringue" vem do placar da vida social
     if (n === pedido) desenhar();
@@ -44,6 +45,10 @@ const Jornal = (() => {
   const valido = d => !!d && d.v === 1 && semanaOk(d.semana) && semanaOk(d.anterior);
   const num = v => (Number.isFinite(v) ? Math.max(0, Math.round(v)) : 0);
   function aviso(txt) { $("jornal-aviso").textContent = txt; $("jornal-aviso").hidden = !txt; }
+  function esconder(txt) { // sem jornal para mostrar: some o artigo e as abas das semanas, fica o aviso
+    $("jornal").hidden = true; $("jornal-semanas").hidden = true; desenhado = "";
+    aviso(txt);
+  }
 
   // ---------- texto -------------------------------------------------------------------
   const qtd = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
@@ -75,7 +80,11 @@ const Jornal = (() => {
     const gente = s.agentes.map(a => ({ id: a.id, tarefas: num(a.tarefas), aprovacoes: num(a.aprovacoes), respostas: num(a.respostas), minutos: num(a.minutos), ag: api.agente(a.id) }))
       .filter(a => typeof a.id === "string" && a.ag);
     const j = $("jornal");
-    j.hidden = false; aviso("");
+    // a leitura de 10 s chama aqui também: só recria quando mudaram os dados, a aba, o placar ou os nomes e aparências
+    const chave = JSON.stringify([qual, s, placar, api.empresa(), gente.map(a => [a.id, a.ag.nome, a.ag.ap])]);
+    if (chave === desenhado && !j.hidden) return;
+    desenhado = chave;
+    j.hidden = false; $("jornal-semanas").hidden = false; aviso("");
     if (!gente.length && !s.dias.length) {
       j.replaceChildren(topo(F, ini), el("p", "jn-vazio", qual === "anterior" ? "Sem edição da semana passada: o escritório ainda não anotava." : "A edição desta semana ainda está em branco. Volte mais tarde."));
       return;

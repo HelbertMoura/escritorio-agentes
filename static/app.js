@@ -133,7 +133,7 @@ async function buscar() {
     for (const s of predio.salas) for (const m of s.mesas || []) if (m.handle) mesas.set(m.handle, m);
     Vida.sincronizar(mundo, estado.agentes || [], estado.trabalhos || [], mesas, aparencia, novo);
     Vida.social(mundo, !naSimulacao() && estado.social && typeof estado.social === "object" ? estado.social : null);   // null desliga a camada
-    Vida.visitantes(mundo, TV.ligada ? [] : estado.visitantes);   // na TV, os visitantes vão embora
+    Vida.visitantes(mundo, TV.invisivel ? [] : estado.visitantes);   // na TV (também na 1ª leitura do /?tv=1), sem visitantes
     mostrarOlhando();
     falhou = false;
     desenharPainel(); desenharEventos(); mostrarConexao(); paginaConversas();
@@ -2071,6 +2071,7 @@ function ligarTV() {
     frase: tipo => FRASES_EVENTO[tipo] || "",
     verTudo: ja => verTudo(ja),
     soltar: () => { seguir = null; },
+    irAoMapa: () => { if (location.hash && location.hash !== "#escritorio") { history.replaceState(history.state, "", "#escritorio"); rota(); } },
     aoLigar: () => Timelapse.preferir(),   // a TV fica com a gravação do time-lapse
     fecharFicha, telaCheia, mini,
   });
