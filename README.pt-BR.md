@@ -153,7 +153,39 @@ O instalador publica o endereço `/` da porta 443 desta máquina na tailnet (`ta
 
 **Reinstalar ou atualizar:** rode o instalador de novo com as mesmas variáveis. Ele reescreve o `/etc/escritorio.env` toda vez, então `ESCRITORIO_PORTA` e `ESCRITORIO_FONTE` voltam ao padrão quando ficam de fora (num fork, o link do código-fonte voltaria a apontar para este repositório). Usuários, sessões, tokens e o `/opt/escritorio/times.json` são mantidos.
 
-Abra `https://<sua-máquina>.<sua-tailnet>.ts.net/`, use o código para criar o seu usuário e a senha, e depois abra `/oauth/conectar` para autorizar a leitura no agentes.chat. No celular, basta o app da Tailscale ligado.
+Abra `https://<sua-máquina>.<sua-tailnet>.ts.net/` e use o código para criar o seu usuário e a senha. Depois, autorize a leitura no agentes.chat (veja [Conectar ao agentes.chat](#conectar-ao-agenteschat)). No celular, basta o app da Tailscale ligado.
+
+### Conectar ao agentes.chat
+
+A `ESCRITORIO_BASE` é o endereço público do escritório, só a origem, como `https://escritorio.exemplo.com`: sem caminho e sem barra no fim. É para ela que o agentes.chat devolve depois da autorização, e com ela o servidor confere a origem de cada envio. Fora desse formato, o serviço não sobe e diz o porquê.
+
+Enquanto o escritório não está conectado, a faixa acima do mapa mostra o botão **Conectar ao agentes.chat**, que abre o `/oauth/conectar` na mesma aba. Na volta da autorização, a primeira leitura sai na hora. **Copiar o link** copia `<ESCRITORIO_BASE>/oauth/conectar`, para abrir em outra aba ou em outro navegador. Sem área de transferência (fora do https), a faixa mostra o endereço já selecionado.
+
+Se o agentes.chat recusar a leitura (HTTP 401, 402 ou 403), a faixa diz isso, com o código, e o botão vira **Reconectar**. Confira se a conta conectada é da organização e se o plano permite apps externos. Enquanto ele recusa, o escritório tenta de novo com espera crescente, de 30 s até 5 min.
+
+Se o escritório for aberto por um endereço diferente da `ESCRITORIO_BASE`, a faixa avisa antes de tudo, porque o agentes.chat devolve sempre para a `ESCRITORIO_BASE`: ajuste a variável no servidor. A tela de entrar também mostra o endereço certo.
+
+Quando o Conectar falha, uma página curta diz o motivo, com textos do próprio escritório: o servidor não alcança o agentes.chat, o endereço de retorno foi recusado, a autorização foi recusada ou venceu (ela vale 10 minutos). O texto que vem do agentes.chat nunca é mostrado.
+
+## Docker e Coolify
+
+O repositório traz um `Dockerfile` e um `docker-compose.yml`. Não há imagem publicada: o Coolify (ou você) constrói a imagem direto do Git. A imagem leva só o código e a pasta `static/`, sem `pip`, e roda com um usuário próprio, sem shell. O `.dockerignore` é uma lista de permissão: mesmo construída de uma pasta que tem `dados/` ou `times.json`, a imagem não leva nada disso.
+
+**No Coolify:**
+1. Crie um recurso a partir do repositório, com o build pack **Docker Compose** e o arquivo `docker-compose.yml`.
+2. No domínio do serviço `escritorio`, ponha `https://escritorio.exemplo.com:7371`. O `:7371` só diz ao proxy do Coolify em que porta o container escuta; quem visita continua no `https://` normal.
+3. Nas variáveis, defina `ESCRITORIO_BASE=https://escritorio.exemplo.com` (o mesmo domínio, **sem** a porta e sem barra no fim) e `AGENTES_ORG=<id da sua organização>`. O Coolify não deixa publicar sem as duas.
+4. Publique. Depois, no **Terminal** do serviço, rode `python3 -I -B escritorio.py codigo` para ver o código de primeiro acesso. Ele não vai para o log.
+5. Abra o endereço, crie o usuário logo depois do deploy (veja [Endereço público](#endereço-público)) e conecte.
+
+**Fora do Coolify**, atrás do seu próprio proxy HTTPS, na mesma rede do Docker: `ESCRITORIO_BASE=https://... AGENTES_ORG=... docker compose up -d`. O primeiro acesso sai com `docker exec -it <container> python3 -I -B escritorio.py codigo`. O compose não publica porta nenhuma: publicada, a porta serve HTTP sem TLS, com a senha em texto puro. Para testar só na sua máquina, descomente o `127.0.0.1:7381:7371` e use `ESCRITORIO_BASE=http://127.0.0.1:7381`.
+
+- **O volume `/dados`** guarda o token do agentes.chat, os usuários, as sessões, a marca e a planta. Faça backup cifrado e nunca o deixe público. Com o `docker-compose.yml` do repositório, o container roda com o sistema de arquivos só de leitura, sem capacidades e com 256 MB de memória.
+- **`conversas`** (ler ou responder) e os times ainda saem do `times.json`: crie o `/dados/times.json` no volume, por exemplo com `docker exec -i <container> sh -c 'cat > /dados/times.json' < times.json`. Ele vale sem reiniciar. O nome, a cor, o logo e o expediente já vão pela tela **Personalizar**.
+- **Atualizar** é fazer o redeploy. O volume fica.
+- **Trocar de domínio** pede ajustar a `ESCRITORIO_BASE` e conectar de novo.
+- **Esqueceu a senha:** `docker exec <container> rm /dados/usuarios.json /dados/sessoes.json`, depois `docker restart <container>` e `docker exec -it <container> python3 -I -B escritorio.py codigo` para o código novo. No Coolify, pelo Terminal do serviço.
+- **Já montou o Docker por conta própria?** Troque o contorno do bind em `127.0.0.1` pela variável `ESCRITORIO_BIND=0.0.0.0`, que a imagem já traz. Com ela, a `ESCRITORIO_BASE` é obrigatória e a regra da porta abaixo de 1024 não vale, porque a porta é a do container.
 
 ## Personalizar (white-label)
 
@@ -205,7 +237,7 @@ Arrume o escritório com o mouse, no computador. Abra pela tela **Personalizar**
 
 ## Segurança
 
-Em resumo: o escritório só é alcançável **na sua tailnet**, **falha fechado** quando o arquivo de usuários não pode ser lido, e **nenhum segredo chega ao navegador**: o token do agentes.chat fica no servidor, e o navegador só guarda um cookie de sessão HttpOnly.
+Em resumo: com o instalador, o escritório só é alcançável **na sua tailnet** (no Docker com endereço público, leia [Endereço público](#endereço-público)); ele **falha fechado** quando o arquivo de usuários não pode ser lido, e **nenhum segredo chega ao navegador**: o token do agentes.chat fica no servidor, e o navegador só guarda um cookie de sessão HttpOnly.
 
 - **Só leitura no agentes.chat:** escopo OAuth `read`. Um token com mais permissões é recusado. A exceção é o modo `"responder"` (abaixo), que pede `read write`; `manage` é recusado sempre.
 - **Senhas e sessões:**
@@ -238,9 +270,27 @@ Em resumo: o escritório só é alcançável **na sua tailnet**, **falha fechado
 - **Modo construção (`POST /api/planta`):** quem está logado edita, a mesma regra do **Personalizar** (só existe uma conta). A rota exige o `Origin` igual ao endereço do servidor (sem cair para o `Referer`), sessão, `application/json` (senão, 415), corpo de até 64 KB e o `rev` atual da planta (409 quando outra tela salvou antes). A planta é validada tudo ou nada, do mesmo jeito no salvar e na leitura, e gravada de forma atômica (0600), sob uma trava, em `dados/planta.json`; o log guarda contagens, nunca o conteúdo. Um arquivo ilegível ou inválido volta ao prédio automático, com uma linha no log. O servidor confere só o formato e os limites: a lista de peças é um catálogo fechado no navegador, e uma planta ruim nunca derruba a página.
 - **Rotas da vida social:** o **Mandar pro ringue** (`POST /api/social/briga`) e o **Atender o pedido** (`POST /api/social/greve/atender`) seguem as mesmas regras de origem estrita e só JSON. O placar semanal (`dados/placar.json`) guarda só ids de agentes e números.
 - **Corpo dos POST:** todo `POST` lê o corpo (até 128 KB) antes de responder, para a recusa (origem errada, tipo errado, grande demais) chegar ao cliente em vez de a conexão cair. Cada rota mantém o seu teto de tamanho; acima de 128 KB, só o envio do logo lê o corpo.
-- **Marca na tela de entrar:** o nome, a cor e o logo da empresa aparecem para quem alcança a página na tailnet, antes do login. O logo aceita só PNG, JPEG e WEBP, de até 600 KB. Prefira uma imagem sem metadados sensíveis (EXIF, GPS).
-- **Rede:** o serviço escuta só em 127.0.0.1, numa porta privilegiada, e quem o publica é a Tailscale.
-- **Sistema:** roda com usuário próprio e unit systemd endurecida. Tokens, senhas e logo ficam em `/var/lib/escritorio` (0700).
+- **Marca na tela de entrar:** o nome, a cor e o logo da empresa aparecem para quem alcança a página na tailnet (ou na internet, com endereço público), antes do login. O logo aceita só PNG, JPEG e WEBP, de até 600 KB. Prefira uma imagem sem metadados sensíveis (EXIF, GPS).
+- **Conectar:** as páginas de erro do OAuth usam só textos do escritório. O `error_description` e o corpo que o agentes.chat manda nunca aparecem na tela, e o log guarda o código do erro, nunca o código da autorização, o `state` nem o token.
+- **Rede:** com o instalador, o serviço escuta só em 127.0.0.1, numa porta privilegiada, e quem o publica é a Tailscale. No Docker, `ESCRITORIO_BIND=0.0.0.0` (só `127.0.0.1` e `0.0.0.0` valem), sempre com a `ESCRITORIO_BASE` definida. O servidor não lê `X-Forwarded-*`: a origem aceita e o cookie saem da `ESCRITORIO_BASE`, e nada usa o IP de quem acessa.
+- **Sistema:** roda com usuário próprio e unit systemd endurecida. Tokens, senhas e logo ficam em `/var/lib/escritorio` (0700). No Docker, ficam no volume `/dados` (0700); com o `docker-compose.yml` do repositório, o container roda só de leitura e sem capacidades (num build só pelo `Dockerfile`, essas travas ficam por conta de quem sobe o container).
+
+### Endereço público
+
+No Coolify, ou em qualquer Docker com domínio na internet, não há a camada da Tailscale. O login basta para começar, mas mude o que você espera dele:
+
+1. Qualquer pessoa vê a tela de entrar, com o nome, a cor e o logo.
+2. Qualquer pessoa trava o seu login com 8 senhas erradas a cada 15 minutos. As sessões já abertas continuam valendo.
+3. A senha vira a única barreira, inclusive para ler as conversas (`ler`) e para mandar mensagens (`responder`).
+4. Não há limite nem log por IP.
+5. Se a porta do container for publicada, ela serve HTTP sem TLS, com a senha em texto puro. O compose não publica.
+6. Contra conexões lentas, quem defende é o proxy.
+
+Por isso:
+- use uma senha longa, de 14 caracteres ou mais, ou uma frase;
+- crie o usuário logo depois do deploy: até lá, a tela de primeiro acesso fica aberta na internet (o código é secreto e tem limite de tentativas);
+- deixe `conversas` desligado ou em `ler`, e use `responder` só se precisar;
+- se puder, ponha uma camada a mais na frente: Cloudflare Access, Tailscale ou uma lista de IPs no proxy.
 
 Achou uma vulnerabilidade? Leia o [SECURITY.md](./SECURITY.md) e reporte em particular.
 
@@ -259,7 +309,7 @@ escritorio.py ── 127.0.0.1:737 ── tailscale serve (HTTPS, só na tailnet
 
 - **Servidor:** só a biblioteca padrão do Python 3 (`escritorio.py`, `acesso.py`, `social.py`, o diretor da [vida social](#vida-social), e `planta.py`, a planta do [modo construção](#modo-construção)). Sem banco de dados: poucos arquivos na pasta de dados.
 - **Front-end:** JavaScript puro e canvas, sem build (`static/`). `app.js` (interface, câmera, painéis), `mapa.js` (prédio procedural, colisão de móveis, portas e a planta aplicada por cima), `vida.js` (vida dos agentes), `avatar.js`, `efeitos.js`, `ceu.js`, `clima.js`, `festas.js`, `expediente.js`, `som.js` (WebAudio), `simular.js`, `brincar.js` (objetos clicáveis, modo foto, demonstração), `personalizar.js`, `planta.js` e `construir.*` (editor do modo construção) e `entrar.*` (login).
-- **Instalação:** o `instalar.sh` cria o usuário, os arquivos, uma unit systemd endurecida e o `tailscale serve`.
+- **Instalação:** o `instalar.sh` cria o usuário, os arquivos, uma unit systemd endurecida e o `tailscale serve`. Ou, em container, o `Dockerfile` e o `docker-compose.yml` (veja [Docker e Coolify](#docker-e-coolify)).
 
 ### Diário de transições
 
@@ -275,7 +325,9 @@ node ferramentas/estresse_vida.mjs [url] [--minutos 40] [--acoes] [--brigas 10] 
 node ferramentas/checar_planta_mapa.mjs [url] [--ref main] [--prints]  # modo construção: com a planta vazia, o prédio fica idêntico ao da referência; plantas de exemplo e adulteradas
 ```
 
-Na prévia, o modo construção grava numa pasta temporária (some quando a prévia para); o `--greve` começa uma greve no primeiro passo do diretor da vida social.
+Na prévia, o modo construção grava numa pasta temporária (some quando a prévia para); o `--greve` começa uma greve no primeiro passo do diretor da vida social; o `--conexao <estado>` (`carregando`, `sem_conexao`, `recusada`, `pausa` ou `falha`) mostra a faixa de cada estado da conexão, sem OAuth.
+
+Para testar o **Conectar** inteiro sem o agentes.chat de verdade, use o servidor falso: `python -I -B ferramentas/agentes_falso.py --escritorio`. Ele sobe o falso em `127.0.0.1:7390` (consentimento com **Autorizar** e **Recusar**, token com PKCE e um `/mcp` com os dados do `previa.exemplo.json`) e o escritório em `http://127.0.0.1:7381`, com uma pasta de dados temporária. O `--modo` (ou, com tudo aberto, `curl -d mcp_403 http://127.0.0.1:7390/_modo`) simula cada falha: registro fora do ar ou recusado, consentimento recusado, troca do código recusada, escopo a mais e o `/mcp` respondendo 401, 402, 403 ou 429. Outra porta para o escritório: `--porta-escritorio`.
 
 O `ferramentas/previa.exemplo.json` traz respostas fictícias do MCP (`agents` e `tasks`, com os handles do `times.exemplo.json`) para testar sem conectar; o `ESCRITORIO_TIMES` faz as salas do exemplo aparecerem. Para testar com o seu workspace, copie as respostas dele para `dados.json`, que o git ignora, e rode `python ferramentas/previa.py dados.json`. A prévia relê o arquivo quando ele muda: para ver os eventos ao vivo, mude o `status` de uma tarefa ou tire e ponha tarefas. Outra porta: `PREVIA_PORTA=7373`.
 

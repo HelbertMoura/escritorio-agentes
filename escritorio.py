@@ -5,7 +5,8 @@
 Lê o agentes.chat pelo conector MCP de apps externos (OAuth, escopo "read"; "read write" só com
 "conversas": "responder"), a cada ESCRITORIO_INTERVALO segundos, e guarda um resumo em memória.
 Não chama modelo de IA nenhum. Serve a página em 127.0.0.1; quem publica é a Tailscale (tailscale serve),
-só na rede privada da pessoa, com HTTPS. Na frente de tudo há login com usuário e senha (acesso.py).
+só na rede privada da pessoa, com HTTPS. Num container, ESCRITORIO_BIND=0.0.0.0, atrás do proxy HTTPS.
+Na frente de tudo há login com usuário e senha (acesso.py).
 
 Rotas: /entrar /primeiro-acesso /sair /logo  /  /<estático>  /api/estado /api/config /api/conversa /api/marca
        /api/logo /api/conversa/modo /api/conversa/modo/fechar /api/conversa/responder /api/social /api/social/briga
@@ -25,6 +26,7 @@ import json
 import os
 import re
 import secrets
+import signal
 import sys
 import threading
 import time
@@ -43,8 +45,9 @@ from social import PLACAR_BYTES, PLACAR_MAX, PLACAR_TETO, Social  # noqa: E402
 VERSAO = "1.0.0"
 MCP = os.environ.get("AGENTES_MCP", "https://app.agentes.chat/mcp")
 EMISSOR = os.environ.get("AGENTES_EMISSOR", "https://app.agentes.chat")
-BASE = os.environ.get("ESCRITORIO_BASE", "http://127.0.0.1:7371").rstrip("/")
+BASE = os.environ.get("ESCRITORIO_BASE", "http://127.0.0.1:7371")   # só origem: o main() confere (erro_rede)
 PORTA = int(os.environ.get("ESCRITORIO_PORTA", "7371"))
+BIND = os.environ.get("ESCRITORIO_BIND", "127.0.0.1")   # 0.0.0.0 só em container, atrás de um proxy HTTPS
 ORG = os.environ.get("AGENTES_ORG", "").strip().lower()  # id da organização no agentes.chat; obrigatório no main()
 TIMES = os.environ.get("ESCRITORIO_TIMES", os.path.join(os.path.dirname(os.path.abspath(__file__)), "times.json"))
 DADOS = os.environ.get("ESCRITORIO_DADOS", os.path.join(os.path.dirname(os.path.abspath(__file__)), "dados"))
@@ -67,6 +70,20 @@ INTERVALO = max(30, int(os.environ.get("ESCRITORIO_INTERVALO", "30")))
 ORCAMENTO_DIA = 3000
 AGENTES_A_CADA, RECARGA_MINIMA = 600, 120   # list_agents a cada 10 min; agente desconhecido recarrega, no máximo a cada 2 min
 PAUSA_429 = "O agentes.chat pediu uma pausa nas leituras; mostrando a última leitura"
+SEM_CONEXAO = "o escritório ainda não está conectado ao agentes.chat (abra /oauth/conectar)"
+FALHA_LEITURA = "agentes.chat não respondeu; mostrando a última leitura"
+# o "conexao" do /api/estado: a faixa do navegador decide por ele, e não pelo texto do "erro"
+CONEXOES = ("carregando", "conectado", "sem_conexao", "recusada", "pausa", "falha")
+
+
+def texto_recusa(http):
+    """A mensagem nossa para o 401, o 402 e o 403 do MCP. O texto que vier do agentes.chat nunca vai para a tela."""
+    if http == 401:
+        return "o agentes.chat recusou o acesso (HTTP 401): conecte o escritório de novo"
+    return (f"o agentes.chat recusou a leitura (HTTP {http}): confira se a conta conectada é da organização e se o "
+            "plano permite apps externos")
+
+
 ARQ_TOKEN = os.path.join(DADOS, "oauth.json")
 URL_APP = re.compile(r"https://app\.agentes\.chat/org/" + re.escape(ORG) + r"/c/[0-9a-f\-]{36}(\?m=[0-9a-f\-]{36})?")
 ARQUIVOS = {  # estáticos servidos (lista fechada)
@@ -83,6 +100,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "simular.js": "text/javascript; charset=utf-8", "expediente.js": "text/javascript; charset=utf-8",
     "planta.js": "text/javascript; charset=utf-8", "construir.html": "text/html; charset=utf-8",
     "construir.js": "text/javascript; charset=utf-8", "construir.css": "text/css; charset=utf-8",
+    "ajustes.js": "text/javascript; charset=utf-8", "assistente.js": "text/javascript; charset=utf-8",
 }
 TIMEOUT = 20
 
@@ -192,7 +210,7 @@ class Credenciais:
         with self.trava:
             pend = self.pendentes.pop(estado, None)
             if not pend or time.time() - pend["em"] > self.VALIDADE:
-                raise ValueError("estado do login inválido ou expirado; comece de novo em /oauth/conectar")
+                raise EstadoInvalido("estado do login inválido ou expirado; comece de novo em /oauth/conectar")
             tok = post_form(EMISSOR + "/api/oauth/token", {
                 "grant_type": "authorization_code", "code": codigo, "redirect_uri": pend["redirect_uri"],
                 "client_id": pend["client_id"], "code_verifier": pend["verificador"], "resource": MCP})
@@ -284,7 +302,7 @@ def post_json(url, corpo):
     req = urllib.request.Request(url, json.dumps(corpo).encode(), {"Content-Type": "application/json", "Accept": "application/json"})
     st, _, dados = _abrir(req)
     if st >= 300:
-        raise RuntimeError(f"{url} respondeu HTTP {st}")
+        raise PermissaoNegada(f"{url} respondeu HTTP {st}", st)
     return json.loads(dados)
 
 
@@ -305,6 +323,10 @@ class PermissaoNegada(Exception):
 
 class EscopoRecusado(PermissaoNegada):
     pass
+
+
+class EstadoInvalido(ValueError):
+    """O state do retorno não é de um login em andamento (venceu, já foi usado ou nunca existiu)."""
 
 
 class Limitado(Exception):
@@ -358,8 +380,8 @@ class ClienteMCP:
         sid = headers.get("mcp-session-id")
         if sid:
             self.sessao = sid
-        if st == 401:
-            raise PermissaoNegada("o agentes.chat recusou o acesso (HTTP 401)")
+        if st in (401, 402, 403):   # o corpo que veio fica de fora: nem tela nem log
+            raise PermissaoNegada(texto_recusa(st), st)
         if st == 404 and self.sessao:
             self.sessao = None
             raise ConnectionResetError("sessão MCP expirou")
@@ -637,8 +659,9 @@ class Leitor(threading.Thread):
         super().__init__(daemon=True)
         self.cred, self.mcp = cred, ClienteMCP(cred)
         self.estado = {"agentes": [], "trabalhos": [], "tarefas": [], "eventos": [], "resolvidos": [], "atualizado": None,
-                       "erro": "Carregando…"}
+                       "erro": "Carregando…", "conexao": "carregando"}
         self.trava = threading.Lock()
+        self.acordado = threading.Event()   # acordar(): a volta do OAuth não espera o resto do intervalo
         self.diario = Diario()
         self.agentes, self.agentes_ok, self.agentes_em = None, True, 0.0   # list_agents guardado entre as recargas
         self.seguidos_429 = self.seguidos_erro = 0
@@ -655,7 +678,7 @@ class Leitor(threading.Thread):
     def ler(self, agora=None):
         token = self.cred.token()
         if not token:
-            raise PermissaoNegada("o escritório ainda não está conectado ao agentes.chat (abra /oauth/conectar)")
+            raise PermissaoNegada(SEM_CONEXAO)
         if not self.mcp.sessao:
             self.mcp.iniciar(token)
         try:
@@ -714,13 +737,13 @@ class Leitor(threading.Thread):
         agora = time.time() if agora is None else agora
         if self.pausado(agora):   # pausa pedida por um 429 que veio de outra chamada (rota de conversa): não chama o MCP
             with self.trava:
-                self.estado = {**self.estado, "erro": PAUSA_429}
+                self.estado = {**self.estado, "erro": PAUSA_429, "conexao": "pausa"}
             return self.pausa_ate - agora
         antes, inicio = self.mcp.pedidos, self.relogio()
         try:
             novo, completa, itens = self.ler(agora)
             self.diario.aplicar(novo, completa)
-            novo.update(atualizado=_iso(agora), erro=None)
+            novo.update(atualizado=_iso(agora), erro=None, conexao="conectado")
             with self.trava:
                 if self.zerar_conversas:   # conta nova no OAuth: a lista da conta anterior não fica à vista
                     self.memoria, self.zerar_conversas = ConversasDoDia(), False
@@ -741,26 +764,37 @@ class Leitor(threading.Thread):
             espera = espera_429(e.retry_after, self.seguidos_429)
             self.pausa_ate = agora + espera
             with self.trava:
-                self.estado = {**self.estado, "erro": PAUSA_429}
+                self.estado = {**self.estado, "erro": PAUSA_429, "conexao": "pausa"}
             if self.seguidos_429 == 1:
                 log(evento="leitura", resultado="limitado", espera=espera)
             return espera
         except PermissaoNegada as e:
             with self.trava:
-                self.estado = {**self.estado, "erro": str(e)}
-            log(evento="leitura", resultado="sem_acesso", detalhe=str(e)[:200])
-            return INTERVALO
+                self.estado = {**self.estado, "erro": str(e), "conexao": "recusada" if e.http else "sem_conexao"}
+            if not e.http:   # sem token: nada sai para o agentes.chat, então o intervalo de sempre basta
+                log(evento="leitura", resultado="sem_acesso", detalhe=str(e)[:200])
+                return INTERVALO
+            # recusada (401, 402, 403): espera crescente como nas falhas, com a sessão MCP de novo na próxima
+            self.mcp.sessao = None
+            self.seguidos_erro += 1
+            log(evento="leitura", resultado="recusada", http=e.http)
+            return espera_erro(self.seguidos_erro)
         except Exception as e:  # rede, MCP fora do ar: mantém o último estado e avisa
             self.mcp.sessao = None
             self.seguidos_erro += 1
             with self.trava:
-                self.estado = {**self.estado, "erro": "agentes.chat não respondeu; mostrando a última leitura"}
+                self.estado = {**self.estado, "erro": FALHA_LEITURA, "conexao": "falha"}
             log(evento="leitura", resultado="erro", detalhe=f"{type(e).__name__}: {str(e)[:200]}")
             return espera_erro(self.seguidos_erro)
 
     def run(self):
         while True:
-            time.sleep(self.ciclo())
+            self.acordado.wait(self.ciclo())
+            self.acordado.clear()
+
+    def acordar(self):
+        """A próxima leitura sai agora (a volta do OAuth). A pausa de um 429 continua: o ciclo() confere antes."""
+        self.acordado.set()
 
     def foto(self):
         with self.trava:
@@ -1457,6 +1491,67 @@ def pagina_login(erro="", primeiro=False):
     return re.sub(r"\{\{(\w+)\}\}", lambda m: valores.get(m[1], m[0]), modelo).encode()
 
 
+def pagina_aviso(titulo, texto):
+    """A página de erro do Conectar (static/aviso.html), com os textos nossos escapados numa passada só."""
+    with open(os.path.join(ESTATICO, "aviso.html"), encoding="utf-8") as f:
+        modelo = f.read()
+    valores = {"titulo": html.escape(titulo), "texto": html.escape(texto)}
+    return re.sub(r"\{\{(\w+)\}\}", lambda m: valores.get(m[1], m[0]), modelo).encode()
+
+
+SEM_REDE_OAUTH = "Não consegui falar com o agentes.chat. Confira se o servidor (ou o container) alcança https://app.agentes.chat."
+# o "error=" que volta do consentimento: só estes códigos têm texto próprio; o error_description nunca aparece
+ERROS_OAUTH = {
+    "access_denied": "A autorização foi recusada. Se a tela do agentes.chat não deixou autorizar, confira se a conta é da "
+                     "organização e se o plano permite apps externos.",
+    "invalid_scope": "O agentes.chat não aceitou o acesso que o escritório pediu.",
+    "invalid_request": "O agentes.chat recusou o pedido de autorização. Comece de novo.",
+    "unauthorized_client": "O agentes.chat não aceitou este escritório como app. Comece de novo; se repetir, confira "
+                           "ESCRITORIO_BASE.",
+    "server_error": "O agentes.chat teve um problema agora. Tente de novo em alguns minutos.",
+    "temporarily_unavailable": "O agentes.chat está indisponível agora. Tente de novo em alguns minutos.",
+}
+CODIGO_OAUTH_OK = re.compile(r"[a-z_]{1,40}")
+
+
+def aviso_conectar(x):
+    """(título, texto) da falha do /oauth/conectar: o registro do app recusado (400: o endereço de retorno; 429: pausa;
+    outro 4xx: só o código) ou o agentes.chat fora de alcance."""
+    http = x.http if isinstance(x, PermissaoNegada) else None
+    if http == 400:
+        return ("O agentes.chat recusou o endereço", f"O agentes.chat recusou o endereço de retorno {BASE}/oauth/retorno. "
+                "Ele precisa ser o endereço https público deste escritório (ESCRITORIO_BASE).")
+    if http == 429:
+        return "Muitas tentativas", "O agentes.chat pediu uma pausa. Tente de novo em alguns minutos."
+    if http and 400 <= http < 500:
+        return "Não consegui conectar", f"O agentes.chat recusou o registro do app (HTTP {http}). Tente de novo."
+    return "Não consegui conectar", SEM_REDE_OAUTH
+
+
+def aviso_retorno(x):
+    """(título, texto) da falha da troca do código, com textos nossos: nada do que o agentes.chat mandou."""
+    if isinstance(x, EstadoInvalido):
+        return "Retorno vencido", "Esse retorno venceu (vale 10 minutos) ou já foi usado. Comece de novo."
+    if isinstance(x, EscopoRecusado):
+        return "Conexão recusada", str(x)
+    if isinstance(x, PermissaoNegada) and x.http in (400, 401):
+        return ("Autorização não aceita", "O agentes.chat não aceitou a autorização. Se o endereço do escritório mudou, "
+                "ajuste ESCRITORIO_BASE e conecte de novo.")
+    if isinstance(x, PermissaoNegada):
+        return "Não deu para conectar", f"O agentes.chat recusou a troca da autorização (HTTP {x.http}). Tente de novo."
+    if isinstance(x, ValueError):   # a resposta do token fora do formato: as mensagens do tokens() são nossas
+        return "Não deu para conectar", f"Não deu para conectar: {x}."
+    return "Não consegui conectar", SEM_REDE_OAUTH
+
+
+def aviso_erro_oauth(codigo):
+    """(título, texto) do retorno com error=: o código só aparece se for um código de verdade, e sem a descrição."""
+    if codigo in ERROS_OAUTH:
+        return "Conexão recusada", ERROS_OAUTH[codigo]
+    sufixo = f" (código: {codigo})" if CODIGO_OAUTH_OK.fullmatch(codigo) else ""
+    return "Conexão recusada", f"O agentes.chat recusou a conexão{sufixo}. Tente de novo."
+
+
 class Pagina(BaseHTTPRequestHandler):
     server_version = "escritorio"
     sys_version = ""
@@ -1607,6 +1702,7 @@ class Pagina(BaseHTTPRequestHandler):
             if self._previa():  # o front mostra a faixa "Prévia de desenvolvimento · dados fixos"
                 cfg["previa"] = True
             cfg["pode_responder"] = self._pode_responder()
+            cfg["base"] = BASE   # o endereço configurado (não é segredo): o link de conectar e o aviso de endereço trocado
             planta = getattr(self.server, "planta", None)
             if planta:   # só aqui, e não no config_publica() que o diretor social chama a cada minuto
                 cfg["planta"] = planta.publica()
@@ -1641,22 +1737,26 @@ class Pagina(BaseHTTPRequestHandler):
                 return self._envia(302, b"", extra={"Location": self.server.cred.url_autorizacao()})
             except Exception as e:
                 log(evento="oauth", resultado="erro", detalhe=str(e)[:200])
-                return self._envia(502, "Não consegui falar com o login do agentes.chat.".encode())
+                return self._envia(502, pagina_aviso(*aviso_conectar(e)), "text/html; charset=utf-8")
         if rota == "/oauth/retorno":
             q = urllib.parse.parse_qs(caminho.query)
             if "error" in q:
-                return self._envia(400, "O agentes.chat recusou a conexão. Tente de novo em /oauth/conectar.".encode())
+                codigo = q["error"][0]
+                log(evento="oauth", resultado="recusado", codigo=codigo if CODIGO_OAUTH_OK.fullmatch(codigo) else "outro")
+                return self._envia(400, pagina_aviso(*aviso_erro_oauth(codigo)), "text/html; charset=utf-8")
             try:
                 self.server.cred.concluir(q.get("code", [""])[0], q.get("state", [""])[0])
             except Exception as e:
                 log(evento="oauth", resultado="erro", detalhe=str(e)[:200])
-                return self._envia(400, f"Não deu para conectar: {str(e)[:160]}".encode())
+                return self._envia(400, pagina_aviso(*aviso_retorno(e)), "text/html; charset=utf-8")
             if hasattr(self.server.leitor, "zerar_memoria"):   # outra conta: a lista do dia da anterior não fica à vista
                 self.server.leitor.zerar_memoria()
             if getattr(self.server, "conversas", None):   # nem as conversas que ela leu (cache de 60 s)
                 self.server.conversas.esquecer()
             if getattr(self.server, "social", None):   # nem as amizades da vida social
                 self.server.social.zerar()
+            if hasattr(self.server.leitor, "acordar"):   # a primeira leitura com a conexão nova sai agora
+                self.server.leitor.acordar()
             log(evento="oauth", resultado="conectado", usuario=usuario)
             return self._envia(302, b"", extra={"Location": "/"})
         return self._estatico("index.html" if rota in ("/", "") else nome)
@@ -1664,8 +1764,11 @@ class Pagina(BaseHTTPRequestHandler):
     def _estatico(self, nome):
         if nome not in ARQUIVOS:
             return self._envia(404, b"")
-        with open(os.path.join(ESTATICO, nome), "rb") as f:
-            corpo = f.read()
+        try:
+            with open(os.path.join(ESTATICO, nome), "rb") as f:
+                corpo = f.read()
+        except FileNotFoundError:   # da lista, mas ainda fora da pasta (um script novo que chega em outro land)
+            return self._envia(404, b"")
         cache = "public, max-age=3600" if nome.endswith((".png", ".ttf", ".woff2")) else "no-cache"
         return self._envia(200, corpo, ARQUIVOS[nome], cache=cache)
 
@@ -1793,6 +1896,9 @@ class Pagina(BaseHTTPRequestHandler):
             return self._post_planta(rota)
         if not self._mesma_origem():
             log(evento="http", rota=rota[:40], resultado="origem_recusada")
+            if rota in ("/entrar", "/primeiro-acesso"):   # aberto por outro endereço: diz qual é o certo (o Origin não volta)
+                return self._envia(403, pagina_login(f"Abra pelo endereço configurado: {BASE}",
+                                                     primeiro=acesso.precisa_configurar()), "text/html; charset=utf-8")
             return self._envia(403, "Origem não permitida.".encode())
         if rota in ("/entrar", "/primeiro-acesso"):
             try:
@@ -1848,12 +1954,39 @@ class Servidor(ThreadingHTTPServer):
     request_queue_size = 64  # fila do listen(): com o padrão (5), vários navegadores carregando juntos levavam conexão recusada
 
 
+def erro_rede(base, bind, porta, base_definida):
+    """Por que o serviço não sobe com esse endereço, bind e porta (ou None). A BASE é só origem, porque o Origin dos
+    POST é comparado com ela letra por letra: esquema e host em minúsculas, porta só fora da padrão, sem caminho, query,
+    fragmento nem barra no fim."""
+    p = urllib.parse.urlsplit(base)
+    try:
+        porta_base = p.port
+    except ValueError:   # porta que não é número ou passa de 65535
+        porta_base = -1
+    origem = f"{p.scheme}://{p.hostname}" + (f":{porta_base}" if porta_base is not None else "")
+    if p.scheme not in ("http", "https") or not p.hostname or base != origem or porta_base == -1 \
+            or (p.scheme, porta_base) in (("http", 80), ("https", 443)):
+        return ("ESCRITORIO_BASE precisa ser só a origem, como https://escritorio.exemplo.com: esquema e host em "
+                "minúsculas, porta só se não for a padrão, sem caminho e sem barra no fim")
+    if p.scheme == "http" and p.hostname != "127.0.0.1":
+        return "ESCRITORIO_BASE precisa ser https (ou http://127.0.0.1 para teste local)"
+    if bind not in ("127.0.0.1", "0.0.0.0"):
+        return "ESCRITORIO_BIND precisa ser 127.0.0.1 (o padrão) ou 0.0.0.0 (só em container)"
+    if bind == "0.0.0.0":   # a porta é a do container, atrás do proxy: a regra da porta baixa não vale
+        return None if base_definida else "com ESCRITORIO_BIND=0.0.0.0, defina ESCRITORIO_BASE com o endereço https público"
+    if p.scheme == "https" and not 1 <= porta < 1024:
+        return ("com https, ESCRITORIO_PORTA precisa ser menor que 1024 (porta privilegiada): numa porta alta, "
+                "qualquer usuário da máquina pode ocupá-la quando o serviço reinicia")
+    return None
+
+
 def main():
-    if BASE.startswith("http://") and not BASE.startswith("http://127.0.0.1"):
-        sys.exit("ESCRITORIO_BASE precisa ser https (ou http://127.0.0.1 para teste local)")
-    if BASE.startswith("https://") and not 1 <= PORTA < 1024:
-        sys.exit("com https, ESCRITORIO_PORTA precisa ser menor que 1024 (porta privilegiada): numa porta alta, "
-                 "qualquer usuário da máquina pode ocupá-la quando o serviço reinicia")
+    motivo = erro_rede(BASE, BIND, PORTA, "ESCRITORIO_BASE" in os.environ)
+    if motivo:
+        sys.exit(motivo)
+    # o docker stop (e o systemctl stop) mandam SIGTERM; como PID 1 num container, o Python o ignoraria até o SIGKILL.
+    # Toda gravação é atômica, então sair na hora não deixa arquivo pela metade
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     if not re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", ORG):
         sys.exit("defina AGENTES_ORG com o id da sua organização no agentes.chat "
                  "(o que vem depois de /org/ no endereço do app)")
@@ -1864,7 +1997,7 @@ def main():
     cred = Credenciais(ARQ_TOKEN)
     leitor = Leitor(cred)
     leitor.start()
-    srv = Servidor(("127.0.0.1", PORTA), Pagina)  # a Tailscale (serve) publica só na rede privada
+    srv = Servidor((BIND, PORTA), Pagina)  # 127.0.0.1: a Tailscale (serve) publica só na rede privada
     srv.cred, srv.leitor, srv.acesso = cred, leitor, contas
     srv.conversas = Conversas(leitor)
     srv.respostas = Respostas(leitor, srv.conversas)
@@ -1873,12 +2006,15 @@ def main():
     srv.social.start()
     srv.planta = Planta(ARQ_PLANTA, log, lambda dados: gravar(ARQ_PLANTA, dados))   # planta ilegível sobe vazia, com 1 log
     if contas.precisa_configurar():
-        log(evento="acesso", resultado="aguardando_primeiro_usuario", ver_codigo="sudo escritorio-codigo")
+        ver = "docker exec -it <container> python3 -I -B escritorio.py codigo" if BIND == "0.0.0.0" else "sudo escritorio-codigo"
+        log(evento="acesso", resultado="aguardando_primeiro_usuario", ver_codigo=ver)   # o código em si nunca vai ao log
     cl = carregar_times().get("clima")
     if cl:
         srv.clima = Clima(cl["lat"], cl["lon"], cl["cidade"])
         srv.clima.start()
-    log(evento="inicio", versao=VERSAO, onde=f"127.0.0.1:{PORTA}", base=BASE)
+    if BIND == "0.0.0.0":
+        log(evento="inicio", aviso="use só em container, atrás de um proxy HTTPS")
+    log(evento="inicio", versao=VERSAO, onde=f"{BIND}:{PORTA}", base=BASE)
     srv.serve_forever()
 
 

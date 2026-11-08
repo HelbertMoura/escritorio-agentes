@@ -4,6 +4,25 @@
 
 As mudanças que importam neste projeto ficam aqui, da mais nova para a mais antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). O projeto ainda não tem número de versão: cada entrada é um marco, com a data e os commits.
 
+## Ainda não publicado · Conectar e Docker
+
+Sem commit ainda.
+
+### Adicionado
+- **Conectar pela tela:** o `/api/estado` ganhou o campo `conexao` (`carregando`, `conectado`, `sem_conexao`, `recusada`, `pausa` ou `falha`), e o `/api/config` ganhou o `base`. Na volta da autorização, a primeira leitura sai na hora. Veja [Conectar ao agentes.chat](./README.pt-BR.md#conectar-ao-agenteschat).
+- **Docker e Coolify:** `Dockerfile`, `.dockerignore` (lista de permissão) e `docker-compose.yml` sem portas publicadas, com a variável nova `ESCRITORIO_BIND` (`127.0.0.1` ou `0.0.0.0`). Veja [Docker e Coolify](./README.pt-BR.md#docker-e-coolify).
+- `ferramentas/agentes_falso.py`: um agentes.chat de mentira, só em `127.0.0.1`, para testar o Conectar inteiro e cada falha sem a conta de verdade. A prévia ganhou o `--conexao <estado>`.
+
+### Mudado
+- HTTP 402 e 403 na leitura deixam de aparecer como queda de rede: viram `recusada`, com o código e um texto do escritório, como o 401. Enquanto a recusa continuar, a leitura espera de 30 s até 5 min, em vez de repetir a cada 30 s.
+- Os erros do `/oauth/conectar` e do `/oauth/retorno` viram uma página curta, que diz o motivo e oferece tentar de novo.
+- Entrar por um endereço diferente da `ESCRITORIO_BASE` mostra o endereço certo na tela de entrar.
+- A `ESCRITORIO_BASE` precisa ser só a origem (sem caminho nem barra no fim, host em minúsculas). Fora disso, o serviço não sobe e diz o porquê. A barra no fim deixou de ser cortada sem aviso.
+
+### Segurança
+- O `error_description` e o corpo das respostas do agentes.chat nunca chegam à tela, e o log guarda só o código do erro.
+- Com `ESCRITORIO_BIND=0.0.0.0`, a `ESCRITORIO_BASE` é obrigatória. A imagem roda com usuário próprio, sem shell, e o compose roda só de leitura, sem capacidades e com memória limitada. O README ganhou o que muda com um [endereço público](./README.pt-BR.md#endereço-público).
+
 ## 2026-11-06 · Modo construção v1
 
 Release [`v2026.11.06`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2026.11.06), com o vídeo de lançamento (narração em português do Brasil, com legenda). Commits [`4860c88`](https://github.com/HelbertMoura/escritorio-agentes/commit/4860c88) e [`26192a6`](https://github.com/HelbertMoura/escritorio-agentes/commit/26192a6).

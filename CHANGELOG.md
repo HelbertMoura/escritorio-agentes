@@ -4,6 +4,25 @@
 
 All notable changes to this project are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The project has no version numbers yet: each entry is a milestone, with its date and commits.
 
+## Unreleased · Connect and Docker
+
+No commit yet.
+
+### Added
+- **Connect from the screen:** `/api/estado` gained the `conexao` field (`carregando`, `conectado`, `sem_conexao`, `recusada`, `pausa` or `falha`), and `/api/config` gained `base`. When you come back from the authorization, the first read happens right away. See [Connect to agentes.chat](./README.md#connect-to-agenteschat).
+- **Docker and Coolify:** `Dockerfile`, `.dockerignore` (an allowlist) and a `docker-compose.yml` with no published ports, plus the new `ESCRITORIO_BIND` variable (`127.0.0.1` or `0.0.0.0`). See [Docker and Coolify](./README.md#docker-and-coolify).
+- `ferramentas/agentes_falso.py`: a fake agentes.chat, on `127.0.0.1` only, to test the whole Connect flow and each failure without the real account. The preview gained `--conexao <state>`.
+
+### Changed
+- HTTP 402 and 403 on the read no longer show up as a network failure: they become `recusada`, with the code and the office's own text, like 401. While the refusal goes on, the read waits from 30 s up to 5 min instead of repeating every 30 s.
+- Errors on `/oauth/conectar` and `/oauth/retorno` become a short page that says why and offers to try again.
+- Signing in from an address other than `ESCRITORIO_BASE` shows the right address on the sign-in screen.
+- `ESCRITORIO_BASE` must be the origin only (no path or trailing slash, lowercase host). Otherwise, the service does not start and says why. A trailing slash is no longer silently cut.
+
+### Security
+- The `error_description` and the body of agentes.chat responses never reach the screen, and the log keeps only the error code.
+- With `ESCRITORIO_BIND=0.0.0.0`, `ESCRITORIO_BASE` is required. The image runs as its own user, with no shell, and the compose file runs it read-only, with no capabilities and limited memory. The README now covers what changes with a [public address](./README.md#public-address).
+
 ## 2026-11-06 · Construction mode v1
 
 Release [`v2026.11.06`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2026.11.06), with the launch video (narrated in Brazilian Portuguese, with subtitles). Commits [`4860c88`](https://github.com/HelbertMoura/escritorio-agentes/commit/4860c88) and [`26192a6`](https://github.com/HelbertMoura/escritorio-agentes/commit/26192a6).

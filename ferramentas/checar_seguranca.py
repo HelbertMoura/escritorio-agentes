@@ -56,6 +56,31 @@ confere("GET /oauth/retorno sem cookie (outro site, sem sessao) cai no login", (
 st, _ = req("/oauth/retorno?code=abc&state=xyz", {"Cookie": ck.split(";")[0]})
 confere("GET /oauth/retorno com o cookie Lax chega ao OAuth (state falso -> 400, nao 302 /entrar)", st, 400)
 
+print("== Conectar (C1): paginas de erro do OAuth, endereco errado e bind")
+def req_corpo(rota, cab=None, dados=None):
+    r = urllib.request.Request(base + rota, headers=cab or {}, data=dados)
+    try:
+        with op.open(r) as x: return x.status, x.headers, x.read().decode()
+    except urllib.error.HTTPError as err: return err.code, err.headers, err.read().decode()
+st, h, pag = req_corpo("/entrar", {"Origin": "https://outro.exemplo"}, form)
+confere("POST /entrar de outro endereco: 403 com a pagina de entrar, sem cookie", (st, h.get("Set-Cookie")), (403, None))
+confere("... mostra o endereco configurado e nao ecoa o Origin", (base in pag, "outro.exemplo" in pag), (True, False))
+sessao = {"Cookie": ck.split(";")[0]}
+hostil = urllib.parse.quote("<script>alert(1)</script> evil.example")
+st, h, pag = req_corpo("/oauth/retorno?error=access_denied&error_description=" + hostil, sessao)
+confere("GET /oauth/retorno com error_description hostil: 400 em HTML, sem repetir o texto",
+        (st, h.get("Content-Type"), "evil" in pag, "<script" in pag), (400, "text/html; charset=utf-8", False, False))
+st, _, pag = req_corpo("/oauth/retorno?error=" + hostil, sessao)
+confere("GET /oauth/retorno com error hostil: o codigo fora de [a-z_] nao aparece", (st, "evil" in pag, "<script" in pag), (400, False, False))
+emissor, e.EMISSOR = e.EMISSOR, "http://127.0.0.1:9"   # porta fechada: nada sai para o agentes.chat
+st, h, pag = req_corpo("/oauth/conectar", sessao)
+confere("GET /oauth/conectar sem rede: 502 com a pagina de aviso", (st, h.get("Content-Type"), 'href="/oauth/conectar"' in pag),
+        (502, "text/html; charset=utf-8", True))
+e.EMISSOR = emissor
+confere("ESCRITORIO_BIND=0.0.0.0 sem ESCRITORIO_BASE definida nao sobe", e.erro_rede(base, "0.0.0.0", 7371, False) is None, False)
+confere("ESCRITORIO_BIND fora de 127.0.0.1 e 0.0.0.0 nao sobe", e.erro_rede(base, "::", 7371, True) is None, False)
+confere("ESCRITORIO_BASE com caminho ou barra no fim nao sobe", [e.erro_rede(base + x, "127.0.0.1", 7371, True) is None for x in ("/", "/app")], [False, False])
+
 print("== Achado 4: limite de tentativas por usuario")
 ruim = urllib.parse.urlencode({"usuario": "qualquer", "senha": "errada-errada"}).encode()
 t0 = time.time()

@@ -153,7 +153,39 @@ The installer publishes the `/` path of port 443 of this machine on your tailnet
 
 **Reinstalling or updating:** run the installer again with the same variables. It rewrites `/etc/escritorio.env` every time, so `ESCRITORIO_PORTA` and `ESCRITORIO_FONTE` go back to their defaults when left out (in a fork, the source-code link would point back to this repository). Users, sessions, tokens and `/opt/escritorio/times.json` are kept.
 
-Open `https://<your-machine>.<your-tailnet>.ts.net/`, use the code to create your username and password, then open `/oauth/conectar` to authorize read access in agentes.chat. On a phone, the Tailscale app turned on is all you need.
+Open `https://<your-machine>.<your-tailnet>.ts.net/` and use the code to create your username and password. Then authorize read access in agentes.chat (see [Connect to agentes.chat](#connect-to-agenteschat)). On a phone, the Tailscale app turned on is all you need.
+
+### Connect to agentes.chat
+
+`ESCRITORIO_BASE` is the office's public address, origin only, like `https://escritorio.example.com`: no path and no trailing slash. agentes.chat sends you back to it after the authorization, and the server checks the origin of every submission against it. In any other format, the service does not start and says why.
+
+While the office is not connected, the bar above the map shows a **Connect to agentes.chat** button, which opens `/oauth/conectar` in the same tab. When you come back from the authorization, the first read happens right away. **Copy link** copies `<ESCRITORIO_BASE>/oauth/conectar`, to open it in another tab or browser. Without a clipboard (outside https), the bar shows the address already selected.
+
+If agentes.chat refuses the read (HTTP 401, 402 or 403), the bar says so, with the code, and the button becomes **Reconnect**. Check that the connected account belongs to the organization and that the plan allows external apps. While it keeps refusing, the office retries with a growing wait, from 30 s up to 5 min.
+
+If the office is opened from an address other than `ESCRITORIO_BASE`, the bar warns you before anything else, because agentes.chat always sends you back to `ESCRITORIO_BASE`: fix the variable on the server. The sign-in screen shows the right address too.
+
+When Connect fails, a short page says why, in the office's own words: the server cannot reach agentes.chat, the return address was refused, or the authorization was refused or expired (it is valid for 10 minutes). The text that comes from agentes.chat is never shown.
+
+## Docker and Coolify
+
+The repository ships a `Dockerfile` and a `docker-compose.yml`. There is no published image: Coolify (or you) builds it straight from Git. The image carries only the code and the `static/` folder, with no `pip`, and runs as its own user, with no shell. The `.dockerignore` is an allowlist: even when built from a folder that has `dados/` or `times.json`, the image carries none of it.
+
+**On Coolify:**
+1. Create a resource from the repository, with the **Docker Compose** build pack and the `docker-compose.yml` file.
+2. Set the `escritorio` service domain to `https://escritorio.example.com:7371`. The `:7371` only tells the Coolify proxy which port the container listens on; visitors still use plain `https://`.
+3. In the variables, set `ESCRITORIO_BASE=https://escritorio.example.com` (the same domain, **without** the port and with no trailing slash) and `AGENTES_ORG=<your organization id>`. Coolify does not deploy without both.
+4. Deploy. Then, in the service **Terminal**, run `python3 -I -B escritorio.py codigo` to see the first-access code. It never goes to the log.
+5. Open the address, create the user right after the deploy (see [Public address](#public-address)) and connect.
+
+**Outside Coolify**, behind your own HTTPS proxy on the same Docker network: `ESCRITORIO_BASE=https://... AGENTES_ORG=... docker compose up -d`. The first-access code comes from `docker exec -it <container> python3 -I -B escritorio.py codigo`. The compose file publishes no port: a published port serves HTTP without TLS, with the password in plain text. To test on your own machine only, uncomment the `127.0.0.1:7381:7371` line and use `ESCRITORIO_BASE=http://127.0.0.1:7381`.
+
+- **The `/dados` volume** holds the agentes.chat token, the users, the sessions, the branding and the floor plan. Keep an encrypted backup and never make it public. With the repository's `docker-compose.yml`, the container runs with a read-only file system, no capabilities and 256 MB of memory.
+- **`conversas`** (read or reply) and the teams still come from `times.json`: create `/dados/times.json` in the volume, for example with `docker exec -i <container> sh -c 'cat > /dados/times.json' < times.json`. It applies without a restart. Name, color, logo and office hours already go through the **Customize** screen.
+- **Updating** is a redeploy. The volume stays.
+- **Changing the domain** means updating `ESCRITORIO_BASE` and connecting again.
+- **Forgot the password:** `docker exec <container> rm /dados/usuarios.json /dados/sessoes.json`, then `docker restart <container>` and `docker exec -it <container> python3 -I -B escritorio.py codigo` for the new code. On Coolify, through the service Terminal.
+- **Already built your own Docker setup?** Replace your workaround for the `127.0.0.1` bind with `ESCRITORIO_BIND=0.0.0.0`, which the image already sets. With it, `ESCRITORIO_BASE` is required and the below-1024 port rule does not apply, because the port belongs to the container.
 
 ## Customize (white-label)
 
@@ -205,7 +237,7 @@ Rearrange the office with the mouse, on a computer. Open it from the **Customize
 
 ## Security
 
-In short: the office is reachable **only on your tailnet**, it **fails closed** when its user file cannot be read, and **no secret ever reaches the browser**: the agentes.chat token stays on the server, and the browser only holds an HttpOnly session cookie.
+In short: with the installer, the office is reachable **only on your tailnet** (on Docker with a public address, read [Public address](#public-address)); it **fails closed** when its user file cannot be read, and **no secret ever reaches the browser**: the agentes.chat token stays on the server, and the browser only holds an HttpOnly session cookie.
 
 - **Read-only on agentes.chat:** OAuth scope `read`. A token with more permissions is refused. The exception is the `"responder"` mode (below), which asks for `read write`; `manage` is always refused.
 - **Passwords and sessions:**
@@ -238,9 +270,27 @@ In short: the office is reachable **only on your tailnet**, it **fails closed** 
 - **Construction mode (`POST /api/planta`):** whoever is signed in can edit, the same rule as **Customize** (there is a single account). The route requires an `Origin` equal to the server address (with no fallback to the `Referer`), a session, `application/json` (otherwise 415), a body of up to 64 KB and the plan's current `rev` (409 when another screen saved first). The plan is validated all or nothing, the same way on save and on read, and written atomically (0600), under a lock, to `dados/planta.json`; the log keeps counts, never the content. An unreadable or invalid file falls back to the automatic building, with one line in the log. The server only checks the format and the limits: the list of pieces is a closed catalog in the browser, and a bad plan never takes the page down.
 - **Social life routes:** **Send to the ring** (`POST /api/social/briga`) and **Atender o pedido** (`POST /api/social/greve/atender`) follow the same strict origin and JSON-only rules. The weekly scoreboard (`dados/placar.json`) holds only agent ids and numbers.
 - **POST bodies:** every `POST` reads its body (up to 128 KB) before answering, so a refusal (wrong origin, wrong type, too big) reaches the client instead of a connection reset. Each route keeps its own size cap; above 128 KB, only the logo upload reads the body.
-- **Branding on the sign-in screen:** the company name, color and logo are shown to anyone who reaches the page on the tailnet, before login. The logo only accepts PNG, JPEG and WEBP, up to 600 KB. Prefer an image without sensitive metadata (EXIF, GPS).
-- **Network:** the service listens only on 127.0.0.1, on a privileged port, and Tailscale publishes it.
-- **System:** runs as its own user with a hardened systemd unit. Tokens, passwords and the logo live in `/var/lib/escritorio` (0700).
+- **Branding on the sign-in screen:** the company name, color and logo are shown to anyone who reaches the page on the tailnet (or on the internet, with a public address), before login. The logo only accepts PNG, JPEG and WEBP, up to 600 KB. Prefer an image without sensitive metadata (EXIF, GPS).
+- **Connect:** the OAuth error pages use only the office's own texts. The `error_description` and the body agentes.chat sends never reach the screen, and the log keeps the error code, never the authorization code, the `state` or the token.
+- **Network:** with the installer, the service listens only on 127.0.0.1, on a privileged port, and Tailscale publishes it. On Docker, `ESCRITORIO_BIND=0.0.0.0` (only `127.0.0.1` and `0.0.0.0` are accepted), always with `ESCRITORIO_BASE` set. The server does not read `X-Forwarded-*`: the accepted origin and the cookie come from `ESCRITORIO_BASE`, and nothing uses the visitor's IP.
+- **System:** runs as its own user with a hardened systemd unit. Tokens, passwords and the logo live in `/var/lib/escritorio` (0700). On Docker, they live in the `/dados` volume (0700); with the repository's `docker-compose.yml`, the container runs read-only and with no capabilities (in a build from the `Dockerfile` alone, those locks are up to whoever runs the container).
+
+### Public address
+
+On Coolify, or on any Docker setup with an internet domain, there is no Tailscale layer. The sign-in is enough to start, but adjust what you expect from it:
+
+1. Anyone sees the sign-in screen, with the name, color and logo.
+2. Anyone can lock your sign-in with 8 wrong passwords every 15 minutes. Sessions already open keep working.
+3. The password becomes the only barrier, including for reading conversations (`ler`) and sending messages (`responder`).
+4. There is no per-IP limit or log.
+5. If the container port is published, it serves HTTP without TLS, with the password in plain text. The compose file does not publish it.
+6. Against slow connections, the proxy is the defense.
+
+So:
+- use a long password, 14 characters or more, or a passphrase;
+- create the user right after the deploy: until then, the first-access screen is open on the internet (the code is secret and has an attempt limit);
+- keep `conversas` off or on `ler`, and use `responder` only if you need it;
+- if you can, add one more layer in front: Cloudflare Access, Tailscale or an IP allowlist on the proxy.
 
 Found a vulnerability? Please read [SECURITY.md](./SECURITY.md) and report it privately.
 
@@ -259,7 +309,7 @@ escritorio.py ── 127.0.0.1:737 ── tailscale serve (HTTPS, tailnet only) 
 
 - **Server:** Python 3 standard library only (`escritorio.py`, `acesso.py`, `social.py`, the director of the [social life](#social-life), and `planta.py`, the plan of the [construction mode](#construction-mode)). No database: a few files in the data folder.
 - **Front-end:** vanilla JavaScript and canvas, no build step (`static/`). `app.js` (UI, camera, panels), `mapa.js` (procedural building, furniture collision, doors, and the plan applied on top), `vida.js` (agent life), `avatar.js`, `efeitos.js`, `ceu.js`, `clima.js`, `festas.js`, `expediente.js`, `som.js` (WebAudio), `simular.js`, `brincar.js` (clickable objects, photo mode, demo), `personalizar.js`, `planta.js` and `construir.*` (construction mode editor) and `entrar.*` (sign-in).
-- **Install:** `instalar.sh` sets up the user, files, a hardened systemd unit and `tailscale serve`.
+- **Install:** `instalar.sh` sets up the user, files, a hardened systemd unit and `tailscale serve`. Or, in a container, the `Dockerfile` and `docker-compose.yml` (see [Docker and Coolify](#docker-and-coolify)).
 
 ### Transition log
 
@@ -275,7 +325,9 @@ node ferramentas/estresse_vida.mjs [url] [--minutos 40] [--acoes] [--brigas 10] 
 node ferramentas/checar_planta_mapa.mjs [url] [--ref main] [--prints]  # construction mode: with an empty plan the building is identical to the reference; example and tampered plans
 ```
 
-In the preview, the construction mode saves to a temporary folder (gone when the preview stops); `--greve` starts a strike at the first step of the social life director.
+In the preview, the construction mode saves to a temporary folder (gone when the preview stops); `--greve` starts a strike at the first step of the social life director; `--conexao <state>` (`carregando`, `sem_conexao`, `recusada`, `pausa` or `falha`) shows the bar for each connection state, with no OAuth.
+
+To test the whole **Connect** flow without the real agentes.chat, use the fake server: `python -I -B ferramentas/agentes_falso.py --escritorio`. It starts the fake on `127.0.0.1:7390` (consent with **Autorizar** and **Recusar**, token with PKCE and an `/mcp` with the `previa.exemplo.json` data) and the office on `http://127.0.0.1:7381`, with a temporary data folder. `--modo` (or, with everything running, `curl -d mcp_403 http://127.0.0.1:7390/_modo`) simulates each failure: registration down or refused, consent refused, code exchange refused, extra scope and `/mcp` answering 401, 402, 403 or 429. Another port for the office: `--porta-escritorio`.
 
 `ferramentas/previa.exemplo.json` holds fictional MCP responses (`agents` and `tasks`, with the handles of `times.exemplo.json`) to test without connecting; `ESCRITORIO_TIMES` makes the rooms of the example show up. To test with your own workspace, copy its responses to `dados.json`, which git ignores, and run `python ferramentas/previa.py dados.json`. The preview rereads the file when it changes: to see events live, change a task's `status` or remove and add tasks. Another port: `PREVIA_PORTA=7373`.
 

@@ -36,6 +36,12 @@ from acesso import Acesso  # noqa: E402
 AG = [{"id": "a1", "name": "Pixel", "handle": "pixel", "role": "Conteúdo"},
       {"id": "a2", "name": "Órbita", "handle": "agent-orbita-qa-acme", "role": "QA"}]  # agentes fictícios
 ORG_URL = f"https://app.agentes.chat/org/{e.ORG}/c/11111111-2222-4333-8444-555555555555"
+# scripts da lista fechada que chegam com o land do floor das telas (config-telas); até lá, o servidor responde 404
+DO_FRONT = {"ajustes.js", "assistente.js"}
+
+
+def servidos():
+    return [n for n in e.ARQUIVOS if n not in DO_FRONT or os.path.isfile(os.path.join(e.ESTATICO, n))]
 
 
 class Rotulo(unittest.TestCase):
@@ -698,7 +704,7 @@ class Http(unittest.TestCase):
 
     def test_scripts_com_login_tipo_e_cache(self):
         cab = self.entrar()
-        for nome, tipo in e.ARQUIVOS.items():
+        for nome in servidos():
             if not nome.endswith(".js"):
                 continue
             st, corpo, h = self.req("/" + nome, cab)
@@ -708,6 +714,8 @@ class Http(unittest.TestCase):
                 self.assertEqual(corpo, f.read(), nome)   # inteiro, mesmo com a escrita em blocos
         for rota in ("/fontes/OFL-figtree-silkscreen.txt", "/tema/", "/tema/../app.js"):   # fora da lista fechada
             self.assertEqual(self.req(rota, cab)[0], 404, rota)
+        for nome in set(e.ARQUIVOS) - set(servidos()):   # da lista e ainda fora da pasta: 404, sem derrubar a conexão
+            self.assertEqual(self.req("/" + nome, cab)[0], 404, nome)
 
     def test_scripts_sem_login_vao_para_entrar(self):
         for nome in e.ARQUIVOS:
@@ -736,7 +744,7 @@ class Http(unittest.TestCase):
 class Estaticos(unittest.TestCase):
     def test_scripts_classicos_sem_modulos_nem_workers(self):
         # as páginas carregam só <script src> clássico: import/export ou Worker trariam código que os testes daqui não leem
-        for nome in e.ARQUIVOS:
+        for nome in servidos():
             if nome.endswith(".js"):
                 with open(os.path.join(e.ESTATICO, nome), encoding="utf-8") as f:
                     self.assertNotRegex(f.read(), r"\bimport\s*[({'\"*]|\bexport\s|\bWorker\b|importScripts", nome)
@@ -746,7 +754,7 @@ class Estaticos(unittest.TestCase):
         proibidos = (r"\beval\s*\(", r"\bnew\s+Function\b", r"\bdocument\.write", r"\bset(?:Timeout|Interval)\s*\(\s*['\"`]")
         for rx, exemplo in zip(proibidos, ("eval (x)", "new Function('a')", "document.writeln(x)", "setTimeout( `go()`, 9)")):
             self.assertRegex(exemplo, rx)
-        for nome in e.ARQUIVOS:
+        for nome in servidos():
             if nome.endswith(".js"):
                 with open(os.path.join(e.ESTATICO, nome), encoding="utf-8") as f:
                     js = f.read()
@@ -757,13 +765,15 @@ class Estaticos(unittest.TestCase):
         # todo <script src>, <link href> e <img src> local das páginas tem que estar em ARQUIVOS e existir no disco;
         # o que a tela de login carrega tem que ser público (sem sessão, o resto vira redirecionamento para /entrar)
         ref = re.compile(r"<(?:script|link|img)\b[^>]*?\b(?:src|href)\s*=\s*[\"']([^\"']+)[\"']", re.I)
-        for pagina, publico in (("index.html", False), ("entrar.html", True), ("construir.html", False)):
+        for pagina, publico in (("index.html", False), ("entrar.html", True), ("construir.html", False), ("aviso.html", True)):
             with open(os.path.join(e.ESTATICO, pagina), encoding="utf-8") as f:
                 html = f.read()
             if pagina == "entrar.html":
                 html = e.pagina_login().decode()   # o que o navegador recebe, com os {{...}} preenchidos
             locais = [u for u in ref.findall(html) if not re.match(r"[a-z][a-z0-9+.-]*:|//|#", u, re.I)]
             self.assertTrue(locais, pagina)
+            if pagina == "aviso.html":   # servida em /oauth/conectar e /oauth/retorno: caminho relativo viraria /oauth/...
+                self.assertEqual([u for u in locais if not u.startswith("/")], [], pagina)
             versoes = set()
             for u in locais:
                 nome = u.split("?")[0].lstrip("/")
@@ -1713,6 +1723,7 @@ class OAuthFalso(ThreadingHTTPServer):
         self.registros, self.trocas, self.revogados = [], [], []
         self.token = (200, {"access_token": "AC-novo", "refresh_token": "RF-novo", "expires_in": 3600, "scope": "read write"})
         self.revoga = 200
+        self.registro = 201   # 400: o registro recusa o endereço de retorno
 
 
 class PaginaOAuth(BaseHTTPRequestHandler):
@@ -1724,7 +1735,9 @@ class PaginaOAuth(BaseHTTPRequestHandler):
         srv = self.server
         if self.path == "/api/oauth/register":
             srv.registros.append(json.loads(corpo))
-            st, obj = 201, {"client_id": f"cliente-{len(srv.registros)}"}
+            st, obj = srv.registro, {"client_id": f"cliente-{len(srv.registros)}"}
+            if st >= 300:
+                obj = {"error": "invalid_redirect_uri", "error_description": "<script>x</script> evil.example"}
         elif self.path == "/api/oauth/token":
             srv.trocas.append({k: v[0] for k, v in urllib.parse.parse_qs(corpo.decode()).items()})
             st, obj = srv.token
@@ -1914,6 +1927,244 @@ def porta_livre():
     with socket.socket() as k:
         k.bind(("127.0.0.1", 0))
         return k.getsockname()[1]
+
+
+HOSTIL = "<script>alert(1)</script> entre em evil.example"   # o que o agentes.chat poderia mandar de ruim
+
+
+class ConexaoLeitor(unittest.TestCase):
+    """C1.1 a C1.3: o "conexao" do /api/estado sai do resultado da leitura; 401, 402 e 403 viram "recusada", com o
+    código e a mensagem nossa, e esperam como as falhas; o acordar() tira a leitura da espera."""
+    def leitor(self, token="t"):
+        class Cred:
+            def token(self):
+                return token
+        l = e.Leitor(Cred())
+        l.mcp = Orcamento.Mcp(AG, [])
+        return l
+
+    def test_cada_resultado_da_leitura_vira_um_estado(self):
+        l = self.leitor(None)
+        self.assertEqual(l.foto()["conexao"], "carregando")   # antes da primeira leitura
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(l.ciclo(1_000_000.0), e.INTERVALO)   # sem token: nada sai para o agentes.chat
+        self.assertEqual((l.foto()["conexao"], l.foto()["erro"]), ("sem_conexao", e.SEM_CONEXAO))
+        l = self.leitor()
+        l.ciclo(1_000_000.0)
+        self.assertEqual((l.foto()["conexao"], l.foto()["erro"], len(l.foto()["agentes"])), ("conectado", None, 2))
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            l.mcp.falha = e.PermissaoNegada(e.texto_recusa(403), 403)
+            esperas = [l.ciclo(1_000_100.0 + i) for i in range(4)]
+            self.assertEqual(esperas, [30, 60, 120, 240])   # recusada: espera crescente, e não os 30 s de sempre
+            self.assertEqual((l.foto()["conexao"], len(l.foto()["agentes"])), ("recusada", 2))   # a última leitura fica
+            self.assertIn("HTTP 403", l.foto()["erro"])
+            self.assertIsNone(l.mcp.sessao)   # a próxima tentativa começa uma sessão nova
+            l.mcp.falha = e.Limitado("60")
+            l.ciclo(1_000_200.0)
+            self.assertEqual(l.foto()["conexao"], "pausa")
+            self.assertEqual(l.ciclo(1_000_210.0), 50)   # a pausa continua valendo, sem chamar o MCP
+            l.pausa_ate, l.mcp.falha = 0, OSError("rede")
+            l.ciclo(1_000_300.0)
+            self.assertEqual((l.foto()["conexao"], l.foto()["erro"]), ("falha", e.FALHA_LEITURA))
+            l.mcp.falha = None
+            l.ciclo(1_000_400.0)
+        self.assertEqual(l.foto()["conexao"], "conectado")
+        self.assertIn('"resultado": "recusada", "http": 403', saida.getvalue())
+
+    def test_mcp_401_402_403_com_codigo_e_sem_o_corpo_de_fora(self):
+        antes = e._abrir
+        try:
+            for st in (401, 402, 403):
+                e._abrir = lambda req, st=st: (st, {}, HOSTIL.encode())
+                with self.assertRaises(e.PermissaoNegada) as x:
+                    e.ClienteMCP(None)._post({"jsonrpc": "2.0", "id": 1, "method": "tools/call"}, "t")
+                self.assertEqual(x.exception.http, st)
+                self.assertIn(f"HTTP {st}", str(x.exception))
+                self.assertNotIn("evil", str(x.exception))
+            for st in (500, 400):   # controle: o resto continua falha de rede ou de MCP, e não recusa
+                e._abrir = lambda req, st=st: (st, {}, b"")
+                with self.assertRaises(RuntimeError) as x:
+                    e.ClienteMCP(None)._post({"jsonrpc": "2.0", "id": 1, "method": "tools/call"}, "t")
+                self.assertNotIsInstance(x.exception, e.PermissaoNegada)
+        finally:
+            e._abrir = antes
+
+    def test_acordar_tira_a_leitura_da_espera(self):
+        class Leitor(e.Leitor):
+            def ciclo(self, agora=None):
+                self.voltas.append(time.monotonic())
+                return 3600
+        l = Leitor(None)
+        l.voltas = []
+        l.start()
+
+        def espera(n, segundos):   # até a n-ésima leitura, ou o tempo acabar
+            fim = time.monotonic() + segundos
+            while len(l.voltas) < n and time.monotonic() < fim:
+                time.sleep(0.01)
+        espera(1, 5)
+        espera(2, 0.3)
+        self.assertEqual(len(l.voltas), 1)   # controle: sem o acordar(), a segunda leitura espera a hora inteira
+        l.acordar()
+        espera(2, 5)
+        self.assertEqual(len(l.voltas), 2)
+        espera(3, 0.3)
+        self.assertEqual(len(l.voltas), 2)   # um acordar() vale uma leitura só
+
+
+class Conectar(unittest.TestCase):
+    """C1.5 e C1.6: o /oauth/conectar e o /oauth/retorno de verdade contra o OAuth falso. Cada erro vira a página
+    aviso.html com texto nosso, sem o error_description nem o corpo que veio; a volta certa acorda o leitor."""
+    @classmethod
+    def setUpClass(cls):
+        class Leitor:
+            acordou = 0
+
+            def foto(self):
+                return {**e.resumir(AG, []), "atualizado": None, "erro": None, "conexao": "sem_conexao"}
+
+            def acordar(self):
+                self.acordou += 1
+        cls.pasta = tempfile.mkdtemp(prefix="escritorio-conectar-")
+        cls.oauth = OAuthFalso()
+        threading.Thread(target=cls.oauth.serve_forever, daemon=True).start()
+        cls.srv = e.Servidor(("127.0.0.1", 0), e.Pagina)
+        cls.srv.leitor, cls.srv.acesso = Leitor(), Acesso(cls.pasta)
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        cls.base = "http://127.0.0.1:%d" % cls.srv.server_address[1]
+        with open(os.path.join(cls.pasta, "codigo-primeiro-acesso.txt")) as f:
+            codigo = f.read().strip()
+        cls.srv.acesso.criar_primeiro(codigo, "dono", "senha-bem-grande")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+        cls.oauth.shutdown()
+        shutil.rmtree(cls.pasta, ignore_errors=True)
+
+    def setUp(self):
+        self.antes = e.BASE, e.EMISSOR, e.TIMES
+        e.BASE, e.EMISSOR = self.base, "http://127.0.0.1:%d" % self.oauth.server_address[1]
+        e.TIMES = os.path.join(self.pasta, "times.json")
+        with open(e.TIMES, "w", encoding="utf-8") as f:
+            json.dump({"conversas": "ler"}, f)
+        self.srv.cred = e.Credenciais(os.path.join(self.pasta, "oauth.json"))
+        self.oauth.registro, self.oauth.token = 201, (200, {"access_token": "AC-novo", "refresh_token": "RF-novo", "scope": "read"})
+        self.saida = io.StringIO()
+        self.log = contextlib.redirect_stdout(self.saida)
+        self.log.__enter__()
+        self.cab = Http.entrar(self)
+
+    def tearDown(self):
+        self.log.__exit__(None, None, None)
+        for segredo in ("AC-", "RF-", "evil"):   # o log nunca leva token nem o texto que veio de fora
+            self.assertNotIn(segredo, self.saida.getvalue())
+        e.BASE, e.EMISSOR, e.TIMES = self.antes
+
+    req = Http.req
+
+    def pagina(self, rota, status):
+        st, corpo, h = self.req(rota, self.cab)
+        self.assertEqual((st, h["Content-Type"]), (status, "text/html; charset=utf-8"), rota)
+        texto = corpo.decode()
+        self.assertNotIn("evil", texto); self.assertNotIn("<script", texto)
+        self.assertIn('href="/oauth/conectar"', texto); self.assertIn('href="/"', texto)
+        return texto
+
+    def conectar(self):
+        st, _, h = self.req("/oauth/conectar", self.cab)
+        self.assertEqual(st, 302)
+        return urllib.parse.parse_qs(urllib.parse.urlsplit(h["Location"]).query)["state"][0]
+
+    def test_volta_certa_conecta_e_acorda_o_leitor(self):
+        antes = self.srv.leitor.acordou
+        estado = self.conectar()
+        st, _, h = self.req(f"/oauth/retorno?code=codigo-secreto&state={estado}", self.cab)
+        self.assertEqual((st, h["Location"]), (302, "/"))
+        self.assertEqual((self.srv.cred.token(), self.srv.leitor.acordou), ("AC-novo", antes + 1))
+        texto = self.pagina(f"/oauth/retorno?code=codigo-secreto&state={estado}", 400)   # o mesmo state de novo
+        self.assertIn("venceu (vale 10 minutos) ou já foi usado", texto)
+        self.assertEqual(self.srv.leitor.acordou, antes + 1)   # a volta que falhou não acorda
+
+    def test_registro_recusado_e_sem_rede(self):
+        self.oauth.registro = 400
+        texto = self.pagina("/oauth/conectar", 502)
+        self.assertIn(f"recusou o endereço de retorno {self.base}/oauth/retorno", texto)
+        for st, esperado in ((401, "recusou o registro do app (HTTP 401)"), (403, "(HTTP 403)"), (429, "pediu uma pausa")):
+            self.oauth.registro = st   # outro 4xx não é o endereço: a página não pode apontar a causa errada
+            texto = self.pagina("/oauth/conectar", 502)
+            self.assertIn(esperado, texto, st)
+            self.assertNotIn("endereço de retorno", texto, st)
+        e.EMISSOR = "http://127.0.0.1:9"   # porta fechada: rede fora
+        self.assertIn("alcança https://app.agentes.chat", self.pagina("/oauth/conectar", 502))
+        self.srv.cred = None   # a prévia (sem credenciais) cai na mesma página
+        self.assertIn("alcança https://app.agentes.chat", self.pagina("/oauth/conectar", 502))
+
+    def test_troca_recusada_e_escopo_a_mais(self):
+        for st in (400, 401):
+            self.oauth.token = (st, {"error": "invalid_grant", "error_description": HOSTIL})
+            texto = self.pagina(f"/oauth/retorno?code=codigo-secreto&state={self.conectar()}", 400)
+            self.assertIn("não aceitou a autorização", texto)
+        self.oauth.token = (500, {"error_description": HOSTIL})
+        self.assertIn("(HTTP 500)", self.pagina(f"/oauth/retorno?code=codigo-secreto&state={self.conectar()}", 400))
+        self.oauth.token = (200, {"access_token": "AC-demais", "refresh_token": "RF-demais", "scope": "read write manage"})
+        texto = self.pagina(f"/oauth/retorno?code=codigo-secreto&state={self.conectar()}", 400)
+        self.assertIn("acesso diferente do pedido", texto)
+        self.assertIsNone(self.srv.cred.token())
+
+    def test_error_do_consentimento_sem_a_descricao(self):
+        desc = urllib.parse.quote(HOSTIL)
+        texto = self.pagina(f"/oauth/retorno?error=access_denied&error_description={desc}&state=s", 400)
+        self.assertIn("A autorização foi recusada.", texto)
+        self.assertIn("(código: algo_novo)", self.pagina("/oauth/retorno?error=algo_novo", 400))
+        for codigo in (urllib.parse.quote(HOSTIL), "Maiusculo", "x" * 41):   # fora de [a-z_]{1,40}: sem código
+            texto = self.pagina(f"/oauth/retorno?error={codigo}", 400)
+            self.assertIn("O agentes.chat recusou a conexão. Tente de novo.", texto)
+            self.assertNotIn("código:", texto)
+        self.assertIn('"codigo": "outro"', self.saida.getvalue())
+
+    def test_entrar_por_outro_endereco_mostra_o_certo_sem_ecoar_o_origin(self):
+        corpo = urllib.parse.urlencode({"usuario": "dono", "senha": "senha-bem-grande"}).encode()
+        for rota in ("/entrar", "/primeiro-acesso"):
+            st, html, h = self.req(rota, {"Origin": "https://outro-endereco.example"}, corpo)
+            self.assertEqual((st, h["Content-Type"], h.get("Set-Cookie")), (403, "text/html; charset=utf-8", None), rota)
+            self.assertIn(f"Abra pelo endereço configurado: {self.base}", html.decode())
+            self.assertNotIn("outro-endereco", html.decode())
+        self.assertEqual(self.req("/sair", {"Origin": "https://outro-endereco.example"}, b"")[1], "Origem não permitida.".encode())
+
+
+class Rede(unittest.TestCase):
+    """C1.7 e o ESCRITORIO_BIND: a BASE é só origem; 0.0.0.0 só com a BASE definida, e aí a porta é a do container."""
+    def test_base_so_origem(self):
+        for base in ("https://escritorio.exemplo.com", "https://escritorio.exemplo.com:8443", "http://127.0.0.1:7381"):
+            self.assertIsNone(e.erro_rede(base, "127.0.0.1", 737, True), base)
+        for base in ("https://escritorio.exemplo.com/", "https://escritorio.exemplo.com/app", "https://Escritorio.exemplo.com",
+                     "HTTPS://escritorio.exemplo.com", "https://escritorio.exemplo.com:443", "http://127.0.0.1:80",
+                     "https://escritorio.exemplo.com?x=1", "https://escritorio.exemplo.com#x", "https://eu@escritorio.exemplo.com",
+                     "https://escritorio.exemplo.com:99999", "https://escritorio.exemplo.com:x", "ftp://escritorio.exemplo.com",
+                     "escritorio.exemplo.com", "https://"):
+            self.assertIn("só a origem", e.erro_rede(base, "127.0.0.1", 737, True) or "", base)
+        self.assertIn("precisa ser https", e.erro_rede("http://escritorio.exemplo.com", "127.0.0.1", 737, True))
+
+    def test_bind(self):
+        self.assertIn("ESCRITORIO_BIND", e.erro_rede("https://escritorio.exemplo.com", "::", 737, True))
+        self.assertIn("ESCRITORIO_BIND", e.erro_rede("https://escritorio.exemplo.com", "192.168.0.10", 737, True))
+        self.assertIn("1024", e.erro_rede("https://escritorio.exemplo.com", "127.0.0.1", 7371, True))   # fora do container
+        self.assertIsNone(e.erro_rede("https://escritorio.exemplo.com", "0.0.0.0", 7371, True))   # a porta é do container
+        self.assertIsNone(e.erro_rede("http://127.0.0.1:7381", "0.0.0.0", 7371, True))   # teste local do container
+        self.assertIn("defina ESCRITORIO_BASE", e.erro_rede("http://127.0.0.1:7371", "0.0.0.0", 7371, False))
+
+    def test_main_recusa_antes_de_subir(self):
+        antes = e.BASE, e.BIND, e.ORG
+        try:
+            for base, bind in (("https://escritorio.exemplo.com/", "127.0.0.1"), ("https://escritorio.exemplo.com", "0.0.0.1")):
+                e.BASE, e.BIND, e.ORG = base, bind, ""   # sem org: numa regressão, para na org em vez de subir
+                with self.assertRaises(SystemExit) as c:
+                    e.main()
+                self.assertNotIn("AGENTES_ORG", str(c.exception.code), base)
+        finally:
+            e.BASE, e.BIND, e.ORG = antes
 
 
 class ModoResposta(unittest.TestCase):
@@ -2442,6 +2693,29 @@ class Previa(unittest.TestCase):
             p.kill()
             p.communicate(timeout=10)
             shutil.rmtree(pasta, ignore_errors=True)
+
+    def test_previa_com_cada_estado_de_conexao(self):
+        raiz = os.path.dirname(os.path.abspath(e.__file__))
+        exemplo = os.path.join("ferramentas", "previa.exemplo.json")
+        for conexao, agentes, erro in (("sem_conexao", 0, e.SEM_CONEXAO), ("recusada", 7, e.texto_recusa(403)),
+                                       ("conectado", 7, None)):
+            with socket.socket() as s:
+                s.bind(("127.0.0.1", 0))
+                porta = s.getsockname()[1]
+            p = subprocess.Popen([sys.executable, "-B", os.path.join("ferramentas", "previa.py"), "--conexao", conexao, exemplo],
+                                 cwd=raiz, env={**os.environ, "PREVIA_PORTA": str(porta), "PYTHONUTF8": "1"},
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            try:
+                self.assertEqual(p.stdout.readline().strip(), f"http://127.0.0.1:{porta}")
+                estado = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{porta}/api/estado", timeout=10).read())
+                self.assertEqual((estado["conexao"], len(estado["agentes"]), estado["erro"]), (conexao, agentes, erro))
+            finally:
+                p.kill()
+                p.communicate(timeout=10)
+        r = subprocess.run([sys.executable, "-B", os.path.join("ferramentas", "previa.py"), "--conexao", "outro", exemplo],
+                           cwd=raiz, capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("sem_conexao", r.stderr)
 
 
 

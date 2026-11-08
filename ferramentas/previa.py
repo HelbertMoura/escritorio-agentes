@@ -14,6 +14,10 @@ forçar uma briga na hora (dois agentes sem tarefa, dentro do expediente), o mes
        http://127.0.0.1:7372/api/social/briga
 --greve: força uma greve no primeiro passo do diretor (como se já houvesse 5 reclamações hoje), com os livres do arquivo,
 dentro do expediente; para atender, o clique na plaquinha ou o POST /api/social/greve/atender {"id": "<cena.id>"}.
+--conexao <estado>: o "conexao" do /api/estado, para ver cada faixa sem OAuth: conectado (o padrão), carregando,
+sem_conexao, recusada (HTTP 403), pausa (429) ou falha. Os dois primeiros e o sem_conexao saem sem agentes, como no
+servidor antes da primeira leitura; os outros mantêm a leitura do arquivo, como o servidor mantém a última. O "erro"
+traz o mesmo texto do servidor. A prévia não tem conexão: o /oauth/conectar dela cai na página de erro e não sai daqui.
 """
 import json, os, sys, threading, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -24,6 +28,17 @@ PORTA = int(os.environ.get("PREVIA_PORTA", "7372"))
 os.environ["ESCRITORIO_BASE"] = f"http://127.0.0.1:{PORTA}"
 import escritorio as e
 import social
+
+ARGS = sys.argv[1:]
+CONEXAO = "conectado"
+if "--conexao" in ARGS:   # --conexao <estado> (o valor sai da lista, para não virar o arquivo)
+    i = ARGS.index("--conexao")
+    CONEXAO = ARGS[i + 1] if i + 1 < len(ARGS) else ""
+    del ARGS[i:i + 2]
+CONEXAO = next((a.split("=", 1)[1] for a in ARGS if a.startswith("--conexao=")), CONEXAO)
+if CONEXAO not in e.CONEXOES:
+    sys.exit("--conexao: use " + ", ".join(e.CONEXOES))
+VAZIO = {"agentes": [], "trabalhos": [], "tarefas": [], "eventos": [], "resolvidos": [], "atualizado": None}
 
 class Token:
     def token(self):
@@ -46,7 +61,7 @@ class Falso:
         return estado
 
     def pausado(self, agora=None):
-        return False
+        return CONEXAO == "pausa"   # as rotas que chamam o MCP (a ficha da conversa) também veem a pausa
 
     def conversas_do_dia(self):
         self.foto()   # o arquivo pode ter mudado
@@ -90,7 +105,13 @@ class Falso:
                     self.marca = marca
             except (OSError, ValueError, KeyError, TypeError) as x:  # salvo pela metade, renomeado ou sem as listas
                 erro = f"prévia: não consegui ler {os.path.basename(self.arquivo)} ({type(x).__name__}); mostrando a leitura anterior"
-            return {**self.estado, "atualizado": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "erro": erro}
+            agora = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            if CONEXAO == "carregando":
+                return {**VAZIO, "erro": "Carregando…", "conexao": CONEXAO}
+            if CONEXAO == "sem_conexao":
+                return {**VAZIO, "erro": e.SEM_CONEXAO, "conexao": CONEXAO}
+            textos = {"recusada": e.texto_recusa(403), "pausa": e.PAUSA_429, "falha": e.FALHA_LEITURA}
+            return {**self.estado, "atualizado": agora, "erro": textos.get(CONEXAO, erro), "conexao": CONEXAO}
 
 class ConversasFicticias(e.Conversas):
     """O Conversas do servidor (cache, tetos, corte do fim), com a conversa vinda daqui em vez do agentes.chat."""
@@ -108,16 +129,16 @@ class ConversasFicticias(e.Conversas):
 
 
 srv = e.Servidor(("127.0.0.1", PORTA), e.Pagina)
-srv.leitor, srv.cred = Falso([a for a in sys.argv[1:] if not a.startswith("--")][0]), None
+srv.leitor, srv.cred = Falso([a for a in ARGS if not a.startswith("--")][0]), None
 srv.conversas = ConversasFicticias(srv.leitor)
-if "--resolvidos" in sys.argv[1:]:
+if "--resolvidos" in ARGS:
     srv.leitor.semear_resolvidos()
 srv.acesso = e.Acesso(os.environ["ESCRITORIO_DADOS"])
 srv.previa_sem_login = True  # prévia local, só em 127.0.0.1
 # o mesmo diretor do servidor, com a leitura do arquivo; o placar semanal vai para o placar.json da pasta temporária
 srv.social = e.Social(srv.leitor, e.config_publica, e.log, e.FUSO, guardar=lambda dados: e.gravar(e.ARQ_PLACAR, dados),
                       placar=e.ler_placar())
-if "--greve" in sys.argv[1:]:   # o dia já começa com as reclamações; a greve sai no primeiro passo (com 3 livres ou mais)
+if "--greve" in ARGS:   # o dia já começa com as reclamações; a greve sai no primeiro passo (com 3 livres ou mais)
     srv.social.dia = e.datetime.datetime.now(e.FUSO).date()
     srv.social.reclamaram_hoje = ["previa"] * social.GREVE_RECLAMACOES
 srv.social.start()
