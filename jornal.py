@@ -106,7 +106,7 @@ class Jornal:
         return sem["dias"].setdefault(dia, {"clima": None, "greves": 0, "brigas": 0})
 
     def ler(self, novos, resumo, agora):
-        """Uma leitura do Leitor: as transições novas do Diario ((tipo, id do agente)), o trabalho desde a leitura anterior
+        """Uma leitura do Leitor: as transições novas do Diario ((tipo, id do agente, ...)), o trabalho desde a leitura anterior
         e o clima do meio-dia. Nunca levanta: um erro aqui não pode virar falha de leitura (1 linha de log por tipo)."""
         try:
             with self.trava:
@@ -121,7 +121,7 @@ class Jornal:
     def _ler(self, novos, resumo, agora):
         sem, dia = self._semana(agora)
         novos, self.pular = () if self.pular else novos, False
-        for tipo, agente in novos:
+        for tipo, agente, *_ in novos:   # (tipo, id do agente, run_id); o run_id é do push
             if tipo in EVENTOS:
                 self._somar(sem, agente, EVENTOS[tipo], 1)
         credito = min(agora - self.ultima, CREDITO_MAX) if self.ultima is not None else 0

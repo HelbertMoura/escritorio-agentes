@@ -11,7 +11,8 @@ Na frente de tudo há login com usuário e senha (acesso.py).
 Rotas: /entrar /primeiro-acesso /sair /logo  /  /<estático>  /api/estado /api/config /api/conversa /api/marca
        /api/logo /api/conversa/modo /api/conversa/modo/fechar /api/conversa/responder /api/social /api/social/briga
        /api/social/greve/atender /api/social/placar /api/planta /api/clima /api/clima/busca /api/festas
-       /api/equipe /api/sair-todos /api/jornal /oauth/conectar /oauth/retorno
+       /api/equipe /api/sair-todos /api/jornal /api/push/chave /api/push/assinar /api/push/sair /api/avisos
+       /oauth/conectar /oauth/retorno
        (as quatro primeiras e os estáticos do login sem sessão)
 Uso: python3 -I escritorio.py           serviço (variáveis no /etc/escritorio.env)
      python3 -I escritorio.py codigo    mostra o código de primeiro acesso, só lendo (sudo escritorio-codigo)
@@ -41,8 +42,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from acesso import (ARQ_CODIGO, ARQ_USUARIOS, Acesso, NaoGravou, TentativasDemais, UsuariosIlegiveis, gravar,  # noqa: E402
                     ler_codigo, ler_usuarios)
 import ajustes  # noqa: E402
+import vapid  # noqa: E402
 from ajustes import (ACESSORIOS, CLIMA_BYTES, CORES, EQUIPE_BYTES, FESTAS_BYTES, HANDLE_OK, ICONES_OK, OLHOS,  # noqa: E402
                      ROTULO_OK, limpa_texto)
+from avisos import (CORPO_MAX as PUSH_CORPO, PUSH_BYTES, Avisos, EndpointInvalido, validar_arquivo as validar_push,  # noqa: E402
+                    validar_assinatura, validar_saida)
 from jornal import JORNAL_BYTES, Jornal, validar as validar_jornal  # noqa: E402
 from planta import PLANTA_BYTES, Planta, validar_planta  # noqa: E402
 from social import PLACAR_BYTES, PLACAR_MAX, PLACAR_TETO, Social  # noqa: E402
@@ -108,6 +112,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "ajustes.js": "text/javascript; charset=utf-8", "assistente.js": "text/javascript; charset=utf-8",
     "tv.js": "text/javascript; charset=utf-8", "sw.js": "text/javascript; charset=utf-8",
     "jornal.js": "text/javascript; charset=utf-8", "timelapse.js": "text/javascript; charset=utf-8",
+    "avisar.js": "text/javascript; charset=utf-8",
     "manifest.webmanifest": "application/manifest+json", "icone-180.png": "image/png", "icone-192.png": "image/png",
     "icone-512.png": "image/png", "icone-mascara-512.png": "image/png",
 }
@@ -527,7 +532,7 @@ class Diario:
     def __init__(self):
         self.runs = {}  # run_id -> {"status", "desde", "agente", "inicio", "rotulo"}
         self.eventos = collections.deque(maxlen=self.LIMITE)  # do mais novo para o mais velho
-        self.novos = []   # os eventos só da última leitura, como (tipo, id do agente): o jornal da semana conta por id
+        self.novos = []   # os eventos só da última leitura, (tipo, id do agente, run_id): para o jornal e o push
         self.resolvidos = collections.deque(maxlen=self.LIMITE)  # (instante, item), do mais novo para o mais velho
         self.base = False
 
@@ -586,7 +591,7 @@ class Diario:
 
     def _evento(self, em, tipo, agente, rid, agente_id):
         self.eventos.appendleft({"em": em, "tipo": tipo, "agente": agente, "run_id": rid})
-        self.novos.append((tipo, agente_id))
+        self.novos.append((tipo, agente_id, rid))
 
     def _resolvido(self, agora, pedido, rid, desfecho):
         self.resolvidos.appendleft((agora, {"run_id": rid, "agente": pedido["agente"], "tipo": self.TIPO[pedido["status"]],
@@ -678,6 +683,7 @@ class Leitor(threading.Thread):
         self.diario = Diario()
         self.diario_novo = False   # conta nova no OAuth: o próximo ciclo recomeça o Diario
         self.jornal = None   # o Jornal da semana, posto pelo main(); conta a cada leitura que deu certo
+        self.avisos = None   # o push (avisos.py), posto pelo main(): os pedidos novos vão para a fila dele
         self.agentes, self.agentes_ok, self.agentes_em = None, True, 0.0   # list_agents guardado entre as recargas
         self.seguidos_429 = self.seguidos_erro = 0
         self.pausa_ate = 0.0   # fim da pausa pedida por um 429; as rotas que chamam o MCP consultam pausado()
@@ -763,6 +769,8 @@ class Leitor(threading.Thread):
             self.diario.aplicar(novo, completa)
             if self.jornal:   # nunca levanta: o jornal não derruba a leitura
                 self.jornal.ler(self.diario.novos, novo, agora)
+            if self.avisos:   # só põe na fila, sem rede; nunca levanta
+                self.avisos.transicoes(self.diario.novos, novo, agora)
             novo.update(atualizado=_iso(agora), erro=None, conexao="conectado")
             with self.trava:
                 if self.zerar_conversas:   # conta nova no OAuth: a lista da conta anterior não fica à vista
@@ -1188,6 +1196,30 @@ def ler_jornal():
     return ajustes.ler(ARQ_JORNAL, JORNAL_BYTES, validar_jornal, log, "jornal")
 
 
+def ler_push():
+    """dados/push.json validado (as assinaturas), ou None. Ilegível ou fora do formato sobe sem aparelhos, com 1 linha de
+    log: falha aberta (cada aparelho assina de novo no "Avisar no celular")."""
+    return ajustes.ler(ARQ_PUSH, PUSH_BYTES, validar_push, log, "push")
+
+
+def criar_avisos(destino=None, sub=None):
+    """O Avisos do servidor, com o sub do VAPID = BASE (e o da prévia, que passa o destino falso e um sub mailto: próprio).
+    Sem a BASE em https, o push fica desligado: a Apple recusa o JWT com um sub que não seja https ou mailto:, e nada se
+    assina nem se envia. A chave ilegível também desliga, sem gerar outra (os aparelhos assinados com ela deixariam de
+    valer)."""
+    comum = dict(log=log, fuso=FUSO, guardar=lambda dados: gravar(ARQ_PUSH, dados), assinaturas=ler_push())
+    if destino is None and not BASE.startswith("https://"):
+        log(evento="push", resultado="desligado", motivo="precisa_https")
+        return Avisos(None, None, desligado="precisa_https", **comum)
+    try:
+        d = vapid.carregar_ou_criar(ARQ_VAPID)
+    except (ValueError, OSError) as x:
+        log(evento="push", resultado="desligado", motivo="chave_invalida", detalhe=f"{type(x).__name__}: {str(x)[:200]}")
+        return Avisos(None, None, desligado="chave_invalida", **comum)
+    sub = sub or BASE
+    return Avisos(vapid.publica_b64url(d), lambda endpoint: vapid.cabecalho(d, endpoint, sub), destino=destino, **comum)
+
+
 # ---------------------------------------------------------------- clima real (Open-Meteo, sem chave)
 
 def tipo_do_clima(codigo, nuvens):
@@ -1477,6 +1509,8 @@ def modo_serio(marca=None):
 ARQ_PLACAR = os.path.join(DADOS, "placar.json")   # placar semanal do ringue (vida social); só a thread do Social grava
 ID_PLACAR = re.compile(r"[A-Za-z0-9_-]{1,100}")
 ARQ_PLANTA = os.path.join(DADOS, "planta.json")   # modo construção; só o POST /api/planta grava, sob a trava da Planta
+ARQ_PUSH = os.path.join(DADOS, "push.json")   # assinaturas do aviso no celular (avisos.py); gravadas sob a trava dele
+ARQ_VAPID = os.path.join(DADOS, "vapid.json")   # a chave privada VAPID (vapid.py), 0600; nunca sai do servidor
 ARQ_JORNAL = os.path.join(DADOS, "jornal.json")   # jornal da semana (jornal.py); só a leitura grava, no máximo 1 vez por minuto
 
 
@@ -2027,6 +2061,11 @@ class Pagina(BaseHTTPRequestHandler):
                 return self._json(*erro(404, "jornal_desligado", "O jornal está desligado neste escritório."))
             presentes = {a["id"] for a in self.server.leitor.foto().get("agentes", [])}
             return self._json(200, jornal.publico(time.time(), presentes))
+        if rota in ("/api/push/chave", "/api/avisos"):   # o aviso no celular (avisos.py); o rótulo da tarefa nunca sai
+            avisos = getattr(self.server, "avisos", None)
+            if not avisos:
+                return self._json(*erro(404, "push_desligado", "O aviso no celular está desligado neste escritório."))
+            return self._json(*avisos.chave_publica()) if rota == "/api/push/chave" else self._json(200, avisos.publico())
         if rota == "/api/conversa":   # só o "id" ou o "agente" da query contam: o canal sai do que o servidor viu
             conversas = getattr(self.server, "conversas", None)
             if not conversas or carregar_times()["conversas"] not in MODOS_CONVERSA:
@@ -2060,6 +2099,8 @@ class Pagina(BaseHTTPRequestHandler):
                 self.server.social.zerar()
             if getattr(self.server, "jornal", None):   # nem os números da semana
                 self.server.jornal.zerar()
+            if getattr(self.server, "avisos", None):   # nem o último aviso (as assinaturas são dos aparelhos e ficam)
+                self.server.avisos.zerar()
             if hasattr(self.server.leitor, "acordar"):   # a primeira leitura com a conexão nova sai agora
                 self.server.leitor.acordar()
             log(evento="oauth", resultado="conectado", usuario=usuario)
@@ -2212,6 +2253,30 @@ class Pagina(BaseHTTPRequestHandler):
             clima.acordar()
         return self._json(st, corpo)
 
+    def _post_push(self, rota):
+        """Aviso no celular: o molde do /api/planta (Origin igual à BASE, sem a volta para o Referer, sessão, JSON exato de
+        até 2 KB, sem NaN nem Infinity). O endpoint nunca vai ao log nem volta na resposta."""
+        if self.headers.get("Origin") != BASE:
+            log(evento="http", rota=rota[:40], resultado="origem_recusada")
+            return self._json(*erro(403, "origem", "Origem não permitida."))
+        if not self._usuario():
+            return self._json(401, {"erro": "entre de novo"})
+        avisos = getattr(self.server, "avisos", None)
+        if not avisos:
+            return self._json(*erro(404, "push_desligado", "O aviso no celular está desligado neste escritório."))
+        if (self.headers.get("Content-Type") or "").split(";")[0].strip().lower() != "application/json":
+            return self._json(*erro(415, "formato", "Envie JSON (application/json)."))
+        try:
+            dados = ajustes.json_estrito(self._corpo(PUSH_CORPO))
+            if rota == "/api/push/sair":
+                return self._json(*avisos.sair(validar_saida(dados)))
+            endpoint = validar_assinatura(dados)
+        except EndpointInvalido:
+            return self._json(*erro(400, "endpoint_invalido", "Esse serviço de aviso não é aceito."))
+        except (ValueError, TypeError, RecursionError):   # tamanho, UTF-8, JSON, NaN ou formato; sem ecoar nada
+            return self._json(*erro(400, "pedido", "Pedido inválido."))
+        return self._json(*avisos.assinar(endpoint, time.time()))
+
     def _post_sair_todos(self, rota):
         """"Sair de todos os aparelhos": Origin obrigatório e igual à BASE (sem a volta para o Referer), sessão, JSON
         {"senha"} de até 1 KB. A senha conta no balde do login (8 erros em 15 min travam também o login). Zera todas as
@@ -2265,6 +2330,8 @@ class Pagina(BaseHTTPRequestHandler):
             return self._post_ajustes(rota)
         if rota == "/api/sair-todos":
             return self._post_sair_todos(rota)
+        if rota in ("/api/push/assinar", "/api/push/sair"):
+            return self._post_push(rota)
         if not self._mesma_origem():
             log(evento="http", rota=rota[:40], resultado="origem_recusada")
             if rota in ("/entrar", "/primeiro-acesso"):   # aberto por outro endereço: diz qual é o certo (o Origin não volta)
@@ -2371,12 +2438,14 @@ def main():
     # jornal da semana: só ids e números, gravado de forma atômica; o clima do meio-dia sai do mesmo Clima da página
     leitor.jornal = Jornal(log, FUSO, lambda dados: gravar(ARQ_JORNAL, dados), ler_jornal(),
                            lambda: (clima.foto() or {}).get("tipo"))
+    leitor.avisos = criar_avisos()   # aviso no celular: a thread dele fala com os serviços de push, nunca com o agentes.chat
+    leitor.avisos.start()
     leitor.start()
     srv = Servidor((BIND, PORTA), Pagina)  # 127.0.0.1: a Tailscale (serve) publica só na rede privada
     srv.cred, srv.leitor, srv.acesso = cred, leitor, contas
     srv.conversas = Conversas(leitor)
     srv.respostas = Respostas(leitor, srv.conversas)
-    srv.jornal = leitor.jornal
+    srv.jornal, srv.avisos = leitor.jornal, leitor.avisos
     # vida social: na memória, sem rede; só o placar semanal vai para o disco, pelo gravar() atômico
     srv.social = Social(leitor, config_publica, log, FUSO, guardar=lambda dados: gravar(ARQ_PLACAR, dados), placar=ler_placar(),
                         contar_jornal=srv.jornal.contar)

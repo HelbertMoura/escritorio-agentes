@@ -4,14 +4,15 @@
 
 All notable changes to this project are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The project has no version numbers yet: each entry is a milestone, with its date and commits.
 
-## Unreleased · TV mode, visitors and newspaper
+## Unreleased · TV mode, visitors, newspaper and phone alerts
 
-`config_v` and the visitors in commit [`89873f5`](https://github.com/HelbertMoura/escritorio-agentes/commit/89873f5); the newspaper in the next commit.
+`config_v` and the visitors in commit [`89873f5`](https://github.com/HelbertMoura/escritorio-agentes/commit/89873f5); the newspaper in [`56f9f46`](https://github.com/HelbertMoura/escritorio-agentes/commit/56f9f46); the phone alerts, in the next commit.
 
 ### Added
 - `/api/estado` gained `config_v`: 12 hex characters that change when a configuration file changes (`times.json` and, in `dados/`, the brand, logo, floor plan, weather, holidays and team). It comes only from each file's size and date, without reading its contents. TV mode reloads the page when it changes.
 - **Visitors:** `/api/estado` gained `visitantes`, the list of who else has the office open, with only an anonymous id and a color (`?invisivel=1` watches without showing up). See [Security](./README.md#security). The preview gained `--visitantes N`.
 - **Weekly newspaper:** `jornal.py` and `GET /api/jornal`, with this week's and last week's numbers (tasks, approvals, answers and minutes per agent; weather, strikes and fights per day), in `dados/jornal.json`, with only ids and numbers. See [Security](./README.md#security). The preview counts its own reads and gained `--jornal`, which starts with both weeks filled in.
+- **Phone alerts:** native push without content, signed with VAPID (`vapid.py`, ES256 in pure Python) and sent by `avisos.py` when an agent asks for approval or an answer, with the routes `GET /api/push/chave`, `POST /api/push/assinar`, `POST /api/push/sair` and `GET /api/avisos`. Only with `ESCRITORIO_BASE` on https. See [Security](./README.md#security). The preview gained `--push`, with a fake local push service.
 
 ### Changed
 - Switching the agentes.chat account also restarts the event list and the day's resolved requests, as a restart would: nothing from the previous account stays on screen or goes into the newspaper.

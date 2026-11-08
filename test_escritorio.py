@@ -31,6 +31,7 @@ with open(os.environ["ESCRITORIO_TIMES"], "w", encoding="utf-8") as _f:
     json.dump({"conversas": "ler"}, _f)
 os.environ["AGENTES_ORG"] = "00000000-0000-4000-8000-000000000000"  # org fictícia
 import acesso  # noqa: E402
+import avisos  # noqa: E402
 import escritorio as e  # noqa: E402
 import social  # noqa: E402
 from acesso import Acesso  # noqa: E402
@@ -45,7 +46,7 @@ AG =[{"id": "a1", "name": "Pixel", "handle": "pixel", "role": "Conteúdo"},
 ORG_URL = f"https://app.agentes.chat/org/{e.ORG}/c/11111111-2222-4333-8444-555555555555"
 # arquivos da lista fechada que chegam com o land do floor das telas (uau-telas); até lá, o servidor responde 404
 PWA = {"manifest.webmanifest", "sw.js", "icone-180.png", "icone-192.png", "icone-512.png", "icone-mascara-512.png"}
-DO_FRONT = {"tv.js", "jornal.js", "timelapse.js"} | PWA
+DO_FRONT = {"tv.js", "jornal.js", "timelapse.js", "avisar.js"} | PWA
 
 
 def servidos():
@@ -2146,10 +2147,14 @@ class Conectar(unittest.TestCase):
         self.srv.jornal = e.Jornal(e.log, e.FUSO)   # com uma contagem da conta anterior
         self.addCleanup(delattr, self.srv, "jornal")
         self.srv.jornal.ler([("terminou", "agente-velho")], {"tarefas": []}, time.time())
+        self.srv.avisos = avisos.Avisos("CHAVE", lambda endpoint: "", e.log, e.FUSO)   # e um aviso da conta anterior
+        self.addCleanup(delattr, self.srv, "avisos")
+        self.srv.avisos.transicoes([("pediu_aprovacao", "agente-velho", "r-velho")], {"agentes": []}, time.time())
         estado = self.conectar()
         st, _, h = self.req(f"/oauth/retorno?code=codigo-secreto&state={estado}", self.cab)
         self.assertEqual((st, h["Location"]), (302, "/"))
         self.assertEqual(self.srv.jornal.publico(time.time(), {"agente-velho"})["semana"]["agentes"], [])   # zerado
+        self.assertEqual(self.srv.avisos.publico(), {"aviso": None})
         self.assertEqual((self.srv.cred.token(), self.srv.leitor.acordou), ("AC-novo", antes + 1))
         texto = self.pagina(f"/oauth/retorno?code=codigo-secreto&state={estado}", 400)   # o mesmo state de novo
         self.assertIn("venceu (vale 10 minutos) ou já foi usado", texto)
@@ -2749,12 +2754,13 @@ class Docker(unittest.TestCase):
                     [no.module] if isinstance(no, ast.ImportFrom) and no.module else []
                 pendentes += [n for n in nomes if os.path.isfile(os.path.join(raiz, n + ".py"))]
         esperados = {n + ".py" for n in locais}
-        self.assertEqual(esperados, {"escritorio.py", "acesso.py", "social.py", "planta.py", "ajustes.py", "jornal.py"})
+        self.assertEqual(esperados, {"escritorio.py", "acesso.py", "social.py", "planta.py", "ajustes.py", "jornal.py",
+                                     "avisos.py", "vapid.py"})
         self.assertLessEqual(esperados, copiados)
         self.assertLessEqual(esperados, liberados)
         with open(os.path.join(raiz, "instalar.sh"), encoding="utf-8") as f:
             linhas = f.read().replace("\\\n", " ").splitlines()   # junta as linhas continuadas com \
-        instalados = {p for linha in linhas if linha.startswith("install ") and linha.endswith(" /opt/escritorio/")
+        instalados = {p for linha in linhas if linha.startswith("install ") and linha.rstrip().endswith(" /opt/escritorio/")
                       for p in linha.split() if p.endswith(".py")}
         compilados = {os.path.basename(p) for linha in linhas if "py_compile" in linha for p in linha.split() if p.endswith(".py")}
         self.assertEqual((instalados, compilados), (esperados, esperados))
@@ -3316,6 +3322,36 @@ class Previa(unittest.TestCase):
                            env={**os.environ, "TEMP": tmp, "TMP": tmp, "TMPDIR": tmp})
         self.assertEqual((r.returncode, os.listdir(tmp)), (1, []))
         self.assertIn("--visitantes", r.stderr)
+
+    def test_previa_com_push_falso(self):
+        """--push: a chave sai, o endpoint da lista é aceito (o de fora, não) e um pedido novo do arquivo vira aviso."""
+        pasta = tempfile.mkdtemp(prefix="escritorio-previa-push-")
+        self.addCleanup(shutil.rmtree, pasta, ignore_errors=True)
+        bruto = os.path.join(pasta, "bruto.json")
+        tarefa = {"run_id": "r1", "agent": {"id": "a1"}, "status": "running", "label": "Post"}
+        with open(bruto, "w", encoding="utf-8") as f:
+            json.dump({"agents": AG, "tasks": [tarefa]}, f)
+        base = self.subir("--push", bruto)
+
+        def req(rota, dados=None):
+            cab = {"Origin": base, "Content-Type": "application/json"} if dados else {}
+            pedido = urllib.request.Request(base + rota, headers=cab, data=json.dumps(dados).encode() if dados else None)
+            try:
+                with urllib.request.urlopen(pedido, timeout=10) as r:
+                    return r.status, json.loads(r.read())
+            except urllib.error.HTTPError as err:
+                with err:
+                    return err.code, json.loads(err.read())
+        st, corpo = req("/api/push/chave")
+        self.assertEqual((st, len(corpo["chave"])), (200, 87))
+        self.assertEqual(req("/api/push/assinar", {"endpoint": "https://fcm.googleapis.com/fcm/send/x"}), (200, {"ok": True}))
+        self.assertEqual(req("/api/push/assinar", {"endpoint": "http://127.0.0.1:9/push"})[1]["erro"], "endpoint_invalido")
+        req("/api/estado")   # a base do diário
+        with open(bruto, "w", encoding="utf-8") as f:
+            json.dump({"agents": AG, "tasks": [{**tarefa, "status": "waiting_approval"}]}, f)
+        req("/api/estado")
+        self.assertEqual(req("/api/avisos")[1]["aviso"]["agente"], "a1")
+        self.assertEqual(req("/api/avisos")[1]["aviso"]["tipo"], "pediu_aprovacao")
 
     def test_previa_com_jornal_semeado(self):
         base = self.subir("--jornal", os.path.join("ferramentas", "previa.exemplo.json"))

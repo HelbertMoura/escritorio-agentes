@@ -25,8 +25,13 @@ visitantes fixos, com id e cor pelo mesmo cálculo do servidor.
 Jornal: o mesmo jornal.py do servidor conta as leituras deste arquivo (e as brigas e greves da vida social) e grava o
 jornal.json na pasta temporária. --jornal: sobe com a semana atual (até hoje) e a anterior já preenchidas, com números
 sorteados (semente fixa) para os agentes do arquivo, pela mesma validação do jornal.json.
+--push: liga o aviso no celular com o mesmo avisos.py e a mesma chave VAPID (vapid.json na pasta temporária), mas todo
+envio vai a um servidor de push falso, local (127.0.0.1, porta sorteada), que só responde 201 e escreve uma linha
+"push falso: ..." sem o endpoint. Nada sai para a rede. Para disparar, ponha uma tarefa do arquivo em waiting_approval
+ou waiting_input com a prévia aberta. Sem --push, as rotas do push respondem 404.
 """
 import atexit, datetime, json, os, random, shutil, signal, sys, threading, time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import tempfile
 os.environ["ESCRITORIO_DADOS"] = tempfile.mkdtemp(prefix="escritorio-previa-")
@@ -83,6 +88,8 @@ class Falso:
         estado = self.diario.aplicar(e.resumir(bruto["agents"], tarefas), agora=agora)
         if self.jornal:
             self.jornal.ler(self.diario.novos, estado, time.time() if agora is None else agora)
+        if getattr(self, "avisos", None):
+            self.avisos.transicoes(self.diario.novos, estado, time.time() if agora is None else agora)
         self.conversas = self.memoria.atualizar(e.normalizar(bruto["agents"], tarefas)[1],
                                                 {t["run_id"]: t.get("desde") for t in estado["tarefas"]}, True,
                                                 time.time() if agora is None else agora)
@@ -157,6 +164,21 @@ def semear_jornal(jornal, arquivo):
         jornal.semanas, jornal.sujo = e.validar_jornal({"v": 1, "semanas": semanas}), True
 
 
+class PushFalso(BaseHTTPRequestHandler):
+    """--push: o serviço de push de mentira. Responde 201, como o FCM, e diz só o que chegou (nunca o endpoint)."""
+    def do_POST(self):
+        vazio = self.headers.get("Content-Length", "0") == "0"
+        vapid = (self.headers.get("Authorization") or "").startswith("vapid t=")
+        print(f"push falso: aviso recebido (vapid: {vapid}, vazio: {vazio}, TTL: {self.headers.get('TTL')}, "
+              f"Urgency: {self.headers.get('Urgency')})", flush=True)
+        self.send_response(201)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def log_message(self, *a):
+        pass
+
+
 class VisitantesDaPrevia(e.Visitantes):
     """--visitantes N: N marcas fixas, renovadas a cada pedido, no lugar das sessões que a prévia não tem."""
     def ver(self, token, agora, marcar=True):
@@ -188,6 +210,13 @@ srv.clima = e.Clima(lambda: e.clima_vigente()[0])
 # o jornal da semana, como no servidor: o jornal.json vai para a pasta temporária; o clima do meio-dia sai do clima vivo
 srv.jornal = srv.leitor.jornal = e.Jornal(e.log, e.FUSO, lambda dados: e.gravar(e.ARQ_JORNAL, dados), e.ler_jornal(),
                                           lambda: (srv.clima.foto() or {}).get("tipo"))
+if "--push" in ARGS:   # o aviso no celular, com o servidor de push falso no lugar do serviço de verdade
+    falso = ThreadingHTTPServer(("127.0.0.1", 0), PushFalso)
+    threading.Thread(target=falso.serve_forever, daemon=True).start()
+    destino = "http://127.0.0.1:%d/push" % falso.server_address[1]
+    # a BASE da prévia é http, que o VAPID não aceita como sub: um mailto: de domínio reservado, só daqui
+    srv.avisos = srv.leitor.avisos = e.criar_avisos(destino=lambda endpoint: destino, sub="mailto:previa@example.com")
+    srv.avisos.start()
 if "--jornal" in ARGS:
     semear_jornal(srv.jornal, [a for a in ARGS if not a.startswith("--")][0])
 if "--resolvidos" in ARGS:

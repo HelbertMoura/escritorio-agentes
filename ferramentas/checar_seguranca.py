@@ -215,6 +215,24 @@ srv.jornal.ler([("terminou", "agente-1")], {"tarefas": []}, time.time())
 confere("GET /api/jornal sem sessao", req("/api/jornal")[0], 401)
 st, _, corpo = req_corpo("/api/jornal", sessao)
 confere("GET /api/jornal com sessao, sem o agente que nao esta na leitura", (st, json.loads(corpo)["semana"]["agentes"]), (200, []))
+print("== Aviso no celular (push): sessao, Origin estrito, so JSON, 2 KB e lista fechada de hosts")
+srv.avisos = e.Avisos("CHAVE", lambda endpoint: "vapid t=x, k=y", e.log, e.FUSO)
+pj = {**sessao, "Origin": base, "Content-Type": "application/json"}
+fcm = json.dumps({"endpoint": "https://fcm.googleapis.com/fcm/send/x"}).encode()
+for rota in ("/api/push/chave", "/api/avisos"):
+    confere("GET %s sem sessao" % rota, req(rota)[0], 401)
+for rota in ("/api/push/assinar", "/api/push/sair"):
+    confere("POST %s sem sessao" % rota, req(rota, {"Origin": base, "Content-Type": "application/json"}, fcm)[0], 401)
+    confere("POST %s de outra origem" % rota, req(rota, {**pj, "Origin": "https://outro.exemplo"}, fcm)[0], 403)
+    confere("POST %s sem Origin, com Referer valido" % rota,
+            req(rota, {**sessao, "Referer": base + "/", "Content-Type": "application/json"}, fcm)[0], 403)
+    confere("POST %s em text/plain" % rota, req(rota, {**pj, "Content-Type": "text/plain"}, fcm)[0], 415)
+    confere("POST %s acima de 2 KB" % rota, req(rota, pj, fcm[:-1] + b" " * 2048 + b"}")[0], 400)
+for fora in ("https://evil.example/push", "http://127.0.0.1:9/push", "https://fcm.googleapis.com.evil.example/x"):
+    st, _, corpo = req_corpo("/api/push/assinar", pj, json.dumps({"endpoint": fora}).encode())
+    confere("POST /api/push/assinar com host fora da lista (%s)" % fora.split("/")[2], (st, json.loads(corpo)["erro"]),
+            (400, "endpoint_invalido"))
+confere("POST /api/push/assinar com o FCM e tudo certo", req("/api/push/assinar", pj, fcm)[0], 200)
 print("== Sair de todos os aparelhos (Origin obrigatorio, JSON exato, senha no balde do login)")
 sj = lambda senha: json.dumps({"senha": senha}).encode()
 confere("POST /api/sair-todos sem Origin, com Referer valido (aqui o Referer nao conta)",
