@@ -35,6 +35,8 @@ const Avisar = (() => {
 
   // como está agora, sem pedir nada à pessoa (a assinatura que já existe é reenviada: o servidor não duplica)
   async function verificar() {
+    // http fora do localhost: o navegador nem expõe o serviceWorker; a caixa explica o https (sem push no servidor, some)
+    if (!window.isSecureContext) return mostrar(await lerChave() === null ? "sem_push" : "precisa_https");
     if (ios() && !naTelaDeInicio() && !suporta()) return mostrar("iphone");
     if (!suporta()) return mostrar("sem_suporte");
     const chave = await lerChave();
@@ -43,6 +45,8 @@ const Avisar = (() => {
     if (Notification.permission === "denied") return mostrar("negado");
     const sub = await assinaturaAtual();
     if (!sub || Notification.permission !== "granted") return mostrar("desligado");
+    // o servidor trocou de chave: o serviço de push recusa (403) e o servidor não apaga sozinho; religar é um toque
+    if (chave && chaveTrocada(sub, chave)) { await sair(sub); return mostrar("desligado"); }
     const r = await postar("api/push/assinar", sub.toJSON());
     mostrar(r.status === 200 ? "ligado" : erroDe(r));
   }
@@ -98,8 +102,7 @@ const Avisar = (() => {
     try {
       const reg = await navigator.serviceWorker.ready;
       sub = await reg.pushManager.getSubscription();
-      const antiga = sub && sub.options && sub.options.applicationServerKey;
-      if (antiga && !igual(new Uint8Array(antiga), chave)) { await sub.unsubscribe(); sub = null; }   // o servidor trocou de chave
+      if (sub && chaveTrocada(sub, chave)) { await sub.unsubscribe(); sub = null; }   // o servidor trocou de chave
       // sem serviço de push (navegador embutido, headless) o subscribe pode nunca responder: 20 s e desiste
       if (!sub) sub = await Promise.race([reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: chave }),
         new Promise((_, nao) => setTimeout(() => nao(new Error("sem resposta")), 20000))]);
@@ -112,12 +115,17 @@ const Avisar = (() => {
   async function desligar() {
     mostrar("desligando");
     const sub = await assinaturaAtual();
-    if (sub) {
-      const endpoint = sub.endpoint;
-      await sub.unsubscribe().catch(() => {});
-      await postar("api/push/sair", { endpoint });   // mesmo que falhe: o serviço de push dá 410 e o servidor apaga sozinho
-    }
+    if (sub) await sair(sub);   // mesmo que o POST falhe: o serviço de push dá 410 e o servidor apaga sozinho
     mostrar("desligado");
+  }
+  async function sair(sub) {   // apaga a assinatura aqui e no servidor
+    const endpoint = sub.endpoint;
+    await sub.unsubscribe().catch(() => {});
+    await postar("api/push/sair", { endpoint });
+  }
+  function chaveTrocada(sub, chave) {   // a assinatura foi feita com outra chave VAPID (sem options, não dá para saber)
+    const antiga = sub.options && sub.options.applicationServerKey;
+    return !!antiga && !igual(new Uint8Array(antiga), chave);
   }
   const igual = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
 
