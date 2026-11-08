@@ -2157,6 +2157,9 @@ class Pagina(BaseHTTPRequestHandler):
             if isinstance(x, TentativasDemais):
                 return self._json(*erro(429, "tentativas_demais", "Tentativas demais; espere alguns minutos."))
             return self._json(*erro(403, "senha_incorreta", "Senha incorreta."))
+        except OSError as x:
+            log(evento="acesso", resultado="sair_todos_nao_gravou", detalhe=type(x).__name__)
+            return self._json(*erro(500, "gravar", "Não deu para encerrar as sessões agora."))
         log(evento="acesso", resultado="sair_todos", usuario=usuario, sessoes=n)
         return self._json(200, {"ok": True}, {"Set-Cookie": [self._cookie("", 0), self._cookie_modo("")]})
 

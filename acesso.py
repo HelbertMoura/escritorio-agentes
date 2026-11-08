@@ -52,7 +52,7 @@ class UsuariosIlegiveis(Exception):
 
 def _hash(senha, sal, n=N, r=R, p=P):
     with CALCULOS:
-        return hashlib.scrypt(senha.encode("utf-8"), salt=sal, n=n, r=r, p=p, maxmem=64 * 1024 * 1024, dklen=32)
+        return hashlib.scrypt(senha.encode("utf-8", "surrogatepass"), salt=sal, n=n, r=r, p=p, maxmem=64 * 1024 * 1024, dklen=32)
 
 
 def gravar(caminho, conteudo):
@@ -230,10 +230,10 @@ class Acesso:
         if not usuario:
             raise PermissionError("entre de novo")
         self.conferir(usuario, senha)
-        with self.trava:
+        with self.trava:   # grava antes de trocar a memória: se o disco falhar, nada muda
             n = len(self.sessoes)
+            _gravar(self.arq_sessoes, {})
             self.sessoes, self.modos = {}, {}
-            _gravar(self.arq_sessoes, self.sessoes)
         return n
 
     def sair(self, token):

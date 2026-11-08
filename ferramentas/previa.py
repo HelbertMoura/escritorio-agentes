@@ -159,6 +159,7 @@ srv.planta = e.Planta(e.ARQ_PLANTA, e.log, lambda dados: e.gravar(e.ARQ_PLANTA, 
 # clima vivo, como no servidor: a cidade salva pela tela vai para o clima.json da pasta temporária
 srv.clima = e.Clima(lambda: e.clima_vigente()[0]); srv.clima.start()
 print(e.BASE, flush=True)
+print("dados temporários:", os.environ["ESCRITORIO_DADOS"], flush=True)   # somem ao sair
 try:
     srv.serve_forever()
 except KeyboardInterrupt:   # Ctrl+C: sai sem traceback, e o atexit apaga a pasta

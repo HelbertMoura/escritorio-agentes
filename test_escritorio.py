@@ -312,6 +312,7 @@ DEMAIS = "tentativas demais; espere alguns minutos"
 class AcessoUnidade(unittest.TestCase):
     def setUp(self):
         self.pasta = tempfile.mkdtemp(prefix="acesso-")
+        self.addCleanup(shutil.rmtree, self.pasta, ignore_errors=True)
         self.a = Acesso(self.pasta)
 
     def codigo(self):
@@ -343,6 +344,11 @@ class AcessoUnidade(unittest.TestCase):
             self.assertNotIn(tok, f.read())  # no disco só vai o hash do token
         self.a.sair(tok)
         self.assertIsNone(self.a.sessao(tok))
+
+    def test_senha_com_surrogate_sozinho_e_senha_errada(self):
+        self.a.criar_primeiro(self.codigo(), "dono", "senha-bem-grande")
+        with self.assertRaises(PermissionError):   # e não UnicodeEncodeError
+            self.a.conferir("dono", "\ud800")
 
     def test_hash_de_senha_no_disco(self):
         self.a.criar_primeiro(self.codigo(), "dono", "senha-bem-grande")
@@ -2350,6 +2356,30 @@ class Configuracoes(unittest.TestCase):
         self.assertIn('"resultado": "salva"', self.saida.getvalue())
         self.assertNotIn("orbita", self.saida.getvalue())   # o log guarda contagens, não os handles
 
+    def test_equipe_no_teto_de_32_kb(self):
+        """O teto da rota é 32 KB (não o de 16 KB das festas), e o arquivo ganha o "v":1, (6 bytes): um corpo compacto de
+        32.763 a 32.768 bytes passa na rota, mas o arquivo passaria do teto, então recebe 400 e nada é gravado."""
+        def corpo(tamanho):
+            agentes = [f"t{i:02d}-".ljust(41, "y") for i in range(24)]
+            tams = [41] * 300
+            montar = lambda: json.dumps({"rev": 0, "times": [{"nome": "Dev", "tipo": "mesas", "cor": None, "icone": None,
+                                                               "parede": 0, "piso": 0, "agentes": agentes}],
+                                         "aparencia": {f"a{i:03d}-".ljust(t, "x"): {"color": "graphite", "eyes": "sleepy",
+                                                                                  "accessory": "headphones"}
+                                                       for i, t in enumerate(tams)}}, separators=(",", ":")).encode()
+            for i in range(len(montar()) - tamanho):   # cada byte a menos sai de um handle
+                tams[i % 300] -= 1
+            dados = montar()
+            self.assertEqual(len(dados), tamanho)
+            return dados
+        for tamanho in range(e.EQUIPE_BYTES - 5, e.EQUIPE_BYTES + 1):
+            st, r = self.post("/api/equipe", corpo(tamanho))
+            self.assertEqual((st, r["mensagem"]), (400, "Os times ficaram grandes demais para salvar."), tamanho)
+            self.assertFalse(os.path.exists(e.ARQ_EQUIPE))
+        self.assertEqual(self.post("/api/equipe", corpo(e.EQUIPE_BYTES - 6)), (200, {"rev": 1, "origem": "tela"}))
+        self.assertEqual(os.path.getsize(e.ARQ_EQUIPE), e.EQUIPE_BYTES)   # o arquivo no teto exato
+        self.assertEqual(len(self.config()["aparencia"]), 300)
+
 
 class SairDeTodos(unittest.TestCase):
     """4.1: "Sair de todos os aparelhos" pede a senha de novo (no balde do login), zera todas as sessões e modos e
@@ -2429,6 +2459,29 @@ class SairDeTodos(unittest.TestCase):
         corpo = urllib.parse.urlencode({"usuario": "dono", "senha": "senha-bem-grande"}).encode()
         self.assertEqual(self.req("/entrar", {"Origin": self.base}, corpo)[0], 200)   # o login também trava (volta à tela)
         self.assertEqual(self.req("/api/estado", cab)[0], 200)   # e a sessão aberta continua
+
+    def test_senha_com_surrogate_sozinho_e_senha_errada(self):
+        cab = self.entrar()
+        st, corpo, _ = self.req("/api/sair-todos", {**cab, "Origin": self.base, "Content-Type": "application/json"},
+                                b'{"senha": "\\ud800"}')   # JSON válido, mas não vira UTF-8: responde, não derruba a conexão
+        self.assertEqual((st, json.loads(corpo)["erro"]), (403, "senha_incorreta"))
+        self.assertEqual(self.req("/api/estado", cab)[0], 200)
+
+    def test_disco_falhando_nao_encerra_nada(self):
+        celular, computador = self.entrar(), self.entrar()
+
+        def falha(*_):
+            raise OSError("disco cheio")
+        antes, acesso._gravar = acesso._gravar, falha
+        try:
+            st, corpo, _ = self.sair(celular)
+        finally:
+            acesso._gravar = antes
+        self.assertEqual((st, json.loads(corpo)), (500, {"erro": "gravar", "mensagem": "Não deu para encerrar as sessões agora."}))
+        self.assertEqual((len(self.srv.acesso.sessoes), len(Acesso(self.pasta).sessoes)), (2, 2))   # memória e disco
+        for cab in (celular, computador):
+            self.assertEqual(self.req("/api/estado", cab)[0], 200)
+        self.assertIn('"resultado": "sair_todos_nao_gravou", "detalhe": "OSError"', self.saida.getvalue())
 
 
 class ClimaVivo(unittest.TestCase):
@@ -3116,11 +3169,15 @@ class Previa(unittest.TestCase):
         grupo = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {}
         p = subprocess.Popen([sys.executable, "-B", os.path.join("ferramentas", "previa.py"), *args], cwd=self.RAIZ,
                              env={**os.environ, "PREVIA_PORTA": str(porta), "PYTHONUTF8": "1", "TEMP": tmp, "TMP": tmp,
-                                  "TMPDIR": tmp}, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, **grupo)
+                                  "TMPDIR": tmp}, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                             encoding="utf-8", **grupo)
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         self.addCleanup(self.parar, p, tmp)
         self.assertEqual(p.stdout.readline().strip(), f"http://127.0.0.1:{porta}")   # o servidor já escuta
         self.assertEqual(len(os.listdir(tmp)), 1)   # a pasta de dados da prévia
+        rotulo, _, pasta = p.stdout.readline().strip().partition(": ")   # e o caminho dela, na subida
+        self.assertEqual(rotulo, "dados temporários")
+        self.assertTrue(os.path.samefile(pasta, os.path.join(tmp, os.listdir(tmp)[0])))
         return f"http://127.0.0.1:{porta}"
 
     def parar(self, p, tmp):
