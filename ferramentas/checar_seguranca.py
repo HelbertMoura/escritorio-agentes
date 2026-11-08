@@ -148,6 +148,30 @@ confere("POST /api/planta com rev velho", req("/api/planta", jp, pl(0))[0], 409)
 st, h = req("/construir.html")
 confere("GET /construir.html sem sessao cai no login", (st, h.get("Location")), (302, "/entrar"))
 
+print("== Configuracoes: clima e datas (Origin obrigatorio, JSON exato, numero de verdade, teto, rev)")
+e.ARQ_CLIMA = os.path.join(os.environ["ESCRITORIO_DADOS"], "clima.json")
+e.ARQ_FESTAS = os.path.join(os.environ["ESCRITORIO_DADOS"], "festas.json")
+cl = lambda **x: json.dumps({"clima": {"cidade": "Cidade de teste", "lat": -8.05, "lon": -34.88, **x}}).encode()
+fe = lambda rev: json.dumps({"rev": rev, "proprias": [], "desligadas": []}).encode()
+for rota, bom in (("/api/clima", cl()), ("/api/festas", fe(0))):
+    confere("POST %s sem Origin, com Referer valido (aqui o Referer nao conta)" % rota,
+            req(rota, {**sessao, "Referer": base + "/", "Content-Type": "application/json"}, bom)[0], 403)
+    confere("POST %s com Origin: null" % rota, req(rota, {**sessao, "Origin": "null", "Content-Type": "application/json"}, bom)[0], 403)
+    confere("POST %s com Origin de outro site" % rota, req(rota, {**jp, "Origin": "https://outro.exemplo"}, bom)[0], 403)
+    confere("POST %s em text/plain (formulario de outro site)" % rota, req(rota, {**jp, "Content-Type": "text/plain"}, bom)[0], 415)
+    confere("POST %s sem sessao" % rota, req(rota, {"Origin": base, "Content-Type": "application/json"}, bom)[0], 401)
+    teto = e.CLIMA_BYTES if rota == "/api/clima" else e.FESTAS_BYTES
+    confere("POST %s com JSON valido acima do teto (%d B)" % (rota, teto), req(rota, jp, bom[:-1] + b" " * teto + b"}")[0], 400)
+for rotulo, corpo in (("NaN", b'{"clima": {"cidade": "X", "lat": NaN, "lon": 1}}'), ("Infinity", b'{"clima": {"cidade": "X", "lat": Infinity, "lon": 1}}'),
+                      ("1e400", b'{"clima": {"cidade": "X", "lat": 1e400, "lon": 1}}'), ("true", cl(lat=True)), ("fora da faixa", cl(lon=181))):
+    confere("POST /api/clima com %s no lugar de numero" % rotulo, req("/api/clima", jp, corpo)[0], 400)
+confere("POST /api/clima certo", req("/api/clima", jp, cl())[0], 200)
+confere("POST /api/festas com dias=true", req("/api/festas", jp, json.dumps({"rev": 0, "proprias": [{"nome": "X", "data": "01-01", "dias": True, "tema": "natal"}], "desligadas": []}).encode())[0], 400)
+confere("POST /api/festas com rev certo", req("/api/festas", jp, fe(0))[0], 200)
+confere("POST /api/festas com rev velho", req("/api/festas", jp, fe(0))[0], 409)
+confere("GET /api/clima/busca sem sessao", req("/api/clima/busca?q=Recife")[0], 401)
+confere("GET /api/clima/busca com 1 letra (recusa antes de qualquer rede)", req("/api/clima/busca?q=R", sessao)[0], 400)
+
 print("== Vida social: mandar pro ringue (Origin obrigatorio, JSON exato)")
 briga = json.dumps({"a": "a1", "b": "a2"}).encode()
 confere("POST /api/social/briga sem Origin, com Referer valido (aqui o Referer nao conta)",

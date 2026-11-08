@@ -1,3 +1,4 @@
+import ast
 import collections
 import contextlib
 import datetime
@@ -2165,6 +2166,324 @@ class Rede(unittest.TestCase):
                 self.assertNotIn("AGENTES_ORG", str(c.exception.code), base)
         finally:
             e.BASE, e.BIND, e.ORG = antes
+
+
+class Configuracoes(unittest.TestCase):
+    """P1.1: POST /api/clima e /api/festas no molde do /api/planta (Origin estrito, sessão, JSON, teto, tudo ou nada,
+    rev) e a junção no /api/config: tela > times.json > padrão."""
+    @classmethod
+    def setUpClass(cls):
+        class Clima:
+            acordou = 0
+
+            def acordar(self):
+                self.acordou += 1
+
+            def foto(self):
+                return None
+        cls.pasta = tempfile.mkdtemp(prefix="escritorio-config-")
+        cls.srv = e.Servidor(("127.0.0.1", 0), e.Pagina)
+
+        class Leitor:
+            def foto(self):
+                return {**e.resumir(AG, []), "atualizado": None, "erro": None}
+        cls.srv.leitor, cls.srv.cred, cls.srv.acesso, cls.srv.clima = Leitor(), None, Acesso(cls.pasta), Clima()
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        cls.base = "http://127.0.0.1:%d" % cls.srv.server_address[1]
+        with open(os.path.join(cls.pasta, "codigo-primeiro-acesso.txt")) as f:
+            codigo = f.read().strip()
+        cls.srv.acesso.criar_primeiro(codigo, "dono", "senha-bem-grande")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+        shutil.rmtree(cls.pasta, ignore_errors=True)
+
+    def setUp(self):
+        self.antes = e.BASE, e.TIMES, e.ARQ_CLIMA, e.ARQ_FESTAS
+        e.BASE, e.TIMES = self.base, os.path.join(self.pasta, "times.json")
+        e.ARQ_CLIMA, e.ARQ_FESTAS = os.path.join(self.pasta, "clima.json"), os.path.join(self.pasta, "festas.json")
+        for arq in (e.ARQ_CLIMA, e.ARQ_FESTAS, e.TIMES):
+            if os.path.exists(arq):
+                os.unlink(arq)
+        self.saida = io.StringIO()
+        self.log = contextlib.redirect_stdout(self.saida)
+        self.log.__enter__()
+        self.cab = Http.entrar(self)
+        self.js = {**self.cab, "Origin": self.base, "Content-Type": "application/json"}
+
+    def tearDown(self):
+        self.log.__exit__(None, None, None)
+        self.assertNotIn("Recife", self.saida.getvalue())   # o log nunca leva a cidade
+        e.BASE, e.TIMES, e.ARQ_CLIMA, e.ARQ_FESTAS = self.antes
+
+    req = Http.req
+
+    def post(self, rota, corpo, cab=None):
+        dados = corpo if isinstance(corpo, bytes) else json.dumps(corpo).encode()
+        st, resp, _ = self.req(rota, self.js if cab is None else cab, dados)
+        return st, json.loads(resp) if resp else None
+
+    def config(self):
+        return json.loads(self.req("/api/config", self.cab)[1])
+
+    def test_barreiras_das_duas_rotas(self):
+        for rota, bom in (("/api/clima", {"clima": None}), ("/api/festas", {"rev": 0, "proprias": [], "desligadas": []})):
+            with self.subTest(rota=rota):
+                dados = json.dumps(bom).encode()
+                self.assertEqual(self.req(rota, {**self.js, "Origin": "https://outro.exemplo"}, dados)[0], 403)
+                self.assertEqual(self.req(rota, {**self.js, "Origin": "null"}, dados)[0], 403)
+                sem_origin = {k: v for k, v in self.js.items() if k != "Origin"}
+                self.assertEqual(self.req(rota, {**sem_origin, "Referer": self.base + "/"}, dados)[0], 403)   # sem Referer
+                self.assertEqual(self.req(rota, {**self.js, "Content-Type": "text/plain"}, dados)[0], 415)
+                self.assertEqual(self.req(rota, {"Origin": self.base, "Content-Type": "application/json"}, dados)[0], 401)
+                teto = e.CLIMA_BYTES if rota == "/api/clima" else e.FESTAS_BYTES
+                grande = dados[:-1] + b" " * teto + b"}"   # JSON válido, acima do teto
+                self.assertEqual(self.req(rota, self.js, grande)[0], 400)
+                self.assertFalse(os.path.exists(e.ARQ_CLIMA if rota == "/api/clima" else e.ARQ_FESTAS))
+                self.assertEqual(self.req(rota, self.js, dados)[0], 200)   # controle: o mesmo pedido, com tudo certo
+
+    def test_clima_tela_arquivo_e_nenhum(self):
+        acordou = self.srv.clima.acordou
+        cfg = self.config()
+        self.assertEqual((cfg["clima"], cfg["ajustes"]["clima"], cfg["ajustes"]["clima_arquivo"]), (None, "nenhum", False))
+        with open(e.TIMES, "w", encoding="utf-8") as f:
+            json.dump({"clima": {"cidade": "Natal", "lat": -5.79, "lon": -35.21}}, f)
+        cfg = self.config()
+        self.assertEqual((cfg["clima"]["cidade"], cfg["ajustes"]["clima"], cfg["ajustes"]["clima_arquivo"]), ("Natal", "arquivo", True))
+        st, r = self.post("/api/clima", {"clima": {"cidade": "Recife", "lat": -8.0476, "lon": -34.877}})
+        self.assertEqual((st, r), (200, {"clima": {"cidade": "Recife", "lat": -8.05, "lon": -34.88}, "origem": "tela"}))
+        self.assertEqual((self.config()["clima"]["cidade"], self.srv.clima.acordou), ("Recife", acordou + 1))
+        st, r = self.post("/api/clima", {"clima": None})   # "sem clima" pela tela vale mais que o times.json
+        self.assertEqual((st, r), (200, {"clima": None, "origem": "tela"}))
+        self.assertEqual((self.config()["clima"], self.config()["ajustes"]["clima_arquivo"]), (None, True))
+        st, r = self.post("/api/clima", {"limpar": True})   # volta ao times.json
+        self.assertEqual((st, r["origem"], r["clima"]["cidade"]), (200, "arquivo", "Natal"))
+        self.assertFalse(os.path.exists(e.ARQ_CLIMA))
+        self.assertEqual(self.srv.clima.acordou, acordou + 3)
+
+    def test_clima_recusa_sem_ecoar_e_sem_gravar(self):
+        acordou = self.srv.clima.acordou
+        cidade = {"cidade": "Recife", "lat": -8.05, "lon": -34.88}
+        crus = [b'{"clima": {"cidade": "Recife", "lat": NaN, "lon": 1}}', b'{"clima": {"cidade": "Recife", "lat": Infinity, "lon": 1}}',
+                b'{"clima": {"cidade": "Recife", "lat": -Infinity, "lon": 1}}', b'{"clima": {"cidade": "Recife", "lat": 1e400, "lon": 1}}']
+        corpos = [{"clima": {**cidade, "lat": True}}, {"clima": {**cidade, "lon": 181}}, {"clima": {**cidade, "lat": "1"}},
+                  {"clima": {**cidade, "cidade": "<b>Recife</b>" * 6}}, {"clima": cidade, "limpar": True}, {"limpar": False},
+                  {"limpar": 1}, {"clima": [cidade]}, {}, ["clima"]]
+        for corpo in crus + corpos:
+            with self.subTest(corpo=corpo):
+                st, r = self.post("/api/clima", corpo)
+                self.assertEqual(st, 400)
+                self.assertNotIn("Recife", json.dumps(r)); self.assertIn("mensagem", r)
+        self.assertFalse(os.path.exists(e.ARQ_CLIMA))
+        self.assertEqual(self.srv.clima.acordou, acordou)   # recusa não acorda o clima
+        self.assertEqual(self.post("/api/clima", {"clima": cidade})[0], 200)   # controle
+
+    def test_festas_rev_e_conteudo(self):
+        data = {"nome": "Aniversário", "data": "02-29", "dias": 2, "tema": "generico", "falas": ["Parabéns!"]}
+        st, r = self.post("/api/festas", {"rev": 0, "proprias": [data], "desligadas": ["halloween"]})
+        self.assertEqual((st, r["rev"]), (200, 1))
+        cfg = self.config()
+        self.assertEqual((cfg["festas"], cfg["ajustes"]["rev"]["festas"]),
+                         ({"proprias": [data], "desligadas": ["halloween"]}, 1))
+        st, r = self.post("/api/festas", {"rev": 0, "proprias": [], "desligadas": []})   # outra tela salvou antes
+        self.assertEqual((st, r["erro"], r["rev"]), (409, "rev", 1))
+        self.assertEqual(self.config()["festas"]["desligadas"], ["halloween"])
+        st, r = self.post("/api/festas", {"rev": 1, "proprias": [data, {**data, "nome": "Recife", "data": "02-30"}], "desligadas": []})
+        self.assertEqual((st, r["mensagem"][:23]), (400, "Data 2: data inválida ("))
+        self.assertNotIn("Recife", r["mensagem"])
+        st, r = self.post("/api/festas", b'{"rev": 1, "proprias": [], "desligadas": [], "x": NaN}')
+        self.assertEqual(st, 400)
+        self.assertEqual(self.post("/api/festas", {"rev": 1, "proprias": [], "desligadas": []})[0], 200)
+        self.assertEqual(self.config()["ajustes"]["rev"]["festas"], 2)
+        self.assertIn('"resultado": "salvas"', self.saida.getvalue())
+
+    def test_festas_ilegivel_vale_como_vazio_com_uma_linha_de_log(self):
+        with open(e.ARQ_FESTAS, "w", encoding="utf-8") as f:
+            f.write('{"v": 1, "rev": 3, "proprias": [{"nome": "X"}], "desligadas": []}')
+        for _ in range(3):
+            cfg = self.config()
+            self.assertEqual((cfg["festas"], cfg["ajustes"]["rev"]["festas"]), ({"proprias": [], "desligadas": []}, 0))
+        self.assertEqual(self.saida.getvalue().count('"evento": "festas", "resultado": "arquivo_invalido"'), 1)
+        self.assertEqual(self.post("/api/festas", {"rev": 0, "proprias": [], "desligadas": []})[0], 200)   # regrava
+
+    def test_busca_sem_sessao(self):
+        self.assertEqual(self.req("/api/clima/busca?q=Recife")[0], 401)
+
+
+class ClimaVivo(unittest.TestCase):
+    """2.1: o Clima relê o lugar a cada volta, zera o estado ao trocar, espera sem lugar e consulta no máximo 1 vez
+    por minuto (e a cada 900 s no mesmo lugar)."""
+    def clima(self, lugares):
+        c = e.Clima(lambda: lugares[0])
+        c.agora, c.consultas = 1000.0, []
+        c.relogio = lambda: c.agora
+
+        def consultar(lat, lon):
+            c.consultas.append((lat, lon))
+            return {"weather_code": 61, "temperature_2m": 21.5}
+        c._consultar = consultar
+        return c
+
+    def test_troca_espera_e_minimo_por_minuto(self):
+        lugares = [None]
+        c = self.clima(lugares)
+        self.assertEqual((c.ciclo(), c.consultas, c.foto()), (900, [], None))   # sem lugar: não consulta
+        lugares[0] = {"cidade": "Recife", "lat": -8.05, "lon": -34.88}
+        self.assertEqual(c.ciclo(), 900)
+        self.assertEqual((c.consultas, c.foto()["cidade"], c.foto()["tipo"]), ([(-8.05, -34.88)], "Recife", "chuva"))
+        c.agora += 10
+        self.assertEqual((c.ciclo(), len(c.consultas)), (890, 1))   # acordou sem troca: não repete a consulta
+        lugares[0] = {"cidade": "Natal", "lat": -5.79, "lon": -35.21}
+        self.assertEqual(c.ciclo(), 50)   # trocou 10 s depois: espera o minuto...
+        self.assertIsNone(c.foto())   # ...mas o tempo de Recife já saiu, para não aparecer com o nome de Natal
+        self.assertEqual(len(c.consultas), 1)
+        c.agora += 50
+        self.assertEqual((c.ciclo(), c.consultas[-1], c.foto()["cidade"]), (900, (-5.79, -35.21), "Natal"))
+        c.agora += 900
+        c.ciclo()
+        self.assertEqual(len(c.consultas), 3)   # no mesmo lugar, de 15 em 15 min
+        lugares[0] = None
+        self.assertEqual((c.ciclo(), c.foto(), len(c.consultas)), (900, None, 3))
+
+    def test_falha_nao_derruba(self):
+        c = self.clima([{"cidade": "Recife", "lat": -8.05, "lon": -34.88}])
+
+        def sem_rede(lat, lon):
+            raise OSError("rede")
+        c._consultar = sem_rede
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual((c.ciclo(), c.foto()), (900, None))
+
+    def test_acordar(self):
+        c = self.clima([None])
+        voltas = []
+        c.ciclo = lambda: voltas.append(1) or 3600
+        c.start()
+        fim = time.monotonic() + 5
+        while not voltas and time.monotonic() < fim:
+            time.sleep(0.01)
+        c.acordar()
+        fim = time.monotonic() + 5
+        while len(voltas) < 2 and time.monotonic() < fim:
+            time.sleep(0.01)
+        self.assertEqual(len(voltas), 2)
+
+
+class Busca(unittest.TestCase):
+    """2.1: a busca de cidade pelo servidor, com host fixo, sem redirecionamento, limite global e resposta reduzida."""
+    BOM = {"results": [{"name": "Recife", "admin1": "Pernambuco", "country": "Brasil", "latitude": -8.0539, "longitude": -34.8811}]}
+
+    def busca(self, resposta):
+        b = e.BuscaCidades()
+        b.urls = []
+
+        def abrir(url):
+            b.urls.append(url)
+            if isinstance(resposta, Exception):
+                raise resposta
+            return resposta if isinstance(resposta, bytes) else json.dumps(resposta).encode()
+        b._abrir = abrir
+        return b
+
+    def test_resposta_reduzida_e_limpa(self):
+        ruins = [{"name": "Sem lat", "longitude": 1}, {"name": "Bool", "latitude": True, "longitude": 1},
+                 {"name": "Fora", "latitude": 91, "longitude": 1}, {"name": "", "latitude": 1, "longitude": 1},
+                 {"name": "n" * 61, "latitude": 1, "longitude": 1}, "texto", None]
+        estranho = {"name": "Olinda‮", "admin1": "Pernam\nbuco" + "x" * 80, "country": 7, "latitude": -8, "longitude": -34.85,
+                    "population": 390000, "timezone": "America/Recife"}
+        b = self.busca({"results": [estranho] + self.BOM["results"] + ruins})   # só as 8 primeiras contam
+        st, r = b.buscar("  Recife ")
+        self.assertEqual(st, 200)
+        self.assertEqual(r["resultados"][1], {"nome": "Recife", "regiao": "Pernambuco", "pais": "Brasil", "lat": -8.05, "lon": -34.88})
+        self.assertEqual(r["resultados"][0], {"nome": "Olinda", "regiao": ("Pernam buco" + "x" * 80)[:60].strip(), "pais": "",
+                                              "lat": -8, "lon": -34.85})
+        self.assertEqual(len(r["resultados"]), 2)
+        url = urllib.parse.urlsplit(b.urls[0])
+        self.assertEqual((url.scheme, url.netloc, url.path), ("https", "geocoding-api.open-meteo.com", "/v1/search"))
+        self.assertEqual(urllib.parse.parse_qs(url.query), {"name": ["Recife"], "count": ["8"], "language": ["pt"], "format": ["json"]})
+        self.assertEqual(len(self.busca({"results": self.BOM["results"] * 20}).buscar("Recife")[1]["resultados"]), 8)
+        self.assertEqual(self.busca({}).buscar("Lugarnenhum"), (200, {"resultados": []}))   # sem "results": nenhum
+
+    def test_q_invalido_nao_chama(self):
+        b = self.busca(self.BOM)
+        for q in ("", "R", " R ", "x" * 61, "Re\ncife", "​​"):
+            self.assertEqual(b.buscar(q)[0], 400, q)
+        self.assertEqual(b.urls, [])
+
+    def test_limite_por_minuto_e_por_dia(self):
+        b = self.busca(self.BOM)
+        t0 = 1_000_000.0
+        self.assertEqual([b.buscar("Recife", t0 + i)[0] for i in range(11)], [200] * 10 + [429])
+        self.assertEqual(b.buscar("Recife", t0 + 10)[1]["mensagem"], "Muitas buscas; espere um minuto.")
+        self.assertEqual(b.buscar("Recife", t0 + 61)[0], 200)   # o minuto passou
+        dia = self.busca(self.BOM)
+        respostas = [dia.buscar("Recife", t0 + 7 * i)[0] for i in range(201)]   # 7 s entre elas: nunca 10 no minuto
+        self.assertEqual((respostas[:200].count(200), respostas[200]), (200, 429))
+        self.assertEqual(dia.buscar("Recife", t0 + 86400 + 1)[0], 200)   # a primeira do dia saiu da janela
+
+    def test_falha_vira_502_sem_repassar(self):
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            for resposta in (OSError("rede"), b"<html>evil.example</html>", b'{"results": NaN}', b'{"results": {"a": 1}}',
+                             b"x" * 200_001, urllib.error.HTTPError("u", 500, "evil.example", {}, None)):
+                st, r = self.busca(resposta).buscar("Recife")
+                self.assertEqual((st, r["mensagem"]), (502, "A busca de cidades não respondeu agora."))
+        self.assertNotIn("Recife", saida.getvalue()); self.assertNotIn("evil", saida.getvalue())
+
+    def test_nao_segue_redirecionamento_e_le_ate_o_teto(self):
+        class Pagina(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                if self.path.startswith("/longe"):
+                    self.server.seguiu = True
+                corpo = json.dumps(Busca.BOM).encode()
+                self.send_response(302 if self.path.startswith("/v1/search") else 200)
+                self.send_header("Location", "/longe")
+                self.send_header("Content-Length", str(len(corpo)))
+                self.end_headers()
+                self.wfile.write(corpo)
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), Pagina)
+        srv.seguiu = False
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            b = e.BuscaCidades()
+            b.URL = "http://127.0.0.1:%d/v1/search" % srv.server_address[1]
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(b.buscar("Recife")[0], 502)
+            self.assertFalse(srv.seguiu)
+            b.URL = "http://127.0.0.1:%d/longe" % srv.server_address[1]   # controle: sem o 302, a mesma rota responde
+            self.assertEqual(b.buscar("Recife")[1]["resultados"][0]["nome"], "Recife")
+        finally:
+            srv.shutdown()
+
+
+class Docker(unittest.TestCase):
+    def test_copy_leva_todo_modulo_local_que_o_servidor_importa(self):
+        # um módulo novo importado pelo escritorio.py e fora do COPY sobe no PC e cai no container
+        raiz = os.path.dirname(os.path.abspath(e.__file__))
+        with open(os.path.join(raiz, "Dockerfile"), encoding="utf-8") as f:
+            copiados = {p for linha in f if linha.startswith("COPY ") for p in linha.split()[1:-1] if p.endswith(".py")}
+        with open(os.path.join(raiz, ".dockerignore"), encoding="utf-8") as f:
+            liberados = {linha.strip()[1:] for linha in f if linha.startswith("!")}
+        locais, pendentes = set(), ["escritorio"]
+        while pendentes:
+            nome = pendentes.pop()
+            if nome in locais:
+                continue
+            locais.add(nome)
+            with open(os.path.join(raiz, nome + ".py"), encoding="utf-8") as f:
+                arvore = ast.parse(f.read())
+            for no in ast.walk(arvore):
+                nomes = [a.name for a in no.names] if isinstance(no, ast.Import) else \
+                    [no.module] if isinstance(no, ast.ImportFrom) and no.module else []
+                pendentes += [n for n in nomes if os.path.isfile(os.path.join(raiz, n + ".py"))]
+        esperados = {n + ".py" for n in locais}
+        self.assertEqual(esperados, {"escritorio.py", "acesso.py", "social.py", "planta.py", "ajustes.py"})
+        self.assertLessEqual(esperados, copiados)
+        self.assertLessEqual(esperados, liberados)
 
 
 class ModoResposta(unittest.TestCase):
