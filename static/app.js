@@ -49,6 +49,7 @@ async function iniciar() {
   try { await document.fonts.load(Mapa.PLACA_FONTE); } catch (e) { /* sem a fonte, a placa usa a reserva monoespaçada */ }
   if (!$("v-personalizar").hidden) { Personalizar.abrir(config); Ajustes.abrir(config); }   // abriu direto em #personalizar
   await buscar();
+  ligarTV();
   Assistente.talvez(config, () => estado);   // nome de exemplo ou sem conexão: o assistente (uma vez por sessão, e na volta do OAuth)
   setInterval(buscar, 10000);
   requestAnimationFrame(quadro);
@@ -122,7 +123,7 @@ function montar(agentes) {
 async function buscar() {
   const pedido = performance.now();
   try {
-    estado = Brincar.demo ? Brincar.estadoDemo() : await json("api/estado");
+    estado = Brincar.demo ? Brincar.estadoDemo() : await json(TV.invisivel || !aparecer ? "api/estado?invisivel=1" : "api/estado");   // a TV e quem desligou não contam como visitante
     modoDoServidor(estado.modo_resposta, pedido);
     Clima.definir(estado.clima);
     // "Olá de novo" na tela de entrada: só o nome de quem já entrou com sucesso (o servidor só manda usuario com sessão válida)
@@ -132,8 +133,12 @@ async function buscar() {
     for (const s of predio.salas) for (const m of s.mesas || []) if (m.handle) mesas.set(m.handle, m);
     Vida.sincronizar(mundo, estado.agentes || [], estado.trabalhos || [], mesas, aparencia, novo);
     Vida.social(mundo, !naSimulacao() && estado.social && typeof estado.social === "object" ? estado.social : null);   // null desliga a camada
+    Vida.visitantes(mundo, TV.ligada ? [] : estado.visitantes);   // na TV, os visitantes vão embora
+    mostrarOlhando();
     falhou = false;
     desenharPainel(); desenharEventos(); mostrarConexao(); paginaConversas();
+    TV.atualizar(estado);
+    if (!$("v-jornal").hidden) Jornal.abrir();   // os nomes vêm desta leitura; o jornal em si é relido a cada minuto
     if (!$("ficha").hidden) renderFicha();
     vigiarSocial(); vigiarGreve();
   } catch (e) {
@@ -165,12 +170,12 @@ function prenderCamera(c) {
 }
 function verTudo(ja) { moverCamera({ x: predio.W / 2, y: predio.H / 2, k: encaixe() }, ja); }
 function moverCamera(alvo, ja) { alvo.k = limitarK(alvo.k); prenderCamera(alvo); if (ja) Object.assign(cam, alvo, { alvo: null }); else cam.alvo = alvo; }
-function focarSala(s) {
+function enquadrar(s, ja) {
   const k = Math.min((vw * dpr) / (s.pw + 40), (vh * dpr) / (s.ph + 60));
   seguir = null;
-  moverCamera({ x: s.px + s.pw / 2, y: s.py + s.ph / 2 - 6, k });
-  marcarSala(s);
+  moverCamera({ x: s.px + s.pw / 2, y: s.py + s.ph / 2 - 6, k }, ja);
 }
+function focarSala(s) { enquadrar(s); marcarSala(s); }
 function paraMundo(cx, cy) {
   const r = tela.getBoundingClientRect();
   const sx = (cx - r.left) * dpr, sy = (cy - r.top) * dpr;
@@ -245,6 +250,8 @@ function desenharCena(t) {
   }
   const cs = mundo.cenaSocial, naNuvem = b => !!cs && cs.fase === "luta" && (b.id === cs.a || b.id === cs.b);   // na luta, a nuvem cobre os dois (Efeitos.cena)
   for (const b of mundo.bonecos.values()) if (visivel(b) && !naNuvem(b)) cena.push({ chave: b.chave ?? b.y + 0.5, desenha: () => desenharBoneco(b, t) });
+  const visitas = [...mundo.visitas.values()].filter(v => v.x > -20);   // visitantes (vida.js): figurantes com crachá
+  for (const v of visitas) cena.push({ chave: v.chave ?? v.y + 0.5, desenha: () => Avatar.boneco(ctx, v, t, escala) });
   cena.sort((a, b) => a.chave - b.chave).forEach(c => c.desenha());
   desenharPortas(t);
   Clima.desenhar(ctx, predio, dtQuadro, t, Som.ligado ? Som : null);
@@ -257,6 +264,7 @@ function desenharCena(t) {
   const visiveis = [...mundo.bonecos.values()].filter(visivel);
   const ocupadas = Efeitos.placas(ctx, mundo, t);   // plaquinhas da greve: os nomes e os balões desviam delas
   visiveis.sort((a, b) => b.y - a.y || a.x - b.x).forEach(b => desenharEtiqueta(b, t, ocupadas));
+  for (const v of visitas) desenharEtiqueta(v, t, ocupadas);   // depois dos agentes: o nome deles tem a preferência
   for (const b of visiveis) Efeitos.emote(ctx, b, t, ceu.escuro);
   const faixa = Efeitos.faixaVencedor(ctx, mundo, t); if (faixa) ocupadas.push(faixa);   // os balões desviam da faixa do vencedor
   const faixaEntrega = Efeitos.entregaAr(ctx, mundo.entrega, t); if (faixaEntrega) ocupadas.push(faixaEntrega);   // e da faixa do pedido atendido
@@ -658,6 +666,7 @@ Object.assign(ICONES, {
   alvo:     ["...##...", "..####..", ".##..##.", "###..###", "###..###", ".##..##.", "..####..", "...##..."],
   encaixar: ["##....##", "#......#", "..####..", "..#++#..", "..#++#..", "..####..", "#......#", "##....##"],
   copiar:   ["..#####.", "..#...#.", "###...#.", "#.#...#.", "#.#####.", "#...#...", "#####...", "........"],
+  tv:       [".#...#..", "..#.#...", "########", "#++++++#", "#++++++#", "#++++++#", "########", ".#....#."],
 });
 
 // Onde está e o que faz cada agente (o mapa e o painel usam a mesma resposta)
@@ -1902,7 +1911,7 @@ atualizarBotaoSom();
 
 // ---------- câmera: mouse, toque (um dedo arrasta, dois dão pinça) e teclado ----------
 tela.addEventListener("wheel", ev => {
-  if (!predio) return; ev.preventDefault();
+  if (!predio) return; ev.preventDefault(); TV.tocou();
   const antes = paraMundo(ev.clientX, ev.clientY);
   cam.alvo = null; seguir = null; cam.k = limitarK(cam.k * Math.exp(-ev.deltaY * 0.0015));
   const depois = paraMundo(ev.clientX, ev.clientY);
@@ -1920,7 +1929,7 @@ function esperaVoce(b) { return !!(b.trabalho && b.trabalho.url && /^waiting_/.t
 const dedos = new Map();   // pointerId -> último ponto na tela
 let arrasto = null, pinca = null;
 tela.addEventListener("pointerdown", ev => {
-  tela.setPointerCapture(ev.pointerId);
+  tela.setPointerCapture(ev.pointerId); TV.tocou();
   dedos.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
   if (dedos.size === 2) { // começa a pinça: guarda a distância e o ponto do mundo sob o meio dos dedos
     const [a, b] = [...dedos.values()];
@@ -2009,14 +2018,60 @@ document.addEventListener("keydown", ev => {
     if (!$("conversa").hidden) { fecharConversa(true); return; }
     if (!$("v-conversas").hidden && convAberta && celularConv()) { fecharConvPagina(); return; }
     if (!$("ficha").hidden) { fecharFicha(); tela.focus(); return; }
+    if (TV.ligada) { TV.desligar(); return; }
     if ($("palco-cartao").classList.contains("cheio")) { telaCheia(false); return; }
   }
   if (!predio || $("v-escritorio").hidden || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  if (["+", "=", "-", "0"].includes(ev.key)) TV.tocou();
   if (ev.key === "/" && !ev.ctrlKey && !ev.metaKey) { ev.preventDefault(); irParaBusca(); }
   else if (ev.key === "+" || ev.key === "=") moverCamera({ x: cam.x, y: cam.y, k: cam.k * 1.3 });
   else if (ev.key === "-") { seguir = null; moverCamera({ x: cam.x, y: cam.y, k: cam.k / 1.3 }); }
   else if (ev.key === "0") { fecharFicha(); verTudo(); }
 });
+// ---------- visitantes: quem mais está olhando (o /api/estado manda os outros, sem a própria sessão) ----------
+let aparecer = true;   // "Aparecer no escritório", por navegador (ligado por padrão)
+try { aparecer = localStorage.getItem("escritorio:aparecer") !== "nao"; } catch (e) { /* aba anônima: vale o padrão */ }
+$("aparecer").checked = aparecer;
+$("aparecer").addEventListener("change", () => {
+  aparecer = $("aparecer").checked;
+  try { localStorage.setItem("escritorio:aparecer", aparecer ? "sim" : "nao"); } catch (e) { /* fica só nesta visita */ }
+  mostrarOlhando(); buscar();   // o servidor fica sabendo já na próxima leitura (quem desliga some em até 45 s)
+});
+function mostrarOlhando() {
+  const lista = estado && Array.isArray(estado.visitantes) ? estado.visitantes : null;
+  $("olhando").hidden = !lista || Brincar.demo;   // servidor antigo ou demonstração: sem a linha
+  if (!lista) return;
+  const outros = Math.min(lista.length, 50), n = outros + (aparecer ? 1 : 0);
+  textoSe($("olhando-txt"), aparecer && n === 1 ? "Só você está olhando" : !n ? "Ninguém mais olhando" : `${n} ${n === 1 ? "pessoa olhando" : "pessoas olhando"}`);
+}
+
+// ---------- modo TV (tv.js): a câmera e as notícias que o diretor usa ----------------
+function salasComGente() { // salas com alguém visível dentro, na ordem do prédio
+  const n = new Map();
+  for (const b of mundo.bonecos.values()) { if (!visivel(b)) continue; const s = salaEm(b); if (s) n.set(s, (n.get(s) || 0) + 1); }
+  return [...predio.salas, ...predio.baixo].filter(s => n.has(s)).map(s => ({ sala: s, n: n.get(s) }));
+}
+function seguirAgente(handle, ja) {
+  const b = porHandle(handle); if (!b || !visivel(b)) return false;
+  seguir = b.id;
+  moverCamera({ x: b.x, y: b.y - 10, k: 3.2 * dpr }, ja);
+  return true;
+}
+function ligarTV() {
+  TV.iniciar({
+    estado: () => estado,
+    eventos: est => eventosDe(est).filter(v => FRASES_EVENTO[v.tipo] && porHandle(v.agente)),
+    cena: () => { const c = socialLigada() && estado.social.cena; return c && typeof c.id === "string" && (c.tipo === "briga" || c.tipo === "greve") ? c : null; },
+    salaDaCena: () => (predio.ringue && predio.ringue.sala) || null,
+    salasComGente, seguirAgente, enquadrar,
+    temAgente: h => !!porHandle(h),
+    agente: h => { const b = porHandle(h); return b ? { nome: b.nome, ap: b.ap } : null; },
+    frase: tipo => FRASES_EVENTO[tipo] || "",
+    verTudo: ja => verTudo(ja),
+    soltar: () => { seguir = null; },
+    fecharFicha, telaCheia, mini,
+  });
+}
 function marcarSala(s) { for (const b of $("salas").querySelectorAll("button")) b.setAttribute("aria-current", String(!!s && b.dataset.sala === s.nome)); }
 
 // ---------- relógio e atualizações de 1 s -----------------------------------------
@@ -2110,14 +2165,15 @@ aplicarLateral();
 function rota() {
   if (gavetaAberta()) { fecharGaveta(); $("principal").focus({ preventScroll: true }); }   // item do menu na gaveta: o foco vai ao conteúdo
   const r = (location.hash || "#escritorio").slice(1);
-  const TELAS = ["escritorio", "conversas", "aprovacoes", "personalizar", "ajuda"];
+  const TELAS = ["escritorio", "conversas", "aprovacoes", "jornal", "personalizar", "ajuda"];
   // na demonstração o Personalizar não existe: ele grava a marca no servidor de verdade
   const valida = TELAS.includes(r) && !(r === "personalizar" && Brincar.demo) ? r : "escritorio";
   for (const v of TELAS) $(`v-${v}`).hidden = v !== valida;
   if (valida === "personalizar" && window.Personalizar) { Personalizar.abrir(config); if (window.Ajustes) Ajustes.abrir(config); }
   if (valida === "conversas") paginaConversas();
+  if (valida === "jornal") Jornal.abrir();
   document.querySelectorAll("[data-rota]").forEach(a => { if (a.dataset.rota === valida) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
-  if (valida !== "escritorio") telaCheia(false);
+  if (valida !== "escritorio") { TV.desligar(); telaCheia(false); }
   else ajustarEscala();
 }
 
@@ -2165,8 +2221,22 @@ function buscarNaAjuda() {
 $("faq-busca").addEventListener("input", buscarNaAjuda);
 buscarNaAjuda();
 
+// jornal (jornal.js): os nomes e as aparências saem desta tela; o resto vem do /api/jornal
+Jornal.iniciar({
+  agente: id => {
+    const b = boneco(id); if (b) return { nome: b.nome, ap: b.ap };
+    const a = ((estado && estado.agentes) || []).find(x => x.id === id);
+    return a ? { nome: a.nome, ap: aparencia(a.handle) } : null;
+  },
+  empresa: () => (config && config.empresa) || "",
+  demo: () => Brincar.demo,
+  socialLigada, mini,
+});
+
 pintarIcones(document);
 window.addEventListener("hashchange", rota);
 window.addEventListener("resize", () => { medirFaixa(); ajustarEscala(); });
 rota();
 iniciar().catch(() => { falhou = true; mostrarConexao(); setTimeout(() => location.reload(), 10000); });
+// PWA (ícone na tela de início): o sw.js não guarda nada; sem ele (http fora do localhost, servidor antigo), o app abre igual
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});

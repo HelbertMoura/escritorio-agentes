@@ -6,7 +6,12 @@
   <meta name="robots" content="noindex, nofollow">
   <title>Escritório</title>
   <link rel="icon" href="logo.png">
-  <link rel="stylesheet" href="estilo.css?v=97">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icone-180.png">
+  <meta name="theme-color" content="#0f0f0e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <link rel="stylesheet" href="estilo.css?v=98">
 </head>
 <body>
   <a class="pular" href="#principal">Ir para o conteúdo</a>
@@ -56,6 +61,7 @@
           <a href="#escritorio" data-rota="escritorio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5l8-3 8 3v16M9 21v-5h6v5M8 8h2M14 8h2M8 12h2M14 12h2"></path></svg><span>Escritório</span></a>
           <a href="#aprovacoes" data-rota="aprovacoes"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg><span>Aprovações</span><span class="contador ambar" id="nav-aprovacoes" hidden></span></a>
           <a href="#conversas" data-rota="conversas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"></path></svg><span>Conversas</span><span class="contador" id="nav-conversas" hidden></span></a>
+          <a href="#jornal" data-rota="jornal"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h13v14H6a2 2 0 0 1-2-2zM17 9h3v8a2 2 0 0 1-2 2M8 9h5M8 13h5"></path></svg><span>Jornal</span></a>
           <a href="#personalizar" data-rota="personalizar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4l6 6-9 9H5v-6z"></path></svg><span>Personalizar</span></a>
           <a href="#ajuda" data-rota="ajuda"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6M12 17h.01"></path></svg><span>Ajuda</span></a>
         </div>
@@ -103,6 +109,8 @@
           <div>
             <h1>Escritório</h1>
             <p id="resumo-esc" class="resumo">Conectando…</p>
+            <p id="olhando" class="olhando" hidden><span class="olhando-led" aria-hidden="true"></span><span id="olhando-txt"></span>
+              <label class="olhando-op"><input id="aparecer" type="checkbox" checked> Aparecer no escritório</label></p>
             <span id="atualizado" class="oculto" role="status"></span>
           </div>
           <div id="estados" class="estados" role="group" aria-label="Filtrar agentes por estado">
@@ -137,6 +145,13 @@
               <button id="ver-tudo" type="button" aria-label="Ver tudo"><span class="ic" data-icone="encaixar" aria-hidden="true"></span><span class="rotulo-ver" aria-hidden="true">Ver tudo</span></button>
               <button id="tela-cheia" type="button" aria-pressed="false" aria-label="Mapa em tela cheia"><span class="ic" data-icone="expandir" aria-hidden="true"></span></button>
               <button id="modo-foto" type="button" aria-label="Modo foto"><span class="ic" data-icone="camera" aria-hidden="true"></span></button>
+              <button id="modo-tv" type="button" aria-label="Modo TV" title="Modo TV: a câmera passeia sozinha e corre para as novidades"><span class="ic" data-icone="tv" aria-hidden="true"></span></button>
+            </div>
+            <!-- modo TV (tv.js): a faixa do telejornal e os dois botões; o cursor e os botões somem com o mouse parado -->
+            <div id="tv-legenda" class="tv-legenda" aria-hidden="true" hidden></div>
+            <div class="tv-acoes">
+              <button id="tv-cheia" class="tv-bt" type="button" hidden>Tela cheia</button>
+              <button id="tv-sair" class="tv-bt" type="button">Sair do modo TV</button>
             </div>
             <span class="dica-mapa" aria-hidden="true">Toque num agente</span>
             <button id="abrir-cheia" class="abrir-cheia" type="button"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"></path></svg>Abrir o mapa em tela cheia</button>
@@ -333,6 +348,17 @@
           </section>
         </div>
       </section>
+      <section id="v-jornal" class="visao" hidden>
+        <div class="cabeca cabeca-jornal">
+          <div><h1>Jornal</h1><p class="resumo">A semana do escritório, de segunda a domingo. Os números saem do que o escritório viu acontecer.</p></div>
+          <div id="jornal-semanas" class="estados" role="group" aria-label="Qual semana">
+            <button type="button" data-semana="semana" aria-pressed="true">Esta semana</button>
+            <button type="button" data-semana="anterior" aria-pressed="false">Semana passada</button>
+          </div>
+        </div>
+        <p id="jornal-aviso" class="jornal-aviso" role="status" hidden></p>
+        <article id="jornal" class="cartao jornal" aria-labelledby="t-jornal" hidden></article>
+      </section>
       <section id="v-ajuda" class="visao" hidden>
         <div class="cabeca"><h1>Ajuda</h1><p class="resumo">Perguntas frequentes e atalhos.</p></div>
         <div class="ajuda-busca"><label class="oculto" for="faq-busca">Procurar na ajuda</label><span class="ic busca-ic" data-icone="lupa" aria-hidden="true"></span><input id="faq-busca" type="search" placeholder="Procurar na ajuda" autocomplete="off"></div>
@@ -503,20 +529,22 @@
       <div class="acoes"><button id="placar-fechar" class="botao fantasma" type="button">Fechar</button></div>
     </div>
   </dialog>
-  <script src="avatar.js?v=97"></script>
-  <script src="mapa.js?v=97"></script>
-  <script src="expediente.js?v=97"></script>
-  <script src="vida.js?v=97"></script>
-  <script src="som.js?v=97"></script>
-  <script src="ceu.js?v=97"></script>
-  <script src="clima.js?v=97"></script>
-  <script src="festas.js?v=97"></script>
-  <script src="simular.js?v=97"></script>
-  <script src="efeitos.js?v=97"></script>
-  <script src="brincar.js?v=97"></script>
-  <script src="app.js?v=97"></script>
-  <script src="personalizar.js?v=97"></script>
-  <script src="ajustes.js?v=97"></script>
-  <script src="assistente.js?v=97"></script>
+  <script src="avatar.js?v=98"></script>
+  <script src="mapa.js?v=98"></script>
+  <script src="expediente.js?v=98"></script>
+  <script src="vida.js?v=98"></script>
+  <script src="som.js?v=98"></script>
+  <script src="ceu.js?v=98"></script>
+  <script src="clima.js?v=98"></script>
+  <script src="festas.js?v=98"></script>
+  <script src="simular.js?v=98"></script>
+  <script src="efeitos.js?v=98"></script>
+  <script src="brincar.js?v=98"></script>
+  <script src="tv.js?v=98"></script>
+  <script src="jornal.js?v=98"></script>
+  <script src="app.js?v=98"></script>
+  <script src="personalizar.js?v=98"></script>
+  <script src="ajustes.js?v=98"></script>
+  <script src="assistente.js?v=98"></script>
 </body>
 </html>

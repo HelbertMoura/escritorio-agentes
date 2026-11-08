@@ -342,7 +342,7 @@ const Ajustes = (() => {
       const cor = el("select"), olhos = el("select"), acess = el("select"), escolhas = el("div", "aparencia-campos");
       auto.type = "checkbox"; auto.checked = !temAp(); auto.id = `${id}-auto`;
       rotAuto.htmlFor = auto.id; rotAuto.append(auto, el("span", null, "Automática"));
-      // o padrão do avatar.js pode vir sem olhos ou acessório (h >> 3 com sinal); o select cai num valor que o servidor aceita
+      // defesa: se a aparência não estiver nas listas, o select cai num valor que o servidor aceita
       const daLista = (lista, x, reserva) => (lista.some(([k]) => k === x) ? x : reserva);
       opcoes(cor, CORES_AV, atual().color); opcoes(olhos, OLHOS, daLista(OLHOS, atual().eyes, "happy")); opcoes(acess, ACESSORIOS, daLista(ACESSORIOS, atual().accessory, ""));
       const escolher = () => { auto.checked = false; eq.aparencia[a.handle] = { color: cor.value, eyes: olhos.value, accessory: acess.value }; };
