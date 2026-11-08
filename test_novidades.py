@@ -4,9 +4,11 @@ Uso: python -B -m unittest test_novidades
 import atexit
 import json
 import os
+import re
 import shutil
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -45,10 +47,12 @@ class ChangelogReal(unittest.TestCase):
     def test_entradas_titulos_e_secoes(self):
         primeira = self.entradas[0]
         self.assertEqual((primeira["titulo"], primeira["versao"], primeira["data"]),
-                         ("Conectar, Configurações, modo TV, jornal e aviso no celular", e.VERSAO, "2026-11-08"))
-        self.assertEqual([s["nome"] for s in primeira["secoes"]], ["Adicionado", "Mudado", "Segurança", "Corrigido"])
-        self.assertEqual((self.entradas[1]["titulo"], self.entradas[1]["versao"], self.entradas[1]["data"]),
-                         ("Modo construção v1", None, "2026-11-06"))
+                         ("Novidades", e.VERSAO, "2026-11-08"))   # o changelog do repositório é o desta versão
+        self.assertEqual([s["nome"] for s in primeira["secoes"]], ["Adicionado", "Mudado", "Segurança"])
+        self.assertEqual([(x["titulo"], x["versao"], x["data"]) for x in self.entradas[1:3]],
+                         [("Conectar, Configurações, modo TV, jornal e aviso no celular", "1.1.0", "2026-11-08"),
+                          ("Modo construção v1", None, "2026-11-06")])
+        self.assertEqual([s["nome"] for s in self.entradas[1]["secoes"]], ["Adicionado", "Mudado", "Segurança", "Corrigido"])
         self.assertEqual(self.entradas[-1]["titulo"], "Primeira versão pública")
         self.assertLessEqual(len(self.entradas), novidades.ENTRADAS_MAX)
         datas = [ent["data"] for ent in self.entradas]
@@ -61,7 +65,8 @@ class ChangelogReal(unittest.TestCase):
 
     def test_itens_em_markdown_cru_e_links_so_do_repositorio(self):
         itens = [i for ent in self.entradas for sec in ent["secoes"] for i in sec["itens"]]
-        self.assertTrue(itens[0].startswith("**Conectar pela tela:** botão na faixa de conexão"))
+        self.assertTrue(itens[0].startswith("**Novidades:** página no menu"))
+        self.assertFalse(any("] (" in i for i in itens))   # nenhum "](" do changelog real foi desarmado
         todos = [u for i in itens for u in links(i)]
         self.assertTrue(todos)
         self.assertTrue(all(u.startswith(REPO) for u in todos), todos)
@@ -113,6 +118,43 @@ class CasosRuins(unittest.TestCase):
                                 "[f](https://github.com/HelbertMoura/escritorio-agentes/blob/main/CONTRIBUTING.md) g h")
         self.assertNotIn("javascript", saida)
 
+    def test_link_aninhado_e_ponto_ponto_viram_texto(self):
+        # B1 do QA: o re.sub de uma volta só deixava sair [b](javascript:y), e o ".." passava depois do REPO
+        casos = {
+            "[[b](javascript:x)](javascript:y)": "[b] (javascript:y)",
+            "[[[c](javascript:x)](https://evil.example/)](javascript:z)": "[[c] (https://evil.example/)] (javascript:z)",
+            "[[d](./README.md)](javascript:y)": "[[d](https://github.com/HelbertMoura/escritorio-agentes/blob/main/README.md)] (javascript:y)",
+            "[b](javascript:x[)": "[b] (javascript:x[)",
+            "[b](javascript:x](y)": "b",
+            "[e](https://github.com/HelbertMoura/escritorio-agentes/../../evil)": "e",
+            "[f](https://github.com/HelbertMoura/escritorio-agentes/blob/main/%2E%2e/x)": "f",
+            "[g](https://github.com/HelbertMoura/escritorio-agentes/./x)": "g",
+            "[h](./docs/../../x)": "h",
+            "[`i`](https://github.com/HelbertMoura/escritorio-agentes/compare/v2026.11.06...v1.1.0)":
+                "[`i`](https://github.com/HelbertMoura/escritorio-agentes/compare/v2026.11.06...v1.1.0)",
+            "[j](https://github.com/HelbertMoura/escritorio-agentes/blob/main/README.md#x..y)":
+                "[j](https://github.com/HelbertMoura/escritorio-agentes/blob/main/README.md#x..y)",
+            "[a[k](javascript:x)": "[ak",
+        }
+        # o mesmo regex do novidades.js: todo link que o navegador achar no que sai daqui aponta para o REPO
+        navegador = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
+        for item, esperado in casos.items():
+            saida = analisar("## 2026-01-01 · X\n### Adicionado\n- " + item)[0]["secoes"][0]["itens"][0]
+            self.assertEqual(saida, esperado, item)
+            self.assertTrue(all(novidades.do_repo(m.group(2)) for m in navegador.finditer(saida)), item)
+
+    def test_milhares_de_colchetes_em_tempo_linear(self):
+        # B2 do QA: 16 mil "[" num item levavam 2,5 s; agora o item é cortado antes da regex e o texto do link para no "["
+        # um item enorme de cada, e mais um changelog de ~1 MB (o teto do arquivo) só com itens hostis de 4 mil caracteres
+        hostis = ["[" * 300_000, "[a](" * 75_000, "[[x](y)" * 40_000, "[" * 2000 + "x](y)" * 400, "](" * 150_000]
+        hostis += [h[:4000] for h in hostis] * 50
+        texto = "## 2026-01-01 · X\n### Adicionado\n" + "".join(f"- {h}\n" for h in hostis)
+        inicio = time.perf_counter()
+        itens = analisar(texto)[0]["secoes"][0]["itens"]
+        self.assertLess(time.perf_counter() - inicio, 1.0)
+        self.assertTrue(all(len(i) <= novidades.ITEM_MAX for i in itens))
+        self.assertEqual(len(itens), 255)
+
     def test_no_maximo_dez_das_mais_novas_e_o_mesmo_dia_na_ordem_do_arquivo(self):
         texto = "".join(f"## 2026-01-{d:02d} · E{d}\n### Adicionado\n- i\n" for d in range(1, 13))
         texto += "## 2026-01-12 · Mesmo dia, depois\n### Adicionado\n- i\n"
@@ -155,6 +197,15 @@ class Memoria(unittest.TestCase):
         self.assertEqual(self.n.publico()[0]["titulo"], "A")
         os.utime(self.arq, (2_000, 2_000))
         self.assertEqual(self.n.publico()[0]["titulo"], "B")
+
+    def test_resultado_ruim_tambem_fica_na_memoria(self):
+        # B3 do QA: o UTF-8 inválido era relido e decodificado a cada GET
+        self.grava(b"## 2026-01-01 \xff A\n", 1_000)
+        self.assertEqual(self.n.publico(), [])
+        self.grava(b"## 2026-01-01 \xc2\xb7A\n", 1_000)   # mesmo mtime e tamanho, agora legível: não é relido
+        self.assertEqual((self.n.publico(), len(self.logs)), ([], 1))
+        os.utime(self.arq, (2_000, 2_000))
+        self.assertEqual((self.n.publico()[0]["titulo"], len(self.logs)), ("A", 1))
 
 
 class Rota(unittest.TestCase):

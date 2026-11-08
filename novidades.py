@@ -19,7 +19,8 @@ ENTRADAS_MAX, ITEM_MAX, TITULO_MAX, SECAO_MAX = 10, 2000, 200, 80
 REPO = "https://github.com/HelbertMoura/escritorio-agentes/"
 VERSAO_OK = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
 DATA_OK = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
-LINK = re.compile(r"\[([^\]\n]*)\]\(([^)\s]*)\)")
+# Texto e endereço sem "[": cada tentativa para no próximo "[", então milhares de "[" ou de "[a](" custam tempo linear
+LINK = re.compile(r"\[([^\[\]\n]*)\]\(([^)\s\[]*)\)")
 # \w: letras com acento valem (a âncora "#modo-construção" do README); aspas, espaços, < > e parênteses, nunca
 LINK_REPO = re.compile(re.escape(REPO) + r"[\w.~/#%+=&?:-]*")
 RELATIVO = re.compile(r"\./[\w.~/#%+-]+")
@@ -29,11 +30,34 @@ def cortar(texto, maximo):
     return texto if len(texto) <= maximo else texto[:maximo - 1] + "…"
 
 
+def do_repo(url):
+    """Só o REPO, sem segmento "." ou ".." no caminho (nem %2e): o navegador resolveria para fora dele. O "..." do
+    compare (v2026.11.06...v1.1.0) é um segmento comum."""
+    if not LINK_REPO.fullmatch(url):
+        return False
+    caminho = re.split(r"[?#]", url[len(REPO):], maxsplit=1)[0]
+    return all(s.lower().replace("%2e", ".") not in (".", "..") for s in caminho.split("/"))
+
+
 def _link(m):
     texto, url = m.group(1), m.group(2)
-    if RELATIVO.fullmatch(url) and ".." not in url:
+    if RELATIVO.fullmatch(url):
         url = REPO + "blob/main/" + url[2:]
-    return f"[{texto}]({url})" if LINK_REPO.fullmatch(url) else texto
+    return f"[{texto}]({url})" if do_repo(url) else texto
+
+
+def limpar_links(texto):
+    """Os links do REPO ficam; os outros viram o texto. Depois, todo "](" que sobrou fora de um link do REPO (o de fora
+    de um aninhado, um endereço com "[") vira "] (": o navegador só lê como link o que tem "](", e assim todo link que
+    ele achar termina num endereço do REPO. Duas passadas lineares, sem repetir até parar de mudar."""
+    texto = LINK.sub(_link, texto)
+    saida, fim = [], 0
+    for m in LINK.finditer(texto):
+        if do_repo(m.group(2)):
+            saida += [texto[fim:m.start()].replace("](", "] ("), m.group(0)]
+            fim = m.end()
+    saida.append(texto[fim:].replace("](", "] ("))
+    return "".join(saida)
 
 
 def _data(x):
@@ -85,7 +109,8 @@ def analisar(texto):
             item = None
     for ent in entradas:
         for sec in ent["secoes"]:
-            sec["itens"] = [cortar(LINK.sub(_link, " ".join(partes)), ITEM_MAX) for partes in sec["itens"]]
+            # corta antes (a regex só vê 2.000 caracteres) e depois (o ./ relativo cresce ao virar o endereço do REPO)
+            sec["itens"] = [cortar(limpar_links(cortar(" ".join(partes), ITEM_MAX)), ITEM_MAX) for partes in sec["itens"]]
         ent["secoes"] = [sec for sec in ent["secoes"] if sec["itens"]]
     # sorted é estável: as entradas do mesmo dia ficam na ordem do arquivo
     return sorted(entradas, key=lambda ent: ent["data"], reverse=True)[:ENTRADAS_MAX]
@@ -95,23 +120,32 @@ class Novidades:
     def __init__(self, caminho, log):
         self.caminho, self.log = caminho, log
         self.trava = threading.Lock()
-        self.chave, self.entradas = None, []
+        self.chave, self.erro, self.entradas = None, None, []   # chave: (mtime, tamanho) da última leitura, boa ou ruim
 
     def publico(self):
-        """As entradas do changelog. Ausente, grande demais ou ilegível: [] e 1 linha de log (até o arquivo mudar)."""
+        """As entradas do changelog. Ausente, grande demais ou ilegível: [] e 1 linha de log. O resultado, bom ou ruim, fica
+        na memória até o arquivo mudar."""
         with self.trava:
             try:
                 st = os.stat(self.caminho)
-                chave = (st.st_mtime_ns, st.st_size)
-                if chave != self.chave:
-                    if st.st_size > ARQUIVO_MAX:
-                        raise ValueError("grande demais")
-                    with open(self.caminho, encoding="utf-8-sig") as f:
-                        self.entradas = analisar(f.read())
-                    self.chave = chave
+            except OSError as x:
+                return self._falha(None, x)
+            chave = (st.st_mtime_ns, st.st_size)
+            if chave == self.chave:
+                return self.entradas
+            try:
+                if st.st_size > ARQUIVO_MAX:
+                    raise ValueError("grande demais")
+                with open(self.caminho, encoding="utf-8-sig") as f:
+                    entradas = analisar(f.read())
             except (OSError, ValueError) as x:   # UnicodeDecodeError é ValueError
-                chave = ("erro", type(x).__name__)
-                if chave != self.chave:
-                    self.log(evento="novidades", resultado="ilegivel", detalhe=type(x).__name__)
-                self.chave, self.entradas = chave, []
-            return self.entradas
+                return self._falha(chave, x)
+            self.chave, self.erro, self.entradas = chave, None, entradas
+            return entradas
+
+    def _falha(self, chave, x):
+        erro = type(x).__name__
+        if (chave, erro) != (self.chave, self.erro):
+            self.log(evento="novidades", resultado="ilegivel", detalhe=erro)
+        self.chave, self.erro, self.entradas = chave, erro, []
+        return []

@@ -4,6 +4,20 @@
 
 As mudanças que importam neste projeto ficam aqui, da mais nova para a mais antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Desde a 1.1.0, as versões seguem o [SemVer](https://semver.org/lang/pt-BR/); as entradas mais antigas são marcos com data.
 
+## 1.2.0 · 2026-11-08 · Novidades
+
+Commits: [`v1.1.0...v1.2.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.1.0...v1.2.0).
+
+### Adicionado
+- **Novidades:** página no menu com este histórico de mudanças, o da versão instalada, das mais novas para as mais antigas (até 10). O selo **Novo** aparece no menu quando a versão do escritório é outra que a última vista neste navegador, e some ao abrir a página. Os dados vêm do `GET /api/novidades` (com sessão), que lê o `CHANGELOG.pt-BR.md` do disco, sem chamada ao agentes.chat. Veja [Segurança](./README.pt-BR.md#segurança).
+
+### Mudado
+- O `CHANGELOG.pt-BR.md` agora vai na imagem Docker e no `instalar.sh`, ao lado do código: é ele que a página Novidades mostra. O teste da lista confere os dois caminhos.
+
+### Segurança
+- Os itens chegam ao navegador em markdown inline cru (negrito, código e links) e são desenhados só com `textContent`. Os links saem só para este repositório (os relativos viram o endereço dele no GitHub, e nenhum caminho com `..` passa); qualquer outro vira texto, no servidor e de novo no navegador.
+- O changelog fica na memória até o arquivo mudar, inclusive quando é ilegível. Ausente, ilegível ou acima de 1 MB, a lista sai vazia, com uma linha no log.
+
 ## 1.1.0 · 2026-11-08 · Conectar, Configurações, modo TV, jornal e aviso no celular
 
 Release [`v1.1.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.1.0). Commits: [`v2026.11.06...v1.1.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v2026.11.06...v1.1.0).

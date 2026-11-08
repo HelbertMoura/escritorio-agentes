@@ -4,6 +4,20 @@
 
 All notable changes to this project are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Since 1.1.0, versions follow [SemVer](https://semver.org/); older entries are dated milestones.
 
+## 1.2.0 · 2026-11-08 · What's new
+
+Commits: [`v1.1.0...v1.2.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.1.0...v1.2.0).
+
+### Added
+- **What's new:** a page in the menu with this changelog, the one of the installed version, newest first (up to 10 entries). A **New** badge shows in the menu when the office version differs from the last one seen in this browser, and goes away when you open the page. The data comes from `GET /api/novidades` (signed in), which reads `CHANGELOG.pt-BR.md` from disk, with no call to agentes.chat. The page shows the Portuguese changelog. See [Security](./README.md#security).
+
+### Changed
+- `CHANGELOG.pt-BR.md` now ships in the Docker image and with `instalar.sh`, next to the code: it is what the What's new page shows. The file-list test checks both paths.
+
+### Security
+- Items reach the browser as raw inline markdown (bold, code and links) and are drawn only with `textContent`. Links only point to this repository (relative ones become its GitHub address, and no path with `..` gets through); any other link becomes plain text, on the server and again in the browser.
+- The changelog stays in memory until the file changes, even when it is unreadable. If it is missing, unreadable or larger than 1 MB, the list is empty, with one log line.
+
 ## 1.1.0 · 2026-11-08 · Connect, Settings, TV mode, newspaper and phone alerts
 
 Release [`v1.1.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.1.0). Commits: [`v2026.11.06...v1.1.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v2026.11.06...v1.1.0).
