@@ -10,6 +10,7 @@ import os
 import random
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -34,7 +35,12 @@ import escritorio as e  # noqa: E402
 import social  # noqa: E402
 from acesso import Acesso  # noqa: E402
 
-AG = [{"id": "a1", "name": "Pixel", "handle": "pixel", "role": "Conteúdo"},
+
+def tearDownModule():   # a pasta de dados da suíte não fica para trás no %TEMP%
+    shutil.rmtree(PASTA, ignore_errors=True)
+
+
+AG =[{"id": "a1", "name": "Pixel", "handle": "pixel", "role": "Conteúdo"},
       {"id": "a2", "name": "Órbita", "handle": "agent-orbita-qa-acme", "role": "QA"}]  # agentes fictícios
 ORG_URL = f"https://app.agentes.chat/org/{e.ORG}/c/11111111-2222-4333-8444-555555555555"
 # scripts da lista fechada que chegam com o land do floor das telas (config-telas); até lá, o servidor responde 404
@@ -2200,10 +2206,11 @@ class Configuracoes(unittest.TestCase):
         shutil.rmtree(cls.pasta, ignore_errors=True)
 
     def setUp(self):
-        self.antes = e.BASE, e.TIMES, e.ARQ_CLIMA, e.ARQ_FESTAS
+        self.antes = e.BASE, e.TIMES, e.ARQ_CLIMA, e.ARQ_FESTAS, e.ARQ_EQUIPE
         e.BASE, e.TIMES = self.base, os.path.join(self.pasta, "times.json")
         e.ARQ_CLIMA, e.ARQ_FESTAS = os.path.join(self.pasta, "clima.json"), os.path.join(self.pasta, "festas.json")
-        for arq in (e.ARQ_CLIMA, e.ARQ_FESTAS, e.TIMES):
+        e.ARQ_EQUIPE = os.path.join(self.pasta, "equipe.json")
+        for arq in (e.ARQ_CLIMA, e.ARQ_FESTAS, e.ARQ_EQUIPE, e.TIMES):
             if os.path.exists(arq):
                 os.unlink(arq)
         self.saida = io.StringIO()
@@ -2215,7 +2222,7 @@ class Configuracoes(unittest.TestCase):
     def tearDown(self):
         self.log.__exit__(None, None, None)
         self.assertNotIn("Recife", self.saida.getvalue())   # o log nunca leva a cidade
-        e.BASE, e.TIMES, e.ARQ_CLIMA, e.ARQ_FESTAS = self.antes
+        e.BASE, e.TIMES, e.ARQ_CLIMA, e.ARQ_FESTAS, e.ARQ_EQUIPE = self.antes
 
     req = Http.req
 
@@ -2228,7 +2235,8 @@ class Configuracoes(unittest.TestCase):
         return json.loads(self.req("/api/config", self.cab)[1])
 
     def test_barreiras_das_duas_rotas(self):
-        for rota, bom in (("/api/clima", {"clima": None}), ("/api/festas", {"rev": 0, "proprias": [], "desligadas": []})):
+        for rota, bom in (("/api/clima", {"clima": None}), ("/api/festas", {"rev": 0, "proprias": [], "desligadas": []}),
+                          ("/api/equipe", {"rev": 0, "times": [], "aparencia": {}})):
             with self.subTest(rota=rota):
                 dados = json.dumps(bom).encode()
                 self.assertEqual(self.req(rota, {**self.js, "Origin": "https://outro.exemplo"}, dados)[0], 403)
@@ -2237,10 +2245,11 @@ class Configuracoes(unittest.TestCase):
                 self.assertEqual(self.req(rota, {**sem_origin, "Referer": self.base + "/"}, dados)[0], 403)   # sem Referer
                 self.assertEqual(self.req(rota, {**self.js, "Content-Type": "text/plain"}, dados)[0], 415)
                 self.assertEqual(self.req(rota, {"Origin": self.base, "Content-Type": "application/json"}, dados)[0], 401)
-                teto = e.CLIMA_BYTES if rota == "/api/clima" else e.FESTAS_BYTES
+                teto = {"/api/clima": e.CLIMA_BYTES, "/api/festas": e.FESTAS_BYTES, "/api/equipe": e.EQUIPE_BYTES}[rota]
                 grande = dados[:-1] + b" " * teto + b"}"   # JSON válido, acima do teto
                 self.assertEqual(self.req(rota, self.js, grande)[0], 400)
-                self.assertFalse(os.path.exists(e.ARQ_CLIMA if rota == "/api/clima" else e.ARQ_FESTAS))
+                arquivo = {"/api/clima": e.ARQ_CLIMA, "/api/festas": e.ARQ_FESTAS, "/api/equipe": e.ARQ_EQUIPE}[rota]
+                self.assertFalse(os.path.exists(arquivo))
                 self.assertEqual(self.req(rota, self.js, dados)[0], 200)   # controle: o mesmo pedido, com tudo certo
 
     def test_clima_tela_arquivo_e_nenhum(self):
@@ -2309,6 +2318,117 @@ class Configuracoes(unittest.TestCase):
 
     def test_busca_sem_sessao(self):
         self.assertEqual(self.req("/api/clima/busca?q=Recife")[0], 401)
+
+    def test_equipe_substitui_o_times_json_e_volta(self):
+        with open(e.TIMES, "w", encoding="utf-8") as f:
+            json.dump({"times": [{"nome": "Antigo", "agentes": ["pixel"]}], "aparencia": {"pixel": {"color": "rose", "eyes": "dots"}}}, f)
+        cfg = self.config()
+        self.assertEqual(([t["nome"] for t in cfg["times"]], cfg["ajustes"]["equipe"], cfg["ajustes"]["rev"]["equipe"]),
+                         (["Antigo"], "arquivo", 0))
+        time_ = {"nome": "Dev", "tipo": "mesas", "cor": None, "icone": "codigo", "parede": 1, "piso": 3,
+                 "agentes": ["agent-orbita-qa-acme"]}
+        visual = {"agent-orbita-qa-acme": {"color": "teal", "eyes": "happy", "accessory": "crown"}}
+        st, r = self.post("/api/equipe", {"rev": 0, "times": [time_], "aparencia": visual})
+        self.assertEqual((st, r), (200, {"rev": 1, "origem": "tela"}))
+        cfg = self.config()   # substitui inteiros: o time e a aparência do times.json saem
+        self.assertEqual((cfg["times"], cfg["aparencia"], cfg["ajustes"]["equipe"], cfg["ajustes"]["rev"]["equipe"]),
+                         ([time_], visual, "tela", 1))
+        self.assertEqual(e.config_publica()["times"], [time_])   # a vida social e o prédio veem pela mesma junção
+        st, r = self.post("/api/equipe", {"rev": 0, "times": [], "aparencia": {}})
+        self.assertEqual((st, r["erro"], r["rev"]), (409, "rev", 1))
+        st, r = self.post("/api/equipe", {"rev": 1, "times": [time_, {**time_, "nome": "dev", "agentes": []}], "aparencia": {}})
+        self.assertEqual((st, r["mensagem"]), (400, "Time 2: já existe um time com esse nome."))
+        st, r = self.post("/api/equipe", {"rev": 1, "times": [], "aparencia": {}, "conversas": "responder"})
+        self.assertEqual(st, 400)   # o modo de conversas (escopo OAuth) fica no servidor
+        for ruim in ({"rev": 1, "limpar": False}, {"rev": True, "limpar": True}, {"rev": 1, "limpar": True, "times": []}):
+            self.assertEqual(self.post("/api/equipe", ruim)[0], 400, ruim)
+        self.assertEqual(self.post("/api/equipe", {"rev": 0, "limpar": True})[0], 409)
+        st, r = self.post("/api/equipe", {"rev": 1, "limpar": True})   # Voltar ao times.json
+        self.assertEqual((st, r), (200, {"rev": 0, "origem": "arquivo"}))
+        self.assertFalse(os.path.exists(e.ARQ_EQUIPE))
+        self.assertEqual([t["nome"] for t in self.config()["times"]], ["Antigo"])
+        self.assertIn('"resultado": "salva"', self.saida.getvalue())
+        self.assertNotIn("orbita", self.saida.getvalue())   # o log guarda contagens, não os handles
+
+
+class SairDeTodos(unittest.TestCase):
+    """4.1: "Sair de todos os aparelhos" pede a senha de novo (no balde do login), zera todas as sessões e modos e
+    apaga os dois cookies deste navegador."""
+    def setUp(self):
+        class Leitor:
+            def foto(self):
+                return {**e.resumir(AG, []), "atualizado": None, "erro": None}
+        self.pasta = tempfile.mkdtemp(prefix="escritorio-sair-")
+        self.srv = e.Servidor(("127.0.0.1", 0), e.Pagina)
+        self.srv.leitor, self.srv.cred, self.srv.acesso = Leitor(), None, Acesso(self.pasta)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.base = "http://127.0.0.1:%d" % self.srv.server_address[1]
+        self.antes, e.BASE = e.BASE, self.base
+        with open(os.path.join(self.pasta, "codigo-primeiro-acesso.txt")) as f:
+            codigo = f.read().strip()
+        self.srv.acesso.criar_primeiro(codigo, "dono", "senha-bem-grande")
+        self.saida = io.StringIO()
+        self.log = contextlib.redirect_stdout(self.saida)
+        self.log.__enter__()
+
+    def tearDown(self):
+        self.log.__exit__(None, None, None)
+        self.assertNotIn("senha-bem-grande", self.saida.getvalue())
+        e.BASE = self.antes
+        self.srv.shutdown()
+        shutil.rmtree(self.pasta, ignore_errors=True)
+
+    req = Http.req
+    entrar = Http.entrar
+
+    def sair(self, cab, senha="senha-bem-grande", **extra):
+        corpo = json.dumps({"senha": senha}).encode()
+        return self.req("/api/sair-todos", {**cab, "Origin": self.base, "Content-Type": "application/json", **extra}, corpo)
+
+    def test_zera_todas_as_sessoes_e_apaga_os_cookies(self):
+        celular, computador = self.entrar(), self.entrar()
+        self.srv.acesso.modos["x"] = {"cookie": "y", "inicio": 0, "ate": 0}   # um modo resposta aberto
+        st, corpo, h = self.sair(celular, senha="errada-errada")
+        self.assertEqual((st, json.loads(corpo)["erro"]), (403, "senha_incorreta"))
+        self.assertEqual(self.req("/api/estado", computador)[0], 200)   # senha errada não derruba ninguém
+        st, corpo, h = self.sair(celular)
+        self.assertEqual((st, json.loads(corpo)), (200, {"ok": True}))
+        cookies = h.get_all("Set-Cookie")
+        self.assertEqual(len(cookies), 2)
+        self.assertTrue(all("Max-Age=0" in c for c in cookies))
+        for cab in (celular, computador):
+            self.assertEqual(self.req("/api/estado", cab)[0], 401)
+        self.assertEqual((self.srv.acesso.sessoes, self.srv.acesso.modos), ({}, {}))
+        self.assertEqual(Acesso(self.pasta).sessoes, {})   # gravado: um reinício não traz as sessões de volta
+        self.assertIn('"resultado": "sair_todos", "usuario": "dono", "sessoes": 2', self.saida.getvalue())
+        self.entrar()   # a senha continua valendo para entrar de novo
+
+    def test_barreiras(self):
+        cab = self.entrar()
+        corpo = json.dumps({"senha": "senha-bem-grande"}).encode()
+        sem_origin = {**cab, "Content-Type": "application/json"}
+        self.assertEqual(self.req("/api/sair-todos", {**sem_origin, "Referer": self.base + "/"}, corpo)[0], 403)
+        self.assertEqual(self.req("/api/sair-todos", {**sem_origin, "Origin": "https://outro.exemplo"}, corpo)[0], 403)
+        self.assertEqual(self.req("/api/sair-todos", {**cab, "Origin": self.base, "Content-Type": "text/plain"}, corpo)[0], 415)
+        self.assertEqual(self.req("/api/sair-todos", {"Origin": self.base, "Content-Type": "application/json"}, corpo)[0], 401)
+        for ruim in (b'{"senha": 12345678901}', b'{"senha": "senha-bem-grande", "x": 1}', b'{"senha": ""}', b"[]",
+                     json.dumps({"senha": "x" * 1100}).encode()):
+            self.assertEqual(self.req("/api/sair-todos", {**sem_origin, "Origin": self.base}, ruim)[0], 400, ruim[:30])
+        self.assertEqual(self.req("/api/estado", cab)[0], 200)   # nada disso encerrou a sessão
+        self.srv.previa_sem_login = True
+        try:
+            self.assertEqual(self.sair(cab)[0], 403)   # a prévia não tem sessões de verdade para encerrar
+        finally:
+            del self.srv.previa_sem_login
+
+    def test_erros_contam_no_balde_do_login(self):
+        cab = self.entrar()
+        for _ in range(acesso.LIMITE):
+            self.assertEqual(self.sair(cab, senha="errada-errada")[0], 403)
+        self.assertEqual(self.sair(cab)[0], 429)   # nem a senha certa passa até a janela vencer
+        corpo = urllib.parse.urlencode({"usuario": "dono", "senha": "senha-bem-grande"}).encode()
+        self.assertEqual(self.req("/entrar", {"Origin": self.base}, corpo)[0], 200)   # o login também trava (volta à tela)
+        self.assertEqual(self.req("/api/estado", cab)[0], 200)   # e a sessão aberta continua
 
 
 class ClimaVivo(unittest.TestCase):
@@ -2984,58 +3104,62 @@ class Responder(unittest.TestCase):
 
 class Previa(unittest.TestCase):
     """A ferramentas/previa.py sobe de verdade e lê uma conversa pelo caminho do servidor (thread e canal): uma
-    mudança no Conversas que a quebre aparece aqui, e não só quando alguém abre a prévia."""
+    mudança no Conversas que a quebre aparece aqui, e não só quando alguém abre a prévia. Cada prévia sobe com uma
+    pasta temporária própria e para com o sinal de sair: a pasta de dados dela tem de sumir junto."""
+    RAIZ = os.path.dirname(os.path.abspath(e.__file__))
+
+    def subir(self, *args):
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            porta = s.getsockname()[1]
+        tmp = tempfile.mkdtemp(prefix="escritorio-previa-teste-tmp-")
+        grupo = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {}
+        p = subprocess.Popen([sys.executable, "-B", os.path.join("ferramentas", "previa.py"), *args], cwd=self.RAIZ,
+                             env={**os.environ, "PREVIA_PORTA": str(porta), "PYTHONUTF8": "1", "TEMP": tmp, "TMP": tmp,
+                                  "TMPDIR": tmp}, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, **grupo)
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        self.addCleanup(self.parar, p, tmp)
+        self.assertEqual(p.stdout.readline().strip(), f"http://127.0.0.1:{porta}")   # o servidor já escuta
+        self.assertEqual(len(os.listdir(tmp)), 1)   # a pasta de dados da prévia
+        return f"http://127.0.0.1:{porta}"
+
+    def parar(self, p, tmp):
+        if p.poll() is None:
+            p.send_signal(signal.CTRL_BREAK_EVENT if os.name == "nt" else signal.SIGTERM)
+            p.communicate(timeout=15)
+            self.assertEqual(os.listdir(tmp), [])   # a prévia apagou a própria pasta ao sair
+
     def test_previa_le_conversa_pela_thread_e_pelo_canal(self):
         pasta = tempfile.mkdtemp(prefix="escritorio-previa-teste-")
+        self.addCleanup(shutil.rmtree, pasta, ignore_errors=True)
         bruto = os.path.join(pasta, "bruto.json")
         url = f"https://app.agentes.chat/org/{e.ORG}/c/"
         with open(bruto, "w", encoding="utf-8") as f:
             json.dump({"agents": AG, "tasks": [
                 {"run_id": "r1", "agent": {"id": "a1"}, "status": "running", "url": f"{url}{CANAL}?m={M}", "label": "Post"},
                 {"run_id": "r2", "agent": {"id": "a2"}, "status": "waiting_input", "url": url + DM, "label": "QA"}]}, f)
-        with socket.socket() as s:
-            s.bind(("127.0.0.1", 0))
-            porta = s.getsockname()[1]
-        raiz = os.path.dirname(os.path.abspath(e.__file__))
-        p = subprocess.Popen([sys.executable, "-B", os.path.join("ferramentas", "previa.py"), bruto], cwd=raiz,
-                             env={**os.environ, "PREVIA_PORTA": str(porta), "PYTHONUTF8": "1"},
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        try:
-            self.assertEqual(p.stdout.readline().strip(), f"http://127.0.0.1:{porta}")   # o servidor já escuta
-            ler = lambda rota: json.loads(urllib.request.urlopen(f"http://127.0.0.1:{porta}{rota}", timeout=10).read())
-            itens = {c["agente_id"]: c["id"] for c in ler("/api/estado")["conversas"]}
-            self.assertEqual(set(itens), {"a1", "a2"})
-            for agente in ("a1", "a2"):   # a1 tem ?m= (thread), a2 não (canal)
-                r = ler(f"/api/conversa?id={itens[agente]}")   # erro na leitura (o TypeError de antes) vira HTTP 502
-                self.assertEqual({m["autor"] for m in r["mensagens"]}, {"pessoa", "agente"}, agente)
-        finally:
-            p.kill()
-            p.communicate(timeout=10)
-            shutil.rmtree(pasta, ignore_errors=True)
+        base = self.subir(bruto)
+        ler = lambda rota: json.loads(urllib.request.urlopen(base + rota, timeout=10).read())
+        itens = {c["agente_id"]: c["id"] for c in ler("/api/estado")["conversas"]}
+        self.assertEqual(set(itens), {"a1", "a2"})
+        for agente in ("a1", "a2"):   # a1 tem ?m= (thread), a2 não (canal)
+            r = ler(f"/api/conversa?id={itens[agente]}")   # erro na leitura (o TypeError de antes) vira HTTP 502
+            self.assertEqual({m["autor"] for m in r["mensagens"]}, {"pessoa", "agente"}, agente)
 
     def test_previa_com_cada_estado_de_conexao(self):
-        raiz = os.path.dirname(os.path.abspath(e.__file__))
         exemplo = os.path.join("ferramentas", "previa.exemplo.json")
         for conexao, agentes, erro in (("sem_conexao", 0, e.SEM_CONEXAO), ("recusada", 7, e.texto_recusa(403)),
                                        ("conectado", 7, None)):
-            with socket.socket() as s:
-                s.bind(("127.0.0.1", 0))
-                porta = s.getsockname()[1]
-            p = subprocess.Popen([sys.executable, "-B", os.path.join("ferramentas", "previa.py"), "--conexao", conexao, exemplo],
-                                 cwd=raiz, env={**os.environ, "PREVIA_PORTA": str(porta), "PYTHONUTF8": "1"},
-                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            try:
-                self.assertEqual(p.stdout.readline().strip(), f"http://127.0.0.1:{porta}")
-                estado = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{porta}/api/estado", timeout=10).read())
-                self.assertEqual((estado["conexao"], len(estado["agentes"]), estado["erro"]), (conexao, agentes, erro))
-            finally:
-                p.kill()
-                p.communicate(timeout=10)
+            base = self.subir("--conexao", conexao, exemplo)
+            estado = json.loads(urllib.request.urlopen(base + "/api/estado", timeout=10).read())
+            self.assertEqual((estado["conexao"], len(estado["agentes"]), estado["erro"]), (conexao, agentes, erro))
+        tmp = tempfile.mkdtemp(prefix="escritorio-previa-teste-tmp-")
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         r = subprocess.run([sys.executable, "-B", os.path.join("ferramentas", "previa.py"), "--conexao", "outro", exemplo],
-                           cwd=raiz, capture_output=True, text=True, timeout=60)
-        self.assertEqual(r.returncode, 1)
+                           cwd=self.RAIZ, capture_output=True, text=True, timeout=60,
+                           env={**os.environ, "TEMP": tmp, "TMP": tmp, "TMPDIR": tmp})
+        self.assertEqual((r.returncode, os.listdir(tmp)), (1, []))   # o erro na subida também apaga a pasta
         self.assertIn("sem_conexao", r.stderr)
-
 
 
 # ---------------------------------------------------------------- vida social (contrato S, fatia 1)

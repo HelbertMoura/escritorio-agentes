@@ -223,6 +223,19 @@ class Acesso:
             return None
         return s["usuario"]
 
+    def sair_todos(self, token, senha):
+        """"Sair de todos os aparelhos": confere a senha do usuário da sessão no balde do login e zera todas as sessões
+        e modos resposta (só existe uma conta). Devolve quantas sessões saíram; senão levanta PermissionError."""
+        usuario = self.sessao(token)
+        if not usuario:
+            raise PermissionError("entre de novo")
+        self.conferir(usuario, senha)
+        with self.trava:
+            n = len(self.sessoes)
+            self.sessoes, self.modos = {}, {}
+            _gravar(self.arq_sessoes, self.sessoes)
+        return n
+
     def sair(self, token):
         with self.trava:
             if token:

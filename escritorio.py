@@ -11,7 +11,7 @@ Na frente de tudo há login com usuário e senha (acesso.py).
 Rotas: /entrar /primeiro-acesso /sair /logo  /  /<estático>  /api/estado /api/config /api/conversa /api/marca
        /api/logo /api/conversa/modo /api/conversa/modo/fechar /api/conversa/responder /api/social /api/social/briga
        /api/social/greve/atender /api/social/placar /api/planta /api/clima /api/clima/busca /api/festas
-       /oauth/conectar /oauth/retorno
+       /api/equipe /api/sair-todos /oauth/conectar /oauth/retorno
        (as quatro primeiras e os estáticos do login sem sessão)
 Uso: python3 -I escritorio.py           serviço (variáveis no /etc/escritorio.env)
      python3 -I escritorio.py codigo    mostra o código de primeiro acesso, só lendo (sudo escritorio-codigo)
@@ -40,7 +40,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from acesso import (ARQ_CODIGO, ARQ_USUARIOS, Acesso, TentativasDemais, UsuariosIlegiveis, gravar, ler_codigo,  # noqa: E402
                     ler_usuarios)
 import ajustes  # noqa: E402
-from ajustes import CLIMA_BYTES, FESTAS_BYTES, limpa_texto  # noqa: E402
+from ajustes import (ACESSORIOS, CLIMA_BYTES, CORES, EQUIPE_BYTES, FESTAS_BYTES, HANDLE_OK, ICONES_OK, OLHOS,  # noqa: E402
+                     ROTULO_OK, limpa_texto)
 from planta import PLANTA_BYTES, Planta, validar_planta  # noqa: E402
 from social import PLACAR_BYTES, PLACAR_MAX, PLACAR_TETO, Social  # noqa: E402
 
@@ -1312,12 +1313,7 @@ def _opcional(x):
 
 # ---------------------------------------------------------------- times e aparência (arquivo do dono)
 
-ROTULO_OK = re.compile(r"[\w .'&À-ÿ\-]{1,40}")
-HANDLE_OK = re.compile(r"[a-z0-9][a-z0-9\-]{0,40}")
-CORES = {"sky", "indigo", "violet", "rose", "amber", "green", "teal", "graphite"}
-OLHOS = {"happy", "sleepy", "round", "wide", "dots"}
-ACESSORIOS = {"crown", "hat", "headphones", "headset", "flower", "antenna", "cap", "bow", ""}
-ICONES_OK = {"codigo", "megafone", "servidor", "coroa", "sino", "controle", "xicara", "pessoas", "grafico", "pincel", "estrela"}
+# os conjuntos dos times ficam no ajustes.py (uma fonte só, para o times.json e a tela de Configurações)
 
 
 EMPRESA_PADRAO = "Minha empresa"
@@ -1531,8 +1527,11 @@ def config_publica():
     cfg["clima"], origem = clima_vigente(clima_arquivo)
     festas = festas_salvas()
     cfg["festas"] = {"proprias": festas["proprias"], "desligadas": festas["desligadas"]}
-    cfg["ajustes"] = {"clima": origem, "clima_arquivo": clima_arquivo is not None, "equipe": "arquivo",
-                      "rev": {"festas": festas["rev"], "equipe": 0}}
+    equipe = equipe_salva()   # substitui inteiros os times e a aparência do times.json (sem misturar listas)
+    if equipe:
+        cfg["times"], cfg["aparencia"] = equipe["times"], equipe["aparencia"]
+    cfg["ajustes"] = {"clima": origem, "clima_arquivo": clima_arquivo is not None, "equipe": "tela" if equipe else "arquivo",
+                      "rev": {"festas": festas["rev"], "equipe": equipe["rev"] if equipe else 0}}
     return cfg
 
 
@@ -1540,8 +1539,10 @@ def config_publica():
 
 ARQ_CLIMA = os.path.join(DADOS, "clima.json")
 ARQ_FESTAS = os.path.join(DADOS, "festas.json")
-TRAVA_AJUSTES = threading.Lock()   # as gravações do clima e das datas, uma de cada vez
+ARQ_EQUIPE = os.path.join(DADOS, "equipe.json")
+TRAVA_AJUSTES = threading.Lock()   # as gravações do clima, das datas e da equipe, uma de cada vez
 MSG_REV_FESTAS = "As datas mudaram em outra tela. Recarregue para ver a versão nova."
+MSG_REV_EQUIPE = "Os times mudaram em outra tela. Recarregue para ver a versão nova."
 
 
 def clima_vigente(do_arquivo=None):
@@ -1557,6 +1558,52 @@ def clima_vigente(do_arquivo=None):
 def festas_salvas():
     return ajustes.ler(ARQ_FESTAS, FESTAS_BYTES, lambda d: ajustes.validar_festas(d, arquivo=True), log, "festas") \
         or ajustes.festas_vazias()
+
+
+def equipe_salva():
+    """dados/equipe.json validado, ou None (vale o times.json)."""
+    return ajustes.ler(ARQ_EQUIPE, EQUIPE_BYTES, lambda d: ajustes.validar_equipe(d, arquivo=True), log, "equipe")
+
+
+def salvar_equipe(dados, usuario):
+    """POST /api/equipe: {rev, times, aparencia}, ou {rev, limpar: true} para voltar ao times.json, com o rev atual
+    (outro: 409). Renomear um time tira da sala dele a pintura e os móveis da planta (chave time:<nome>): a tela
+    avisa antes, e o editor de construção oferece limpar. Devolve (status, corpo)."""
+    limpar = isinstance(dados, dict) and set(dados) == {"rev", "limpar"}
+    try:
+        if limpar:
+            if dados["limpar"] is not True:
+                raise ValueError('Envie {"rev": n, "limpar": true}.')
+            rev_pedido = ajustes.inteiro(dados["rev"], 0, ajustes.REV_TETO, "Revisão inválida.")
+        else:
+            pedido = ajustes.validar_equipe(dados)
+            rev_pedido = pedido["rev"]
+    except ValueError as x:   # a mensagem é nossa, com a posição, sem repetir o valor
+        return erro(400, "pedido", str(x))
+    with TRAVA_AJUSTES:
+        atual = equipe_salva()
+        rev = atual["rev"] if atual else 0
+        if rev_pedido != rev:
+            return 409, {"erro": "rev", "mensagem": MSG_REV_EQUIPE, "rev": rev}
+        try:
+            if limpar:
+                if os.path.exists(ARQ_EQUIPE):
+                    os.unlink(ARQ_EQUIPE)
+            else:
+                nova = {**pedido, "rev": rev + 1}
+                bruto = ajustes.bytes_da_equipe(nova)
+                if len(bruto) > EQUIPE_BYTES:   # o "v" e o rev novo podem passar do teto: o arquivo nunca sai ilegível
+                    return erro(400, "pedido", "Os times ficaram grandes demais para salvar.")
+                gravar(ARQ_EQUIPE, bruto)
+        except OSError as x:
+            log(evento="equipe", resultado="nao_gravou", detalhe=type(x).__name__)
+            return erro(500, "gravar", "Não deu para salvar os times agora.")
+    if limpar:
+        log(evento="equipe", resultado="limpa", usuario=usuario)
+        return 200, {"rev": 0, "origem": "arquivo"}
+    log(evento="equipe", resultado="salva", usuario=usuario, rev=nova["rev"], times=len(nova["times"]),
+        aparencia=len(nova["aparencia"]))
+    return 200, {"rev": nova["rev"], "origem": "tela"}
 
 
 def salvar_clima(dados, usuario):
@@ -2055,7 +2102,7 @@ class Pagina(BaseHTTPRequestHandler):
         return self._json(*planta.salvar(pedido, usuario))
 
     def _post_ajustes(self, rota):
-        """Configurações (clima e datas): Origin obrigatório e igual à BASE (sem a volta para o Referer), sessão (ou a
+        """Configurações (clima, datas e times): Origin obrigatório e igual à BASE (sem a volta para o Referer), sessão (ou a
         prévia), JSON exato com teto por rota, sem NaN nem Infinity, validação tudo ou nada e gravação atômica sob trava.
         Nada aqui chama o agentes.chat."""
         if self.headers.get("Origin") != BASE:
@@ -2066,17 +2113,52 @@ class Pagina(BaseHTTPRequestHandler):
             return self._json(401, {"erro": "entre de novo"})
         if (self.headers.get("Content-Type") or "").split(";")[0].strip().lower() != "application/json":
             return self._json(*erro(415, "formato", "Envie JSON (application/json)."))
+        teto = {"/api/clima": CLIMA_BYTES, "/api/festas": FESTAS_BYTES, "/api/equipe": EQUIPE_BYTES}[rota]
         try:
-            dados = ajustes.json_estrito(self._corpo(CLIMA_BYTES if rota == "/api/clima" else FESTAS_BYTES))
+            dados = ajustes.json_estrito(self._corpo(teto))
         except (ValueError, RecursionError):   # tamanho, UTF-8, JSON inválido, NaN ou Infinity
             return self._json(*erro(400, "pedido", "Pedido inválido."))
         if rota == "/api/festas":
             return self._json(*salvar_festas(dados, usuario))
+        if rota == "/api/equipe":
+            return self._json(*salvar_equipe(dados, usuario))
         st, corpo = salvar_clima(dados, usuario)
         clima = getattr(self.server, "clima", None)
         if st == 200 and clima:   # o clima novo vale sem reiniciar
             clima.acordar()
         return self._json(st, corpo)
+
+    def _post_sair_todos(self, rota):
+        """"Sair de todos os aparelhos": Origin obrigatório e igual à BASE (sem a volta para o Referer), sessão, JSON
+        {"senha"} de até 1 KB. A senha conta no balde do login (8 erros em 15 min travam também o login). Zera todas as
+        sessões e modos resposta e apaga os dois cookies deste navegador."""
+        acesso, token = self.server.acesso, self._token()
+        if self.headers.get("Origin") != BASE:
+            log(evento="http", rota=rota[:40], resultado="origem_recusada")
+            return self._json(*erro(403, "origem", "Origem não permitida."))
+        if self._previa():   # a prévia não tem sessão de verdade
+            return self._json(*erro(403, "previa", "Na prévia não há sessões para encerrar."))
+        usuario = acesso.sessao(token)
+        if not usuario:
+            return self._json(401, {"erro": "entre de novo"})
+        if (self.headers.get("Content-Type") or "").split(";")[0].strip().lower() != "application/json":
+            return self._json(*erro(415, "formato", "Envie JSON (application/json)."))
+        try:
+            dados = ajustes.json_estrito(self._corpo(1024))
+        except (ValueError, RecursionError):
+            dados = None
+        senha = dados.get("senha") if isinstance(dados, dict) and set(dados) == {"senha"} else None
+        if not isinstance(senha, str) or not 0 < len(senha) <= 256:
+            return self._json(*erro(400, "pedido", "Pedido inválido."))
+        try:
+            n = acesso.sair_todos(token, senha)
+        except PermissionError as x:
+            log(evento="acesso", resultado="sair_todos_recusado", usuario=usuario)
+            if isinstance(x, TentativasDemais):
+                return self._json(*erro(429, "tentativas_demais", "Tentativas demais; espere alguns minutos."))
+            return self._json(*erro(403, "senha_incorreta", "Senha incorreta."))
+        log(evento="acesso", resultado="sair_todos", usuario=usuario, sessoes=n)
+        return self._json(200, {"ok": True}, {"Set-Cookie": [self._cookie("", 0), self._cookie_modo("")]})
 
     def do_POST(self):
         # o corpo (até 128 KB) é lido antes de qualquer resposta: respondendo com ele ainda por ler, o sistema fecha a
@@ -2092,8 +2174,10 @@ class Pagina(BaseHTTPRequestHandler):
             return self._post_social(rota)
         if rota == "/api/planta":
             return self._post_planta(rota)
-        if rota in ("/api/clima", "/api/festas"):
+        if rota in ("/api/clima", "/api/festas", "/api/equipe"):
             return self._post_ajustes(rota)
+        if rota == "/api/sair-todos":
+            return self._post_sair_todos(rota)
         if not self._mesma_origem():
             log(evento="http", rota=rota[:40], resultado="origem_recusada")
             if rota in ("/entrar", "/primeiro-acesso"):   # aberto por outro endereço: diz qual é o certo (o Origin não volta)

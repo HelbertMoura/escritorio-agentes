@@ -6,13 +6,15 @@ As mudanças que importam neste projeto ficam aqui, da mais nova para a mais ant
 
 ## Ainda não publicado · Conectar, Docker e Configurações
 
-O Conectar e o Docker no commit [`cf29e8c`](https://github.com/HelbertMoura/escritorio-agentes/commit/cf29e8c); o clima e as datas, sem commit ainda.
+O Conectar e o Docker no commit [`cf29e8c`](https://github.com/HelbertMoura/escritorio-agentes/commit/cf29e8c); o clima e as datas no [`13b91a2`](https://github.com/HelbertMoura/escritorio-agentes/commit/13b91a2); os times e o Sair de todos, sem commit ainda.
 
 ### Adicionado
 - **Conectar pela tela:** o `/api/estado` ganhou o campo `conexao` (`carregando`, `conectado`, `sem_conexao`, `recusada`, `pausa` ou `falha`), e o `/api/config` ganhou o `base`. Na volta da autorização, a primeira leitura sai na hora. Veja [Conectar ao agentes.chat](./README.pt-BR.md#conectar-ao-agenteschat).
 - **Docker e Coolify:** `Dockerfile`, `.dockerignore` (lista de permissão) e `docker-compose.yml` sem portas publicadas, com a variável nova `ESCRITORIO_BIND` (`127.0.0.1` ou `0.0.0.0`). Veja [Docker e Coolify](./README.pt-BR.md#docker-e-coolify).
 - **Cidade do clima pela tela:** busca pelo nome (geocoding do Open-Meteo, pelo servidor, com 10 buscas por minuto e 200 por dia), **Sem clima** e **Voltar ao times.json**, em `dados/clima.json`. Trocar a cidade não pede mais reinício.
 - **Datas comemorativas pela tela:** desligar as 13 embutidas e criar até 24 próprias (todo ano ou uma vez, de 1 a 14 dias, com tema e falas), em `dados/festas.json`.
+- **Times e aparência pela tela**, em `dados/equipe.json` (substituem os do `times.json`; **Voltar ao times.json** apaga o arquivo).
+- **Sair de todos os aparelhos**: com a senha de novo, encerra todas as sessões.
 - `ferramentas/agentes_falso.py`: um agentes.chat de mentira, só em `127.0.0.1`, para testar o Conectar inteiro e cada falha sem a conta de verdade. A prévia ganhou o `--conexao <estado>`.
 
 ### Mudado

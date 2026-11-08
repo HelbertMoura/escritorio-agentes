@@ -25,7 +25,8 @@ class Clima(unittest.TestCase):
         self.assertIsNone(ajustes.validar_clima(None))
 
     def test_numero_de_verdade(self):
-        for campo, valor in (("lat", True), ("lon", False), ("lat", float("nan")), ("lon", float("inf")),
+        for campo, valor in (("lat", True), ("lon", False), ("lat", float("nan")), ("lon", float("inf")), ("lat", 10 ** 400),
+                             ("lon", -10 ** 400),
                              ("lat", float("-inf")), ("lat", "1"), ("lat", None), ("lat", [1]),
                              ("lat", 90.001), ("lat", -90.5), ("lon", 180.01), ("lon", -181)):
             with self.subTest(campo=campo, valor=valor), self.assertRaises(ValueError) as x:
@@ -123,6 +124,79 @@ class Festas(unittest.TestCase):
             ajustes.validar_festas({**FESTAS, "v": 1})
         f = ajustes.validar_festas(FESTAS)
         self.assertEqual(ajustes.validar_festas(json.loads(ajustes.bytes_das_festas(f)), arquivo=True), f)   # ida e volta
+
+
+TIME = {"nome": "Dev", "tipo": "mesas", "cor": "#3b82f6", "icone": "codigo", "parede": 0, "piso": 2, "agentes": ["cora", "duda"]}
+VISUAL = {"color": "teal", "eyes": "happy", "accessory": ""}
+EQUIPE = {"rev": 0, "times": [TIME], "aparencia": {"cora": VISUAL}}
+
+
+class Equipe(unittest.TestCase):
+    def test_valido(self):
+        e = ajustes.validar_equipe(EQUIPE)
+        self.assertEqual(e, EQUIPE)
+        self.assertIsNot(e["times"][0], TIME)
+        sem_cor = com(TIME, nome="Ops & Infra", tipo="ops", cor=None, icone=None, parede=5, piso=9, agentes=[])
+        self.assertEqual(ajustes.validar_equipe(com(EQUIPE, times=[TIME, sem_cor]))["times"][1], sem_cor)
+        self.assertEqual(ajustes.validar_equipe(com(EQUIPE, times=[], aparencia={}))["times"], [])   # vazio também vale
+
+    def test_cada_campo_do_time(self):
+        mutantes = [com(TIME, nome=""), com(TIME, nome="a" * 41), com(TIME, nome="Dev|1"), com(TIME, nome="Dev\n"),
+                    com(TIME, nome=7), com(TIME, tipo="sala"), com(TIME, tipo=None), com(TIME, cor="azul"),
+                    com(TIME, cor="#3b82f"), com(TIME, cor=["#3b82f6"]), com(TIME, icone="foguete"), com(TIME, icone=["codigo"]),
+                    com(TIME, parede=6), com(TIME, parede=-1), com(TIME, parede=True), com(TIME, parede=1.0),
+                    com(TIME, piso=10), com(TIME, piso="2"), com(TIME, agentes="cora"), com(TIME, agentes=["Cora"]),
+                    com(TIME, agentes=["-cora"]), com(TIME, agentes=[7]), com(TIME, agentes=["cora", "cora"]),
+                    com(TIME, agentes=[f"a{i}" for i in range(25)]), com(TIME, conversas="responder"),
+                    {k: v for k, v in TIME.items() if k != "icone"}, "Dev"]
+        for m in mutantes:
+            with self.subTest(m=m), self.assertRaises(ValueError) as x:
+                ajustes.validar_equipe(com(EQUIPE, times=[m]))
+            self.assertTrue(str(x.exception).startswith("Time 1"), str(x.exception))
+        ajustes.validar_equipe(com(EQUIPE, times=[com(TIME, nome="a" * 40, agentes=[f"a{i}" for i in range(24)])]))
+
+    def test_nome_unico_e_agente_em_um_time_so(self):
+        for outro, msg in ((com(TIME, nome="DEV", agentes=[]), "já existe um time com esse nome"),
+                           (com(TIME, nome="Ops", agentes=["duda"]), "um agente já está em outro time")):
+            with self.assertRaises(ValueError) as x:
+                ajustes.validar_equipe(com(EQUIPE, times=[TIME, outro]))
+            self.assertTrue(str(x.exception).startswith("Time 2:") and msg in str(x.exception))
+        ajustes.validar_equipe(com(EQUIPE, times=[TIME, com(TIME, nome="Ops", agentes=["eco"])]))   # controle
+
+    def test_tetos(self):
+        times = [com(TIME, nome=f"T{i}", agentes=[]) for i in range(12)]
+        visual = {f"a{i}": VISUAL for i in range(300)}
+        ajustes.validar_equipe(com(EQUIPE, times=times, aparencia=visual))
+        for d in (com(EQUIPE, times=times + [com(TIME, nome="T12", agentes=[])]), com(EQUIPE, aparencia={**visual, "b": VISUAL})):
+            with self.subTest(n=len(d["times"])), self.assertRaises(ValueError):
+                ajustes.validar_equipe(d)
+
+    def test_aparencia(self):
+        for a in ({"Cora": VISUAL}, {"cora": com(VISUAL, color="pink")}, {"cora": com(VISUAL, eyes="x")},
+                  {"cora": com(VISUAL, accessory="cape")}, {"cora": com(VISUAL, accessory=None)}, {"cora": com(VISUAL, color=["teal"])},
+                  {"cora": {"color": "teal", "eyes": "happy"}}, {"cora": com(VISUAL, cor="x")}, {"cora": "teal"}, ["cora"]):
+            with self.subTest(a=a), self.assertRaises(ValueError):
+                ajustes.validar_equipe(com(EQUIPE, aparencia=a))
+        self.assertEqual(ajustes.validar_equipe(com(EQUIPE, aparencia={"cora": com(VISUAL, accessory="crown")}))["aparencia"],
+                         {"cora": com(VISUAL, accessory="crown")})
+
+    def test_raiz_sem_campo_a_mais(self):
+        for d in (com(EQUIPE, conversas="responder"), com(EQUIPE, clima=None), com(EQUIPE, empresa="Acme"),
+                  {"rev": 0, "times": []}, com(EQUIPE, rev=True), com(EQUIPE, rev=-1), com(EQUIPE, times={"Dev": TIME})):
+            with self.subTest(d=d), self.assertRaises(ValueError):
+                ajustes.validar_equipe(d)
+
+    def test_arquivo_e_ida_e_volta(self):
+        e = ajustes.validar_equipe(EQUIPE)
+        self.assertEqual(ajustes.validar_equipe(json.loads(ajustes.bytes_da_equipe(e)), arquivo=True), e)
+        for d in (EQUIPE, {**EQUIPE, "v": 2}):
+            with self.subTest(d=d), self.assertRaises(ValueError):
+                ajustes.validar_equipe(d, arquivo=True)
+
+    def test_mensagem_sem_o_valor(self):
+        with self.assertRaises(ValueError) as x:
+            ajustes.validar_equipe(com(EQUIPE, times=[com(TIME, nome="<script>x</script>")]))
+        self.assertNotIn("script", str(x.exception))
 
 
 class Leitura(unittest.TestCase):

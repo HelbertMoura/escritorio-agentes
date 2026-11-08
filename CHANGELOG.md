@@ -6,13 +6,15 @@ All notable changes to this project are listed here, newest first. The format fo
 
 ## Unreleased · Connect, Docker and Settings
 
-Connect and Docker in commit [`cf29e8c`](https://github.com/HelbertMoura/escritorio-agentes/commit/cf29e8c); the weather city and the holidays, not committed yet.
+Connect and Docker in commit [`cf29e8c`](https://github.com/HelbertMoura/escritorio-agentes/commit/cf29e8c); the weather city and the holidays in [`13b91a2`](https://github.com/HelbertMoura/escritorio-agentes/commit/13b91a2); the teams and Sign out of all devices, not committed yet.
 
 ### Added
 - **Connect from the screen:** `/api/estado` gained the `conexao` field (`carregando`, `conectado`, `sem_conexao`, `recusada`, `pausa` or `falha`), and `/api/config` gained `base`. When you come back from the authorization, the first read happens right away. See [Connect to agentes.chat](./README.md#connect-to-agenteschat).
 - **Docker and Coolify:** `Dockerfile`, `.dockerignore` (an allowlist) and a `docker-compose.yml` with no published ports, plus the new `ESCRITORIO_BIND` variable (`127.0.0.1` or `0.0.0.0`). See [Docker and Coolify](./README.md#docker-and-coolify).
 - **Weather city from the screen:** search by name (Open-Meteo's geocoding, through the server, at 10 searches per minute and 200 per day), **Sem clima** and **Voltar ao times.json**, in `dados/clima.json`. Changing the city no longer needs a restart.
 - **Holidays from the screen:** turn off any of the 13 built-in dates and create up to 24 of your own (every year or once, 1 to 14 days, with a theme and lines), in `dados/festas.json`.
+- **Teams and appearance from the screen**, in `dados/equipe.json` (they replace the ones in `times.json`; **Voltar ao times.json** deletes the file).
+- **Sign out of all devices**: with the password again, ends every session.
 - `ferramentas/agentes_falso.py`: a fake agentes.chat, on `127.0.0.1` only, to test the whole Connect flow and each failure without the real account. The preview gained `--conexao <state>`.
 
 ### Changed

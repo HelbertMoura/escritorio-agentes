@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Dev Maniac's
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Ajustes salvos pela tela de Configurações, que valem mais que o times.json: a cidade do clima e as datas
-comemorativas. Validação tudo ou nada, a mesma no salvar e na leitura; quem grava é o escritorio.py, sob trava.
+"""Ajustes salvos pela tela de Configurações, que valem mais que o times.json: a cidade do clima, as datas
+comemorativas e os times com a aparência dos agentes. Validação tudo ou nada, a mesma no salvar e na leitura; quem grava é o escritorio.py, sob trava.
 
 dados/clima.json, até 512 B:
   {"v": 1, "clima": {"cidade": "Belo Horizonte", "lat": -19.92, "lon": -43.94}}   ou {"v": 1, "clima": null} (sem clima)
@@ -11,6 +11,11 @@ dados/festas.json, até 16 KB:
    "desligadas": ["halloween"]}
 A data é "MM-DD" (todo ano) ou "AAAA-MM-DD" (uma vez só). O tema e as chaves desligadas são conferidos só no
 formato: o catálogo é fechado no navegador (static/festas.js).
+dados/equipe.json, até 32 KB (substitui inteiros os "times" e a "aparencia" do times.json):
+  {"v": 1, "rev": 4,
+   "times": [{"nome": "Dev", "tipo": "mesas", "cor": "#3b82f6", "icone": "codigo", "parede": 0, "piso": 2,
+              "agentes": ["cora", "duda"]}],
+   "aparencia": {"cora": {"color": "teal", "eyes": "happy", "accessory": ""}}}
 Só biblioteca padrão do Python 3.
 """
 import datetime
@@ -19,8 +24,19 @@ import math
 import re
 import unicodedata
 
-CLIMA_BYTES, FESTAS_BYTES = 512, 16384
+CLIMA_BYTES, FESTAS_BYTES, EQUIPE_BYTES = 512, 16384, 32768
 MAX_PROPRIAS, MAX_DESLIGADAS, MAX_FALAS, MAX_DIAS = 24, 20, 3, 14
+MAX_TIMES, MAX_AGENTES_TIME, MAX_APARENCIA = 12, 24, 300
+# times e aparência: os mesmos conjuntos para o times.json (escritorio.carregar_times) e para a tela
+ROTULO_OK = re.compile(r"[\w .'&À-ÿ\-]{1,40}")
+HANDLE_OK = re.compile(r"[a-z0-9][a-z0-9\-]{0,40}")
+COR_OK = re.compile(r"#[0-9a-fA-F]{6}")
+CORES = {"sky", "indigo", "violet", "rose", "amber", "green", "teal", "graphite"}
+OLHOS = {"happy", "sleepy", "round", "wide", "dots"}
+ACESSORIOS = {"crown", "hat", "headphones", "headset", "flower", "antenna", "cap", "bow", ""}
+ICONES_OK = {"codigo", "megafone", "servidor", "coroa", "sino", "controle", "xicara", "pessoas", "grafico", "pincel", "estrela"}
+TIPOS = ("mesas", "ops", "gabinete")
+CAMPOS_TIME = {"nome", "tipo", "cor", "icone", "parede", "piso", "agentes"}
 REV_TETO = 10 ** 9
 TEMA_OK = re.compile(r"[a-z_]{1,20}")
 CHAVE_OK = re.compile(r"[a-z]{1,20}")
@@ -61,7 +77,8 @@ def texto(x, maximo, msg):
 
 def numero(x, minimo, maximo, msg):
     """Número de verdade: int ou float, nunca bool, finito e dentro da faixa (sem grampear)."""
-    if type(x) not in (int, float) or not math.isfinite(x) or not minimo <= x <= maximo:
+    # a faixa antes do isfinite: um int de centenas de dígitos (o json aceita) faria o isfinite levantar OverflowError
+    if type(x) not in (int, float) or not minimo <= x <= maximo or not math.isfinite(x):
         raise ValueError(msg)
     return x
 
@@ -158,6 +175,73 @@ def validar_festas(d, arquivo=False):
 
 def bytes_das_festas(f):
     return json.dumps({"v": 1, **f}, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
+
+# ---------------------------------------------------------------- times e aparência
+
+def _time(t, i, vistos):
+    """Um time da tela, com as regras do times.json, mas recusando em vez de descartar. vistos: handle -> time."""
+    pos = f"Time {i}"
+    if not isinstance(t, dict) or set(t) != CAMPOS_TIME:
+        raise ValueError(f"{pos}: envie nome, tipo, cor, ícone, parede, piso e agentes, e nada mais.")
+    if not isinstance(t["nome"], str) or not ROTULO_OK.fullmatch(t["nome"]):
+        raise ValueError(f"{pos}: nome de 1 a 40 caracteres, só com letras, números, espaço e . ' & -")
+    if t["tipo"] not in TIPOS:
+        raise ValueError(f"{pos}: tipo inválido (mesas, ops ou gabinete).")
+    if t["cor"] is not None and not (isinstance(t["cor"], str) and COR_OK.fullmatch(t["cor"])):
+        raise ValueError(f"{pos}: cor no formato #rrggbb.")
+    if t["icone"] is not None and not (isinstance(t["icone"], str) and t["icone"] in ICONES_OK):
+        raise ValueError(f"{pos}: ícone inválido.")
+    agentes = t["agentes"]
+    if not isinstance(agentes, list) or len(agentes) > MAX_AGENTES_TIME:
+        raise ValueError(f"{pos}: até {MAX_AGENTES_TIME} agentes.")
+    for h in agentes:
+        if not isinstance(h, str) or not HANDLE_OK.fullmatch(h):
+            raise ValueError(f"{pos}: agente com @handle inválido.")
+        if h in vistos:
+            raise ValueError(f"{pos}: um agente já está em outro time (cada agente fica em um time só).")
+        vistos[h] = i
+    return {"nome": t["nome"], "tipo": t["tipo"], "cor": t["cor"], "icone": t["icone"],
+            "parede": inteiro(t["parede"], 0, 5, f"{pos}: parede de 0 a 5."),
+            "piso": inteiro(t["piso"], 0, 9, f"{pos}: piso de 0 a 9."), "agentes": list(agentes)}
+
+
+def validar_equipe(d, arquivo=False):
+    """Tudo ou nada: o corpo do POST /api/equipe ({rev, times, aparencia}) ou, com arquivo=True, o equipe.json (com
+    "v": 1). Nome de time único (sem diferenciar maiúsculas), cada agente num time só e nenhum campo a mais (nem
+    conversas, clima ou empresa, que ficam no servidor). Devolve uma cópia nova; senão ValueError com o motivo e a
+    posição, sem repetir o valor."""
+    campos = {"rev", "times", "aparencia"}
+    if not isinstance(d, dict) or set(d) != (campos | {"v"} if arquivo else campos):
+        raise ValueError("Envie rev, times e aparencia, e nada mais.")
+    if arquivo and (type(d["v"]) is not int or d["v"] != 1):
+        raise ValueError("versão")
+    times, aparencia = d["times"], d["aparencia"]
+    if not isinstance(times, list) or len(times) > MAX_TIMES:
+        raise ValueError(f"Até {MAX_TIMES} times.")
+    if not isinstance(aparencia, dict) or len(aparencia) > MAX_APARENCIA:
+        raise ValueError(f"Aparência de até {MAX_APARENCIA} agentes.")
+    vistos, limpos, nomes = {}, [], set()
+    for i, t in enumerate(times, 1):
+        limpo = _time(t, i, vistos)
+        if limpo["nome"].casefold() in nomes:
+            raise ValueError(f"Time {i}: já existe um time com esse nome.")
+        nomes.add(limpo["nome"].casefold())
+        limpos.append(limpo)
+    visual = {}
+    for i, (h, a) in enumerate(aparencia.items(), 1):
+        if not HANDLE_OK.fullmatch(h):
+            raise ValueError(f"Aparência {i}: @handle inválido.")
+        if not isinstance(a, dict) or set(a) != {"color", "eyes", "accessory"} \
+                or not all(isinstance(v, str) for v in a.values()) or a["color"] not in CORES or a["eyes"] not in OLHOS \
+                or a["accessory"] not in ACESSORIOS:
+            raise ValueError(f"Aparência {i}: cor, olhos e acessório da lista.")
+        visual[h] = {"color": a["color"], "eyes": a["eyes"], "accessory": a["accessory"]}
+    return {"rev": inteiro(d["rev"], 0, REV_TETO, "Revisão inválida."), "times": limpos, "aparencia": visual}
+
+
+def bytes_da_equipe(e):
+    return json.dumps({"v": 1, **e}, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
 # ---------------------------------------------------------------- leitura
