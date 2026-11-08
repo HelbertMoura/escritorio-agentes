@@ -2812,7 +2812,7 @@ class ModoResposta(unittest.TestCase):
         outra = self.a.entrar("dono", "senha-bem-grande")   # outro navegador, mesmo usuário: não herda
         self.assertIsNone(self.a.modo(outra, cookie, self.T))   # o cookie do modo copiado para outra sessão não vale
         self.assertIsNone(self.a.modo(self.sessao, None, self.T))   # a sessão sem o cookie do modo
-        self.assertIsNone(self.a.modo(self.sessao, "x" + cookie[1:], self.T))
+        self.assertIsNone(self.a.modo(self.sessao, ("y" if cookie[0] == "x" else "x") + cookie[1:], self.T))   # sempre outro 1º caractere
         self.assertIsNone(self.a.modo("sessao-que-nao-existe", cookie, self.T))
         self.assertIsNone(Acesso(self.pasta).modo(self.sessao, cookie, self.T))   # reinício: começa sem modo nenhum
         segundo = self.a.abrir_modo(self.sessao, "senha-bem-grande", agora=self.T + 10)   # de novo: registro novo

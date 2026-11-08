@@ -51,7 +51,7 @@ from jornal import JORNAL_BYTES, Jornal, validar as validar_jornal  # noqa: E402
 from planta import PLANTA_BYTES, Planta, validar_planta  # noqa: E402
 from social import PLACAR_BYTES, PLACAR_MAX, PLACAR_TETO, Social  # noqa: E402
 
-VERSAO = "1.0.0"
+VERSAO = "1.1.0"
 MCP = os.environ.get("AGENTES_MCP", "https://app.agentes.chat/mcp")
 EMISSOR = os.environ.get("AGENTES_EMISSOR", "https://app.agentes.chat")
 BASE = os.environ.get("ESCRITORIO_BASE", "http://127.0.0.1:7371")   # só origem: o main() confere (erro_rede)

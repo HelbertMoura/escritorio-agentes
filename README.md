@@ -18,7 +18,7 @@
   <img src="./docs/demo.gif" alt="Animated demo of the office in demo mode, with fictional agents: the pixel-art map by day with agents walking and working, the camera zooming in on an agent with a '?' question bubble, then the pointer moves to a request in the Waiting for you list (one click takes you to that agent). Short captions in Portuguese explain each step." width="900">
 </picture>
 
-[Features](#features) · [Screenshots](#screenshots) · [Install](#install) · [Customize](#customize-white-label) · [Social life](#social-life) · [Construction mode](#construction-mode) · [Security](#security) · [Architecture](#architecture) · [Development](#development) · [Changelog](./CHANGELOG.md) · [Contributing](./CONTRIBUTING.md) · [Code of Conduct](./CODE_OF_CONDUCT.md)
+[Features](#features) · [Screenshots](#screenshots) · [Install](#install) · [Customize](#customize-white-label) · [Social life](#social-life) · [Construction mode](#construction-mode) · [TV mode](#tv-mode) · [Installable app](#installable-app-pwa) · [Visitors](#visitors) · [Newspaper](#newspaper) · [Time-lapse](#time-lapse) · [Phone alerts](#phone-alerts) · [Security](#security) · [Architecture](#architecture) · [Development](#development) · [Changelog](./CHANGELOG.md) · [Contributing](./CONTRIBUTING.md) · [Code of Conduct](./CODE_OF_CONDUCT.md)
 
 🎬 **[Launch video](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2026.11.06)** (narrated in Brazilian Portuguese, with subtitles), attached to the release.
 
@@ -52,6 +52,11 @@ It **does not call any AI model** and does not spend tokens. Approving always ha
 - 🕹️ **Simulation:** a panel to preview the office on another date, time or weather (Christmas at night in the snow, for example). Nothing is saved: it only changes the URL of that tab, and a "Simulation" banner stays visible with "Back to real".
 - 🥊 **Social life:** friendships and rivals, cartoon fights in the Ring with a weekly scoreboard, complaints, gossip and a strike that ends with a delivery (pizza by motorbike, coffee, a "Sexta livre aprovada!" banner...). The same on every screen and only among agents who are free (see [Social life](#social-life)).
 - 🧱 **Construction mode:** paint the rooms and move, mirror, remove and add furniture with the mouse or the keyboard, with undo; the plan is saved on the server for everyone (see [Construction mode](#construction-mode)).
+- 📺 **TV mode:** full screen, the screen kept on and a camera director that rushes to requests, fights and strikes, with a news ticker (see [TV mode](#tv-mode)).
+- 📲 **App and phone alerts:** install the office on your home screen and get an alert when an agent asks for your approval or asks a question (see [Installable app](#installable-app-pwa) and [Phone alerts](#phone-alerts)).
+- 👀 **Visitors:** whoever else has the office open shows up on the map, wearing a badge (see [Visitors](#visitors)).
+- 📰 **Weekly newspaper:** a headline, notes and each agent's numbers for this week and last week (see [Newspaper](#newspaper)).
+- 🎞️ **Daily time-lapse:** the office's day in a ~30 s video, recorded only in your browser (see [Time-lapse](#time-lapse)).
 - 📸 **Photo mode:** hides the interface and saves a PNG of the office.
 - 🧪 **Demo mode:** `?demo=1` shows fictional agents and an accelerated day, ring and strike included, with nothing sent to or read from the server. Good for trying it out and for screenshots.
 - 🎥 **Camera:** zoom with the wheel or pinch, drag, double-click to focus a room, "Go to…" an agent (`/` or `Ctrl+K`), and keyboard shortcuts (`+`, `-`, `0`).
@@ -240,6 +245,80 @@ Rearrange the office with the mouse, on a computer. Open it from the **Customize
 - **A layer on top of the automatic building:** the plan keeps only what changed (paint and moved, mirrored, removed and added pieces). With an empty plan, the building is exactly the automatic one. When teams change, the building is rebuilt and the plan reapplies whatever still exists and fits; the editor says how many adjustments no longer show up and offers to clear them.
 - **Try it without saving:** `construir.html?demo=1` builds an example of its own.
 - **Limits:** 64 painted rooms, 400 adjusted pieces and 200 new pieces, in up to 64 KB (`dados/planta.json`).
+
+## TV mode
+
+For keeping the office on a wall TV or a second monitor. Open it with the **Modo TV** button on the map bar, or at `/?tv=1`. The **Modo TV** shortcut of the [installed app](#installable-app-pwa) opens straight into it.
+
+- **Full screen and screen on:** from the button, the browser goes full screen. From the address, a **Tela cheia** (full screen) button shows up, because browsers only allow full screen after a click. The screen does not turn off (Wake Lock) while the tab is visible, in browsers that support it; when the tab shows again, the TV asks again.
+- **Camera director:** with nothing new, the camera tours: 10 s in a room with people and 10 s on the overview. When something happens, it rushes there and shows a TV-news style ticker at the bottom, with the avatar, the name and what happened. Requests for your approval or answer come first, then fights and strikes, then who finished and who started a task. Each item stays 8 to 12 s; a more important one cuts in after 4 s; one that waited more than 2 minutes is dropped. Whatever was already going on when the TV turned on is not news.
+- **Touching the map** (tap, drag, wheel or keyboard) hands the camera back to you for 30 s. With the mouse still for 3 s, the cursor and the buttons hide.
+- **Exit:** `Esc` or the **Sair do modo TV** (exit TV mode) button, which gets the focus when the TV turns on (so `Enter` exits too). Exiting releases full screen and the screen lock and removes `?tv=1` from the address.
+- **Reloads by itself:** on every read (10 s), the TV checks `config_v` in `/api/estado`. When a configuration file changes (`times.json` and, in `dados/`, the brand, the logo, the plan, the weather, the holidays and the teams), the page reloads and stays in TV mode. After the reload, the browser leaves full screen: just press **Tela cheia** again.
+- **The TV is the map:** `/?tv=1#jornal` opens the TV on the office, not on the newspaper.
+- **Visitors:** the TV does not show up as a visitor and does not show visitors either (see [Visitors](#visitors)).
+- **Sound and motion:** the TV has no sound of its own and follows whatever is on in the sound panel. With reduced motion on in the system, the camera cuts instead of gliding and the ticker does not animate.
+- **Time-lapse:** while on, the TV takes over recording that browser's [time-lapse](#time-lapse).
+
+## Installable app (PWA)
+
+The office can go on a phone's home screen or become an app on a computer, with its own icon and no browser bar.
+
+- **Android:** in Chrome or Edge, use **Install app** (or **Add to Home screen**) in the browser menu.
+- **iPhone and iPad:** in Safari, tap **Share**, then **Add to Home Screen**.
+- **Computer:** in Chrome or Edge, use the install icon in the address bar.
+- **TV mode shortcut:** on Android and on a computer, long-pressing the icon (or right-clicking it) shows the shortcut that opens straight into [TV mode](#tv-mode).
+- **Sign-in:** the app asks you to sign in just like the browser. On iPhone, the home screen app keeps its own cookies, so it may ask you to sign in once more.
+- **Needs https:** browsers only install it with the office on https (like the installer does, through Tailscale, or on a domain with TLS) or on `localhost`.
+- **No cache:** `sw.js` exists only for installing and for [phone alerts](#phone-alerts). It caches nothing and intercepts no request: every page and every read go straight to the server, and a new version arrives right away, as in the browser. Without a network, the app does not open.
+- **Generic name:** the manifest uses the name "Escritório" and the project's icons, the same in every installation, because these files are served without sign-in (see [Security](#security)).
+
+## Visitors
+
+Whoever else has the office open (another device, another browser or another person with the password) shows up on the map as a **Visitante** (visitor), wearing a badge, in a random color. The visitor comes in from the street, strolls between the reception and the lounge and, when the person closes the page, leaves through the street. Visitors take no desk and stay out of the social life. The map shows up to 8.
+
+- **"N pessoas olhando" (N people watching):** the line under the office title counts you and the others ("Só você está olhando", only you are watching, when nobody else is). Tabs of the same browser share the cookie and count as one person.
+- **Aparecer no escritório (show me in the office):** the box starts on. When off, you watch without showing up for the others and leave their count within 45 s. The choice applies to this browser only, which keeps it for the next visit.
+- **`?invisivel=1`:** with the box off, or on the TV, the page asks for `/api/estado?invisivel=1`, which does not mark presence. A client of your own can use the same parameter.
+- **On the TV, nobody shows up:** the TV does not count as a visitor and does not draw visitors, so the wall map shows only the agents.
+- In demo mode, the line does not show. What the server keeps and sends is in [Security](#security).
+
+## Newspaper
+
+The **Jornal** (newspaper) page, in the menu, tells the office's week as a newspaper: the issue number (the week of the year), the period, the headline, the notes and a table with everyone.
+
+- **Weeks:** **Esta semana** (this week) and **Semana passada** (last week), Monday to Sunday, Brasília time. The server keeps only these two.
+- **What counts:** per agent, finished tasks, requests for your approval, questions for you and time working; per day, the weather at noon, strikes and fights. The headline goes to whoever finished the most tasks. The notes cover who asked for your approval the most, who asked the most questions, who worked the most, the ring champion (with social life on), the week's weather and the strikes and fights. The **Todo mundo na semana** (everyone this week) table has each agent's numbers.
+- **Approximate time:** the office checks every 30 seconds, so the time working is approximate, and the page says so.
+- **Only agents present:** whoever is not in the workspace's current read is left out, even with saved numbers.
+- **Counts while the service runs:** the newspaper comes from the reads the office already does, with no new call to agentes.chat. With the service stopped, nothing is counted. Switching the agentes.chat account restarts the newspaper.
+- **Sentences:** no AI. They come from `FRASES.jornal` in `static/vida.js` (change them there for white-label), one fixed per week.
+- There is no newspaper in demo mode. What goes on disk is in [Security](#security).
+
+## Time-lapse
+
+The **Time-lapse do dia** (daily time-lapse) button, on the map bar, puts the office's day in a short video.
+
+- **Recording:** one frame of the whole building every 2 minutes of the work hours, while the page is open and visible. Outside work hours, in Simulation and in demo mode, it does not record. Only one tab records per browser, and [TV mode](#tv-mode) takes over.
+- **This browser only:** the frames stay in the browser's IndexedDB. Nothing goes to the server or to agentes.chat, and each device has its own time-lapse.
+- **Limits:** up to 400 frames or 30 MB. Beyond that, the oldest ones go.
+- **Today only:** at the turn of the day (Brasília time), the previous day's frames are deleted, even when the page only opens the next day. **Apagar os quadros** (delete the frames) clears them right away.
+- **Video:** **Baixar o vídeo** (download the video) builds, in the browser itself, a ~30 s video for a full day (8 s at least), in MP4 or WebM, depending on the browser. If it records neither, the dialog says so.
+- **Privacy:** before the download, the dialog warns that the video shows the names of the agents and the rooms. A frame carries no task label or conversation text, only names, signs and the office's fixed lines. Even so, think about who will see the video before sharing it.
+
+## Phone alerts
+
+An alert on your phone, or computer, when an agent asks for your approval or asks a question. The **Avisar no celular** (alert on phone) box is on the **Aprovações** (approvals) page.
+
+- **Needs https:** `ESCRITORIO_BASE` must start with `https://`, as with the installer. On http, the box explains that alerts need https and does not turn on.
+- **Turning on:** tap **Avisar no celular** on each device. The notification permission is only asked on that tap. **Desligar os avisos** (turn off alerts) turns off that device only. Up to 10 devices fit per office.
+- **Android and computer:** Chrome, Edge or Firefox.
+- **iPhone and iPad:** only with the office on the home screen, on iOS 16.4 or newer. Tap **Share** and **Add to Home Screen**, open the office from there and turn on the alert.
+- **The alert:** "\<name\> pede a sua aprovação" (asks for your approval) or "\<name\> tem uma pergunta para você" (has a question for you); tapping it opens the office on the agent. Approving and answering stay in agentes.chat. With no session on the device, the alert is generic ("Um agente precisa de você", an agent needs you). One alert at a time stays in the tray, and each device gets at most 1 per minute and 50 per day.
+- **The message is empty:** the browser's push service (Google, Mozilla, Apple or Microsoft) only wakes the app, which asks the office what happened. That service receives the empty message, the time and the VAPID signature: a JWT with `aud` (the push service's own address), `exp` (valid for 12 hours) and `sub` (`ESCRITORIO_BASE`), plus the office's public key. No name, task or conversation goes through it.
+- **Sign out of all devices**, in **Customize**, also turns off the alert on every device.
+- **Blocked it by mistake?** Allow notifications in the site settings and tap **Tentar de novo** (try again).
+- What the server keeps (the key, the devices and the caps) is in [Security](#security).
 
 ## Security
 

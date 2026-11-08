@@ -2,47 +2,43 @@
 
 # Changelog
 
-All notable changes to this project are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The project has no version numbers yet: each entry is a milestone, with its date and commits.
+All notable changes to this project are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Since 1.1.0, versions follow [SemVer](https://semver.org/); older entries are dated milestones.
 
-## Unreleased · TV mode, visitors, newspaper and phone alerts
+## 1.1.0 · 2026-11-08 · Connect, Settings, TV mode, newspaper and phone alerts
 
-`config_v` and the visitors in commit [`89873f5`](https://github.com/HelbertMoura/escritorio-agentes/commit/89873f5); the newspaper in [`56f9f46`](https://github.com/HelbertMoura/escritorio-agentes/commit/56f9f46); the phone alerts, in the next commit.
-
-### Added
-- `/api/estado` gained `config_v`: 12 hex characters that change when a configuration file changes (`times.json` and, in `dados/`, the brand, logo, floor plan, weather, holidays and team). It comes only from each file's size and date, without reading its contents. TV mode reloads the page when it changes.
-- **Visitors:** `/api/estado` gained `visitantes`, the list of who else has the office open, with only an anonymous id and a color (`?invisivel=1` watches without showing up). See [Security](./README.md#security). The preview gained `--visitantes N`.
-- **Weekly newspaper:** `jornal.py` and `GET /api/jornal`, with this week's and last week's numbers (tasks, approvals, answers and minutes per agent; weather, strikes and fights per day), in `dados/jornal.json`, with only ids and numbers. See [Security](./README.md#security). The preview counts its own reads and gained `--jornal`, which starts with both weeks filled in.
-- **Phone alerts:** native push without content, signed with VAPID (`vapid.py`, ES256 in pure Python) and sent by `avisos.py` when an agent asks for approval or an answer, with the routes `GET /api/push/chave`, `POST /api/push/assinar`, `POST /api/push/sair` and `GET /api/avisos`. Only with `ESCRITORIO_BASE` on https. **Sign out of all devices** also turns off the alerts on all of them. See [Security](./README.md#security). The preview gained `--push`, with a fake local push service.
-
-### Changed
-- Switching the agentes.chat account also restarts the event list and the day's resolved requests, as a restart would: nothing from the previous account stays on screen or goes into the newspaper.
-
-### Fixed
-- `instalar.sh` now installs and compiles `ajustes.py` (since Settings, the service it installed failed to start) and `jornal.py`, and copies `manifest.webmanifest`.
-
-## Unreleased · Connect, Docker and Settings
-
-Connect and Docker in commit [`cf29e8c`](https://github.com/HelbertMoura/escritorio-agentes/commit/cf29e8c); the weather city and the holidays in [`13b91a2`](https://github.com/HelbertMoura/escritorio-agentes/commit/13b91a2); the teams and Sign out of all devices, not committed yet.
+Release [`v1.1.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.1.0). Commits: [`v2026.11.06...v1.1.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v2026.11.06...v1.1.0).
 
 ### Added
-- **Connect from the screen:** `/api/estado` gained the `conexao` field (`carregando`, `conectado`, `sem_conexao`, `recusada`, `pausa` or `falha`), and `/api/config` gained `base`. When you come back from the authorization, the first read happens right away. See [Connect to agentes.chat](./README.md#connect-to-agenteschat).
-- **Docker and Coolify:** `Dockerfile`, `.dockerignore` (an allowlist) and a `docker-compose.yml` with no published ports, plus the new `ESCRITORIO_BIND` variable (`127.0.0.1` or `0.0.0.0`). See [Docker and Coolify](./README.md#docker-and-coolify).
-- **Weather city from the screen:** search by name (Open-Meteo's geocoding, through the server, at 10 searches per minute and 200 per day), **Sem clima** and **Voltar ao times.json**, in `dados/clima.json`. Changing the city no longer needs a restart.
-- **Holidays from the screen:** turn off any of the 13 built-in dates and create up to 24 of your own (every year or once, 1 to 14 days, with a theme and lines), in `dados/festas.json`.
-- **Teams and appearance from the screen**, in `dados/equipe.json` (they replace the ones in `times.json`; **Voltar ao times.json** deletes the file).
-- **Sign out of all devices**: with the password again, ends every session.
-- `ferramentas/agentes_falso.py`: a fake agentes.chat, on `127.0.0.1` only, to test the whole Connect flow and each failure without the real account. The preview gained `--conexao <state>`.
+- **Connect from the screen:** a button on the connection bar, OAuth error pages that say why, and `conexao` in `/api/estado` (`carregando`, `conectado`, `sem_conexao`, `recusada`, `pausa` or `falha`). When you come back from the authorization, the first read happens right away. See [Connect to agentes.chat](./README.md#connect-to-agenteschat).
+- **First-run assistant**, replacing the welcome screen, which resumes at Connect after a refused authorization.
+- **Settings from the screen:** the weather city (search by name, through the server; changing it needs no restart), holidays (turn off any of the 13 built-in ones and create up to 24 of your own) and each agent's team and appearance, in `dados/clima.json`, `dados/festas.json` and `dados/equipe.json`. **Voltar ao times.json** removes the override.
+- **Sign out of all devices:** with the password again, ends every session and turns off phone alerts on every device.
+- **Docker and Coolify:** `Dockerfile`, `.dockerignore` (an allowlist) and a `docker-compose.yml` with no published ports, plus the new `ESCRITORIO_BIND` variable. See [Docker and Coolify](./README.md#docker-and-coolify).
+- **TV mode** (`/?tv=1` or a button): full screen, screen kept on and a camera director that shows requests, fights and strikes. The TV reloads by itself when the configuration changes (`config_v` in `/api/estado`). See [TV mode](./README.md#tv-mode).
+- **Installable app (PWA):** a manifest, icons and a cache-free `sw.js`, there only for installing and for phone alerts. See [Installable app](./README.md#installable-app-pwa).
+- **Visitors:** whoever else has the office open shows up as an anonymous visitor, with "N people watching" and a **Show me in the office** option. The TV does not show up. See [Visitors](./README.md#visitors).
+- **Weekly newspaper:** a page with this week's and last week's notes (employee of the week, who asked for your approval the most, ring champion, rainy week), built in the browser from `GET /api/jornal`, which keeps only ids and numbers in `dados/jornal.json`. See [Newspaper](./README.md#newspaper).
+- **Daily time-lapse:** a frame of the building every 2 minutes of the work hours, in the browser only (IndexedDB), and a ~30 s MP4 or WebM video to download, with a privacy notice first. See [Time-lapse](./README.md#time-lapse).
+- **Phone alerts:** native push without content, signed with VAPID (`vapid.py`, ES256 in pure Python), when an agent asks for your approval or an answer. **Avisar no celular** is on the Approvals page. It works only with `ESCRITORIO_BASE` on https; on iPhone, only with the app on the home screen (iOS 16.4+). See [Phone alerts](./README.md#phone-alerts) and [Security](./README.md#security).
+- For development: `ferramentas/agentes_falso.py` (a fake agentes.chat, on `127.0.0.1` only) and, in the preview, `--conexao`, `--visitantes`, `--jornal` and `--push` (with a fake local push service).
 
 ### Changed
-- HTTP 402 and 403 on the read no longer show up as a network failure: they become `recusada`, with the code and the office's own text, like 401. While the refusal goes on, the read waits from 30 s up to 5 min instead of repeating every 30 s.
-- Errors on `/oauth/conectar` and `/oauth/retorno` become a short page that says why and offers to try again.
+- HTTP 402 and 403 on the read become `recusada`, like 401, instead of a network failure. While the refusal goes on, the read waits from 30 s up to 5 min.
 - Signing in from an address other than `ESCRITORIO_BASE` shows the right address on the sign-in screen.
-- `ESCRITORIO_BASE` must be the origin only (no path or trailing slash, lowercase host). Otherwise, the service does not start and says why. A trailing slash is no longer silently cut.
+- Switching the agentes.chat account restarts the event list, the day's resolved requests, the newspaper and the last alert: nothing from the previous account stays on screen.
+- **When updating:** `ESCRITORIO_BASE` must be the origin only (no path or trailing slash, lowercase host). Otherwise, the service does not start and says why.
 
 ### Security
+- Every new write (weather, holidays, teams, Sign out of all devices and push) follows the construction mode rules: `Origin` equal to the address, a session, JSON only, a body cap, all-or-nothing validation (no `NaN`, `Infinity` or `true` as a number) and an atomic write under a lock.
+- The CSP did not change: the browser still talks only to its own server. The city search and push go out through the server, to fixed hosts, without following redirects.
 - The `error_description` and the body of agentes.chat responses never reach the screen, and the log keeps only the error code.
-- `POST /api/clima` and `POST /api/festas` follow the `POST /api/planta` mold: strict origin, a session, JSON only, a body cap, all or nothing (no `NaN`, `Infinity` or `true` as a number) and an atomic write under a lock; the holidays with `rev`. The city search only talks to Open-Meteo, without redirects, and the log keeps neither the city nor the search.
-- With `ESCRITORIO_BIND=0.0.0.0`, `ESCRITORIO_BASE` is required. The image runs as its own user, with no shell, and the compose file runs it read-only, with no capabilities and limited memory. The README now covers what changes with a [public address](./README.md#public-address).
+- Phone alerts are empty. The push services (Google, Mozilla, Apple, Microsoft) receive the empty message, the time and the VAPID signature: a JWT with the office's address (`ESCRITORIO_BASE`) as the contact (`sub`) and the public key. None of this goes to agentes.chat.
+- Visitors come from memory only: an anonymous id (an HMAC with a key drawn at each start), with nothing on disk or in the log.
+- With `ESCRITORIO_BIND=0.0.0.0`, `ESCRITORIO_BASE` is required. The image runs as its own user with no shell, and the compose file runs it read-only. The README now covers what changes with a [public address](./README.md#public-address).
+
+### Fixed
+- `instalar.sh` installs and compiles every module the service imports: since Settings, the service it installed failed to start without `ajustes.py`. It also copies the app manifest. A test checks the list against the imports.
+- The avatar's eyes and accessory came out empty for some handles: the hash now uses `>>>`.
 
 ## 2026-11-06 · Construction mode v1
 

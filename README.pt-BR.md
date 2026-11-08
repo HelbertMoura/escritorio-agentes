@@ -18,7 +18,7 @@
   <img src="./docs/demo.gif" alt="Demonstração animada do escritório no modo demonstração, com agentes fictícios: o mapa em pixel art de dia, com agentes andando e trabalhando; a câmera aproxima de um agente com um balão de pergunta '?'; depois o cursor vai até um pedido da lista Esperando você (um clique leva até esse agente). Legendas curtas explicam cada passo." width="900">
 </picture>
 
-[Recursos](#recursos) · [Capturas](#capturas) · [Instalar](#instalar) · [Personalizar](#personalizar-white-label) · [Vida social](#vida-social) · [Modo construção](#modo-construção) · [Segurança](#segurança) · [Arquitetura](#arquitetura) · [Desenvolvimento](#desenvolvimento) · [Histórico de mudanças](./CHANGELOG.pt-BR.md) · [Contribuir](./CONTRIBUTING.md) · [Código de conduta](./CODE_OF_CONDUCT.md)
+[Recursos](#recursos) · [Capturas](#capturas) · [Instalar](#instalar) · [Personalizar](#personalizar-white-label) · [Vida social](#vida-social) · [Modo construção](#modo-construção) · [Modo TV](#modo-tv) · [App instalável](#app-instalável-pwa) · [Visitantes](#visitantes) · [Jornal](#jornal) · [Time-lapse](#time-lapse) · [Avisar no celular](#avisar-no-celular) · [Segurança](#segurança) · [Arquitetura](#arquitetura) · [Desenvolvimento](#desenvolvimento) · [Histórico de mudanças](./CHANGELOG.pt-BR.md) · [Contribuir](./CONTRIBUTING.md) · [Código de conduta](./CODE_OF_CONDUCT.md)
 
 🎬 **[Vídeo de lançamento](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2026.11.06)** (narração em português do Brasil, com legenda), anexado à release.
 
@@ -52,6 +52,11 @@ Ele **não chama nenhum modelo de IA** e não gasta tokens. Aprovar é sempre no
 - 🕹️ **Simulação:** um painel para ver o escritório em outra data, hora ou clima (Natal à noite na neve, por exemplo). Nada é salvo: muda só o endereço daquela aba, e a faixa "Simulação" fica à vista, com "Voltar ao real".
 - 🥊 **Vida social:** amizades e rivais, brigas de desenho animado no Ringue com placar semanal, reclamações, fofoca e uma greve que acaba com uma entrega (a pizza de moto, o café, a faixa "Sexta livre aprovada!"...). Iguais em todas as telas e só entre quem está livre (veja [Vida social](#vida-social)).
 - 🧱 **Modo construção:** pintar as salas e mover, espelhar, tirar e pôr móveis com o mouse ou o teclado, com desfazer; a planta fica salva no servidor para todos (veja [Modo construção](#modo-construção)).
+- 📺 **Modo TV:** tela cheia, tela sempre acesa e um diretor de câmera que corre para os pedidos, as brigas e as greves, com uma faixa de notícias (veja [Modo TV](#modo-tv)).
+- 📲 **App e aviso no celular:** instale o escritório na tela de início e receba um aviso quando um agente pedir a sua aprovação ou fizer uma pergunta (veja [App instalável](#app-instalável-pwa) e [Avisar no celular](#avisar-no-celular)).
+- 👀 **Visitantes:** quem mais está com o escritório aberto aparece no mapa, de crachá (veja [Visitantes](#visitantes)).
+- 📰 **Jornal da semana:** manchete, notas e os números de cada agente nesta semana e na passada (veja [Jornal](#jornal)).
+- 🎞️ **Time-lapse do dia:** o dia do escritório num vídeo de uns 30 s, gravado só no seu navegador (veja [Time-lapse](#time-lapse)).
 - 📸 **Modo foto:** esconde a interface e salva um PNG do escritório.
 - 🧪 **Modo demonstração:** `?demo=1` mostra agentes fictícios e um dia acelerado, com ringue e greve, sem mandar nem ler nada do servidor. Bom para experimentar e para capturas de tela.
 - 🎥 **Câmera:** zoom com a roda ou a pinça, arrastar, duplo clique para focar uma sala, "Ir para…" um agente (`/` ou `Ctrl+K`) e atalhos (`+`, `-`, `0`).
@@ -240,6 +245,80 @@ Arrume o escritório com o mouse, no computador. Abra pela tela **Personalizar**
 - **Uma camada por cima do prédio automático:** a planta guarda só o que mudou (pintura e peças movidas, espelhadas, tiradas e postas). Com a planta vazia, o prédio é exatamente o automático. Quando os times mudam, o prédio é refeito e a planta reaplica o que ainda existe e cabe; o editor diz quantos ajustes não aparecem mais e oferece limpar.
 - **Para testar sem salvar:** `construir.html?demo=1` monta um exemplo próprio.
 - **Limites:** 64 salas pintadas, 400 móveis ajustados e 200 peças novas, em até 64 KB (`dados/planta.json`).
+
+## Modo TV
+
+Para deixar o escritório numa TV na parede ou num segundo monitor. Abra pelo botão **Modo TV**, na barra do mapa, ou pelo endereço `/?tv=1`. O atalho **Modo TV** do [app instalado](#app-instalável-pwa) abre direto nele.
+
+- **Tela cheia e tela acesa:** pelo botão, o navegador entra em tela cheia. Pelo endereço, aparece o botão **Tela cheia**, porque o navegador só permite tela cheia depois de um clique. A tela não apaga (Wake Lock) enquanto a aba estiver à vista, nos navegadores que têm esse recurso; quando a aba volta a aparecer, a TV pede de novo.
+- **Diretor de câmera:** sem novidade, a câmera passeia, 10 s numa sala com gente e 10 s na visão geral. Quando algo acontece, ela corre para lá e mostra embaixo uma faixa de notícias, no estilo telejornal, com o boneco, o nome e o que houve. Vêm primeiro os pedidos da sua aprovação ou resposta, depois as brigas e as greves, depois quem terminou e quem começou uma tarefa. Cada notícia fica de 8 a 12 s; uma mais importante passa na frente depois de 4 s; a que esperou mais de 2 minutos é descartada. O que já acontecia quando a TV ligou não vira notícia.
+- **Mexer no mapa** (toque, arrasto, roda ou teclado) devolve a câmera a você por 30 s. Com o mouse parado por 3 s, o cursor e os botões somem.
+- **Sair:** `Esc` ou o botão **Sair do modo TV**, que recebe o foco ao ligar (então o `Enter` também sai). Sair solta a tela cheia e a trava da tela e tira o `?tv=1` do endereço.
+- **Recarrega sozinha:** a cada leitura (10 s), a TV confere o `config_v` do `/api/estado`. Quando muda um arquivo de configuração (o `times.json` e, em `dados/`, a marca, o logo, a planta, o clima, as datas e a equipe), a página recarrega e continua na TV. Ao recarregar, o navegador sai da tela cheia: é só tocar em **Tela cheia** de novo.
+- **A TV é o mapa:** `/?tv=1#jornal` abre a TV no escritório, não no jornal.
+- **Visitantes:** a TV não aparece como visitante e também não mostra visitantes (veja [Visitantes](#visitantes)).
+- **Som e movimento:** a TV não tem som próprio e segue o que estiver ligado no painel de som. Com movimento reduzido no sistema, a câmera corta em vez de deslizar, e a faixa não anima.
+- **Time-lapse:** ligada, a TV passa a gravar o [time-lapse](#time-lapse) daquele navegador.
+
+## App instalável (PWA)
+
+O escritório pode ir para a tela de início do celular ou virar um app no computador, com ícone próprio e sem a barra do navegador.
+
+- **Android:** no Chrome ou no Edge, use **Instalar app** (ou **Adicionar à tela inicial**) no menu do navegador.
+- **iPhone e iPad:** no Safari, toque em **Compartilhar** e depois em **Adicionar à Tela de Início**.
+- **Computador:** no Chrome ou no Edge, use o ícone de instalar na barra de endereço.
+- **Atalho Modo TV:** no Android e no computador, tocar e segurar o ícone (ou clicar com o botão direito) mostra o atalho que abre direto no [modo TV](#modo-tv).
+- **Login:** o app pede login como o navegador. No iPhone, o app da tela de início guarda os próprios cookies, então pode pedir para entrar mais uma vez.
+- **Precisa de https:** o navegador só instala com o escritório em https (como no instalador, pela Tailscale, ou num domínio com TLS) ou em `localhost`.
+- **Sem cache:** o `sw.js` existe só para instalar e para o [aviso no celular](#avisar-no-celular). Ele não guarda nada em cache e não intercepta nenhum pedido: cada página e cada leitura vão direto ao servidor, e uma versão nova chega na hora, como no navegador. Sem rede, o app não abre.
+- **Nome genérico:** o manifesto usa o nome "Escritório" e os ícones do projeto, iguais em toda instalação, porque esses arquivos saem sem login (veja [Segurança](#segurança)).
+
+## Visitantes
+
+Quem mais está com o escritório aberto (outro aparelho, outro navegador ou outra pessoa com a senha) aparece no mapa como **Visitante**, de crachá e numa cor sorteada. O visitante entra pela rua, passeia entre a recepção e a sala comunal e, quando a pessoa fecha a página, vai embora pela rua. Visitante não ocupa mesa nem entra na vida social. O mapa mostra até 8.
+
+- **"N pessoas olhando":** a linha embaixo do título do escritório conta você e os outros ("Só você está olhando", quando não há mais ninguém). As abas do mesmo navegador dividem o cookie e contam como uma pessoa só.
+- **Aparecer no escritório:** a caixa vem ligada. Desligada, você olha sem aparecer para os outros e sai da conta deles em até 45 s. A escolha vale só neste navegador, que a guarda para a próxima visita.
+- **`?invisivel=1`:** com a caixa desligada, ou na TV, a tela pede o `/api/estado?invisivel=1`, que não marca presença. Um cliente próprio pode usar o mesmo parâmetro.
+- **Na TV, ninguém aparece:** a TV não conta como visitante e não desenha os visitantes, então o mapa da parede mostra só os agentes.
+- No modo demonstração, a linha não aparece. O que o servidor guarda e manda está em [Segurança](#segurança).
+
+## Jornal
+
+A página **Jornal**, no menu, conta a semana do escritório como um jornal: o número da edição (a semana do ano), o período, a manchete, as notas e uma tabela com todo mundo.
+
+- **Semanas:** **Esta semana** e **Semana passada**, de segunda a domingo, no horário de Brasília. O servidor guarda só essas duas.
+- **O que conta:** por agente, as tarefas que terminaram, os pedidos da sua aprovação, as perguntas para você e o tempo trabalhando; por dia, o clima do meio-dia, as greves e as brigas. A manchete vai para quem terminou mais tarefas. As notas falam de quem mais pediu a sua aprovação, de quem mais perguntou, de quem mais trabalhou, do campeão do ringue (com a vida social ligada), do tempo na semana e das greves e brigas. A tabela **Todo mundo na semana** traz os números de cada um.
+- **Tempo aproximado:** o escritório confere a cada 30 segundos, então o tempo trabalhando é aproximado, e a página diz isso.
+- **Só agentes presentes:** quem não está na leitura atual do workspace fica de fora, mesmo com números guardados.
+- **Conta enquanto o serviço roda:** o jornal sai das leituras que o escritório já faz, sem chamada nova ao agentes.chat. Com o serviço parado, nada é contado. Trocar a conta no agentes.chat recomeça o jornal.
+- **Frases:** sem IA. Saem do `FRASES.jornal`, no `static/vida.js` (troque ali no white-label), uma fixa por semana.
+- No modo demonstração não há jornal. O que fica no disco está em [Segurança](#segurança).
+
+## Time-lapse
+
+O botão **Time-lapse do dia**, na barra do mapa, junta o dia do escritório num vídeo curto.
+
+- **Gravação:** um quadro do prédio inteiro a cada 2 minutos do expediente, enquanto a página está aberta e à vista. Fora do expediente, na Simulação e no modo demonstração, não grava. Só uma aba grava em cada navegador, e o [modo TV](#modo-tv) toma a vez.
+- **Só neste navegador:** os quadros ficam no IndexedDB do navegador. Nada vai ao servidor nem ao agentes.chat, e cada aparelho tem o próprio time-lapse.
+- **Limites:** até 400 quadros ou 30 MB. Acima disso, saem os mais antigos.
+- **Só o dia de hoje:** na virada do dia (horário de Brasília), os quadros do dia anterior são apagados, inclusive quando a página só abre no dia seguinte. **Apagar os quadros** limpa na hora.
+- **Vídeo:** **Baixar o vídeo** monta no próprio navegador um vídeo de uns 30 s com o dia cheio (8 s, no mínimo), em MP4 ou WebM, conforme o navegador. Se ele não gravar nenhum dos dois, o diálogo avisa.
+- **Privacidade:** antes de baixar, o diálogo avisa que o vídeo mostra os nomes dos agentes e das salas. O quadro não leva rótulo de tarefa nem texto de conversa, só nomes, placas e as falas fixas do escritório. Mesmo assim, pense em quem vai ver o vídeo antes de compartilhar.
+
+## Avisar no celular
+
+Um aviso no celular, ou no computador, quando um agente pede a sua aprovação ou faz uma pergunta. A caixa **Avisar no celular** fica na página **Aprovações**.
+
+- **Precisa de https:** a `ESCRITORIO_BASE` precisa começar com `https://`, como no instalador. Em http, a caixa explica que o aviso precisa de https e não liga.
+- **Ligar:** toque em **Avisar no celular** em cada aparelho. A permissão de notificação só é pedida nesse toque. **Desligar os avisos** desliga só aquele aparelho. Cabem até 10 aparelhos por escritório.
+- **Android e computador:** Chrome, Edge ou Firefox.
+- **iPhone e iPad:** só com o escritório na tela de início, no iOS 16.4 ou mais novo. Toque em **Compartilhar** e em **Adicionar à Tela de Início**, abra o escritório por lá e ligue o aviso.
+- **O aviso:** "\<nome\> pede a sua aprovação" ou "\<nome\> tem uma pergunta para você"; tocar nele abre o escritório no agente. Aprovar e responder continuam no agentes.chat. Sem sessão no aparelho, o aviso é genérico ("Um agente precisa de você"). Fica um aviso por vez na bandeja, e cada aparelho recebe no máximo 1 por minuto e 50 por dia.
+- **A mensagem vai vazia:** o serviço de push do navegador (Google, Mozilla, Apple ou Microsoft) só acorda o app, que pergunta ao escritório o que houve. Esse serviço recebe a mensagem vazia, a hora e a assinatura VAPID: um JWT com `aud` (o endereço do próprio serviço de push), `exp` (validade de 12 horas) e `sub` (a `ESCRITORIO_BASE`), mais a chave pública do escritório. Nenhum nome, tarefa ou conversa passa por ele.
+- **Sair de todos os aparelhos**, no **Personalizar**, também desliga o aviso em todos os aparelhos.
+- **Bloqueou sem querer?** Libere as notificações nas configurações do site e toque em **Tentar de novo**.
+- O que o servidor guarda (a chave, os aparelhos e os tetos) está em [Segurança](#segurança).
 
 ## Segurança
 

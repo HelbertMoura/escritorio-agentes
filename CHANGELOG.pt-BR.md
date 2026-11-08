@@ -2,47 +2,43 @@
 
 # Histórico de mudanças
 
-As mudanças que importam neste projeto ficam aqui, da mais nova para a mais antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). O projeto ainda não tem número de versão: cada entrada é um marco, com a data e os commits.
+As mudanças que importam neste projeto ficam aqui, da mais nova para a mais antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Desde a 1.1.0, as versões seguem o [SemVer](https://semver.org/lang/pt-BR/); as entradas mais antigas são marcos com data.
 
-## Ainda não publicado · Modo TV, visitantes, jornal e aviso no celular
+## 1.1.0 · 2026-11-08 · Conectar, Configurações, modo TV, jornal e aviso no celular
 
-O `config_v` e os visitantes no commit [`89873f5`](https://github.com/HelbertMoura/escritorio-agentes/commit/89873f5); o jornal no [`56f9f46`](https://github.com/HelbertMoura/escritorio-agentes/commit/56f9f46); o aviso no celular, no commit seguinte.
-
-### Adicionado
-- O `/api/estado` ganhou o `config_v`: 12 hex que mudam quando muda um arquivo de configuração (`times.json` e, em `dados/`, a marca, o logo, a planta, o clima, as datas e a equipe). Sai só do tamanho e da data de cada arquivo, sem ler o conteúdo. O modo TV recarrega a página quando ele muda.
-- **Visitantes:** o `/api/estado` ganhou o `visitantes`, a lista de quem mais está com o escritório aberto, só com um id anônimo e uma cor (`?invisivel=1` olha sem aparecer). Veja [Segurança](./README.pt-BR.md#segurança). A prévia ganhou o `--visitantes N`.
-- **Jornal da semana:** `jornal.py` e `GET /api/jornal`, com os números da semana atual e da anterior (tarefas, aprovações, respostas e minutos por agente; clima, greves e brigas por dia), em `dados/jornal.json`, só com ids e números. Veja [Segurança](./README.pt-BR.md#segurança). A prévia conta as leituras dela e ganhou o `--jornal`, que sobe com as duas semanas preenchidas.
-- **Aviso no celular:** push nativo sem conteúdo, assinado com VAPID (`vapid.py`, ES256 em Python puro) e enviado por `avisos.py` quando um agente pede aprovação ou resposta, com as rotas `GET /api/push/chave`, `POST /api/push/assinar`, `POST /api/push/sair` e `GET /api/avisos`. Só com a `ESCRITORIO_BASE` em https. O **Sair de todos os aparelhos** também desliga o aviso em todos eles. Veja [Segurança](./README.pt-BR.md#segurança). A prévia ganhou o `--push`, com um serviço de push falso e local.
-
-### Mudado
-- Trocar a conta no agentes.chat também recomeça a lista de eventos e os resolvidos do dia, como num reinício: nada da conta anterior fica à vista nem entra no jornal.
-
-### Corrigido
-- O `instalar.sh` passa a instalar e compilar o `ajustes.py` (desde as Configurações, o serviço instalado por ele caía ao subir) e o `jornal.py`, e copia o `manifest.webmanifest`.
-
-## Ainda não publicado · Conectar, Docker e Configurações
-
-O Conectar e o Docker no commit [`cf29e8c`](https://github.com/HelbertMoura/escritorio-agentes/commit/cf29e8c); o clima e as datas no [`13b91a2`](https://github.com/HelbertMoura/escritorio-agentes/commit/13b91a2); os times e o Sair de todos, sem commit ainda.
+Release [`v1.1.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.1.0). Commits: [`v2026.11.06...v1.1.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v2026.11.06...v1.1.0).
 
 ### Adicionado
-- **Conectar pela tela:** o `/api/estado` ganhou o campo `conexao` (`carregando`, `conectado`, `sem_conexao`, `recusada`, `pausa` ou `falha`), e o `/api/config` ganhou o `base`. Na volta da autorização, a primeira leitura sai na hora. Veja [Conectar ao agentes.chat](./README.pt-BR.md#conectar-ao-agenteschat).
-- **Docker e Coolify:** `Dockerfile`, `.dockerignore` (lista de permissão) e `docker-compose.yml` sem portas publicadas, com a variável nova `ESCRITORIO_BIND` (`127.0.0.1` ou `0.0.0.0`). Veja [Docker e Coolify](./README.pt-BR.md#docker-e-coolify).
-- **Cidade do clima pela tela:** busca pelo nome (geocoding do Open-Meteo, pelo servidor, com 10 buscas por minuto e 200 por dia), **Sem clima** e **Voltar ao times.json**, em `dados/clima.json`. Trocar a cidade não pede mais reinício.
-- **Datas comemorativas pela tela:** desligar as 13 embutidas e criar até 24 próprias (todo ano ou uma vez, de 1 a 14 dias, com tema e falas), em `dados/festas.json`.
-- **Times e aparência pela tela**, em `dados/equipe.json` (substituem os do `times.json`; **Voltar ao times.json** apaga o arquivo).
-- **Sair de todos os aparelhos**: com a senha de novo, encerra todas as sessões.
-- `ferramentas/agentes_falso.py`: um agentes.chat de mentira, só em `127.0.0.1`, para testar o Conectar inteiro e cada falha sem a conta de verdade. A prévia ganhou o `--conexao <estado>`.
+- **Conectar pela tela:** botão na faixa de conexão, páginas de erro do OAuth com o motivo e o `conexao` no `/api/estado` (`carregando`, `conectado`, `sem_conexao`, `recusada`, `pausa` ou `falha`). Na volta da autorização, a primeira leitura sai na hora. Veja [Conectar ao agentes.chat](./README.pt-BR.md#conectar-ao-agenteschat).
+- **Assistente de primeira instalação**, no lugar das boas-vindas, que retoma no Conectar depois de uma autorização recusada.
+- **Configurações pela tela:** a cidade do clima (busca pelo nome, pelo servidor; trocar não pede reinício), as datas comemorativas (desligar as 13 embutidas e criar até 24 próprias) e os times e a aparência de cada agente, em `dados/clima.json`, `dados/festas.json` e `dados/equipe.json`. **Voltar ao times.json** apaga o ajuste.
+- **Sair de todos os aparelhos:** com a senha de novo, encerra todas as sessões e desliga o aviso no celular em todos os aparelhos.
+- **Docker e Coolify:** `Dockerfile`, `.dockerignore` (lista de permissão) e `docker-compose.yml` sem portas publicadas, com a variável nova `ESCRITORIO_BIND`. Veja [Docker e Coolify](./README.pt-BR.md#docker-e-coolify).
+- **Modo TV** (`/?tv=1` ou botão): tela cheia, tela sempre acesa e um diretor de câmera que mostra os pedidos, as brigas e as greves. A TV recarrega sozinha quando a configuração muda (`config_v` no `/api/estado`). Veja [Modo TV](./README.pt-BR.md#modo-tv).
+- **App instalável (PWA):** manifesto, ícones e um `sw.js` sem cache, que só serve para instalar e para o aviso no celular. Veja [App instalável](./README.pt-BR.md#app-instalável-pwa).
+- **Visitantes:** quem mais está com o escritório aberto aparece como visitante anônimo, com "N pessoas olhando" e a opção **Aparecer no escritório**. A TV não aparece. Veja [Visitantes](./README.pt-BR.md#visitantes).
+- **Jornal da semana:** página com as notas da semana atual e da anterior (funcionário da semana, quem mais pediu a sua aprovação, campeão do ringue, semana de chuva), montadas no navegador a partir do `GET /api/jornal`, que guarda só ids e números em `dados/jornal.json`. Veja [Jornal](./README.pt-BR.md#jornal).
+- **Time-lapse do dia:** um quadro do prédio a cada 2 minutos do expediente, só no navegador (IndexedDB), e um vídeo de uns 30 s em MP4 ou WebM para baixar, com aviso de privacidade antes. Veja [Time-lapse](./README.pt-BR.md#time-lapse).
+- **Aviso no celular:** push nativo sem conteúdo, assinado com VAPID (`vapid.py`, ES256 em Python puro), quando um agente pede a sua aprovação ou uma resposta. **Avisar no celular** fica na página Aprovações. Só funciona com a `ESCRITORIO_BASE` em https; no iPhone, só com o app na tela de início (iOS 16.4+). Veja [Avisar no celular](./README.pt-BR.md#avisar-no-celular) e [Segurança](./README.pt-BR.md#segurança).
+- Para desenvolver: `ferramentas/agentes_falso.py` (um agentes.chat de mentira, só em `127.0.0.1`) e, na prévia, `--conexao`, `--visitantes`, `--jornal` e `--push` (com um serviço de push falso e local).
 
 ### Mudado
-- HTTP 402 e 403 na leitura deixam de aparecer como queda de rede: viram `recusada`, com o código e um texto do escritório, como o 401. Enquanto a recusa continuar, a leitura espera de 30 s até 5 min, em vez de repetir a cada 30 s.
-- Os erros do `/oauth/conectar` e do `/oauth/retorno` viram uma página curta, que diz o motivo e oferece tentar de novo.
+- HTTP 402 e 403 na leitura viram `recusada`, como o 401, e não mais queda de rede. Enquanto a recusa continuar, a leitura espera de 30 s até 5 min.
 - Entrar por um endereço diferente da `ESCRITORIO_BASE` mostra o endereço certo na tela de entrar.
-- A `ESCRITORIO_BASE` precisa ser só a origem (sem caminho nem barra no fim, host em minúsculas). Fora disso, o serviço não sobe e diz o porquê. A barra no fim deixou de ser cortada sem aviso.
+- Trocar a conta no agentes.chat recomeça a lista de eventos, os resolvidos do dia, o jornal e o último aviso: nada da conta anterior fica à vista.
+- **Ao atualizar:** a `ESCRITORIO_BASE` precisa ser só a origem (sem caminho nem barra no fim, host em minúsculas). Fora disso, o serviço não sobe e diz o porquê.
 
 ### Segurança
+- Toda gravação nova (clima, datas, times, Sair de todos e push) segue o molde do modo construção: `Origin` igual ao endereço, sessão, só JSON, teto de corpo, validação tudo ou nada (sem `NaN`, `Infinity` nem `true` no lugar de número) e gravação atômica sob trava.
+- O CSP não mudou: o navegador continua falando só com o próprio servidor. A busca de cidade e o push saem pelo servidor, para hosts fixos, sem seguir redirecionamento.
 - O `error_description` e o corpo das respostas do agentes.chat nunca chegam à tela, e o log guarda só o código do erro.
-- `POST /api/clima` e `POST /api/festas` no molde do `POST /api/planta`: origem estrita, sessão, só JSON, teto de corpo, tudo ou nada (sem `NaN`, `Infinity` nem `true` no lugar de número) e gravação atômica sob trava; as datas com `rev`. A busca de cidade fala só com o Open-Meteo, sem redirecionamento, e o log não guarda a cidade nem a busca.
-- Com `ESCRITORIO_BIND=0.0.0.0`, a `ESCRITORIO_BASE` é obrigatória. A imagem roda com usuário próprio, sem shell, e o compose roda só de leitura, sem capacidades e com memória limitada. O README ganhou o que muda com um [endereço público](./README.pt-BR.md#endereço-público).
+- O aviso no celular vai vazio. Os serviços de push (Google, Mozilla, Apple, Microsoft) recebem a mensagem vazia, a hora e a assinatura VAPID: um JWT com o endereço do escritório (`ESCRITORIO_BASE`) como contato (`sub`) e a chave pública. Nada disso vai para o agentes.chat.
+- Os visitantes saem só da memória: um id anônimo (HMAC com chave sorteada a cada subida), sem nada no disco nem no log.
+- Com `ESCRITORIO_BIND=0.0.0.0`, a `ESCRITORIO_BASE` é obrigatória. A imagem roda com usuário próprio e sem shell, e o compose roda só de leitura. O README ganhou o que muda com um [endereço público](./README.pt-BR.md#endereço-público).
+
+### Corrigido
+- O `instalar.sh` instala e compila todos os módulos que o serviço importa: desde as Configurações, o serviço instalado por ele caía ao subir por falta do `ajustes.py`. Também copia o manifesto do app. Um teste confere a lista contra os imports.
+- Olhos e acessório do avatar vinham vazios para alguns handles: o hash passou a usar `>>>`.
 
 ## 2026-11-06 · Modo construção v1
 
