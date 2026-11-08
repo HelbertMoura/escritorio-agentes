@@ -252,8 +252,8 @@ For keeping the office on a wall TV or a second monitor. Open it with the **Modo
 
 - **Full screen and screen on:** from the button, the browser goes full screen. From the address, a **Tela cheia** (full screen) button shows up, because browsers only allow full screen after a click. The screen does not turn off (Wake Lock) while the tab is visible, in browsers that support it; when the tab shows again, the TV asks again.
 - **Camera director:** with nothing new, the camera tours: 10 s in a room with people and 10 s on the overview. When something happens, it rushes there and shows a TV-news style ticker at the bottom, with the avatar, the name and what happened. Requests for your approval or answer come first, then fights and strikes, then who finished and who started a task. Each item stays 8 to 12 s; a more important one cuts in after 4 s; one that waited more than 2 minutes is dropped. Whatever was already going on when the TV turned on is not news.
-- **Touching the map** (tap, drag, wheel or keyboard) hands the camera back to you for 30 s. With the mouse still for 3 s, the cursor and the buttons hide.
-- **Exit:** `Esc` or the **Sair do modo TV** (exit TV mode) button, which gets the focus when the TV turns on (so `Enter` exits too). Exiting releases full screen and the screen lock and removes `?tv=1` from the address.
+- **Touching the map** (tap, drag, wheel or the zoom keys `+`, `-` and `0`) hands the camera back to you for 30 s. With the mouse still for 3 s, the cursor and the buttons hide.
+- **Exit:** `Esc` (twice in full screen: the first one only leaves full screen) or the **Sair do modo TV** (exit TV mode) button, which gets the focus when the TV turns on (so `Enter` exits too). Exiting releases full screen and the screen lock and removes `?tv=1` from the address.
 - **Reloads by itself:** on every read (10 s), the TV checks `config_v` in `/api/estado`. When a configuration file changes (`times.json` and, in `dados/`, the brand, the logo, the plan, the weather, the holidays and the teams), the page reloads and stays in TV mode. After the reload, the browser leaves full screen: just press **Tela cheia** again.
 - **The TV is the map:** `/?tv=1#jornal` opens the TV on the office, not on the newspaper.
 - **Visitors:** the TV does not show up as a visitor and does not show visitors either (see [Visitors](#visitors)).
@@ -277,8 +277,8 @@ The office can go on a phone's home screen or become an app on a computer, with 
 
 Whoever else has the office open (another device, another browser or another person with the password) shows up on the map as a **Visitante** (visitor), wearing a badge, in a random color. The visitor comes in from the street, strolls between the reception and the lounge and, when the person closes the page, leaves through the street. Visitors take no desk and stay out of the social life. The map shows up to 8.
 
-- **"N pessoas olhando" (N people watching):** the line under the office title counts you and the others ("Só você está olhando", only you are watching, when nobody else is). Tabs of the same browser share the cookie and count as one person.
-- **Aparecer no escritório (show me in the office):** the box starts on. When off, you watch without showing up for the others and leave their count within 45 s. The choice applies to this browser only, which keeps it for the next visit.
+- **"N pessoas olhando" (N people watching):** the line under the office title counts you (with the **Aparecer no escritório** box on) and the others ("Só você está olhando", only you are watching, when nobody else is). Tabs of the same browser share the cookie and count as one person.
+- **Aparecer no escritório (show me in the office):** the box starts on. When off, you watch without showing up for the others and leave the count: yours right away (with 3 visitors, "4 pessoas olhando" becomes "3") and theirs within 45 s. The choice applies to this browser only, which keeps it for the next visit.
 - **`?invisivel=1`:** with the box off, or on the TV, the page asks for `/api/estado?invisivel=1`, which does not mark presence. A client of your own can use the same parameter.
 - **On the TV, nobody shows up:** the TV does not count as a visitor and does not draw visitors, so the wall map shows only the agents.
 - In demo mode, the line does not show. What the server keeps and sends is in [Security](#security).
@@ -312,6 +312,7 @@ An alert on your phone, or computer, when an agent asks for your approval or ask
 
 - **Needs https:** `ESCRITORIO_BASE` must start with `https://`, as with the installer. On http, the box explains that alerts need https and does not turn on.
 - **Turning on:** tap **Avisar no celular** on each device. The notification permission is only asked on that tap. **Desligar os avisos** (turn off alerts) turns off that device only. Up to 10 devices fit per office.
+- **New key:** if the server's key changes, the device goes back to off; just turn it on again.
 - **Android and computer:** Chrome, Edge or Firefox.
 - **iPhone and iPad:** only with the office on the home screen, on iOS 16.4 or newer. Tap **Share** and **Add to Home Screen**, open the office from there and turn on the alert.
 - **The alert:** "\<name\> pede a sua aprovação" (asks for your approval) or "\<name\> tem uma pergunta para você" (has a question for you); tapping it opens the office on the agent. Approving and answering stay in agentes.chat. With no session on the device, the alert is generic ("Um agente precisa de você", an agent needs you). One alert at a time stays in the tray, and each device gets at most 1 per minute and 50 per day.

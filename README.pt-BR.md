@@ -252,8 +252,8 @@ Para deixar o escritório numa TV na parede ou num segundo monitor. Abra pelo bo
 
 - **Tela cheia e tela acesa:** pelo botão, o navegador entra em tela cheia. Pelo endereço, aparece o botão **Tela cheia**, porque o navegador só permite tela cheia depois de um clique. A tela não apaga (Wake Lock) enquanto a aba estiver à vista, nos navegadores que têm esse recurso; quando a aba volta a aparecer, a TV pede de novo.
 - **Diretor de câmera:** sem novidade, a câmera passeia, 10 s numa sala com gente e 10 s na visão geral. Quando algo acontece, ela corre para lá e mostra embaixo uma faixa de notícias, no estilo telejornal, com o boneco, o nome e o que houve. Vêm primeiro os pedidos da sua aprovação ou resposta, depois as brigas e as greves, depois quem terminou e quem começou uma tarefa. Cada notícia fica de 8 a 12 s; uma mais importante passa na frente depois de 4 s; a que esperou mais de 2 minutos é descartada. O que já acontecia quando a TV ligou não vira notícia.
-- **Mexer no mapa** (toque, arrasto, roda ou teclado) devolve a câmera a você por 30 s. Com o mouse parado por 3 s, o cursor e os botões somem.
-- **Sair:** `Esc` ou o botão **Sair do modo TV**, que recebe o foco ao ligar (então o `Enter` também sai). Sair solta a tela cheia e a trava da tela e tira o `?tv=1` do endereço.
+- **Mexer no mapa** (toque, arrasto, roda ou as teclas de zoom `+`, `-` e `0`) devolve a câmera a você por 30 s. Com o mouse parado por 3 s, o cursor e os botões somem.
+- **Sair:** `Esc` (em tela cheia, duas vezes: o primeiro só sai da tela cheia) ou o botão **Sair do modo TV**, que recebe o foco ao ligar (então o `Enter` também sai). Sair solta a tela cheia e a trava da tela e tira o `?tv=1` do endereço.
 - **Recarrega sozinha:** a cada leitura (10 s), a TV confere o `config_v` do `/api/estado`. Quando muda um arquivo de configuração (o `times.json` e, em `dados/`, a marca, o logo, a planta, o clima, as datas e a equipe), a página recarrega e continua na TV. Ao recarregar, o navegador sai da tela cheia: é só tocar em **Tela cheia** de novo.
 - **A TV é o mapa:** `/?tv=1#jornal` abre a TV no escritório, não no jornal.
 - **Visitantes:** a TV não aparece como visitante e também não mostra visitantes (veja [Visitantes](#visitantes)).
@@ -277,8 +277,8 @@ O escritório pode ir para a tela de início do celular ou virar um app no compu
 
 Quem mais está com o escritório aberto (outro aparelho, outro navegador ou outra pessoa com a senha) aparece no mapa como **Visitante**, de crachá e numa cor sorteada. O visitante entra pela rua, passeia entre a recepção e a sala comunal e, quando a pessoa fecha a página, vai embora pela rua. Visitante não ocupa mesa nem entra na vida social. O mapa mostra até 8.
 
-- **"N pessoas olhando":** a linha embaixo do título do escritório conta você e os outros ("Só você está olhando", quando não há mais ninguém). As abas do mesmo navegador dividem o cookie e contam como uma pessoa só.
-- **Aparecer no escritório:** a caixa vem ligada. Desligada, você olha sem aparecer para os outros e sai da conta deles em até 45 s. A escolha vale só neste navegador, que a guarda para a próxima visita.
+- **"N pessoas olhando":** a linha embaixo do título do escritório conta você (com a caixa **Aparecer no escritório** ligada) e os outros ("Só você está olhando", quando não há mais ninguém). As abas do mesmo navegador dividem o cookie e contam como uma pessoa só.
+- **Aparecer no escritório:** a caixa vem ligada. Desligada, você olha sem aparecer para os outros e sai da conta: da sua na hora (com 3 visitantes, "4 pessoas olhando" vira "3") e da deles em até 45 s. A escolha vale só neste navegador, que a guarda para a próxima visita.
 - **`?invisivel=1`:** com a caixa desligada, ou na TV, a tela pede o `/api/estado?invisivel=1`, que não marca presença. Um cliente próprio pode usar o mesmo parâmetro.
 - **Na TV, ninguém aparece:** a TV não conta como visitante e não desenha os visitantes, então o mapa da parede mostra só os agentes.
 - No modo demonstração, a linha não aparece. O que o servidor guarda e manda está em [Segurança](#segurança).
@@ -312,6 +312,7 @@ Um aviso no celular, ou no computador, quando um agente pede a sua aprovação o
 
 - **Precisa de https:** a `ESCRITORIO_BASE` precisa começar com `https://`, como no instalador. Em http, a caixa explica que o aviso precisa de https e não liga.
 - **Ligar:** toque em **Avisar no celular** em cada aparelho. A permissão de notificação só é pedida nesse toque. **Desligar os avisos** desliga só aquele aparelho. Cabem até 10 aparelhos por escritório.
+- **Chave nova:** se a chave do servidor mudar, o aparelho volta a desligado, e é só ligar de novo.
 - **Android e computador:** Chrome, Edge ou Firefox.
 - **iPhone e iPad:** só com o escritório na tela de início, no iOS 16.4 ou mais novo. Toque em **Compartilhar** e em **Adicionar à Tela de Início**, abra o escritório por lá e ligue o aviso.
 - **O aviso:** "\<nome\> pede a sua aprovação" ou "\<nome\> tem uma pergunta para você"; tocar nele abre o escritório no agente. Aprovar e responder continuam no agentes.chat. Sem sessão no aparelho, o aviso é genérico ("Um agente precisa de você"). Fica um aviso por vez na bandeja, e cada aparelho recebe no máximo 1 por minuto e 50 por dia.
