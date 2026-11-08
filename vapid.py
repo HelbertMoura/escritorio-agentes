@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Assinatura VAPID (RFC 8292) para o push sem conteúdo: ES256 em Python puro, só biblioteca padrão.
 
-- Curva P-256 em coordenadas afins, com escada de Montgomery (a mesma sequência de operações para todo bit).
-  O Python não garante tempo constante nos inteiros grandes: a chave fica só nesta máquina e o único tempo
-  visível de fora é o do envio do push, com a rede no meio.
+- Curva P-256 em coordenadas afins, com escada de Montgomery sobre o escalar em 257 bits fixos (k + n ou k + 2n):
+  a mesma sequência de operações para todo bit e o mesmo trabalho para qualquer tamanho de k. O s usa o inverso
+  de Fermat (expoente fixo). O Python não garante tempo constante nos inteiros grandes: a chave fica só nesta
+  máquina e o único tempo visível de fora é o do envio do push, com a rede no meio.
 - Nonce determinístico pelo RFC 6979 (HMAC-SHA256): não depende do gerador aleatório na hora de assinar.
 - Assinatura em r||s de 64 bytes (formato JWS). Nada de normalizar o s: os vetores do RFC batem exatamente.
 - verificar() recusa chave pública fora da curva ou mal codificada e r ou s fora de [1, n-1].
@@ -18,6 +19,7 @@ import hmac
 import json
 import re
 import secrets
+import functools
 import time
 import urllib.parse
 
@@ -54,8 +56,12 @@ def _soma(p1, p2):
 
 
 def _vezes(k, ponto):
-    """k * ponto pela escada de Montgomery, sempre com 256 passos (0 <= k < 2^256)."""
-    r0, r1 = None, ponto
+    """k * ponto (0 <= k <= n) pela escada de Montgomery, com o escalar em 257 bits fixos (k + n ou k + 2n): a escada
+    não começa no infinito e o trabalho não depende do tamanho de k. n * ponto é o infinito, então o resultado é o mesmo."""
+    k += N
+    if k.bit_length() <= 256:
+        k += N
+    r0, r1 = ponto, _soma(ponto, ponto)   # o bit 256, sempre 1
     for i in reversed(range(256)):
         if (k >> i) & 1:
             r0, r1 = _soma(r0, r1), _soma(r1, r1)
@@ -85,8 +91,13 @@ def gerar_chave():
 
 
 def publica(d):
-    """Chave pública não comprimida: 0x04 || X || Y, 65 bytes."""
+    """Chave pública não comprimida: 0x04 || X || Y, 65 bytes. Calculada uma vez por chave."""
     _confere_d(d)
+    return _publica(d)
+
+
+@functools.lru_cache(maxsize=4)
+def _publica(d):
     x, y = _vezes(d, G)
     return b"\x04" + x.to_bytes(32, "big") + y.to_bytes(32, "big")
 
@@ -125,7 +136,7 @@ def assinar(d, msg):
     e = int.from_bytes(h, "big")
     for k in _nonces(d, h):
         r = _vezes(k, G)[0] % N
-        s = pow(k, -1, N) * (e + r * d) % N
+        s = pow(k, N - 2, N) * (e + r * d) % N   # inverso de Fermat: expoente fixo
         if r and s:
             return r.to_bytes(32, "big") + s.to_bytes(32, "big")
 
@@ -162,7 +173,7 @@ def cabecalho(d, endpoint, sub, agora=None):
     partes = urllib.parse.urlsplit(endpoint)
     if partes.scheme != "https" or not partes.hostname:
         raise ValueError("endpoint de push precisa ser https com host")
-    aud = f"https://{partes.hostname}" + (f":{partes.port}" if partes.port else "")
+    aud = f"https://{partes.hostname}" + (f":{partes.port}" if partes.port not in (None, 443) else "")   # a origem omite a 443
     if not sub.startswith(("mailto:", "https://")):
         raise ValueError("sub do VAPID precisa ser mailto: ou https://")
     exp = int(time.time() if agora is None else agora) + VALIDADE
