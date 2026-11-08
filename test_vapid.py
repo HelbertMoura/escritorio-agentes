@@ -44,6 +44,27 @@ class Rfc6979(unittest.TestCase):
                 self.assertEqual(next(vapid._nonces(D_RFC, hashlib.sha256(msg).digest())), k)
                 self.assertEqual(vapid.assinar(D_RFC, msg), sig(r, s))
 
+    def test_segundo_candidato_do_laco_de_rejeicao(self):
+        # passo h.3, que nenhum vetor da P-256 exercita; valor conferido por um RFC 6979 independente (gate F2)
+        g = vapid._nonces(D_RFC, hashlib.sha256(b"sample").digest())
+        next(g)
+        self.assertEqual(next(g), 0x8E83DC490BC5FC4D5992BD63CD87F254ADFFCB930F8A8011702A88870F638FDB)
+
+
+class Escada(unittest.TestCase):
+    def test_bordas(self):
+        g = vapid.G
+        self.assertIsNone(vapid._vezes(0, g))
+        self.assertIsNone(vapid._vezes(N, g))
+        self.assertEqual(vapid._vezes(N - 1, g), (g[0], vapid.P - g[1]))
+        self.assertEqual(vapid._vezes(N - 2, g), (vapid._soma(g, g)[0], vapid.P - vapid._soma(g, g)[1]))
+        soma = None
+        for k in range(1, 9):   # k pequeno: o mesmo que somar o ponto k vezes
+            soma = vapid._soma(soma, g)
+            with self.subTest(k=k):
+                self.assertEqual(vapid._vezes(k, g), soma)
+        self.assertEqual(vapid._vezes(2 ** 255, g), vapid._vezes(2 ** 254, vapid._soma(g, g)))
+
 
 class Assinatura(unittest.TestCase):
     def setUp(self):
@@ -108,6 +129,8 @@ class Cabecalho(unittest.TestCase):
         self.assertNotIn("=", t + k)
         sem_porta = vapid.cabecalho(d, "https://web.push.apple.com/QGx", "https://exemplo.com", agora=0)
         self.assertEqual(json.loads(b64d(sem_porta.split(".")[1]))["aud"], "https://web.push.apple.com")
+        com_443 = vapid.cabecalho(d, "https://web.push.apple.com:443/QGx", "https://exemplo.com", agora=0)
+        self.assertEqual(json.loads(b64d(com_443.split(".")[1]))["aud"], "https://web.push.apple.com")
 
     def test_recusas(self):
         d = vapid.gerar_chave()
