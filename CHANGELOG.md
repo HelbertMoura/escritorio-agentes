@@ -4,6 +4,14 @@
 
 All notable changes to this project are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The project has no version numbers yet: each entry is a milestone, with its date and commits.
 
+## Unreleased · TV mode, visitors and newspaper
+
+Not committed yet.
+
+### Added
+- `/api/estado` gained `config_v`: 12 hex characters that change when a configuration file changes (`times.json` and, in `dados/`, the brand, logo, floor plan, weather, holidays and team). It comes only from each file's size and date, without reading its contents. TV mode reloads the page when it changes.
+- **Visitors:** `/api/estado` gained `visitantes`, the list of who else has the office open, with only an anonymous id and a color (`?invisivel=1` watches without showing up). See [Security](./README.md#security). The preview gained `--visitantes N`.
+
 ## Unreleased · Connect, Docker and Settings
 
 Connect and Docker in commit [`cf29e8c`](https://github.com/HelbertMoura/escritorio-agentes/commit/cf29e8c); the weather city and the holidays in [`13b91a2`](https://github.com/HelbertMoura/escritorio-agentes/commit/13b91a2); the teams and Sign out of all devices, not committed yet.

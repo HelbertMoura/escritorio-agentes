@@ -43,8 +43,9 @@ def tearDownModule():   # a pasta de dados da suíte não fica para trás no %TE
 AG =[{"id": "a1", "name": "Pixel", "handle": "pixel", "role": "Conteúdo"},
       {"id": "a2", "name": "Órbita", "handle": "agent-orbita-qa-acme", "role": "QA"}]  # agentes fictícios
 ORG_URL = f"https://app.agentes.chat/org/{e.ORG}/c/11111111-2222-4333-8444-555555555555"
-# scripts da lista fechada que chegam com o land do floor das telas (config-telas); até lá, o servidor responde 404
-DO_FRONT = {"ajustes.js", "assistente.js"}
+# arquivos da lista fechada que chegam com o land do floor das telas (uau-telas); até lá, o servidor responde 404
+PWA = {"manifest.webmanifest", "sw.js", "icone-180.png", "icone-192.png", "icone-512.png", "icone-mascara-512.png"}
+DO_FRONT = {"tv.js"} | PWA
 
 
 def servidos():
@@ -633,6 +634,25 @@ class Http(unittest.TestCase):
         for rota in ("/escritorio.py", "/../escritorio.py", "/static/app.js", "/dados/oauth.json", "/entrar.html", "/acesso.py"):
             self.assertEqual(self.req(rota, cab)[0], 404, rota)
 
+    def test_visitantes_no_estado(self):
+        """Cada sessão vê as outras como visitantes anônimos, nunca a si mesma; ?invisivel=1 não marca presença."""
+        antes, self.srv.visitantes = getattr(self.srv, "visitantes", None), e.Visitantes()
+        try:
+            um, dois, tv = self.entrar(), self.entrar(), self.entrar()
+            ver = lambda cab, q="": json.loads(self.req("/api/estado" + q, cab)[1])["visitantes"]
+            self.assertEqual(ver(um), [])   # sozinho
+            outro = ver(dois)   # o "dois" vê o "um"
+            self.assertEqual(len(outro), 1)
+            self.assertRegex(outro[0]["id"], r"\A[0-9a-f]{8}\Z")
+            self.assertIn(outro[0]["cor"], e.CORES_VISITANTE)
+            self.assertEqual(set(outro[0]), {"id", "cor"})   # sem usuário, aparelho nem nada da sessão
+            sessao_um = um["Cookie"].partition("=")[2]
+            self.assertNotIn(outro[0]["id"], (sessao_um, hashlib.sha256(sessao_um.encode()).hexdigest()))
+            self.assertEqual(len(ver(tv, "?invisivel=1")), 2)   # a TV vê os dois...
+            self.assertEqual(ver(um), [v for v in ver(tv, "?invisivel=1") if v != outro[0]])   # ...e ninguém vê a TV
+        finally:
+            self.srv.visitantes = antes
+
     def test_marca_e_logo(self):
         cab = {**self.entrar(), "Origin": self.base}
         st, corpo, _ = self.req("/api/marca", {**cab, "Content-Type": "application/json"}, json.dumps({"empresa": "Acme", "cor": "#112233"}).encode())
@@ -730,6 +750,16 @@ class Http(unittest.TestCase):
         for nome in set(e.ARQUIVOS) - set(servidos()):   # da lista e ainda fora da pasta: 404, sem derrubar a conexão
             self.assertEqual(self.req("/" + nome, cab)[0], 404, nome)
 
+    def test_pwa_sem_login(self):
+        """O manifesto, o sw.js e os ícones são públicos (o navegador busca o manifesto sem cookie), com o tipo certo."""
+        self.assertLessEqual(PWA, e.PUBLICOS)
+        for nome in PWA:
+            st, _, h = self.req("/" + nome)
+            if nome in servidos():
+                self.assertEqual((st, h["Content-Type"]), (200, e.ARQUIVOS[nome]), nome)
+            else:
+                self.assertEqual(st, 404, nome)   # antes do land das telas: 404, e não o /entrar
+
     def test_scripts_sem_login_vao_para_entrar(self):
         for nome in e.ARQUIVOS:
             if nome.endswith(".js") and nome not in e.PUBLICOS:
@@ -813,6 +843,27 @@ class Estaticos(unittest.TestCase):
                 self.assertTrue(os.path.isfile(os.path.join(e.ESTATICO, nome)), f"{folha}: {nome} não existe")
                 if publico:
                     self.assertIn(nome, e.PUBLICOS, f"{folha} carrega {u}, que exige login")
+
+class Visitantes(unittest.TestCase):
+    """A presença fica só na memória, com teto, validade de 45 s e um id que não leva de volta à sessão."""
+    def test_validade_teto_e_chave_da_subida(self):
+        v = e.Visitantes()
+        v.ver("a", 1000)
+        self.assertEqual(len(v.ver("b", 1000)), 1)
+        self.assertEqual(len(v.ver("c", 1000 + e.VISITANTE_VALIDADE - 1)), 2)   # a e b ainda valem
+        self.assertEqual(len(v.ver("c", 1000 + e.VISITANTE_VALIDADE)), 0)   # venceram: só o próprio c
+        self.assertEqual(len(v.ver("c", 1000 + e.VISITANTE_VALIDADE)), 0)   # a mesma sessão é uma marca só
+        v.ver("d", 2000, marcar=False)
+        self.assertEqual(len(v.ver("c", 2000)), 0)   # invisível não marca
+        self.assertEqual(len(v.ver(None, 2000)), 1)   # sem sessão (a prévia) só olha
+        for i in range(e.VISITANTES_MAX + 10):
+            v.ver(f"s{i}", 3000)
+        self.assertEqual(len(v.visto), e.VISITANTES_MAX)   # lotado: sessão nova não entra
+        self.assertEqual(len(v.ver("s0", 3000)), e.VISITANTES_MAX - 1)   # quem já estava continua
+        um, outro = e.Visitantes(), e.Visitantes()
+        um.ver("a", 0); outro.ver("a", 0)
+        self.assertNotEqual(um.ver(None, 0), outro.ver(None, 0))   # a mesma sessão, outra subida: outro id
+
 
 class Envio(unittest.TestCase):
     class Saida:   # o socket do navegador: aceita os cabeçalhos e o 1º bloco, depois falha
@@ -2277,6 +2328,24 @@ class Configuracoes(unittest.TestCase):
         self.assertFalse(os.path.exists(e.ARQ_CLIMA))
         self.assertEqual(self.srv.clima.acordou, acordou + 3)
 
+    def test_config_v_no_estado_muda_com_a_configuracao(self):
+        """Modo TV: o config_v muda quando um arquivo de configuração aparece, some ou muda (mtime ou tamanho)."""
+        v = lambda: json.loads(self.req("/api/estado", self.cab)[1])["config_v"]
+        v0 = v()
+        self.assertRegex(v0, r"\A[0-9a-f]{12}\Z")
+        self.assertEqual(v(), v0)   # nada mudou, o mesmo valor
+        self.assertEqual(self.post("/api/clima", {"clima": {"cidade": "Recife", "lat": -8.05, "lon": -34.88}})[0], 200)
+        v1 = v()
+        self.assertNotEqual(v1, v0)
+        st = os.stat(e.ARQ_CLIMA)   # o mesmo tamanho com outro mtime (o conteúdo não é lido)
+        os.utime(e.ARQ_CLIMA, ns=(st.st_atime_ns, st.st_mtime_ns + 10**9))
+        self.assertNotIn(v(), (v0, v1))
+        self.assertEqual(self.post("/api/clima", {"limpar": True})[0], 200)   # apagou o clima.json: volta ao de antes
+        self.assertEqual(v(), v0)
+        with open(e.TIMES, "w", encoding="utf-8") as f:   # o times.json editado à mão também conta
+            f.write("{}")
+        self.assertNotEqual(v(), v0)
+
     def test_clima_recusa_sem_ecoar_e_sem_gravar(self):
         acordou = self.srv.clima.acordou
         cidade = {"cidade": "Recife", "lat": -8.05, "lon": -34.88}
@@ -3207,6 +3276,19 @@ class Previa(unittest.TestCase):
         for agente in ("a1", "a2"):   # a1 tem ?m= (thread), a2 não (canal)
             r = ler(f"/api/conversa?id={itens[agente]}")   # erro na leitura (o TypeError de antes) vira HTTP 502
             self.assertEqual({m["autor"] for m in r["mensagens"]}, {"pessoa", "agente"}, agente)
+
+    def test_previa_com_visitantes(self):
+        exemplo = os.path.join("ferramentas", "previa.exemplo.json")
+        base = self.subir("--visitantes", "3", exemplo)
+        visitantes = json.loads(urllib.request.urlopen(base + "/api/estado", timeout=10).read())["visitantes"]
+        self.assertEqual((len(visitantes), visitantes), (3, sorted(visitantes, key=lambda x: x["id"])))
+        tmp = tempfile.mkdtemp(prefix="escritorio-previa-teste-tmp-")
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        r = subprocess.run([sys.executable, "-B", os.path.join("ferramentas", "previa.py"), "--visitantes", "9", exemplo],
+                           cwd=self.RAIZ, capture_output=True, text=True, timeout=60,
+                           env={**os.environ, "TEMP": tmp, "TMP": tmp, "TMPDIR": tmp})
+        self.assertEqual((r.returncode, os.listdir(tmp)), (1, []))
+        self.assertIn("--visitantes", r.stderr)
 
     def test_previa_com_cada_estado_de_conexao(self):
         exemplo = os.path.join("ferramentas", "previa.exemplo.json")

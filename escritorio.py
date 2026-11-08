@@ -22,6 +22,7 @@ import collections
 import datetime
 import email.utils
 import hashlib
+import hmac
 import html
 import json
 import os
@@ -104,6 +105,9 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "planta.js": "text/javascript; charset=utf-8", "construir.html": "text/html; charset=utf-8",
     "construir.js": "text/javascript; charset=utf-8", "construir.css": "text/css; charset=utf-8",
     "ajustes.js": "text/javascript; charset=utf-8", "assistente.js": "text/javascript; charset=utf-8",
+    "tv.js": "text/javascript; charset=utf-8", "sw.js": "text/javascript; charset=utf-8",
+    "manifest.webmanifest": "application/manifest+json", "icone-180.png": "image/png", "icone-192.png": "image/png",
+    "icone-512.png": "image/png", "icone-mascara-512.png": "image/png",
 }
 TIMEOUT = 20
 
@@ -1565,6 +1569,19 @@ def equipe_salva():
     return ajustes.ler(ARQ_EQUIPE, EQUIPE_BYTES, lambda d: ajustes.validar_equipe(d, arquivo=True), log, "equipe")
 
 
+def config_v():
+    """O "config_v" do /api/estado (modo TV): 12 hex que mudam quando muda a configuração. Só o os.stat (mtime e
+    tamanho) de cada arquivo, sem ler o conteúdo de nenhum; a TV recarrega a página quando o valor muda."""
+    h = hashlib.sha256()
+    for arq in (TIMES, ARQ_MARCA, ARQ_LOGO, ARQ_PLANTA, ARQ_CLIMA, ARQ_FESTAS, ARQ_EQUIPE):
+        try:
+            st = os.stat(arq)
+            h.update(f"{st.st_mtime_ns}:{st.st_size};".encode())
+        except OSError:   # ausente (ou sem acesso): conta como ausente, e criar o arquivo muda o valor
+            h.update(b"-;")
+    return h.hexdigest()[:12]
+
+
 def salvar_equipe(dados, usuario):
     """POST /api/equipe: {rev, times, aparencia}, ou {rev, limpar: true} para voltar ao times.json, com o rev atual
     (outro: 409). Renomear um time tira da sala dele a pintura e os móveis da planta (chave time:<nome>): a tela
@@ -1686,7 +1703,9 @@ def nome_cookie_modo():
 
 
 PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "fontes/figtree.ttf", "fontes/silkscreen.ttf", "fontes/source-sans-3.woff2",
-            "fontes/doto.woff2", "logo.png"}  # liberados na tela de login
+            "fontes/doto.woff2", "logo.png",  # liberados na tela de login
+            # PWA: o navegador busca o manifesto sem cookie; nenhum deles tem segredo. O sw.js fica na raiz (escopo /)
+            "manifest.webmanifest", "sw.js", "icone-180.png", "icone-192.png", "icone-512.png", "icone-mascara-512.png"}
 
 
 def pagina_login(erro="", primeiro=False):
@@ -1769,6 +1788,38 @@ def aviso_erro_oauth(codigo):
         return "Conexão recusada", ERROS_OAUTH[codigo]
     sufixo = f" (código: {codigo})" if CODIGO_OAUTH_OK.fullmatch(codigo) else ""
     return "Conexão recusada", f"O agentes.chat recusou a conexão{sufixo}. Tente de novo."
+
+
+# ---------------------------------------------------------------- visitantes (as pessoas com o escritório aberto)
+
+VISITANTES_MAX = 50
+VISITANTE_VALIDADE = 45   # s: cada tela pede o /api/estado a cada 10 s
+CORES_VISITANTE = ("#e07a5f", "#3d9be9", "#81b29a", "#f2cc8f", "#b388eb", "#ef6f9a", "#4ecdc4", "#f4a261")
+
+
+class Visitantes:
+    """Quem está com o escritório aberto, tirado do próprio GET /api/estado: o sha256 da sessão e o instante, só na
+    memória (nada vai ao disco nem ao log), até 50 sessões, cada marca por 45 s. Para fora sai só um id anônimo: o
+    HMAC do sha com uma chave sorteada na subida, nos primeiros 8 hex, que não leva de volta à sessão e muda a cada
+    reinício. As abas de um navegador dividem o cookie, então contam como um visitante só."""
+
+    def __init__(self):
+        self.chave = secrets.token_bytes(32)
+        self.visto = {}
+        self.trava = threading.Lock()
+
+    def ver(self, token, agora, marcar=True):
+        """Marca a sessão (fora com ?invisivel=1, que só deixa de renovar: a marca some em até 45 s) e devolve os
+        outros visitantes, sem a própria sessão, em ordem de id. Lotado, sessão nova não entra até alguém sair."""
+        eu = hashlib.sha256(token.encode()).hexdigest() if token else None
+        with self.trava:
+            for k in [k for k, t in self.visto.items() if agora - t >= VISITANTE_VALIDADE]:
+                del self.visto[k]
+            if marcar and eu and (eu in self.visto or len(self.visto) < VISITANTES_MAX):
+                self.visto[eu] = agora
+            outros = [k for k in self.visto if k != eu]
+        ids = sorted(hmac.new(self.chave, k.encode(), "sha256").hexdigest()[:8] for k in outros)
+        return [{"id": i, "cor": CORES_VISITANTE[int(i, 16) % len(CORES_VISITANTE)]} for i in ids]
 
 
 class Pagina(BaseHTTPRequestHandler):
@@ -1905,7 +1956,11 @@ class Pagina(BaseHTTPRequestHandler):
             conversas = conversas_publicas(do_dia(), agora, aceita) if do_dia and carregar_times()["conversas"] in MODOS_CONVERSA else []
             modo = self._modo_resposta() if pode else None   # só o da própria sessão, neste navegador
             estado = {**leitor.foto(), "conversas": conversas, "clima": clima.foto() if clima else None,
-                      "usuario": usuario, "modo_resposta": {"resta_s": modo[0], "teto_s": modo[1]} if modo else None}
+                      "usuario": usuario, "modo_resposta": {"resta_s": modo[0], "teto_s": modo[1]} if modo else None,
+                      "config_v": config_v()}
+            visitantes = getattr(self.server, "visitantes", None)   # ?invisivel=1: a TV e quem desligou "Aparecer"
+            invisivel = urllib.parse.parse_qs(caminho.query).get("invisivel") == ["1"]
+            estado["visitantes"] = visitantes.ver(self._token(), agora, not invisivel) if visitantes else []
             social = getattr(self.server, "social", None)
             if social:
                 try:   # a vida social nunca derruba o /api/estado: na falha, a resposta sai sem a chave
@@ -2292,6 +2347,7 @@ def main():
     srv.social = Social(leitor, config_publica, log, FUSO, guardar=lambda dados: gravar(ARQ_PLACAR, dados), placar=ler_placar())
     srv.social.start()
     srv.planta = Planta(ARQ_PLANTA, log, lambda dados: gravar(ARQ_PLANTA, dados))   # planta ilegível sobe vazia, com 1 log
+    srv.visitantes = Visitantes()
     if contas.precisa_configurar():
         ver = "docker exec -it <container> python3 -I -B escritorio.py codigo" if BIND == "0.0.0.0" else "sudo escritorio-codigo"
         log(evento="acesso", resultado="aguardando_primeiro_usuario", ver_codigo=ver)   # o código em si nunca vai ao log

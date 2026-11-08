@@ -20,6 +20,8 @@ servidor antes da primeira leitura; os outros mantêm a leitura do arquivo, como
 traz o mesmo texto do servidor. A prévia não tem conexão: o /oauth/conectar dela cai na página de erro e não sai daqui.
 Configurações: o clima e as datas salvos pela tela vão para a pasta temporária; a busca de cidade chama o Open-Meteo
 de verdade, com o mesmo limite do servidor. PREVIA_ESTATICO=<pasta static> serve as telas de outro floor.
+--visitantes N (0 a 8): a prévia não tem sessão, então ninguém vira visitante; com N, o "visitantes" do /api/estado traz N
+visitantes fixos, com id e cor pelo mesmo cálculo do servidor.
 """
 import atexit, json, os, shutil, signal, sys, threading, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -50,6 +52,14 @@ if "--conexao" in ARGS:   # --conexao <estado> (o valor sai da lista, para não 
 CONEXAO = next((a.split("=", 1)[1] for a in ARGS if a.startswith("--conexao=")), CONEXAO)
 if CONEXAO not in e.CONEXOES:
     sys.exit("--conexao: use " + ", ".join(e.CONEXOES))
+VISITANTES = "0"
+if "--visitantes" in ARGS:   # --visitantes N, como o --conexao
+    i = ARGS.index("--visitantes")
+    VISITANTES = ARGS[i + 1] if i + 1 < len(ARGS) else ""
+    del ARGS[i:i + 2]
+if VISITANTES not in [str(n) for n in range(9)]:
+    sys.exit("--visitantes: use um número de 0 a 8")
+VISITANTES = int(VISITANTES)
 VAZIO = {"agentes": [], "trabalhos": [], "tarefas": [], "eventos": [], "resolvidos": [], "atualizado": None}
 
 class Token:
@@ -125,6 +135,14 @@ class Falso:
             textos = {"recusada": e.texto_recusa(403), "pausa": e.PAUSA_429, "falha": e.FALHA_LEITURA}
             return {**self.estado, "atualizado": agora, "erro": textos.get(CONEXAO, erro), "conexao": CONEXAO}
 
+class VisitantesDaPrevia(e.Visitantes):
+    """--visitantes N: N marcas fixas, renovadas a cada pedido, no lugar das sessões que a prévia não tem."""
+    def ver(self, token, agora, marcar=True):
+        with self.trava:
+            self.visto.update({f"previa-{n}": agora for n in range(VISITANTES)})
+        return super().ver(token, agora, marcar)
+
+
 class ConversasFicticias(e.Conversas):
     """O Conversas do servidor (cache, tetos, corte do fim), com a conversa vinda daqui em vez do agentes.chat."""
     FALAS = ((40, "person", "Bom dia! Consegue revisar o rascunho de hoje e me dizer o que falta?", 0),
@@ -147,6 +165,7 @@ if "--resolvidos" in ARGS:
     srv.leitor.semear_resolvidos()
 srv.acesso = e.Acesso(os.environ["ESCRITORIO_DADOS"])
 srv.previa_sem_login = True  # prévia local, só em 127.0.0.1
+srv.visitantes = VisitantesDaPrevia()
 # o mesmo diretor do servidor, com a leitura do arquivo; o placar semanal vai para o placar.json da pasta temporária
 srv.social = e.Social(srv.leitor, e.config_publica, e.log, e.FUSO, guardar=lambda dados: e.gravar(e.ARQ_PLACAR, dados),
                       placar=e.ler_placar())

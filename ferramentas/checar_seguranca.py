@@ -1,7 +1,7 @@
 """Confere no servidor de verdade (rotas reais, sem rede) as regras de login, origem, cookie e limite de tentativas.
 Uso: python -B ferramentas/checar_seguranca.py <pasta do projeto>   (sai com 1 se algo falhar)
 """
-import json, os, shutil, sys, tempfile, threading, time, urllib.parse, urllib.request, urllib.error
+import hashlib, json, os, shutil, sys, tempfile, threading, time, urllib.parse, urllib.request, urllib.error
 PROJ = sys.argv[1]
 os.environ["ESCRITORIO_DADOS"] = tempfile.mkdtemp(prefix="esc-verif-")
 os.environ["ESCRITORIO_TIMES"] = os.path.join(os.environ["ESCRITORIO_DADOS"], "times.json")  # nunca o times.json real
@@ -197,6 +197,18 @@ confere("POST /api/social/greve/atender com Origin: null",
 confere("POST /api/social/greve/atender em text/plain",
         req("/api/social/greve/atender", {**sessao, "Origin": base, "Content-Type": "text/plain"}, greve)[0], 415)
 confere("POST /api/social/greve/atender sem sessao", req("/api/social/greve/atender", {"Origin": base, "Content-Type": "application/json"}, greve)[0], 401)
+print("== Visitantes (presenca so na memoria, id anonimo, nunca a propria sessao)")
+srv.visitantes = e.Visitantes()
+outra = {"Cookie": req("/entrar", {"Origin": base}, form)[1]["Set-Cookie"].split(";")[0]}
+vis = lambda cab, q="": json.loads(req_corpo("/api/estado" + q, cab)[2])["visitantes"]
+vis(sessao)
+v = vis(outra)
+tok = sessao["Cookie"].partition("=")[2]
+confere("GET /api/estado: a outra sessao aparece so com id e cor", [sorted(x) for x in v], [["cor", "id"]])
+confere("... o id nao sai do token nem do sha da sessao", v[0]["id"] in tok + hashlib.sha256(tok.encode()).hexdigest(), False)
+confere("... a propria sessao nao se ve (so a outra)", [x["id"] == v[0]["id"] for x in vis(sessao)], [False])
+tv = {"Cookie": req("/entrar", {"Origin": base}, form)[1]["Set-Cookie"].split(";")[0]}
+confere("... com ?invisivel=1 uma sessao nova olha sem aparecer", (len(vis(tv, "?invisivel=1")), len(vis(sessao))), (2, 1))
 print("== Sair de todos os aparelhos (Origin obrigatorio, JSON exato, senha no balde do login)")
 sj = lambda senha: json.dumps({"senha": senha}).encode()
 confere("POST /api/sair-todos sem Origin, com Referer valido (aqui o Referer nao conta)",

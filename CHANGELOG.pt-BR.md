@@ -4,6 +4,14 @@
 
 As mudanças que importam neste projeto ficam aqui, da mais nova para a mais antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). O projeto ainda não tem número de versão: cada entrada é um marco, com a data e os commits.
 
+## Ainda não publicado · Modo TV, visitantes e jornal
+
+Sem commit ainda.
+
+### Adicionado
+- O `/api/estado` ganhou o `config_v`: 12 hex que mudam quando muda um arquivo de configuração (`times.json` e, em `dados/`, a marca, o logo, a planta, o clima, as datas e a equipe). Sai só do tamanho e da data de cada arquivo, sem ler o conteúdo. O modo TV recarrega a página quando ele muda.
+- **Visitantes:** o `/api/estado` ganhou o `visitantes`, a lista de quem mais está com o escritório aberto, só com um id anônimo e uma cor (`?invisivel=1` olha sem aparecer). Veja [Segurança](./README.pt-BR.md#segurança). A prévia ganhou o `--visitantes N`.
+
 ## Ainda não publicado · Conectar, Docker e Configurações
 
 O Conectar e o Docker no commit [`cf29e8c`](https://github.com/HelbertMoura/escritorio-agentes/commit/cf29e8c); o clima e as datas no [`13b91a2`](https://github.com/HelbertMoura/escritorio-agentes/commit/13b91a2); os times e o Sair de todos, sem commit ainda.
