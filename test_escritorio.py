@@ -2469,19 +2469,24 @@ class SairDeTodos(unittest.TestCase):
 
     def test_disco_falhando_nao_encerra_nada(self):
         celular, computador = self.entrar(), self.entrar()
-
-        def falha(*_):
-            raise OSError("disco cheio")
-        antes, acesso._gravar = acesso._gravar, falha
-        try:
-            st, corpo, _ = self.sair(celular)
-        finally:
-            acesso._gravar = antes
-        self.assertEqual((st, json.loads(corpo)), (500, {"erro": "gravar", "mensagem": "Não deu para encerrar as sessões agora."}))
-        self.assertEqual((len(self.srv.acesso.sessoes), len(Acesso(self.pasta).sessoes)), (2, 2))   # memória e disco
-        for cab in (celular, computador):
-            self.assertEqual(self.req("/api/estado", cab)[0], 200)
-        self.assertIn('"resultado": "sair_todos_nao_gravou", "detalhe": "OSError"', self.saida.getvalue())
+        # PermissionError (EACCES, arquivo travado no Windows) também é OSError: é o disco, não a senha errada
+        for falha_do_disco in (OSError("disco cheio"), PermissionError(13, "sem permissão")):
+            with self.subTest(falha=type(falha_do_disco).__name__):
+                def falha(*_):
+                    raise falha_do_disco
+                antes, acesso._gravar = acesso._gravar, falha
+                try:
+                    st, corpo, _ = self.sair(celular)
+                finally:
+                    acesso._gravar = antes
+                self.assertEqual((st, json.loads(corpo)),
+                                 (500, {"erro": "gravar", "mensagem": "Não deu para encerrar as sessões agora."}))
+                self.assertEqual((len(self.srv.acesso.sessoes), len(Acesso(self.pasta).sessoes)), (2, 2))   # memória e disco
+                for cab in (celular, computador):
+                    self.assertEqual(self.req("/api/estado", cab)[0], 200)
+                self.assertIn('"resultado": "sair_todos_nao_gravou", "detalhe": "%s"' % type(falha_do_disco).__name__,
+                              self.saida.getvalue())
+        self.assertNotIn("sair_todos_recusado", self.saida.getvalue())   # nenhuma vira senha errada
 
 
 class ClimaVivo(unittest.TestCase):

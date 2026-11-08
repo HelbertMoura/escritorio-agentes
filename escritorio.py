@@ -37,8 +37,8 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from acesso import (ARQ_CODIGO, ARQ_USUARIOS, Acesso, TentativasDemais, UsuariosIlegiveis, gravar, ler_codigo,  # noqa: E402
-                    ler_usuarios)
+from acesso import (ARQ_CODIGO, ARQ_USUARIOS, Acesso, NaoGravou, TentativasDemais, UsuariosIlegiveis, gravar,  # noqa: E402
+                    ler_codigo, ler_usuarios)
 import ajustes  # noqa: E402
 from ajustes import (ACESSORIOS, CLIMA_BYTES, CORES, EQUIPE_BYTES, FESTAS_BYTES, HANDLE_OK, ICONES_OK, OLHOS,  # noqa: E402
                      ROTULO_OK, limpa_texto)
@@ -2157,8 +2157,8 @@ class Pagina(BaseHTTPRequestHandler):
             if isinstance(x, TentativasDemais):
                 return self._json(*erro(429, "tentativas_demais", "Tentativas demais; espere alguns minutos."))
             return self._json(*erro(403, "senha_incorreta", "Senha incorreta."))
-        except OSError as x:
-            log(evento="acesso", resultado="sair_todos_nao_gravou", detalhe=type(x).__name__)
+        except NaoGravou as x:
+            log(evento="acesso", resultado="sair_todos_nao_gravou", detalhe=str(x))
             return self._json(*erro(500, "gravar", "Não deu para encerrar as sessões agora."))
         log(evento="acesso", resultado="sair_todos", usuario=usuario, sessoes=n)
         return self._json(200, {"ok": True}, {"Set-Cookie": [self._cookie("", 0), self._cookie_modo("")]})

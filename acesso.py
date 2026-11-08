@@ -50,6 +50,10 @@ class UsuariosIlegiveis(Exception):
     """usuarios.json existe e não pode ser lido: o serviço não sobe (nunca vira "sem usuários")."""
 
 
+class NaoGravou(Exception):
+    """A gravação no disco falhou e nada mudou. Não herda de OSError: um PermissionError do disco não vira senha errada."""
+
+
 def _hash(senha, sal, n=N, r=R, p=P):
     with CALCULOS:
         return hashlib.scrypt(senha.encode("utf-8", "surrogatepass"), salt=sal, n=n, r=r, p=p, maxmem=64 * 1024 * 1024, dklen=32)
@@ -225,14 +229,18 @@ class Acesso:
 
     def sair_todos(self, token, senha):
         """"Sair de todos os aparelhos": confere a senha do usuário da sessão no balde do login e zera todas as sessões
-        e modos resposta (só existe uma conta). Devolve quantas sessões saíram; senão levanta PermissionError."""
+        e modos resposta (só existe uma conta). Devolve quantas sessões saíram; senão levanta PermissionError (sessão ou
+        senha) ou NaoGravou (disco)."""
         usuario = self.sessao(token)
         if not usuario:
             raise PermissionError("entre de novo")
         self.conferir(usuario, senha)
         with self.trava:   # grava antes de trocar a memória: se o disco falhar, nada muda
             n = len(self.sessoes)
-            _gravar(self.arq_sessoes, {})
+            try:
+                _gravar(self.arq_sessoes, {})
+            except OSError as x:
+                raise NaoGravou(type(x).__name__) from x
             self.sessoes, self.modos = {}, {}
         return n
 
