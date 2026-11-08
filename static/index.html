@@ -146,6 +146,7 @@
               <button id="tela-cheia" type="button" aria-pressed="false" aria-label="Mapa em tela cheia"><span class="ic" data-icone="expandir" aria-hidden="true"></span></button>
               <button id="modo-foto" type="button" aria-label="Modo foto"><span class="ic" data-icone="camera" aria-hidden="true"></span></button>
               <button id="modo-tv" type="button" aria-label="Modo TV" title="Modo TV: a câmera passeia sozinha e corre para as novidades"><span class="ic" data-icone="tv" aria-hidden="true"></span></button>
+              <button id="abrir-timelapse" type="button" aria-label="Time-lapse do dia" title="Time-lapse do dia"><span class="ic" data-icone="filme" aria-hidden="true"></span></button>
             </div>
             <!-- modo TV (tv.js): a faixa do telejornal e os dois botões; o cursor e os botões somem com o mouse parado -->
             <div id="tv-legenda" class="tv-legenda" aria-hidden="true" hidden></div>
@@ -529,6 +530,19 @@
       <div class="acoes"><button id="placar-fechar" class="botao fantasma" type="button">Fechar</button></div>
     </div>
   </dialog>
+  <dialog id="dlg-timelapse" class="boas-vindas dlg-timelapse" aria-labelledby="tl-titulo" aria-describedby="tl-estado tl-privacidade">
+    <div class="form-bv">
+      <h2 id="tl-titulo">Time-lapse do dia</h2>
+      <p id="tl-estado" class="ajuda"></p>
+      <p id="tl-privacidade" class="tl-aviso">O vídeo mostra os nomes dos agentes e das salas. Os quadros ficam só neste navegador, nada vai ao servidor, e somem na virada do dia.</p>
+      <p id="tl-progresso" class="aviso-form" role="status"></p>
+      <div class="acoes">
+        <button id="tl-baixar" class="botao" type="button">Baixar o vídeo</button>
+        <button id="tl-apagar" class="botao secundario" type="button">Apagar os quadros</button>
+        <button id="tl-fechar" class="botao fantasma" type="button">Fechar</button>
+      </div>
+    </div>
+  </dialog>
   <script src="avatar.js?v=98"></script>
   <script src="mapa.js?v=98"></script>
   <script src="expediente.js?v=98"></script>
@@ -542,6 +556,7 @@
   <script src="brincar.js?v=98"></script>
   <script src="tv.js?v=98"></script>
   <script src="jornal.js?v=98"></script>
+  <script src="timelapse.js?v=98"></script>
   <script src="app.js?v=98"></script>
   <script src="personalizar.js?v=98"></script>
   <script src="ajustes.js?v=98"></script>

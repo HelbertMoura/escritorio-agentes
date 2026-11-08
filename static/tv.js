@@ -46,7 +46,7 @@ const TV = (() => {
     document.body.classList.add("tv", "tv-quieto");
     api.fecharFicha(); api.telaCheia(true);
     if (gesto) pedirTelaCheia(); else $("tv-cheia").hidden = telaCheiaDoNavegador() || !document.fullscreenEnabled;
-    pedirWake();
+    pedirWake(); api.aoLigar();
     fila = []; atual = null; ate = 0; pausaAte = 0; passeio = { sala: -1, geral: true };
     marcarVistos(api.estado());   // o que já estava acontecendo não vira notícia
     api.verTudo(true);

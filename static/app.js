@@ -209,6 +209,7 @@ function quadro(t) {
     Som.teclado(Vida.digitando(mundo), t);
     Som.ambiente(true);
     desenharCena(t);
+    Timelapse.quadro();   // na vez do quadro do time-lapse, fotografa logo depois de desenhar
   }
 }
 
@@ -667,6 +668,7 @@ Object.assign(ICONES, {
   encaixar: ["##....##", "#......#", "..####..", "..#++#..", "..#++#..", "..####..", "#......#", "##....##"],
   copiar:   ["..#####.", "..#...#.", "###...#.", "#.#...#.", "#.#####.", "#...#...", "#####...", "........"],
   tv:       [".#...#..", "..#.#...", "########", "#++++++#", "#++++++#", "#++++++#", "########", ".#....#."],
+  filme:    ["########", "#.#..#.#", "########", "#++++++#", "#++++++#", "########", "#.#..#.#", "########"],
 });
 
 // Onde está e o que faz cada agente (o mapa e o painel usam a mesma resposta)
@@ -2069,8 +2071,21 @@ function ligarTV() {
     frase: tipo => FRASES_EVENTO[tipo] || "",
     verTudo: ja => verTudo(ja),
     soltar: () => { seguir = null; },
+    aoLigar: () => Timelapse.preferir(),   // a TV fica com a gravação do time-lapse
     fecharFicha, telaCheia, mini,
   });
+}
+// time-lapse (timelapse.js): o prédio inteiro, sem mexer na câmera de quem olha (redesenha do jeito que estava antes de a tela pintar)
+function fotografar(out, largura) {
+  if (!predio || !mundo || !tela.width) return false;
+  const antes = { x: cam.x, y: cam.y, k: cam.k, alvo: cam.alvo }, seg = seguir, t = performance.now();
+  cam.alvo = null; seguir = null; Object.assign(cam, { x: predio.W / 2, y: predio.H / 2, k: encaixe() });
+  desenharCena(t);
+  out.width = largura; out.height = Math.round((largura * tela.height) / tela.width);
+  out.getContext("2d").drawImage(tela, 0, 0, out.width, out.height);
+  Object.assign(cam, antes); seguir = seg;
+  desenharCena(t);
+  return true;
 }
 function marcarSala(s) { for (const b of $("salas").querySelectorAll("button")) b.setAttribute("aria-current", String(!!s && b.dataset.sala === s.nome)); }
 
@@ -2221,6 +2236,11 @@ function buscarNaAjuda() {
 $("faq-busca").addEventListener("input", buscarNaAjuda);
 buscarNaAjuda();
 
+Timelapse.iniciar({
+  fotografar,
+  podeGravar: () => !!predio && !naSimulacao() && !Brincar.demo && !Expediente.fora(Ceu.agora().h),
+  demo: () => Brincar.demo,
+});
 // jornal (jornal.js): os nomes e as aparências saem desta tela; o resto vem do /api/jornal
 Jornal.iniciar({
   agente: id => {
