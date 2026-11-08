@@ -2147,7 +2147,7 @@ class Conectar(unittest.TestCase):
         self.srv.jornal = e.Jornal(e.log, e.FUSO)   # com uma contagem da conta anterior
         self.addCleanup(delattr, self.srv, "jornal")
         self.srv.jornal.ler([("terminou", "agente-velho")], {"tarefas": []}, time.time())
-        self.srv.avisos = avisos.Avisos("CHAVE", lambda endpoint: "", e.log, e.FUSO)   # e um aviso da conta anterior
+        self.srv.avisos = avisos.Avisos("CHAVE", lambda endpoint, agora: "", e.log, e.FUSO)   # e um aviso da conta anterior
         self.addCleanup(delattr, self.srv, "avisos")
         self.srv.avisos.transicoes([("pediu_aprovacao", "agente-velho", "r-velho")], {"agentes": []}, time.time())
         estado = self.conectar()
@@ -2512,7 +2512,10 @@ class SairDeTodos(unittest.TestCase):
     def test_zera_todas_as_sessoes_e_apaga_os_cookies(self):
         celular, computador = self.entrar(), self.entrar()
         self.srv.acesso.modos["x"] = {"cookie": "y", "inicio": 0, "ate": 0}   # um modo resposta aberto
+        self.srv.avisos = avisos.Avisos("CHAVE", lambda endpoint, agora: "", e.log, e.FUSO)   # e um celular com aviso
+        self.srv.avisos.assinar("https://fcm.googleapis.com/fcm/send/celular", time.time())
         st, corpo, h = self.sair(celular, senha="errada-errada")
+        self.assertEqual(len(self.srv.avisos.assinaturas), 1)   # a senha errada não mexe no aviso
         self.assertEqual((st, json.loads(corpo)["erro"]), (403, "senha_incorreta"))
         self.assertEqual(self.req("/api/estado", computador)[0], 200)   # senha errada não derruba ninguém
         st, corpo, h = self.sair(celular)
@@ -2522,7 +2525,7 @@ class SairDeTodos(unittest.TestCase):
         self.assertTrue(all("Max-Age=0" in c for c in cookies))
         for cab in (celular, computador):
             self.assertEqual(self.req("/api/estado", cab)[0], 401)
-        self.assertEqual((self.srv.acesso.sessoes, self.srv.acesso.modos), ({}, {}))
+        self.assertEqual((self.srv.acesso.sessoes, self.srv.acesso.modos, self.srv.avisos.assinaturas), ({}, {}, []))
         self.assertEqual(Acesso(self.pasta).sessoes, {})   # gravado: um reinício não traz as sessões de volta
         self.assertIn('"resultado": "sair_todos", "usuario": "dono", "sessoes": 2', self.saida.getvalue())
         self.entrar()   # a senha continua valendo para entrar de novo

@@ -216,7 +216,7 @@ confere("GET /api/jornal sem sessao", req("/api/jornal")[0], 401)
 st, _, corpo = req_corpo("/api/jornal", sessao)
 confere("GET /api/jornal com sessao, sem o agente que nao esta na leitura", (st, json.loads(corpo)["semana"]["agentes"]), (200, []))
 print("== Aviso no celular (push): sessao, Origin estrito, so JSON, 2 KB e lista fechada de hosts")
-srv.avisos = e.Avisos("CHAVE", lambda endpoint: "vapid t=x, k=y", e.log, e.FUSO)
+srv.avisos = e.Avisos("CHAVE", lambda endpoint, agora: "vapid t=x, k=y", e.log, e.FUSO)
 pj = {**sessao, "Origin": base, "Content-Type": "application/json"}
 fcm = json.dumps({"endpoint": "https://fcm.googleapis.com/fcm/send/x"}).encode()
 for rota in ("/api/push/chave", "/api/avisos"):

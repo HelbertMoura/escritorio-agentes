@@ -2,6 +2,7 @@
 gancho no Leitor e as rotas /api/push/chave, /api/push/assinar, /api/push/sair e /api/avisos.
 Uso: python -B -m unittest test_escritorio test_avisos
 """
+import atexit
 import base64
 import datetime
 import http.server
@@ -10,6 +11,7 @@ import os
 import shutil
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -33,8 +35,9 @@ WNS = "https://wns2-par02p.notify.windows.com/w/?token=AwYAAAB%2bx"
 T0 = datetime.datetime(2026, 11, 9, 10, 0, tzinfo=e.FUSO).timestamp()
 
 
-def tearDownModule():
-    shutil.rmtree(PASTA, ignore_errors=True)
+# até o fim do processo, e não no tearDownModule: no discover, o escritorio pode ter sido importado com esta pasta, e os
+# módulos de teste seguintes ainda gravam nela
+atexit.register(shutil.rmtree, PASTA, ignore_errors=True)
 
 
 class Logs(list):
@@ -58,7 +61,7 @@ class Envios(list):
 
 def novo(**k):
     logs, envios, gravados = Logs(), Envios(), []
-    a = avisos.Avisos("CHAVE", lambda endpoint: "vapid t=jwt-de-" + endpoint[8:20], logs, e.FUSO,
+    a = avisos.Avisos("CHAVE", lambda endpoint, agora: "vapid t=jwt-de-" + endpoint[8:20], logs, e.FUSO,
                       guardar=gravados.append, enviar=envios, **k)
     return a, logs, envios, gravados
 
@@ -171,7 +174,8 @@ class Disparo(unittest.TestCase):
             self.assertEqual((r.get_method(), r.data), ("POST", None))   # sem payload
             self.assertEqual(r.get_header("Authorization"), "vapid t=jwt-de-" + r.full_url[8:20])
             self.assertEqual((r.get_header("Ttl"), r.get_header("Urgency")), (str(avisos.TTL), "high"))
-        self.assertEqual(logs[-1], {"evento": "push", "resultado": "aviso", "enviados": 2, "falhas": 0, "apagados": 0})
+        self.assertEqual(logs[-1], {"evento": "push", "resultado": "aviso", "enviados": 2, "falhas": 0, "apagados": 0,
+                                    "codigos": []})
 
     def test_um_por_minuto_e_50_por_dia_em_cada_aparelho(self):
         a, _, envios, _ = novo()
@@ -186,6 +190,20 @@ class Disparo(unittest.TestCase):
         a.disparar(amanha)
         self.assertEqual(len(envios), avisos.POR_DIA + 1)
 
+    def test_cabecalho_assinado_uma_vez_por_aud_ate_perto_do_exp(self):
+        assinados = []
+        a, _, envios, _ = novo()
+        a.cabecalho = lambda endpoint, agora: assinados.append((endpoint.split("/")[2], agora)) or f"vapid t={len(assinados)}"
+        for endpoint in (FCM, "https://fcm.googleapis.com/fcm/send/outro", APPLE):
+            a.assinar(endpoint, T0)
+        a.disparar(T0)   # dois aparelhos no FCM e um na Apple: duas assinaturas
+        self.assertEqual(assinados, [("fcm.googleapis.com", T0), ("web.push.apple.com", T0)])
+        a.disparar(T0 + avisos.CABECALHO_VALE - 1)   # ainda vale: reaproveita
+        self.assertEqual(len(assinados), 2)
+        self.assertEqual({r.get_header("Authorization") for r in envios if "apple" in r.full_url}, {"vapid t=2"})
+        a.disparar(T0 + avisos.CABECALHO_VALE + 60)   # perto do exp (e passado o 1 por minuto): assina de novo
+        self.assertEqual(len(assinados), 4)
+
     def test_404_e_410_apagam_o_resto_fica(self):
         a, logs, envios, gravados = novo()
         for endpoint in (FCM, MOZ, APPLE, WNS):
@@ -194,8 +212,37 @@ class Disparo(unittest.TestCase):
         a.disparar(T0)
         self.assertEqual([x["endpoint"] for x in a.assinaturas], [APPLE, WNS])
         self.assertEqual([x["endpoint"] for x in avisos.validar_arquivo(json.loads(gravados[-1]))], [APPLE, WNS])
-        self.assertEqual(logs[-1], {"evento": "push", "resultado": "aviso", "enviados": 0, "falhas": 2, "apagados": 2})
+        self.assertEqual(logs[-1], {"evento": "push", "resultado": "aviso", "enviados": 0, "falhas": 2, "apagados": 2,
+                                    "codigos": [404, 410, 500]})
         self.assertNotIn("googleapis", json.dumps(logs)); self.assertNotIn("mozilla", json.dumps(logs))
+
+    def test_fila_cheia_nao_trava_o_leitor_e_zerar_esquece_os_vistos(self):
+        a, _, _, _ = novo()
+        a.assinar(FCM, T0)
+        leitura = threading.Thread(target=a.transicoes, args=([pedido(f"r{n}") for n in range(avisos.FILA_MAX + 5)], RESUMO, T0),
+                                   daemon=True)   # se travasse, o teste falha em vez de segurar o processo
+        leitura.start()
+        leitura.join(5)
+        self.assertFalse(leitura.is_alive())   # a fila lotou e o Leitor seguiu: o resto fica só no GET /api/avisos
+        self.assertEqual((a.fila.qsize(), a.publico()["aviso"]["quando"]), (avisos.FILA_MAX, int(T0)))
+        while not a.fila.empty():
+            a.fila.get_nowait()
+        a.transicoes([pedido("r0")], RESUMO, T0 + 1)   # o mesmo pedido: já visto
+        self.assertTrue(a.fila.empty())
+        a.zerar()
+        self.assertEqual(a.publico(), {"aviso": None})
+        a.transicoes([pedido("r0")], RESUMO, T0 + 2)   # depois do zerar (troca de conta), avisa de novo
+        self.assertEqual(a.fila.qsize(), 1)
+
+    def test_limpar_desliga_todos_os_aparelhos(self):
+        a, logs, _, gravados = novo()
+        a.limpar()   # sem aparelhos: nem grava
+        self.assertEqual(gravados, [])
+        for endpoint in (FCM, APPLE):
+            a.assinar(endpoint, T0)
+        a.limpar()
+        self.assertEqual((a.assinaturas, avisos.validar_arquivo(json.loads(gravados[-1]))), ([], []))
+        self.assertEqual(logs[-1], {"evento": "push", "resultado": "limpou", "aparelhos": 2})
 
     def test_fora_da_previa_so_manda_para_host_da_lista(self):
         a, _, envios, _ = novo()
@@ -230,7 +277,7 @@ class Disparo(unittest.TestCase):
         self.addCleanup(srv.server_close)
         self.addCleanup(srv.shutdown)
         logs = Logs()
-        a = avisos.Avisos("CHAVE", lambda endpoint: "vapid t=x, k=y", logs, e.FUSO,
+        a = avisos.Avisos("CHAVE", lambda endpoint, agora: "vapid t=x, k=y", logs, e.FUSO,
                           destino=lambda endpoint: "http://127.0.0.1:%d/primeiro" % srv.server_address[1])
         a.assinaturas = [{"endpoint": FCM, "desde": 1}]
         a.disparar(T0)
@@ -258,14 +305,18 @@ class ComVapid(unittest.TestCase):
         st, corpo = a.chave_publica()
         publica = base64.urlsafe_b64decode(corpo["chave"] + "=")
         self.assertEqual((st, len(publica), publica[0], "=" in corpo["chave"]), (200, 65, 4, False))   # 0x04||X||Y, sem padding
-        t, k = a.cabecalho(FCM).removeprefix("vapid t=").split(", k=")
+        agora = time.time()
+        t, k = a._autorizacao(FCM, agora).removeprefix("vapid t=").split(", k=")
         self.assertEqual(k, corpo["chave"])
         cab, carga, assinatura = t.split(".")
         dados = json.loads(base64.urlsafe_b64decode(carga + "=" * (-len(carga) % 4)))
-        self.assertEqual((dados["aud"], dados["sub"]), ("https://fcm.googleapis.com", e.BASE))
+        self.assertEqual((dados["aud"], dados["sub"], dados["exp"]), ("https://fcm.googleapis.com", e.BASE, int(agora) + 12 * 3600))
         self.assertTrue(vapid.verificar(base64.urlsafe_b64decode(k + "="), f"{cab}.{carga}".encode(),
                                         base64.urlsafe_b64decode(assinatura + "=" * (-len(assinatura) % 4))))
         self.assertEqual(e.criar_avisos().chave, corpo["chave"])   # a mesma chave na subida seguinte
+        d = vapid.carregar_ou_criar(e.ARQ_VAPID)   # o d não fica em atributo, repr nem log
+        for forma in (str(d), format(d, "x"), base64.urlsafe_b64encode(d.to_bytes(32, "big")).decode().rstrip("=")):
+            self.assertNotIn(forma, repr(vars(a)) + repr(a) + json.dumps(self.logs))
 
     def test_sem_https_ou_chave_ilegivel_desliga(self):
         e.BASE = "http://127.0.0.1:7371"
@@ -274,8 +325,7 @@ class ComVapid(unittest.TestCase):
         e.BASE = "https://escritorio.exemplo.com"
         with open(e.ARQ_VAPID, "w", encoding="utf-8") as f:
             f.write("{quebrado")
-        a = e.criar_avisos()
-        self.assertEqual(a.chave_publica()[1]["erro"], "chave_invalida")
+        self.assertIsNone(e.criar_avisos())   # o push sai: as rotas respondem 404 push_desligado
         with open(e.ARQ_VAPID, encoding="utf-8") as f:
             self.assertEqual(f.read(), "{quebrado")   # não gerou outra por cima
         self.assertEqual([x.get("motivo") for x in self.logs], ["precisa_https", "chave_invalida"])

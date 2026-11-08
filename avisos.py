@@ -16,6 +16,7 @@ import re
 import threading
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 
 ASSINATURAS_MAX, PUSH_BYTES, CORPO_MAX, ENDPOINT_MAX = 10, 16 * 1024, 2048, 1024
@@ -30,8 +31,8 @@ TIPOS = ("pediu_aprovacao", "pediu_resposta")
 TTL, URGENCIA, TIMEOUT = 300, "high", 10   # o aviso vale 5 min no serviço de push; depois disso, perdeu a graça
 ENTRE_ENVIOS, POR_DIA = 60, 50   # por aparelho
 VISTOS_MAX, FILA_MAX, DESDE_TETO = 1000, 50, 10 ** 11
-DESLIGADO = {"precisa_https": "O aviso no celular precisa do escritório em https (ESCRITORIO_BASE).",
-             "chave_invalida": "A chave do aviso no celular (dados/vapid.json) está ilegível. Veja o log do serviço."}
+DESLIGADO = {"precisa_https": "O aviso no celular precisa do escritório em https (ESCRITORIO_BASE)."}
+CABECALHO_VALE = 11 * 3600   # o mesmo Authorization por aud, até 1 h antes do exp do JWT (12 h, no vapid.py)
 
 
 class EndpointInvalido(ValueError):
@@ -116,8 +117,8 @@ class Avisos(threading.Thread):
 
     def __init__(self, chave, cabecalho, log, fuso, guardar=None, assinaturas=None, enviar=abrir, destino=None,
                  desligado=None):
-        """chave: a chave pública VAPID (base64url) do GET /api/push/chave; cabecalho(endpoint): o Authorization do
-        envio ("vapid t=..., k=..."); guardar(bytes): o gravar() atômico do push.json; assinaturas: o que o ler_push()
+        """chave: a chave pública VAPID (base64url) do GET /api/push/chave; cabecalho(endpoint, agora): o Authorization do
+        envio ("vapid t=..., k=..."), assinado de novo só a cada CABECALHO_VALE por aud; guardar(bytes): o gravar() atômico do push.json; assinaturas: o que o ler_push()
         leu ao subir (validado, ou None); destino(endpoint): só a prévia (--push) passa, e manda tudo a um servidor falso
         local em vez do serviço de push. desligado: o motivo do DESLIGADO (sem chave nem cabecalho), quando o push não
         pode funcionar: nada se assina nem se envia, e as rotas dizem o porquê (409)."""
@@ -133,6 +134,7 @@ class Avisos(threading.Thread):
         self.contas = {}   # endpoint -> [último envio, dia, envios no dia]
         self.ultimo = None
         self.erros = set()
+        self.cabecalhos = {}   # aud (https://host) -> (Authorization, até quando vale); só a thread do envio mexe
 
     # ------------------------------------------------------------ assinaturas (rotas)
 
@@ -183,6 +185,18 @@ class Avisos(threading.Thread):
             total = len(self.assinaturas)
         self.log(evento="push", resultado="saiu", aparelhos=total)
         return 200, {"ok": True}
+
+    def limpar(self):
+        """"Sair de todos os aparelhos": nenhum aparelho segue recebendo aviso (um celular perdido, por exemplo)."""
+        with self.trava:
+            if not self.assinaturas:
+                return
+            antes, self.assinaturas = self.assinaturas, []
+            try:
+                self._gravar()
+            except OSError as x:   # a memória já está vazia; o arquivo é regravado na próxima mudança
+                self.log(evento="push", resultado="nao_gravou", detalhe=type(x).__name__)
+        self.log(evento="push", resultado="limpou", aparelhos=len(antes))
 
     def publico(self):
         """GET /api/avisos: o último aviso (agente, nome, tipo e quando), nunca o rótulo da tarefa."""
@@ -238,25 +252,37 @@ class Avisos(threading.Thread):
                 escolhidos.append(endpoint)
         return escolhidos
 
-    def _mandar(self, endpoint):
+    def _autorizacao(self, endpoint, agora):
+        """O Authorization do aud do endpoint: o mesmo JWT serve a todos os aparelhos do serviço até perto do exp."""
+        partes = urllib.parse.urlsplit(endpoint)
+        aud = f"{partes.scheme}://{partes.netloc}"
+        cab, ate = self.cabecalhos.get(aud, (None, 0))
+        if agora >= ate:
+            cab, ate = self.cabecalho(endpoint, agora), agora + CABECALHO_VALE
+            self.cabecalhos[aud] = (cab, ate)
+        return cab
+
+    def _mandar(self, endpoint, agora):
         """Um envio vazio: só o Authorization VAPID, o TTL e a Urgency. Fora da prévia, só para endpoint da lista."""
         if self.destino is None and not endpoint_ok(endpoint):
             return None
         req = urllib.request.Request(self.destino(endpoint) if self.destino else endpoint, data=None, method="POST",
-                                     headers={"Authorization": self.cabecalho(endpoint), "TTL": str(TTL),
+                                     headers={"Authorization": self._autorizacao(endpoint, agora), "TTL": str(TTL),
                                               "Urgency": URGENCIA})
         return self.enviar(req)
 
     def disparar(self, agora):
         """Envia o aviso a cada aparelho que pode receber; 404 e 410 apagam a assinatura. O log leva só contagens."""
         enviados = falhas = 0
-        apagar = set()
+        apagar, codigos = set(), set()
         for endpoint in self._escolher(agora):
             try:
-                st = self._mandar(endpoint)
+                st = self._mandar(endpoint, agora)
             except Exception as x:   # o cabecalho ou o envio com erro: conta como falha, sem derrubar a thread
                 self._erro(x)
                 st = None
+            if st is not None and not 200 <= st < 300:
+                codigos.add(st)
             if st in (404, 410):
                 apagar.add(endpoint)
             elif st is not None and 200 <= st < 300:
@@ -271,7 +297,8 @@ class Avisos(threading.Thread):
                 except OSError as x:   # some da memória já; o arquivo é regravado na próxima mudança
                     self.log(evento="push", resultado="nao_gravou", detalhe=type(x).__name__)
         if enviados or falhas or apagar:
-            self.log(evento="push", resultado="aviso", enviados=enviados, falhas=falhas, apagados=len(apagar))
+            self.log(evento="push", resultado="aviso", enviados=enviados, falhas=falhas, apagados=len(apagar),
+                     codigos=sorted(codigos))   # para o teste real (um 403 da Apple, por exemplo), sem o endpoint
 
     def run(self):
         while True:

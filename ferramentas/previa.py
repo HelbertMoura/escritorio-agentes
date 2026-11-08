@@ -216,7 +216,7 @@ if "--push" in ARGS:   # o aviso no celular, com o servidor de push falso no lug
     destino = "http://127.0.0.1:%d/push" % falso.server_address[1]
     # a BASE da prévia é http, que o VAPID não aceita como sub: um mailto: de domínio reservado, só daqui
     srv.avisos = srv.leitor.avisos = e.criar_avisos(destino=lambda endpoint: destino, sub="mailto:previa@example.com")
-    srv.avisos.start()
+    srv.avisos.start()   # a chave da prévia nasce agora, na pasta temporária: nunca é ilegível
 if "--jornal" in ARGS:
     semear_jornal(srv.jornal, [a for a in ARGS if not a.startswith("--")][0])
 if "--resolvidos" in ARGS:

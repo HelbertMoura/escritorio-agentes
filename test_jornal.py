@@ -2,6 +2,7 @@
 social.py e a rota GET /api/jornal.
 Uso: python -B -m unittest test_escritorio test_jornal
 """
+import atexit
 import datetime
 import json
 import os
@@ -28,8 +29,9 @@ from acesso import Acesso  # noqa: E402
 SEG = datetime.date(2026, 11, 9)   # uma segunda-feira
 
 
-def tearDownModule():
-    shutil.rmtree(PASTA, ignore_errors=True)
+# até o fim do processo, e não no tearDownModule: no discover, o escritorio pode ter sido importado com esta pasta, e os
+# módulos de teste seguintes ainda gravam nela
+atexit.register(shutil.rmtree, PASTA, ignore_errors=True)
 
 
 def t(dia, hhmm="10:00", s=0):

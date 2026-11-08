@@ -1204,20 +1204,25 @@ def ler_push():
 
 def criar_avisos(destino=None, sub=None):
     """O Avisos do servidor, com o sub do VAPID = BASE (e o da prévia, que passa o destino falso e um sub mailto: próprio).
-    Sem a BASE em https, o push fica desligado: a Apple recusa o JWT com um sub que não seja https ou mailto:, e nada se
-    assina nem se envia. A chave ilegível também desliga, sem gerar outra (os aparelhos assinados com ela deixariam de
-    valer)."""
+    Chamado uma vez só, no main() (ou na prévia), antes das threads: a chave é lida (ou criada) uma vez, sem corrida.
+    Sem a BASE em https, o push fica desligado com 409: a Apple recusa o JWT com um sub que não seja https ou mailto:, e
+    nada se assina nem se envia. A chave ilegível (ou o disco com erro) devolve None, o push sai (404) e nenhuma chave
+    nova é gerada por cima (os aparelhos assinados com ela deixariam de valer). O d só existe dentro do cabecalho, nunca
+    em atributo, log ou repr."""
     comum = dict(log=log, fuso=FUSO, guardar=lambda dados: gravar(ARQ_PUSH, dados), assinaturas=ler_push())
     if destino is None and not BASE.startswith("https://"):
         log(evento="push", resultado="desligado", motivo="precisa_https")
         return Avisos(None, None, desligado="precisa_https", **comum)
     try:
         d = vapid.carregar_ou_criar(ARQ_VAPID)
-    except (ValueError, OSError) as x:
+    except (ValueError, OSError) as x:   # a mensagem do vapid.py tem o caminho e o motivo, nunca o conteúdo
         log(evento="push", resultado="desligado", motivo="chave_invalida", detalhe=f"{type(x).__name__}: {str(x)[:200]}")
-        return Avisos(None, None, desligado="chave_invalida", **comum)
+        return None
     sub = sub or BASE
-    return Avisos(vapid.publica_b64url(d), lambda endpoint: vapid.cabecalho(d, endpoint, sub), destino=destino, **comum)
+
+    def cabecalho(endpoint, agora):
+        return vapid.cabecalho(d, endpoint, sub, agora)
+    return Avisos(vapid.publica_b64url(d), cabecalho, destino=destino, **comum)
 
 
 # ---------------------------------------------------------------- clima real (Open-Meteo, sem chave)
@@ -2280,7 +2285,8 @@ class Pagina(BaseHTTPRequestHandler):
     def _post_sair_todos(self, rota):
         """"Sair de todos os aparelhos": Origin obrigatório e igual à BASE (sem a volta para o Referer), sessão, JSON
         {"senha"} de até 1 KB. A senha conta no balde do login (8 erros em 15 min travam também o login). Zera todas as
-        sessões e modos resposta e apaga os dois cookies deste navegador."""
+        sessões e modos resposta, desliga o aviso no celular de todos os aparelhos e apaga os dois cookies deste
+        navegador."""
         acesso, token = self.server.acesso, self._token()
         if self.headers.get("Origin") != BASE:
             log(evento="http", rota=rota[:40], resultado="origem_recusada")
@@ -2310,6 +2316,8 @@ class Pagina(BaseHTTPRequestHandler):
             log(evento="acesso", resultado="sair_todos_nao_gravou", detalhe=str(x))
             return self._json(*erro(500, "gravar", "Não deu para encerrar as sessões agora."))
         log(evento="acesso", resultado="sair_todos", usuario=usuario, sessoes=n)
+        if getattr(self.server, "avisos", None):   # um aparelho perdido também para de receber os avisos
+            self.server.avisos.limpar()
         return self._json(200, {"ok": True}, {"Set-Cookie": [self._cookie("", 0), self._cookie_modo("")]})
 
     def do_POST(self):
@@ -2439,7 +2447,8 @@ def main():
     leitor.jornal = Jornal(log, FUSO, lambda dados: gravar(ARQ_JORNAL, dados), ler_jornal(),
                            lambda: (clima.foto() or {}).get("tipo"))
     leitor.avisos = criar_avisos()   # aviso no celular: a thread dele fala com os serviços de push, nunca com o agentes.chat
-    leitor.avisos.start()
+    if leitor.avisos:
+        leitor.avisos.start()
     leitor.start()
     srv = Servidor((BIND, PORTA), Pagina)  # 127.0.0.1: a Tailscale (serve) publica só na rede privada
     srv.cred, srv.leitor, srv.acesso = cred, leitor, contas
