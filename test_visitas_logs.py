@@ -56,11 +56,14 @@ class PrivacidadeLogs(unittest.TestCase):
             # fecha com RST (SO_LINGER 0): a leitura do corpo no servidor cai com ConnectionResetError
             cliente.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('ii', 1, 0))
             cliente.close()
-            for _ in range(50):
+            for _ in range(250):
                 if saida.getvalue() or erros.getvalue():
                     break
                 time.sleep(0.02)
         log = saida.getvalue() + erros.getvalue()
+        # o caminho de erro rodou (log vazio passaria sem provar nada) e registrou só o tipo
+        self.assertEqual(json.loads(log.splitlines()[0])['evento'], 'http', log)
+        self.assertIn('ConnectionResetError', log)
         self.assertNotIn(self.servidor.server_address[0], log)
         self.assertNotIn('Exception occurred', log)
 
