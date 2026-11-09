@@ -116,6 +116,7 @@ class VisitasHTTP(unittest.TestCase):
                 status, _, dados = self.pedir('criar', {'agente': 'ag-1'}, admin=True)
                 self.assertEqual(status, 403)
                 self.assertIn('modo resposta', dados['erro'])
+                self.assertEqual(dados['codigo'], 'modo_fechado', 'a tela pede a senha ali mesmo')
                 self.assertEqual(self.pedir('criar', {}, admin=True)[0], 200, 'sala só de pessoas não precisa')
             with patch.object(e.Pagina, '_modo_resposta', lambda self: (3600, 28800)):
                 self._agente_autorizado()
