@@ -466,6 +466,32 @@ class Http(unittest.TestCase):
         self.assertEqual(self.req("/entrar")[0], 200)
         self.assertEqual(self.req("/logo.png")[0], 200)
 
+    def test_visitas_isoladas_de_sessao_administrativa(self):
+        def post(rota, dados, cookie=None, origem=None):
+            cab = {"Origin": self.base if origem is None else origem, "Content-Type": "application/json"}
+            cab.update(cookie or {})
+            st, corpo, _ = self.req(rota, cab, json.dumps(dados).encode())
+            return st, json.loads(corpo)
+
+        criar = "/api/visitas/criar"
+        self.assertEqual(self.req("/visita.html")[0], 200)
+        self.assertEqual(self.req("/visita.js")[0], 200)
+        self.assertEqual(self.req("/visitas-admin.html")[0], 302)
+        self.assertEqual(post(criar, {})[0], 401)
+        dono = self.entrar()
+        self.assertEqual(post(criar, {}, dono, "https://outro.example")[0], 403)
+        convite = post(criar, {}, dono)[1]["convite"]
+        outro = post(criar, {}, dono)[1]["convite"]
+        visitante = post("/api/visitas/entrar", {"convite": convite})[1]["sessao"]
+        equipe = post("/api/visitas/entrar", {"convite": convite})[1]["sessao"]
+        isolado = post("/api/visitas/entrar", {"convite": outro})[1]["sessao"]
+        self.assertEqual(self.req("/api/estado")[0], 401)
+        self.assertEqual(post("/api/visitas/enviar", {"sessao": visitante, "texto": "olá"})[0], 200)
+        self.assertEqual(post("/api/visitas/receber", {"sessao": equipe})[1]["mensagens"], ["olá"])
+        self.assertEqual(post("/api/visitas/receber", {"sessao": isolado})[1]["mensagens"], [])
+        self.assertTrue(post("/api/visitas/revogar", {"convite": convite}, dono)[1]["ok"])
+        self.assertEqual(post("/api/visitas/receber", {"sessao": visitante})[0], 403)
+
     def test_estado_com_rotulo_cortado_no_meio_do_emoji_responde_200(self):
         antes = self.srv.leitor
 
@@ -2758,7 +2784,7 @@ class Docker(unittest.TestCase):
                 pendentes += [n for n in nomes if os.path.isfile(os.path.join(raiz, n + ".py"))]
         esperados = {n + ".py" for n in locais}
         self.assertEqual(esperados, {"escritorio.py", "acesso.py", "social.py", "planta.py", "ajustes.py", "jornal.py",
-                                     "avisos.py", "vapid.py", "novidades.py"})
+                                 "avisos.py", "vapid.py", "novidades.py", "visitas_sala.py"})
         self.assertLessEqual(esperados, copiados)
         self.assertLessEqual(esperados, liberados)
         with open(os.path.join(raiz, "instalar.sh"), encoding="utf-8") as f:

@@ -1,0 +1,27 @@
+@font-face { font-family: "Source Sans 3"; src: url("/fontes/source-sans-3.woff2") format("woff2"); font-weight: 200 900; font-display: swap; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #0f0f11; color: #f2f2f3; font: 16px/1.5 "Source Sans 3", sans-serif; }
+.layout { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.8fr); min-height: 100vh; }
+.ambiente { padding: clamp(24px, 5vw, 64px); background: #1b3fb8; }
+.marca { font-weight: 700; letter-spacing: .08em; font-size: 13px; }
+.voltar { color: inherit; }
+h1 { font-size: clamp(32px, 4vw, 50px); line-height: 1.1; margin: 32px 0 8px; }
+.ambiente p { max-width: 40ch; }
+canvas { display: block; width: min(100%, 640px); height: auto; margin-top: 32px; image-rendering: pixelated; background: #d7d6c9; }
+.conversa { display: flex; flex-direction: column; min-height: 100vh; padding: clamp(24px, 4vw, 48px); }
+h2 { margin: 0; font-size: 26px; }
+#estado, .nota { color: #c2c2c9; font-size: 14px; }
+#mensagens { list-style: none; padding: 0; flex: 1; max-height: 50vh; overflow: auto; overflow-wrap: anywhere; }
+#mensagens li { padding: 10px 0; border-bottom: 1px solid #33333b; white-space: pre-wrap; }
+label { display: block; margin-bottom: 6px; font-weight: 600; }
+textarea { display: block; width: 100%; resize: vertical; border: 1px solid #555560; border-radius: 8px; padding: 12px; background: #17171a; color: inherit; font: inherit; }
+button { min-height: 48px; padding: 0 18px; margin-top: 12px; border: 0; border-radius: 8px; background: #f5b83d; color: #1a1408; font: inherit; font-weight: 700; cursor: pointer; }
+button:disabled { opacity: .55; cursor: default; }
+.secundario { align-self: flex-start; background: transparent; color: #f2f2f3; border: 1px solid #777; }
+:focus-visible { outline: 3px solid #f5b83d; outline-offset: 3px; }
+select { display: block; width: 100%; min-height: 44px; border: 1px solid #555560; border-radius: 8px; padding: 0 12px; background: #17171a; color: inherit; font: inherit; }
+.aviso { margin: 8px 0; padding: 10px 12px; border-left: 3px solid #f5b83d; background: #1d1a12; color: #f2e6c8; font-size: 14px; }
+.mundo { max-width: 980px; margin: 0 auto; padding: clamp(24px, 5vw, 64px); }
+.mundo canvas { width: 100%; max-width: 960px; background: #3a3a42; }
+#mundo-estado { color: #c2c2c9; font-size: 14px; }
+@media (max-width: 700px) { .layout { display: block; } .conversa { min-height: 60vh; } }

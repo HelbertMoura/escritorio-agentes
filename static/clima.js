@@ -4,7 +4,9 @@
 "use strict";
 
 const Clima = (() => {
-  const simulado = new URLSearchParams(location.search).get("clima");
+  const TIPOS = ["limpo", "nublado", "neblina", "garoa", "chuva", "tempestade", "neve"];
+  const pedido = new URLSearchParams(location.search).get("clima");
+  const simulado = TIPOS.includes(pedido) ? pedido : null;   // nada de texto livre da URL na tela
   let atual = { tipo: "limpo" }, gotas = [], flocos = [], respingos = [], neveAcumulada = 0, raio = 0, proxRaio = 6, nuvens = [];
 
   function definir(c) { atual = simulado ? { tipo: simulado } : (c || { tipo: "limpo" }); }
