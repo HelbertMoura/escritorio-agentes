@@ -59,7 +59,7 @@ select { display: block; width: 100%; min-height: 44px; border: 1px solid #55556
   .mundo-teclas { display: none; }
   .mundo-painel #entrar { min-height: 44px; margin-top: 4px; }
   #mundo-estado { min-height: 0; }
-  .mundo-palco { height: min(130vw, 75svh); }
+  .mundo-palco { height: min(112vw, 72svh); }
   .mundo-controles { right: 10px; bottom: 10px; }
 }
 @media (max-width: 700px) { .layout { display: block; } .conversa { min-height: 60vh; } }

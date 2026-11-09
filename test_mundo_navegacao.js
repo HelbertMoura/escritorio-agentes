@@ -46,7 +46,9 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
     setInterval(f, ms) { intervalos.push(ms); }, clearInterval() {}, setTimeout, Math, Promise, JSON, URLSearchParams,
     Image: class { constructor() { this.complete = false; this.naturalWidth = 0; } addEventListener() {} },
     Ceu: { agora: () => ({ h: 12, cima: "#3d95ee", baixo: "#a9d8ff", escuro: 0, hora: "12:00" }) },
-    Clima: { definir(c) { contexto.clima = c; }, tipo: () => "limpo", texto: () => "céu limpo", desenhar() {}, balanco: () => 0 },
+    // desenhar conta as chamadas: as partículas de chuva e neve e o clarão do raio só saem do Clima.desenhar
+    Clima: { definir(c) { contexto.clima = c; }, tipo: () => (contexto.clima && contexto.clima.tipo) || "limpo", texto: () => "céu limpo",
+             desenhar() { contexto.desenhos = (contexto.desenhos || 0) + 1; }, balanco: () => 0 },
     fetch: async (url, opcoes) => {
       requisicoes.push([url, opcoes]);
       if (url.startsWith("/mundo/mundo.json")) return { ok: true, json: async () => JSON.parse(JSON.stringify(MUNDO)) };
@@ -142,6 +144,12 @@ async function principal() {
   const solta = a.M.Camera([0, 0, 400, 400]);
   solta.tamanho(640, 400, 1); solta.x = -999; solta.y = 9999; solta.z = 9; solta.limitar();
   assert.equal(solta.z, 4); assert.ok(solta.x - 320 / solta.P >= 0 && solta.y + 200 / solta.P <= 400);
+  // a 1x o mapa inteiro cabe: celular (canvas de 1170 px, dpr 3) e o palco do desktop de 1280x800
+  for (const [w, h, d] of [[1170, 1521, 3], [1170, 1290, 3], [940, 800, 1]]) {
+    const c = a.M.Camera([0, 0, 400, 400]).tamanho(w, h, d);
+    assert.ok(c.x - w / 2 / c.P <= 0 && c.x + w / 2 / c.P >= 400, `x de 0 a 400 inteiro em ${w}x${h}`);
+    assert.ok(c.y - h / 2 / c.P <= 0 && c.y + h / 2 / c.P >= 400, `y de 0 a 400 inteiro em ${w}x${h}`);
+  }
 
   // aba escondida: nenhum quadro novo; de volta, um só
   const h = await abrir("#brasil");
@@ -161,6 +169,16 @@ async function principal() {
   for (let i = 0; i < 600; i++) { v.rodar(); maximo = Math.max(maximo, v.M.niveis.brasil.avioes.length); }
   assert.ok(maximo > 0 && maximo <= 6, "aviões: " + maximo);
   assert.ok(v.M.niveis.brasil.particulas > 0);
+  // no bairro também: com tempestade e movimento reduzido, nem partículas nem o clarão do raio (nada de Clima.desenhar)
+  const tormenta = { cidades: { recife: { tipo: "tempestade", vento: 1, noite: false } }, casa: "recife", versao: 1 };
+  for (const reduz of [true, false]) {
+    const b = await abrir("#bairro", { clima: tormenta, reduzido: reduz });
+    b.rodar(60);
+    assert.equal(b.M.nivel, "bairro");
+    assert.equal(b.contexto.clima.tipo, "tempestade", "#bairro direto fica na casa assim que o clima chega");
+    if (reduz) assert.equal(b.contexto.desenhos || 0, 0, "reduzido: sem chuva nem raio no bairro");
+    else assert.ok(b.contexto.desenhos >= 60, "sem reduzir, o clima desenha a cada quadro");
+  }
 
   // clima vazio, estranho ou fora do ar não quebra o quadro
   for (const opcoes of [{ clima: {} }, { clima: { cidades: { recife: "lixo", manaus: { tipo: "<b>", vento: "x" } }, casa: 7 } }, { climaFalha: true }]) {

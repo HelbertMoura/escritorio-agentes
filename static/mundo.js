@@ -5,8 +5,8 @@
 // segue só pela porta do chalé, como antes. O tempo das cidades vem de POST /api/mundo/clima ao abrir e a cada 15 min.
 "use strict";
 const Mundo = (() => {
-  // Câmera de um nível: centro (x, y) no mundo e zoom z de 1x a 4x sobre a escala base, a escala inteira em que a caixa
-  // do nível mais se aproxima da tela. Parada, a escala final (base·z) é inteira e a origem cai em pixel inteiro.
+  // Câmera de um nível: centro (x, y) no mundo e zoom z de 1x a 4x sobre a escala base, a maior escala inteira em que a
+  // caixa do nível cabe inteira na tela. Parada, a escala final (base·z) é inteira e a origem cai em pixel inteiro.
   function Camera(caixa) {
     const MIN = 1, MAX = 4, prender = z => Math.min(MAX, Math.max(MIN, z));
     const c = {
@@ -18,7 +18,7 @@ const Mundo = (() => {
       limitar(nova) {
         if (nova) c.caixa = nova;
         const [x0, y0, x1, y1] = c.caixa;
-        c.base = Math.max(1, Math.round(Math.min(c.W / (x1 - x0), c.H / (y1 - y0))));
+        c.base = Math.max(1, Math.floor(Math.min(c.W / (x1 - x0), c.H / (y1 - y0))));   // a 1x a caixa cabe inteira
         c.z = prender(Number.isFinite(c.z) ? c.z : 1); c.alvoZ = prender(Number.isFinite(c.alvoZ) ? c.alvoZ : 1);
         const mw = c.W / 2 / c.P, mh = c.H / 2 / c.P;
         c.x = mw * 2 >= x1 - x0 || !Number.isFinite(c.x) ? (x0 + x1) / 2 : Math.min(x1 - mw, Math.max(x0 + mw, c.x));
@@ -78,7 +78,7 @@ const Mundo = (() => {
 
   // o bairro de hoje, desenhado 1:1 num quadro de 320x180 e ampliado inteiro: o mesmo pixel art de antes
   function nivelBairro() {
-    const cena = MundoBairro.cena(entrar), camera = Camera([0, 0, MundoBairro.W, MundoBairro.H]), p = cena.porta;
+    const cena = MundoBairro.cena(entrar, { reduzido }), camera = Camera([0, 0, MundoBairro.W, MundoBairro.H]), p = cena.porta;
     const quadro = document.createElement("canvas"); quadro.width = MundoBairro.W; quadro.height = MundoBairro.H;
     const qctx = quadro.getContext("2d");
     const porta = { id: "porta", x: p.x + p.w / 2, y: p.y + p.h / 2, alto: 0, titulo: "Recepção",
@@ -323,7 +323,12 @@ const Mundo = (() => {
   function pedirClima() {   // só tipo, vento e noite por cidade; sem cookie, com o limite das rotas públicas
     fetch("/api/mundo/clima", { method: "POST", credentials: "omit", cache: "no-store", headers: { "Content-Type": "application/json" }, body: "{}" })
       .then(r => r.ok ? r.json() : null).catch(() => null)
-      .then(d => { if (mapa) mapa.clima(d); if (nome === "bairro") climaDoBairro(); montarAlvos(); mostrar(); });
+      .then(d => {
+        if (mapa) mapa.clima(d);
+        if (nome === "bairro" && !atualCidade && mapa && mapa.casa) atualCidade = ultimaCidade = mapa.casa;   // #bairro direto: o da casa
+        if (nome === "bairro") climaDoBairro();
+        montarAlvos(); mostrar();
+      });
   }
   fetch("/mundo/mundo.json", { credentials: "omit", cache: "no-cache" })
     .then(r => r.ok ? r.json() : Promise.reject(new Error("mundo.json " + r.status)))

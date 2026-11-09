@@ -16,7 +16,8 @@ const MundoBairro = (() => {
   function porta(c) { return { x: c.x + c.w / 2 - 6, y: CALCADA - 18, w: 12, h: 18 }; }
   function dentro(p, x, y) { return x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h; }
 
-  function cena(destino) {
+  // reduzido (prefers-reduced-motion): sem as partículas de chuva e neve e sem o clarão do raio; o céu fechado fica
+  function cena(destino, { reduzido = false } = {}) {
     let ctx = null;
     const estado = {
       carro: { x: -30, v: 34 }, pessoas: [{ x: 60, v: 9, cor: "#d0453b" }, { x: 250, v: -7, cor: "#3b7bd0" }],
@@ -105,7 +106,7 @@ const MundoBairro = (() => {
       }
       // o bairro tem céu (o raio aparece nele); som só se a pessoa já ligou o som no escritório (mesma config)
       const som = window.Som && Som.ligado ? Som : null;
-      Clima.desenhar(ctx, { W, H, predioRet: { x: -10, y: -10, w: 0, h: 0 }, ceu: true }, dt, t, som);
+      if (!reduzido) Clima.desenhar(ctx, { W, H, predioRet: { x: -10, y: -10, w: 0, h: 0 }, ceu: true }, dt, t, som);
     }
 
     // clique em coordenadas do bairro: a porta chama o destino; o cachorro pula; a árvore solta passarinhos

@@ -32,9 +32,9 @@ const MundoMapa = (() => {
   function rgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
   function mistura(a, b, f) { const x = rgb(a), y = rgb(b); return `rgb(${x.map((v, i) => Math.round(v + (y[i] - v) * f)).join(",")})`; }
   function semente(s) { return () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff); }
-  // U: pixels da tela por pixel de sprite. 2 px de CSS, mas nunca maior que a escala base do nível: no celular, o ícone
-  // fica na mesma grade do mapa em vez de cobrir as cidades vizinhas
-  function unidade(cam) { return Math.max(1, Math.min(Math.round(2 * cam.dpr), cam.base)); }
+  // U: pixels da tela por pixel de sprite. 2 px de CSS, mas não mais que a escala base do nível (no celular o ícone não
+  // cobre as cidades vizinhas) e nunca menos que 1 px de CSS (para continuar legível)
+  function unidade(cam) { return Math.max(1, Math.min(Math.round(2 * cam.dpr), Math.max(cam.base, Math.round(cam.dpr)))); }
 
   // telas pequenas guardadas: o sprite é pintado uma vez por cor e escala, e depois só copiado
   const telas = new Map();
@@ -217,6 +217,8 @@ const MundoMapa = (() => {
         ctx.drawImage(imagem, 0, 0, 1, 1, -E, -E, E, E); ctx.drawImage(imagem, W - 1, 0, 1, 1, W, -E, E, E);
         ctx.drawImage(imagem, 0, H - 1, 1, 1, -E, H, E, E); ctx.drawImage(imagem, W - 1, H - 1, 1, 1, W, H, E, E);
         ctx.drawImage(imagem, 0, 0);
+        ctx.fillStyle = "rgba(4,8,20,.38)";   // fora da imagem, um véu: as faixas esticadas leem como borda do mapa
+        ctx.fillRect(-E, -E, E * 2 + W, E); ctx.fillRect(-E, H, E * 2 + W, E); ctx.fillRect(-E, 0, E, H); ctx.fillRect(W, 0, E, H);
       }
       const nuvens = [];
       for (const c of cidades) {   // o chão de cada cidade: neve assentada, chão molhado, neblina
