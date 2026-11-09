@@ -69,10 +69,25 @@ class RecepcaoPublica(unittest.TestCase):
         self.assertEqual(self.pedir('recepcao', {})[2]['clima'], 'limpo')
         Clima.estado = None
         self.assertEqual(self.pedir('recepcao', {})[2]['clima'], 'limpo')
+        self.assertEqual(self.pedir('recepcao', {})[2]['vento'], 0)
+
+    def test_recepcao_entrega_o_vento_arredondado(self):
+        class Clima:
+            estado = {'tipo': 'tempestade', 'vento': 37.4, 'cidade': 'Cidade Secreta'}
+            def foto(self):
+                return self.estado
+        self.servidor.clima = Clima()
+        resultado = self.pedir('recepcao', {})[2]
+        self.assertEqual(resultado['vento'], 40)
+        self.assertNotIn('37.4', json.dumps(resultado))
+        for bruto, publico in ((None, 0), ('forte', 0), (True, 0), (-5, 0), (float('nan'), 0), (float('inf'), 0),
+                               (4, 0), (5, 0), (16, 20), (300, 120)):
+            self.assertEqual(suporte_http.e.vento_publico(bruto), publico, bruto)
 
     def test_bairro_publico_sem_cookie_e_sem_cache_da_pagina(self):
         import http.client
-        for nome, cache in (('mundo.html', 'no-store'), ('mundo.js', 'no-cache'), ('ceu.js', 'no-cache'), ('clima.js', 'no-cache')):
+        for nome, cache in (('mundo.html', 'no-store'), ('mundo.js', 'no-cache'), ('ceu.js', 'no-cache'), ('clima.js', 'no-cache'),
+                            ('som.js', 'no-cache')):
             conexao = http.client.HTTPConnection(*self.servidor.server_address, timeout=3)
             try:
                 conexao.request('GET', '/' + nome)

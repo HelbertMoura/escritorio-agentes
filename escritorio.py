@@ -2074,7 +2074,7 @@ def geometria_visita(config, foto, planta):
 
 PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "fontes/figtree.ttf", "fontes/silkscreen.ttf", "fontes/source-sans-3.woff2",
             "visita.html", "visita.js", "visita.css", "mapa.js", "tema/atlas.png", "tema/atlas.json",
-            "mundo.html", "mundo.js", "ceu.js", "clima.js",  # bairro público: só código de desenho, sem dados
+            "mundo.html", "mundo.js", "ceu.js", "clima.js", "som.js",  # bairro público: só código de desenho e som, sem dados
             "fontes/doto.woff2", "logo.png",  # liberados na tela de login
             # PWA: o navegador busca o manifesto sem cookie; nenhum deles tem segredo. O sw.js fica na raiz (escopo /)
             "manifest.webmanifest", "sw.js", "icone-180.png", "icone-192.png", "icone-512.png", "icone-mascara-512.png"}
@@ -2473,10 +2473,13 @@ class Pagina(BaseHTTPRequestHandler):
                     "novos": [v for v in dados_planta.get("novos", []) if v.get("sala") == "recepcao"],
                 }
                 resposta = geometria_visita({"times": []}, {}, publica)
-                # para o céu do bairro, só o tipo de tempo: sem cidade, coordenadas nem temperatura
+                # para o céu do bairro, só o tipo de tempo e o vento arredondado de 10 em 10 km/h:
+                # sem cidade, coordenadas nem temperatura
                 clima = getattr(self.server, "clima", None)
-                tempo = (clima.foto() or {}).get("tipo") if clima else None
+                foto = (clima.foto() or {}) if clima else {}
+                tempo = foto.get("tipo")
                 resposta["clima"] = tempo if tempo in TIPOS_CLIMA else "limpo"
+                resposta["vento"] = vento_publico(foto.get("vento"))
                 return self._json(200, resposta)
             elif rota == "/api/visitas/entrar" and set(dados) == {"convite"}:
                 salas.limitar_sala(dados["convite"], convite=True)
@@ -2940,6 +2943,13 @@ class Servidor(ThreadingHTTPServer):
         if agora >= self._proxima_limpeza_visitas:
             self.salas_visitas.limpar()
             self._proxima_limpeza_visitas = agora + 30
+
+
+def vento_publico(kmh):
+    """Vento para o bairro público: km/h arredondado de 10 em 10, de 0 a 120; sem número válido, 0."""
+    if isinstance(kmh, bool) or not isinstance(kmh, (int, float)) or not 0 <= kmh < 1000:   # NaN e infinito também caem aqui
+        return 0
+    return int(min(120, round(kmh / 10) * 10))
 
 
 def proxy_visitas(valor):
