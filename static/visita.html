@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex, nofollow">
   <meta name="referrer" content="no-referrer">
   <title>Visita ao escritório</title>
-  <link rel="stylesheet" href="/visita.css?v=3">
+  <link rel="stylesheet" href="/visita.css?v=4">
 </head>
 <body>
   <main class="layout">
@@ -23,10 +23,12 @@
       <h2 id="titulo-conversa">Conversa</h2>
       <p id="estado" role="status">Conectando…</p>
       <p id="aviso-agente" class="aviso" hidden></p>
+      <p id="mensagens-vazio" class="nota" hidden>Ainda não há mensagens.</p>
       <ol id="mensagens" aria-label="Mensagens" aria-live="polite"></ol>
       <form id="formulario">
         <label for="texto">Sua mensagem</label>
-        <textarea id="texto" maxlength="1000" rows="3" required disabled></textarea>
+        <textarea id="texto" maxlength="1000" rows="3" aria-describedby="caracteres-restantes" required disabled></textarea>
+        <p id="caracteres-restantes" class="nota contador">1000 caracteres restantes</p>
         <button type="submit" disabled>Enviar</button>
       </form>
       <p class="nota">As mensagens ficam temporariamente na memória do serviço. Ao sair, esta tela é apagada.</p>
@@ -34,6 +36,6 @@
     </section>
   </main>
   <script src="/mapa.js?v=3"></script>
-  <script src="/visita.js?v=3"></script>
+  <script src="/visita.js?v=4"></script>
 </body>
 </html>

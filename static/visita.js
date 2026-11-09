@@ -5,6 +5,9 @@
   const estado = document.getElementById("estado"), lista = document.getElementById("mensagens");
   const formulario = document.getElementById("formulario"), campo = document.getElementById("texto");
   const enviar = formulario.querySelector("button"), sair = document.getElementById("sair");
+  const vazio = document.getElementById("mensagens-vazio"), contador = document.getElementById("caracteres-restantes");
+  function atualizarContador() { contador.textContent = `${campo.maxLength - campo.value.length} caracteres restantes`; }
+  campo.addEventListener("input", atualizarContador);
   let sessao = null, ativa = true, timer, recepcaoLimitada = false;
   async function pedir(acao, dados) {
     const resposta = await fetch(`/api/visitas/${acao}`, { method: "POST", credentials: "omit", cache: "no-store",
@@ -19,7 +22,7 @@
   }
   function encerrar(mensagem) {
     ativa = false; clearTimeout(timer); campo.disabled = true; enviar.disabled = true; estado.textContent = mensagem;
-    sessao = null; lista.replaceChildren(); campo.value = "";
+    sessao = null; lista.replaceChildren(); campo.value = ""; atualizarContador(); vazio.hidden = true;
     predio = null; imagem = null; atlasDados = null; verSala.disabled = verEscritorio.disabled = true;
     ctx.clearRect(0, 0, canvas.width, canvas.height); mapaEstado.textContent = "Mapa indisponível.";
   }
@@ -33,7 +36,7 @@
         const item = document.createElement("li"); item.textContent = mensagem; lista.append(item);
         if (lista.children.length > 100) lista.firstElementChild.remove();
       }
-      if (resposta.mensagens.length) lista.scrollTop = lista.scrollHeight;
+      if (resposta.mensagens.length) { vazio.hidden = true; lista.scrollTop = lista.scrollHeight; }
       timer = setTimeout(receber, 1500);
     } catch (erro) {
       if (!ativa) return;
@@ -49,7 +52,7 @@
     const texto = campo.value;
     if (!sessao || !texto.trim()) return;
     enviar.disabled = true;
-    try { await pedir("enviar", { sessao, texto }); campo.value = ""; }
+    try { await pedir("enviar", { sessao, texto }); campo.value = ""; atualizarContador(); }
     catch (_) { if (ativa) estado.textContent = "Não foi possível enviar. Aguarde um instante e tente novamente."; }
     finally { if (ativa) enviar.disabled = false; }
   });
@@ -122,7 +125,7 @@
     try {
       const dados = await pedir("entrar", { convite });
       if (!ativa) { navigator.sendBeacon("/api/visitas/sair", new Blob([JSON.stringify({ sessao: dados.sessao })], { type: "application/json" })); return; }
-      sessao = dados.sessao; estado.textContent = "Conectado à sala.";
+      sessao = dados.sessao; estado.textContent = "Conectado à sala."; vazio.hidden = false;
       const aviso = document.getElementById("aviso-agente");
       if (aviso && typeof dados.agente === "string" && dados.agente) {
         aviso.textContent = `${dados.agente} (agente) participa desta sala. O que você escrever aqui é enviado ao agentes.chat e fica guardado lá.`;
