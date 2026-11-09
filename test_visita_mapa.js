@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 
 async function principal() {
-  const ids = ["estado", "mensagens", "formulario", "texto", "sair", "cena", "mapa-estado", "ver-sala", "ver-escritorio", "titulo-conversa"];
+  const ids = ["estado", "mensagens", "mensagens-vazio", "caracteres-restantes", "formulario", "texto", "sair", "cena", "mapa-estado", "ver-sala", "ver-escritorio", "titulo-conversa"];
   const chamadas = [], transformacoes = [];
   const ctx = { clearRect() {}, drawImage() {}, setTransform(...v) { transformacoes.push(v); } };
   const elementos = Object.fromEntries(ids.map(id => [id, {
