@@ -1,6 +1,6 @@
 "use strict";
-// Mundo público em níveis (Brasil → Cidade → Bairro): fragmento inválido, Esc, clique numa cidade, câmera presa à caixa,
-// aba escondida, movimento reduzido e clima vazio. O mesmo arnês de VM do test_visita_mundo.js, com os scripts da página.
+// Mundo público em níveis (Globo → Brasil → Cidade → Bairro): fragmento inválido, Esc, clique numa cidade, câmera presa à
+// caixa, aba escondida, movimento reduzido e clima vazio. O mesmo arnês de VM do test_visita_mundo.js, com os scripts da página.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
@@ -58,7 +58,7 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
     },
   };
   vm.createContext(contexto);
-  for (const f of ["static/mundo_bairro.js", "static/mundo_mapa.js", "static/mundo.js"]) vm.runInContext(fs.readFileSync(f, "utf8"), contexto, { filename: f });
+  for (const f of ["static/mundo_bairro.js", "static/mundo_mapa.js", "static/mundo_globo.js", "static/mundo.js"]) vm.runInContext(fs.readFileSync(f, "utf8"), contexto, { filename: f });
   for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r));   // mundo.json e clima chegam
   let relogio = 0;
   const rodar = (n = 1) => { for (let i = 0; i < n; i++) { const f = quadros.shift(); if (!f) return; relogio += 16; f(relogio); } };
@@ -111,7 +111,31 @@ async function principal() {
   e.tecla("Escape"); e.rodar(40);
   assert.equal(e.M.nivel, "brasil"); assert.equal(e.contexto.location.hash, "#brasil");
   e.elementos["mundo-voltar"].disparar("click"); e.rodar(40);
-  assert.equal(e.M.nivel, "brasil", "sem o globo, o Brasil é o topo");
+  assert.equal(e.M.nivel, "globo", "Voltar no Brasil sobe para o globo"); assert.equal(e.contexto.location.hash, "#globo");
+  assert.equal(e.elementos["mundo-voltar"].disabled, true, "o globo é o topo: Voltar desabilitado");
+  e.tecla("Escape"); e.rodar(40);
+  assert.equal(e.M.nivel, "globo", "Esc no globo não sai dele");
+
+  // sem fragmento, abre no globo (e #globo também vale); um clique no espaço não faz nada, um clique no Brasil desce
+  const g = await abrir("");
+  assert.equal(g.M.nivel, "globo"); assert.equal(g.contexto.location.hash, "#globo");
+  assert.equal(g.elementos["mundo-voltar"].disabled, true);
+  assert.equal((await abrir("#globo")).M.nivel, "globo");
+  g.clicar(3, 3); g.rodar(40);
+  assert.equal(g.M.nivel, "globo", "clique no espaço");
+  g.clicar(...g.M.camera.tela(80, 80)); g.rodar(40);
+  assert.equal(g.M.nivel, "brasil", "clique no Brasil"); assert.equal(g.contexto.location.hash, "#brasil");
+  g.tecla("Escape"); g.rodar(40);
+  assert.equal(g.M.nivel, "globo", "Esc no Brasil volta ao globo"); assert.equal(g.contexto.location.hash, "#globo");
+  // o + no globo com o Brasil escondido: o globo gira até ele e então desce
+  const gz = await abrir("");
+  for (let i = 0; i < 3; i++) { gz.arrastar(-150, 0); gz.rodar(); }
+  const lon = gz.M.niveis.globo.rotacao.lon;
+  assert.ok(Math.abs((((lon + 50) % 360) + 540) % 360 - 180) > 60, "o arraste levou o Brasil para longe: " + lon);
+  gz.elementos["mundo-mais"].disparar("click"); gz.rodar(3);
+  assert.equal(gz.M.nivel, "globo", "ainda girando até o Brasil");
+  gz.rodar(240);
+  assert.equal(gz.M.nivel, "brasil", "o + leva ao Brasil");
 
   // um clique numa cidade leva a #cidade=<id>; no mar, nada
   const k = await abrir("#brasil");
@@ -181,6 +205,22 @@ async function principal() {
   assert.equal(h.quadros.length, 0, "escondida, não pede quadro");
   h.documento.hidden = false; h.documento.disparar("visibilitychange"); h.documento.disparar("visibilitychange");
   assert.equal(h.quadros.length, 1, "de volta, um quadro só");
+
+  // o globo gira sozinho a 6°/s; com movimento reduzido fica parado no centro inicial (mas o arraste ainda gira)
+  const gg = await abrir("");
+  const antes = gg.M.niveis.globo.rotacao.lon;
+  gg.rodar(60);
+  assert.ok(Math.abs(Math.abs(gg.M.niveis.globo.rotacao.lon - antes) - 60 * 0.016 * 6) < 0.05, "6°/s: " + (gg.M.niveis.globo.rotacao.lon - antes));
+  const gr = await abrir("", { reduzido: true });
+  const r0 = JSON.stringify(gr.M.niveis.globo.rotacao);
+  assert.equal(r0, JSON.stringify({ lon: -50, lat: -15 }), "centro inicial");
+  gr.rodar(120);
+  assert.equal(JSON.stringify(gr.M.niveis.globo.rotacao), r0, "reduzido: a rotação não muda entre quadros");
+  gr.arrastar(100, 0); gr.rodar(30);
+  const r1 = JSON.stringify(gr.M.niveis.globo.rotacao);
+  assert.notEqual(r1, r0, "o arraste gira o globo à mão");
+  gr.rodar(60);
+  assert.equal(JSON.stringify(gr.M.niveis.globo.rotacao), r1, "reduzido: sem inércia nem giro depois do arraste");
 
   // movimento reduzido: nem aviões nem partículas; sem ele, até 6 aviões e partículas sobre as cidades
   const tempo = { cidades: Object.fromEntries(MUNDO.cidades.map((c, i) => [c.id, { tipo: ["chuva", "neve", "tempestade", "garoa"][i % 4], vento: 0.5, noite: false }])), casa: null, versao: 1 };

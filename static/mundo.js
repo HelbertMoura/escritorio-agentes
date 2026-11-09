@@ -1,8 +1,10 @@
-// Mundo dos escritórios: orquestra os níveis (Brasil → Cidade → Bairro; o globo chega depois), a câmera e a entrada.
-// Nível: {entrar(params), sair(), quadro(ctx, dt, t), clique(x, y) -> ação | null, camera}, com sobre(x, y) e alvos()
-// opcionais (a dica do mouse e os botões de teclado). Ação: {ir: "globo" | "brasil" | "cidade" | "bairro", cidade?: id}.
-// O endereço guarda o nível (#brasil, #cidade=<id>, #bairro). O convite que vier no fragmento sai da barra na hora e
-// segue só pela porta do chalé, como antes. O tempo das cidades vem de POST /api/mundo/clima ao abrir e a cada 15 min.
+// Mundo dos escritórios: orquestra os níveis (Globo → Brasil → Cidade → Bairro), a câmera e a entrada.
+// Nível: {entrar(params), sair(), quadro(ctx, dt, t) -> ação | null, clique(x, y) -> ação | null, camera}, com sobre(x, y)
+// e alvos() opcionais (a dica do mouse e os botões de teclado). O globo traz também zoom(sinal, sx, sy) -> ação | null,
+// arrastar(dx, dy), soltar(lancado) e mergulho(): ele gira em vez de mover a câmera. Ação: {ir: "globo" | "brasil" |
+// "cidade" | "bairro", cidade?: id}. O endereço guarda o nível (#globo, #brasil, #cidade=<id>, #bairro); sem fragmento,
+// abre no globo. O convite que vier no fragmento sai da barra na hora e segue só pela porta do chalé, como antes.
+// O tempo das cidades vem de POST /api/mundo/clima ao abrir e a cada 15 min.
 "use strict";
 const Mundo = (() => {
   // Câmera de um nível: centro (x, y) no mundo e zoom z de 1x a 4x sobre a escala base, a maior escala (pode ser
@@ -64,12 +66,12 @@ const Mundo = (() => {
   const ctx = canvas.getContext("2d"), $ = id => document.getElementById(id);
   const estado = $("mundo-estado"), botaoEntrar = $("entrar"), voltar = $("mundo-voltar"), caixaAlvos = $("mundo-alvos"), dica = $("mundo-dica");
   const reduzido = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-  const ORDEM = ["globo", "brasil", "cidade", "bairro"], ACIMA = { bairro: "cidade", cidade: "brasil" };   // o globo fica acima do Brasil na Tarefa 5
+  const ORDEM = ["globo", "brasil", "cidade", "bairro"], ACIMA = { bairro: "cidade", cidade: "brasil", brasil: "globo" };
   const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5], FUNDO = "#0b0d12";
 
   // o convite, se veio no link, sai da barra já e segue só pela porta do chalé
   const convite = /^[A-Za-z0-9_-]{43}$/.test(location.hash.slice(1)) ? location.hash.slice(1) : "";
-  const pedido = convite ? "" : location.hash;
+  const pedido = convite ? "#brasil" : location.hash;   // o convite colado abre no Brasil, como um fragmento inválido
   if (convite) history.replaceState(null, "", location.pathname + location.search);
   const entrar = () => { location.href = "/visita.html" + (convite ? "#" + convite : ""); };
   botaoEntrar.addEventListener("click", entrar);
@@ -103,15 +105,15 @@ const Mundo = (() => {
 
   function ler(h) {
     const s = String(h || "").replace(/^#/, ""), m = /^cidade=([a-z0-9-]{1,40})$/.exec(s);
-    return s === "bairro" ? { ir: "bairro" } : m ? { ir: "cidade", cidade: m[1] } : { ir: "brasil" };
+    return s === "" || s === "globo" ? { ir: "globo" } : s === "bairro" ? { ir: "bairro" } : m ? { ir: "cidade", cidade: m[1] } : { ir: "brasil" };
   }
   function normalizar(a) {   // a ação pedida vira um nível que existe; cidade fora da lista cai no Brasil
     if (!mapa) return { ir: "bairro", cidade: null };
-    let ir = a.ir === "globo" ? "brasil" : a.ir, id = a.cidade;
+    let ir = a.ir, id = a.cidade;
     if (ir === "cidade" && !mapa.porId.has(id)) ir = "brasil";
     if (ir === "bairro") id = mapa.porId.has(id) ? id : ultimaCidade || mapa.casa || null;
     if (!niveis[ir]) ir = "brasil";
-    return { ir, cidade: ir === "brasil" ? null : id };
+    return { ir, cidade: ir === "brasil" || ir === "globo" ? null : id };
   }
   function endereco(a, substituir) {
     const h = a.ir === "cidade" ? "#cidade=" + a.cidade : "#" + a.ir;
@@ -128,20 +130,23 @@ const Mundo = (() => {
     if (ORDEM.indexOf(a.ir) > ORDEM.indexOf(nome)) {   // descendo: mergulha na cidade (ou no meio da tela)
       if (nome === "brasil" && c) cam.voar(c.x, c.y, 4);
       else if (c) cam.zoomPara(4, ...cam.tela(c.x, c.y));
+      else if (nivel.mergulho) cam.zoomPara(4, ...cam.tela(...nivel.mergulho()));   // do globo: mergulha no Brasil
     } else cam.zoomPara(1, cam.W / 2, cam.H / 2);
     trans = { fase: 0, k: 0, a, opcoes };
   }
   function trocar(a, opcoes = {}) {
-    const deCidade = atualCidade;
+    const deCidade = atualCidade, deNivel = nome;
     if (nivel) nivel.sair();
     nome = a.ir; nivel = niveis[nome]; atualCidade = a.cidade || null;
     if (atualCidade) ultimaCidade = atualCidade;
     nivel.camera.tamanho(W, H, dpr);
-    nivel.entrar({ cidade: atualCidade, de: deCidade });
+    nivel.entrar({ cidade: atualCidade, de: deCidade, nivel: deNivel });
     endereco(a, opcoes.substituir);
     voltar.disabled = !ACIMA[nome];
     const c = atualCidade && mapa && mapa.porId.get(atualCidade);
-    canvas.setAttribute("aria-label", nome === "brasil"
+    canvas.setAttribute("aria-label", nome === "globo"
+      ? "Globo terrestre em pixel art girando, com a noite de agora, as luzes das cidades do Brasil, nuvens e a lua"
+      : nome === "brasil"
       ? "Mapa do Brasil em pixel art com as capitais e Mateus Leme, o tempo de agora em cada uma, aviões nas rotas e a noite pelo horário"
       : nome === "cidade" ? `Vista de perto de ${c.nome} no mapa, com o tempo de agora`
       : "Bairro com o chalé deste escritório, rua, pessoas, cachorro, carro e céu do horário atual");
@@ -149,10 +154,16 @@ const Mundo = (() => {
   }
   function subir() { if (nivel && ACIMA[nome]) ir(ACIMA[nome], { cidade: atualCidade }); }
   function executar(a) { if (a && a.ir) ir(a.ir, a); }
+  // roda, botões, teclado, duplo clique e pinça: o globo decide o próprio zoom (desce ao Brasil); os outros níveis aproximam
+  function aproximar(sinal, sx, sy) {
+    if (!nivel) return;
+    if (nivel.zoom) { if (!trans) executar(nivel.zoom(sinal, sx, sy)); } else nivel.camera.passoZoom(sinal, sx, sy);
+  }
 
   function mostrar() {
     const hora = Ceu.agora().hora, c = atualCidade && mapa && mapa.porId.get(atualCidade);
     if (!mapa) estado.textContent = `${hora} · ${Clima.texto()} · O mapa não abriu agora; o bairro e a recepção seguem aqui.`;
+    else if (nome === "globo") estado.textContent = `Terra, ${hora} em Brasília. Clique no Brasil ou aproxime para descer ao mapa.`;
     else if (nome === "brasil") {
       const casa = mapa.casa && mapa.porId.get(mapa.casa);
       estado.textContent = `Brasil, ${hora}. Escolha uma cidade no mapa.${casa ? ` O escritório fica em ${casa.nome}.` : ""}`;
@@ -228,10 +239,11 @@ const Mundo = (() => {
       cam.passo(dt, reduzido);
       const [ox, oy] = cam.origem();
       ctx.setTransform(cam.P, 0, 0, cam.P, ox, oy);
-      nivel.quadro(ctx, dt, t);
+      const acao = nivel.quadro(ctx, dt, t);   // o globo devolve o mergulho quando termina de girar até o Brasil
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       if (trans) cortina(trans.fase === 0 ? trans.k : 1 - trans.k);
       posicionar();
+      if (acao && !trans) executar(acao);
     }
     pedir();
   }
@@ -266,6 +278,7 @@ const Mundo = (() => {
     const cam = nivel.camera;
     if (gesto.pinca && toques.size >= 2) {
       const [d, mx, my] = dois(), p = gesto.pinca;
+      if (nivel.zoom) { if (!p.feito && d / p.d > 1.25) { p.feito = true; aproximar(1, mx, my); } return; }
       cam.z = cam.alvoZ = Math.min(4, Math.max(1, p.z * d / p.d));
       cam.x = p.wx - (mx - W / 2) / cam.P; cam.y = p.wy - (my - H / 2) / cam.P; cam.limitar();
       return;
@@ -274,7 +287,7 @@ const Mundo = (() => {
     if (!gesto.moveu && Math.hypot(x - gesto.x0, y - gesto.y0) < 6 * dpr) return;   // tremida do dedo ainda é clique
     if (!gesto.moveu) { gesto.moveu = true; canvas.style.cursor = "grabbing"; destacar(null); }
     const agora = performance.now(), dtm = Math.max(8, agora - gesto.t) / 1000, max = 3000 / cam.P;
-    cam.arrastar(x - gesto.x, y - gesto.y);
+    if (nivel.arrastar) nivel.arrastar(x - gesto.x, y - gesto.y); else cam.arrastar(x - gesto.x, y - gesto.y);
     gesto.vx = Math.max(-max, Math.min(max, 0.7 * (-(x - gesto.x) / cam.P / dtm) + 0.3 * gesto.vx));
     gesto.vy = Math.max(-max, Math.min(max, 0.7 * (-(y - gesto.y) / cam.P / dtm) + 0.3 * gesto.vy));
     gesto.x = x; gesto.y = y; gesto.t = agora;
@@ -289,9 +302,10 @@ const Mundo = (() => {
       return;
     }
     if (toques.size) return;
+    if (nivel.soltar) nivel.soltar(gesto.moveu && !gesto.pinca && !cancelado && performance.now() - gesto.t < 90);
     if (!gesto.moveu && !cancelado) clicar(gesto.x0, gesto.y0);
     else if (gesto.pinca) cam.zoomPara(cam.z, W / 2, H / 2);
-    else if (!reduzido && !cancelado && performance.now() - gesto.t < 90) { cam.vx = gesto.vx; cam.vy = gesto.vy; }
+    else if (!nivel.soltar && !reduzido && !cancelado && performance.now() - gesto.t < 90) { cam.vx = gesto.vx; cam.vy = gesto.vy; }   // o globo cuida da própria inércia
     gesto = null; canvas.style.cursor = "grab";
   }
   canvas.addEventListener("pointerup", ev => soltar(ev, false));
@@ -302,19 +316,20 @@ const Mundo = (() => {
     ev.preventDefault();
     roda += ev.deltaY * (ev.deltaMode === 1 ? 40 : 1);
     if (Math.abs(roda) < 50) return;
-    nivel.camera.passoZoom(roda < 0 ? 1 : -1, ...ponto(ev)); roda = 0;
+    aproximar(roda < 0 ? 1 : -1, ...ponto(ev)); roda = 0;
   }, { passive: false });
-  canvas.addEventListener("dblclick", ev => { if (nivel && !trans) nivel.camera.passoZoom(1, ...ponto(ev)); });
-  $("mundo-mais").addEventListener("click", () => { if (nivel) nivel.camera.passoZoom(1); });
-  $("mundo-menos").addEventListener("click", () => { if (nivel) nivel.camera.passoZoom(-1); });
+  canvas.addEventListener("dblclick", ev => { if (nivel && !trans) aproximar(1, ...ponto(ev)); });
+  $("mundo-mais").addEventListener("click", () => aproximar(1));
+  $("mundo-menos").addEventListener("click", () => aproximar(-1));
   voltar.addEventListener("click", subir);
   window.addEventListener("keydown", ev => {
     const alvo = ev.target, campo = alvo && /^(INPUT|TEXTAREA|SELECT)$/.test(alvo.tagName || "");
     if (!nivel || campo || ev.altKey || ev.ctrlKey || ev.metaKey) return;
     const cam = nivel.camera, d = 80 * dpr / cam.P, noMapa = alvo === canvas || caixaAlvos.contains(alvo) || alvo === document.body;
-    const acoes = { Escape: subir, "+": () => cam.passoZoom(1), "=": () => cam.passoZoom(1), "-": () => cam.passoZoom(-1), _: () => cam.passoZoom(-1),
-      ArrowLeft: () => cam.voar(cam.x - d, cam.y), ArrowRight: () => cam.voar(cam.x + d, cam.y),
-      ArrowUp: () => cam.voar(cam.x, cam.y - d), ArrowDown: () => cam.voar(cam.x, cam.y + d) };
+    // as setas movem a vista; no globo, giram (como arrastar o mundo no sentido contrário)
+    const mover = (dx, dy) => nivel.arrastar ? (nivel.arrastar(-dx * 80 * dpr, -dy * 80 * dpr), nivel.soltar(false)) : cam.voar(cam.x + dx * d, cam.y + dy * d);
+    const acoes = { Escape: subir, "+": () => aproximar(1), "=": () => aproximar(1), "-": () => aproximar(-1), _: () => aproximar(-1),
+      ArrowLeft: () => mover(-1, 0), ArrowRight: () => mover(1, 0), ArrowUp: () => mover(0, -1), ArrowDown: () => mover(0, 1) };
     if (!acoes[ev.key] || (ev.key.startsWith("Arrow") && !noMapa)) return;   // setas fora do mapa seguem rolando a página
     ev.preventDefault(); acoes[ev.key]();
   });
@@ -336,7 +351,10 @@ const Mundo = (() => {
   }
   fetch("/mundo/mundo.json", { credentials: "omit", cache: "no-cache" })
     .then(r => r.ok ? r.json() : Promise.reject(new Error("mundo.json " + r.status)))
-    .then(dados => { mapa = MundoMapa.criar({ dados, Camera, reduzido }); Object.assign(niveis, mapa.niveis); })
+    .then(dados => {
+      mapa = MundoMapa.criar({ dados, Camera, reduzido });
+      Object.assign(niveis, mapa.niveis, { globo: Globo.criar({ dados, Camera, reduzido }) });
+    })
     .catch(() => { mapa = null; })   // sem o mapa, a página segue com o bairro, como antes
     .then(() => {
       trocar(normalizar(ler(pedido)), { substituir: true });
