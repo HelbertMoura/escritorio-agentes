@@ -22,15 +22,16 @@ function elemento() {
   return el;
 }
 
-async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false } = {}) {
+async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false, tela = [640, 400, 1] } = {}) {
   const quadros = [], requisicoes = [], intervalos = [];
   const ctx = new Proxy({}, { get: (_, k) => ["createLinearGradient", "createRadialGradient"].includes(k) ? () => ({ addColorStop() {} })
     : k === "getTransform" ? () => ({ a: 1 }) : () => {}, set: () => true });
   const canvas = elemento(); canvas.getContext = () => ctx;
+  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: tela[0], height: tela[1] });
   const ids = ["mundo", "entrar", "mundo-estado", "mundo-alvos", "mundo-dica", "mundo-voltar", "mundo-mais", "mundo-menos"];
   const elementos = Object.fromEntries(ids.map(id => [id, id === "mundo" ? canvas : elemento()]));
   const janela = elemento();
-  janela.devicePixelRatio = 1;
+  janela.devicePixelRatio = tela[2];
   janela.matchMedia = q => ({ matches: reduzido && q === "(prefers-reduced-motion: reduce)", addEventListener() {} });
   const documento = elemento();
   documento.hidden = false;
@@ -67,7 +68,8 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
   const arrastar = (dx, dy) => { ponteiro("pointerdown", 320, 200); ponteiro("pointermove", 320 + dx / 2, 200 + dy / 2); ponteiro("pointermove", 320 + dx, 200 + dy); ponteiro("pointerup", 320 + dx, 200 + dy); };
   const tecla = key => janela.disparar("keydown", { key, target: documento });
   rodar(2);
-  return { contexto, M, canvas, elementos, documento, quadros, requisicoes, intervalos, rodar, clicar, arrastar, tecla };
+  const toque = (tipo, id, x, y) => canvas.disparar(tipo, { pointerId: id, clientX: x, clientY: y, button: 0 });
+  return { contexto, M, canvas, elementos, documento, quadros, requisicoes, intervalos, rodar, clicar, arrastar, tecla, toque };
 }
 
 const cidade = id => MUNDO.cidades.find(c => c.id === id);
@@ -152,6 +154,25 @@ async function principal() {
     assert.ok(c.x - w / 2 / c.P <= 0 && c.x + w / 2 / c.P >= 400, `x de 0 a 400 inteiro em ${w}x${h}`);
     assert.ok(c.y - h / 2 / c.P <= 0 && c.y + h / 2 / c.P >= 400, `y de 0 a 400 inteiro em ${w}x${h}`);
   }
+
+  // celular (390x507 de CSS, dpr 3): uma pinça que volta ao tamanho de partida para em z = 1, a base exata (sem arredondar
+  // para a escala inteira acima dela, que cortaria o mapa ou os chalés); a cidade também entra em z = 1
+  const CEL = [390, 507, 3];
+  for (const [hash, base] of [["#brasil", 2.925], ["#bairro", 1170 / 320]]) {
+    const p = await abrir(hash, { tela: CEL });
+    assert.ok(Math.abs(p.M.camera.base - base) < 1e-9, `${hash}: base ${p.M.camera.base}`);
+    p.toque("pointerdown", 1, 100, 250); p.toque("pointerdown", 2, 300, 250);
+    p.toque("pointermove", 2, 380, 250); p.toque("pointermove", 2, 300, 250);
+    p.toque("pointerup", 2, 300, 250); p.toque("pointerup", 1, 100, 250);
+    p.rodar(60);
+    const c = p.M.camera;
+    assert.equal(c.z, 1, `${hash}: a pinça termina em z = 1`); assert.equal(c.alvoZ, 1);
+    assert.ok(c.x - c.W / 2 / c.P <= c.caixa[0] + 1e-9 && c.x + c.W / 2 / c.P >= c.caixa[2] - 1e-9, `${hash}: a largura inteira cabe`);
+  }
+  const pc = await abrir("#cidade=recife", { tela: CEL });
+  pc.rodar(30);
+  assert.ok(Math.abs(pc.M.camera.base - 9.75) < 1e-9, "cidade: base " + pc.M.camera.base);
+  assert.equal(pc.M.camera.z, 1, "cidade entra em z = 1"); assert.equal(pc.M.camera.alvoZ, 1);
 
   // aba escondida: nenhum quadro novo; de volta, um só
   const h = await abrir("#brasil");

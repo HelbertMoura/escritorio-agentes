@@ -6,10 +6,12 @@
 "use strict";
 const Mundo = (() => {
   // Câmera de um nível: centro (x, y) no mundo e zoom z de 1x a 4x sobre a escala base, a maior escala (pode ser
-  // fracionária) em que a caixa do nível cabe inteira na tela. Acima de 1x, parada, a escala final (base·z) é inteira;
-  // a origem cai sempre em pixel inteiro.
+  // fracionária) em que a caixa do nível cabe inteira na tela. O 1x é sempre a base exata; acima dele, parada, a escala
+  // final (base·z) é inteira até o teto de 4x, e no teto pode ser fracionária. A origem cai sempre em pixel inteiro.
   function Camera(caixa) {
     const MIN = 1, MAX = 4, prender = z => Math.min(MAX, Math.max(MIN, z));
+    // o zoom parado: a escala inteira mais perto de base·z, ou 1 (a base exata) se ela não passar da base arredondada
+    const parado = z => { const p = Math.round(c.base * z); return p <= Math.round(c.base) ? 1 : prender(p / c.base); };
     const c = {
       caixa, x: (caixa[0] + caixa[2]) / 2, y: (caixa[1] + caixa[3]) / 2, z: 1, alvoZ: 1, W: 1, H: 1, dpr: 1, base: 1,
       vx: 0, vy: 0, ancora: null, voo: null,
@@ -30,16 +32,16 @@ const Mundo = (() => {
       tela(x, y) { const [ox, oy] = c.origem(); return [ox + x * c.P, oy + y * c.P]; },
       mundo(sx, sy) { const [ox, oy] = c.origem(); return [(sx - ox) / c.P, (sy - oy) / c.P]; },
       arrastar(dx, dy) { c.x -= dx / c.P; c.y -= dy / c.P; c.voo = c.ancora = null; return c.limitar(); },
-      // zoom até z (arredondado para escala inteira), com o ponto (sx, sy) da tela parado
+      // zoom até z (escala inteira acima de 1x; o 1x é a base exata), com o ponto (sx, sy) da tela parado
       zoomPara(z, sx, sy) {
-        c.alvoZ = prender(Math.round(c.base * z) / c.base);
+        c.alvoZ = parado(z);
         if (sx != null) { const [wx, wy] = c.mundo(sx, sy); c.ancora = { sx, sy, wx, wy }; c.voo = null; } else c.ancora = null;
       },
       passoZoom(sinal, sx = c.W / 2, sy = c.H / 2) {
         const p = Math.round(c.base * c.alvoZ), q = sinal > 0 ? Math.max(p + 1, Math.round(p * 1.5)) : Math.min(p - 1, Math.round(p / 1.5));
         c.zoomPara(q / c.base, sx, sy);
       },
-      voar(x, y, z) { c.voo = { x, y }; c.ancora = null; c.vx = c.vy = 0; if (z != null) c.alvoZ = prender(Math.round(c.base * z) / c.base); },
+      voar(x, y, z) { c.voo = { x, y }; c.ancora = null; c.vx = c.vy = 0; if (z != null) c.alvoZ = parado(z); },
       passo(dt, imediato) {
         const k = imediato ? 1 : 1 - Math.exp(-dt * 12), x = c.x, y = c.y;
         if (c.vx || c.vy) {   // inércia do arraste
@@ -77,7 +79,8 @@ const Mundo = (() => {
   let botoes = [], chaveAlvos = "", dicaAlvo = null, anterior = performance.now(), pedido_ = false, gesto = null, roda = 0;
   const niveis = { bairro: nivelBairro() }, toques = new Map();
 
-  // o bairro de hoje, desenhado 1:1 num quadro de 320x180 e ampliado inteiro: o mesmo pixel art de antes
+  // o bairro de hoje, desenhado 1:1 num quadro de 320x180 e ampliado pela câmera (a 1x, na escala fracionária que enche
+  // o palco, com uma pequena irregularidade de pixel; acima de 1x, em escala inteira)
   function nivelBairro() {
     const cena = MundoBairro.cena(entrar, { reduzido }), camera = Camera([0, 0, MundoBairro.W, MundoBairro.H]), p = cena.porta;
     const quadro = document.createElement("canvas"); quadro.width = MundoBairro.W; quadro.height = MundoBairro.H;
