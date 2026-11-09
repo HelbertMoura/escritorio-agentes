@@ -2285,6 +2285,9 @@ class Pagina(BaseHTTPRequestHandler):
         if "limpar" not in dados and tela_recepcao() == "fechada":
             return self._json(403, {"erro": "Esta tela está desligada neste servidor. Quem administra o servidor liga "
                                             "com ESCRITORIO_VISITAS_TELA=1 ou define ESCRITORIO_VISITAS_ANFITRIOES."})
+        if not self._pode_responder():   # sem "codigo": a senha não resolve, então a tela não pede
+            return self._json(403, {"erro": "Responder pelo escritório não está ligado. Ligue o modo \"responder\" "
+                                            "com uma conexão de escrita antes de trocar o recepcionista."})
         if not self._modo_resposta():   # "codigo": a tela pede a senha ali mesmo e tenta de novo
             return self._json(403, {"erro": "Para trocar o recepcionista, confirme a senha do escritório. Ela abre o "
                                             "modo resposta por 1 hora neste navegador.", "codigo": "modo_fechado"})

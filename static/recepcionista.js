@@ -67,7 +67,8 @@ function instrucoesRecepcionista(d) {
   }
   function falhou(e) {
     estado.textContent = e.message;
-    if (e.codigo === "modo_fechado") { blocoSenha.hidden = false; senha.focus(); }
+    if (e.codigo === "modo_fechado") blocoSenha.hidden = false;
+    if (!blocoSenha.hidden) senha.focus();   // também depois de uma senha errada, como na tela do convite
   }
 
   function mostrar(r) {

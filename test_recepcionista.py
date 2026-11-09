@@ -182,6 +182,18 @@ class Rota(unittest.TestCase):
             self.modo.start()
         self.assertEqual(self.chamadas, [])
 
+    def test_sem_responder_nao_pede_senha(self):
+        """A revisão do be8df31: com o modo "ler" ou sem escrita, a senha não resolve, então não vem "codigo"."""
+        with patch.object(e.Pagina, '_pode_responder', lambda s: False):
+            for dados in ({'anfitriao': 'recepcao', 'canal': CANAL}, {'limpar': True},
+                          {'anfitriao': 'recepcao', 'canal': CANAL, 'conferir': True}):
+                status, corpo = self.pedir('recepcionista', dados)
+                self.assertEqual(status, 403)
+                self.assertIn('não está ligado', corpo['erro'])
+                self.assertNotIn('codigo', corpo)
+        self.assertEqual(self.chamadas, [])
+        self.assertFalse(os.path.exists(self.arq))
+
     def test_lista_do_servidor_limita_a_tela(self):
         """A revisão do #2: com ESCRITORIO_VISITAS_ANFITRIOES só com recepcao, a tela não põe outro agente na sala."""
         with patch.object(e, 'ANFITRIOES_VISITAS', {'recepcao'}), patch.object(e, 'CANAL_VISITAS', CANAL), \

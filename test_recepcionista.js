@@ -130,9 +130,10 @@ async function senhaAliMesmo() {
   assert.match(el.estado.textContent, /confirme a senha/);
   await el.ligar.onsubmit(ev);   // vazio: nada sai
   assert.equal(el.estado.textContent, "Digite a senha do escritório.");
-  el.senha.value = "errada";
+  el.senha.value = "errada"; el.senha.focado = false;
   await el.ligar.onsubmit(ev);
   assert.equal(el.estado.textContent, "Senha incorreta.");
+  assert.equal(el.senha.focado, true, "senha errada: o foco volta ao campo");
   assert.equal(el["bloco-senha"].hidden, false);
   assert.equal(el.senha.value, "", "a senha não fica no campo");
   el.senha.value = "certa";
