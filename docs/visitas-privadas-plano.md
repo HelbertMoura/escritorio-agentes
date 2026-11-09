@@ -22,6 +22,25 @@ O aplicativo não grava mensagens, convites, sessões de visita, nomes ou endere
 
 O link é uma credencial de acesso: não o inclua em logs ou ferramentas de análise. O fragmento não é enviado ao servidor HTTP, mas pode ser visto por quem tem acesso ao navegador ou ao canal usado para compartilhá-lo. A entrega não oferece identidade verificada dos participantes, nem anonimato perante a rede. Não use para informações sensíveis sem avaliar esses limites.
 
+## Para onde vai cada dado
+
+Tudo o que é da visita fica só na memória do processo. Reiniciar o escritório apaga tudo, e a limpeza roda a cada 30 segundos. Os testes abaixo estão no repositório e rodam com `python3 -B -I -m unittest discover -p "test_*.py"`.
+
+| Dado | Onde passa | Quanto tempo fica | Quando some | Teste que prova |
+|---|---|---|---|---|
+| Convite (o link) | No fragmento do link, no navegador de quem recebe. O servidor não usa o convite em texto claro como chave | Até 1 hora (`VALIDADE_CONVITE`) | Quando vence, quando é revogado ou quando o processo reinicia | `test_visitas_sala.py`: `test_convite_expira_e_revogacao_encerra_sessoes`, `test_limpeza_sem_novos_pedidos_descarta_sessoes_e_mensagens`; `test_visitas_privacidade.py`: `test_convite_e_credencial_nao_sao_chaves_em_texto_claro` |
+| Sessão do visitante | Na memória do servidor, também sem texto claro como chave | Até 1 hora (`VALIDADE_SESSAO`), e cai depois de 60 segundos sem consulta (`INATIVIDADE`) | Ao sair, quando o convite é revogado, quando vence ou quando o processo reinicia | `test_visitas_sala.py`: `test_inatividade_e_entrada_invalida`; `test_visitas_privacidade.py`: `test_limpeza_descarta_fila_sem_novo_pedido_do_visitante` |
+| Nome do visitante | Não existe: a sala só tem o campo do texto da mensagem | — | — | `static/visita.html` (o formulário tem só o `textarea`) |
+| Texto da mensagem | Na fila da sala, até 50 mensagens por sala (`MAX_FILA`). Só vai para quem está conectado, e quem entra depois não recebe o histórico | Até ser entregue a cada participante, ou até a sala ou a sessão acabar | Quando é entregue, quando a fila passa do teto (saem as mais antigas), na limpeza ou no reinício | `test_visitas_privacidade.py`: `test_fila_limitada_e_sem_historico_para_novo_participante`, `test_operacoes_nao_gravam_arquivos_ou_logs` |
+| Texto numa sala com agente | Além da fila da sala, espera na fila da ponte (até 20) e é enviado ao canal de visitas do agentes.chat, **onde fica guardado** | Na ponte, até o envio. A resposta é lida por até 15 minutos (`VIDA_TAREFA`) | Na ponte, depois do envio. No agentes.chat, segue a política dele | `test_visitas_ponte.py`, `test_recepcionista.py`: `test_anfitriao_trocado_deixa_de_receber` |
+| Endereço IP | Só como HMAC, com uma chave sorteada a cada início do processo e nunca gravada, para os limites por origem. IPv6 conta pelo bloco /64 | Janelas de 10 segundos (`JANELA_REQUISICOES`), até 1024 origens | Quando a janela vence. No reinício, a chave muda | `test_visitas_sala.py`: `test_limites_de_requisicoes_e_limpeza`, `test_origens_limitadas_fecham_sem_descartar_janelas_ativas`; `test_visitas_http.py`: `test_ipv6_conta_pelo_bloco_64` |
+
+**Disco.** Nada da visita vai para o disco. O único arquivo das visitas é `dados/recepcao.json`, que é configuração da equipe: o @ do recepcionista e o id do canal, até 512 B, e nenhum dado de visitante (`test_recepcionista.py`: `test_valida_tudo_ou_nada`). As operações da sala rodam com `open` proibido no teste `test_operacoes_nao_gravam_arquivos_ou_logs`.
+
+**Logs.** O escritório não registra os pedidos HTTP das visitas, nem corpo nem cabeçalho. Das visitas, vão ao log só duas coisas. A primeira é `evento=visita_agente`, com o resultado, o tipo do erro e a quantidade de mensagens. A segunda é `evento=recepcao`, com o resultado e o usuário da equipe que trocou o recepcionista. Nunca vão ao log o texto, o convite, a sessão, o IP, o agente, o canal ou a tarefa. Os testes que provam isso são `test_visitas_logs.py` (`test_credenciais_e_mensagens_fora_dos_logs_http`, que confere que o convite, a sessão e o texto não aparecem na saída do servidor), `test_visitas_ponte.py` (`test_falha_avisa_a_sala_uma_vez_sem_texto_no_log`) e `test_visitas_privacidade.py` (`test_operacoes_nao_gravam_arquivos_ou_logs`).
+
+**O que os testes não provam.** Os testes não comprovam o que guardam o proxy, a Cloudflare (logs, Logpush, cache), o sistema operacional e o navegador do visitante. O que o agentes.chat guarda das salas com agente também fica fora deles. Isso se confere no ambiente real, como descrito em "Antes de disponibilizar na internet".
+
 ## Limites encontrados
 
 - `/api/estado` combina a leitura dos agentes com conversas internas, usuário e outras informações. Não é uma API para visitantes; o controle precisa ocorrer no servidor, antes de responder.
