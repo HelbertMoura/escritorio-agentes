@@ -243,11 +243,64 @@ def montar(fontes, saida):
     return mundo
 
 
+GENERICOS = ["predios-1", "predios-2", "chale-1", "chale-2", "chale-3", "chale-4", "arvore-1", "arvore-2", "arvore-3",
+             "carro-1", "carro-2", "carro-3", "carro-4", "aviao-1", "aviao-2"]
+ATLAS_LARGURA = 512
+
+
+def montar_atlas(arte, cidades, saida):
+    """atlas.png e atlas.json em `saida` com a arte do PixelLab (`arte`): os marcos das cidades que têm um e as peças
+    genéricas. Cada peça vai recortada pela caixa do alfa (o código ancora pelo pé do recorte) e empilhada em
+    prateleiras, da mais alta para a mais baixa. Marco sem arte fica de fora (a cidade usa os prédios genéricos);
+    peça genérica sem arte é erro."""
+    from PIL import Image
+    pecas = {}
+
+    def abrir(nome):
+        im = Image.open(os.path.join(arte, nome + ".png")).convert("RGBA")
+        return im.crop(im.getchannel("A").getbbox())
+    for nome in GENERICOS:
+        if not os.path.exists(os.path.join(arte, nome + ".png")):
+            raise FileNotFoundError(f"atlas: falta a arte {nome}.png em {arte}")
+        pecas[nome] = abrir(nome)
+    for c in cidades:
+        nome = "marco-" + c["marco"] if c["marco"] else None
+        if nome and os.path.exists(os.path.join(arte, nome + ".png")):
+            pecas[nome] = abrir(nome)
+        elif nome:
+            print(f"atlas: sem {nome}.png, {c['id']} usa os prédios genéricos")
+
+    x = y = alto = 0
+    quadros = {}
+    for nome, im in sorted(pecas.items(), key=lambda p: (-p[1].height, p[0])):
+        if x + im.width > ATLAS_LARGURA:
+            x, y, alto = 0, y + alto + 1, 0
+        quadros[nome] = [x, y, im.width, im.height]
+        x += im.width + 1
+        alto = max(alto, im.height)
+    imagem = Image.new("RGBA", (ATLAS_LARGURA, y + alto))
+    for nome, (px, py, _, _) in quadros.items():
+        imagem.paste(pecas[nome], (px, py))
+    quadros = dict(sorted(quadros.items()))
+    h = hashlib.sha256(imagem.tobytes() + json.dumps(quadros, sort_keys=True).encode())
+    atlas = {"versao": int(h.hexdigest()[:8], 16), "quadros": quadros}
+
+    os.makedirs(saida, exist_ok=True)
+    imagem.save(os.path.join(saida, "atlas.png"), optimize=True)
+    with open(os.path.join(saida, "atlas.json"), "w", encoding="utf-8", newline="\n") as f:
+        json.dump(atlas, f, ensure_ascii=False, separators=(",", ":"))
+        f.write("\n")
+    return atlas
+
+
 def main():
     entrada = sys.argv[1] if len(sys.argv) > 1 else ENTRADA
     saida = sys.argv[2] if len(sys.argv) > 2 else SAIDA
     mundo = montar(entrada, saida)
     print(f"mundo: {len(mundo['cidades'])} cidades, {len(mundo['rotas'])} rotas, versão {mundo['versao']} -> {os.path.normpath(saida)}")
+    arte = os.path.join(entrada, "..", "pixellab", "mundo")   # arte/mundo -> arte/pixellab/mundo
+    atlas = montar_atlas(arte, ler(os.path.join(entrada, "cidades.json")), saida)
+    print(f"atlas: {len(atlas['quadros'])} peças, versão {atlas['versao']} -> {os.path.normpath(saida)}")
 
 
 if __name__ == "__main__":

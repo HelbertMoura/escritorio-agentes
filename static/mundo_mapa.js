@@ -3,7 +3,7 @@
 // sombra no chão, em curva leve pelas rotas. O mapa e as nuvens seguem a escala da câmera; ícones, aviões e partículas
 // têm tamanho fixo na tela (U pixels da tela por pixel do desenho), sempre em escala inteira e sem suavização.
 // ?clima= vale para todas as cidades; ?hora= vem do Ceu. Com movimento reduzido, nem aviões nem partículas (nem raio).
-// Também monta o nível Cidade provisório (a Tarefa 6 traz o de verdade): o mapa de perto, que leva ao bairro.
+// O nível Cidade fica em mundo_cidade.js; daqui ele usa porId (com o tempo de cada cidade), casa e texto.
 "use strict";
 const MundoMapa = (() => {
   const TIPOS = ["limpo", "nublado", "neblina", "garoa", "chuva", "tempestade", "neve"];
@@ -23,7 +23,6 @@ const MundoMapa = (() => {
     "kjjkajakajk", "kaakaaakaak", "kjjkajakajk", "kaakaaakaak", "kkkkkkkkkkk"];
   const CHALE = ["...k...", "..krk..", ".krrrk.", "krrrrrk", ".kajak.", ".kadak.", ".kkkkk."];
   const MARCO = ["..k..", ".kok.", "koook", ".kok.", "..k.."];
-  const SETA = ["kkkkkkk", "koooook", ".koook.", "..kok..", "...k..."];
   const AVIAO = ["....g......", "....gg.....", "t...ggg....", "twwwwwwwwwc", "t...ggg....", "....gg.....", "....g......"];   // para o leste
   const DIA = { k: "#25301f", a: "#e6e0cc", j: "#7d9bbb", r: "#c0563a", d: "#5a3a26", o: "#f5c84d", w: "#f2f5f8", g: "#b8c4d2", c: "#28374f", t: "#d8473a" };
   const NOITE = { k: "#0c1120", a: "#454b62", j: "#ffd977", r: "#5e3434", d: "#ffd977", o: "#f5c84d", w: "#a4adc0", g: "#6c768a", c: "#ffe9a8", t: "#7a3a3a" };
@@ -203,7 +202,7 @@ const MundoMapa = (() => {
     }
 
     // um quadro: chão e mapa (mundo), sombras, noite e luzes, cidades, aviões, nuvens e precipitação (tela)
-    function desenhar(ctx, dt, t, cam, foco, destaque) {
+    function desenhar(ctx, dt, t, cam, destaque) {
       simular(dt, t);
       const P = cam.P, [ox, oy] = cam.origem(), U = unidade(cam), TW = cam.W, TH = cam.H;
       const ceu = Ceu.agora(), escuro = Math.max(0, Math.min(1, ceu.escuro)), noite = escuro > 0.45;
@@ -268,7 +267,7 @@ const MundoMapa = (() => {
         ctx.drawImage(sprite(nome + (noite ? "n" : "d"), lin, noite ? NOITE : DIA, U), x0, y0);
         if (c.marco && c.id !== casa) ctx.drawImage(sprite("marco", MARCO, DIA, U), tx(c.x) - 2 * U, y0 - 6 * U);
         if (c.id === casa) bandeira(ctx, x0 + lin[0].length * U, ty(c.y), U, t, tx(c.x), y0);
-        if (c.id === destaque || c.id === foco) colchetes(ctx, x0 - 2 * U, y0 - 2 * U, (lin[0].length + 4) * U, (lin.length + 3) * U, U, t);
+        if (c.id === destaque) colchetes(ctx, x0 - 2 * U, y0 - 2 * U, (lin[0].length + 4) * U, (lin.length + 3) * U, U, t);
       }
       for (const a of avioes) {   // aviões: o rastro, o corpo e, à noite, as luzes de navegação
         const [x, y, ang, alt] = ponto(a), i = ((Math.round(ang / (Math.PI / 8)) % 16) + 16) % 16, sx = tx(x), sy = ty(y) - Math.round(alt * 3) * U;
@@ -301,10 +300,6 @@ const MundoMapa = (() => {
         ctx.fillStyle = `rgba(255,255,230,${c.flash})`;
         for (let y = y1, dx = 0; y < y2; y += U) { ctx.fillRect(x + dx * U, y, U, U); if (r() < 0.4) dx += r() < 0.5 ? -1 : 1; }
         ctx.fillStyle = `rgba(230,236,255,${c.flash * 0.18})`; ctx.fillRect(x - 14 * U, y1 - 10 * U, 28 * U, 24 * U);
-      }
-      if (foco && porId.has(foco)) {   // nível Cidade: a seta pulando sobre a cidade
-        const c = porId.get(foco), pulo = reduzido ? 0 : Math.round((Math.sin(t / 220) + 1) * 1.5) * U;
-        ctx.drawImage(sprite("seta", SETA, DIA, U), tx(c.x) - 3 * U, ty(c.y) - 22 * U - pulo);
       }
       if (!vinheta || vinheta.w !== TW || vinheta.h !== TH) {
         const g = ctx.createRadialGradient(TW / 2, TH / 2, Math.min(TW, TH) * 0.4, TW / 2, TH / 2, Math.max(TW, TH) * 0.75);
@@ -357,35 +352,13 @@ const MundoMapa = (() => {
         camBrasil.x = c.x; camBrasil.y = c.y; camBrasil.z = reduzido ? 2 : 4; camBrasil.zoomPara(2); camBrasil.limitar();
       },
       sair() { brasil.destaque = null; },
-      quadro(ctx, dt, t) { desenhar(ctx, dt, t, camBrasil, null, brasil.destaque); },
+      quadro(ctx, dt, t) { desenhar(ctx, dt, t, camBrasil, brasil.destaque); },
       clique(x, y) { const c = perto(camBrasil, x, y); return c ? { ir: "cidade", cidade: c.id } : null; },
       sobre(x, y) { const c = perto(camBrasil, x, y); return c ? alvo(c, camBrasil) : null; },
       alvos() { return cidades.map(c => alvo(c, camBrasil)); },
       get avioes() { return avioes; }, get particulas() { return gotas.length; },
     };
-    let focoId = null;
-    const camCidade = Camera([0, 0, 120, 80]);
-    const alvoBairro = () => {
-      const c = porId.get(focoId), U = unidade(camCidade);
-      return { id: "bairro", x: c.x, y: c.y, alto: 26 * U / camCidade.dpr, titulo: `${c.nome} · ${c.uf}`, texto: `${texto(c)} · descer ao bairro`,
-               rotulo: `Descer ao bairro de ${c.nome}`, acao: { ir: "bairro", cidade: c.id } };
-    };
-    const cidade = {
-      nome: "cidade", camera: camCidade,
-      entrar(p) {   // a caixa: 120x80 do mapa em volta da cidade, dentro da imagem
-        const c = porId.get(p.cidade);
-        focoId = c.id;
-        const x0 = Math.min(W - 120, Math.max(0, c.x - 60)), y0 = Math.min(H - 80, Math.max(0, c.y - 40));
-        camCidade.limitar([x0, y0, x0 + 120, y0 + 80]);
-        camCidade.x = c.x; camCidade.y = c.y; camCidade.z = 1; camCidade.zoomPara(1); camCidade.limitar();
-      },
-      sair() {},
-      quadro(ctx, dt, t) { desenhar(ctx, dt, t, camCidade, focoId, null); },
-      clique() { return { ir: "bairro", cidade: focoId }; },
-      sobre() { return alvoBairro(); },
-      alvos() { return [alvoBairro()]; },
-    };
-    return { niveis: { brasil, cidade }, clima, texto, porId, get casa() { return casa; } };
+    return { niveis: { brasil }, clima, texto, porId, get casa() { return casa; } };
   }
   // o disco de chão (neve ou chuva) em volta da cidade, 13x11
   const DISCO = (() => { const l = []; for (let y = -5; y <= 5; y++) { let s = ""; for (let x = -6; x <= 6; x++) s += x * x + y * y * 1.5 <= 36 && (x * x + y * y * 1.5 <= 16 || (x + y) % 2 === 0) ? "x" : "."; l.push(s); } return l; })();

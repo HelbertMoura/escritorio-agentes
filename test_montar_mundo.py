@@ -110,8 +110,62 @@ class Montagem(unittest.TestCase):
 
     def test_deterministico(self):
         self.montar(self.pastas[1])
-        for nome in ("brasil.png", "terra.png", "mundo.json"):
+        for nome in ("brasil.png", "terra.png", "mundo.json", "atlas.png", "atlas.json"):
             self.assertEqual(self.sha(self.pastas[0], nome), self.sha(self.pastas[1], nome), nome)
+
+    def atlas(self, arte, pasta):
+        """Roda só montar_atlas() com a arte de `arte`, grava em `pasta` e devolve o atlas.json."""
+        montar = ("import json, sys\nsys.path.insert(0, sys.argv[1])\nimport montar_mundo as mm\n"
+                  "mm.montar_atlas(sys.argv[2], mm.ler(sys.argv[3]), sys.argv[4])")
+        r = subprocess.run([sys.executable, "-B", "-c", montar, os.path.join(RAIZ, "ferramentas"), arte, CIDADES, pasta],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+        if r.returncode:
+            raise AssertionError(r.stderr)
+        with open(os.path.join(pasta, "atlas.json"), encoding="utf-8") as f:
+            return json.load(f)
+
+    def test_atlas_deterministico(self):
+        """O atlas sai igual a cada montagem, com as peças pedidas, cada uma dentro da imagem e sem sobrepor outra."""
+        pasta = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, pasta, True)
+        atlas = self.atlas(os.path.join(RAIZ, "arte", "pixellab", "mundo"), pasta)
+        for nome in ("atlas.png", "atlas.json"):
+            self.assertEqual(self.sha(self.pastas[0], nome), self.sha(pasta, nome), nome)
+        with open(CIDADES, encoding="utf-8") as f:
+            marcos = {"marco-" + c["marco"] for c in json.load(f) if c["marco"]}
+        nomes = marcos | {"predios-1", "predios-2", "chale-1", "chale-2", "chale-3", "chale-4", "aviao-1", "aviao-2",
+                          "carro-1", "carro-2", "carro-3", "carro-4", "arvore-1", "arvore-2", "arvore-3"}
+        self.assertEqual(set(atlas), {"versao", "quadros"})
+        self.assertIsInstance(atlas["versao"], int)
+        self.assertEqual(set(atlas["quadros"]), nomes)
+        with open(os.path.join(pasta, "atlas.png"), "rb") as f:
+            cabeca = f.read(24)
+        largura, altura = int.from_bytes(cabeca[16:20], "big"), int.from_bytes(cabeca[20:24], "big")
+        caixas = list(atlas["quadros"].values())
+        for x, y, w, h in caixas:
+            self.assertTrue(w > 0 and h > 0 and x >= 0 and y >= 0 and x + w <= largura and y + h <= altura, (x, y, w, h))
+        for i, (x, y, w, h) in enumerate(caixas):
+            for a, b, c, d in caixas[i + 1:]:
+                self.assertFalse(x < a + c and a < x + w and y < b + d and b < y + h, ((x, y, w, h), (a, b, c, d)))
+
+    def test_atlas_sem_marco_usa_generico(self):
+        """Marco sem arte não derruba a montagem: ele fica fora do atlas, e a cidade usa os prédios genéricos."""
+        arte, pasta = tempfile.mkdtemp(), tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, arte, True)
+        self.addCleanup(shutil.rmtree, pasta, True)
+        origem = os.path.join(RAIZ, "arte", "pixellab", "mundo")
+        for nome in os.listdir(origem):
+            if nome != "marco-cristo.png":
+                shutil.copy(os.path.join(origem, nome), arte)
+        quadros = self.atlas(arte, pasta)["quadros"]
+        self.assertNotIn("marco-cristo", quadros)
+        self.assertIn("marco-pampulha", quadros)
+        self.assertTrue({"predios-1", "predios-2"} <= set(quadros))
+        # sem uma peça genérica (que toda cidade usa), a montagem para com erro
+        os.remove(os.path.join(arte, "predios-2.png"))
+        with self.assertRaises(AssertionError) as erro:
+            self.atlas(arte, pasta)
+        self.assertIn("predios-2", str(erro.exception))
 
     def test_rotas(self):
         rotas = self.mundo["rotas"]
@@ -179,7 +233,7 @@ class Montagem(unittest.TestCase):
 
     def test_estaticos_em_dia(self):
         """static/mundo/ versionado bate com o que a ferramenta gera hoje."""
-        for nome in ("brasil.png", "terra.png", "mundo.json"):
+        for nome in ("brasil.png", "terra.png", "mundo.json", "atlas.png", "atlas.json"):
             self.assertEqual(self.sha(os.path.join(RAIZ, "static", "mundo"), nome), self.sha(self.pastas[0], nome), nome)
 
 if __name__ == "__main__":

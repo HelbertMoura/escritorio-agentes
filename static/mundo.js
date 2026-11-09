@@ -3,7 +3,8 @@
 // e alvos() opcionais (a dica do mouse e os botões de teclado). O globo traz também zoom(sinal, sx, sy) -> ação | null,
 // arrastar(dx, dy), soltar(lancado) e mergulho(): ele gira em vez de mover a câmera. Ação: {ir: "globo" | "brasil" |
 // "cidade" | "bairro", cidade?: id}. O endereço guarda o nível (#globo, #brasil, #cidade=<id>, #bairro); sem fragmento,
-// abre no globo. O convite que vier no fragmento sai da barra na hora e segue só pela porta do chalé, como antes.
+// abre no globo. O bairro é sempre o da casa (a cidade do escritório), quando ela é conhecida: só ela tem o chalé com a
+// placa. O convite que vier no fragmento sai da barra na hora e segue só pela porta do chalé, como antes.
 // O tempo das cidades vem de POST /api/mundo/clima ao abrir e a cada 15 min.
 "use strict";
 const Mundo = (() => {
@@ -91,14 +92,14 @@ const Mundo = (() => {
       texto: convite ? "Entrar com convite" : "Entrar na recepção", rotulo: "Porta do chalé com a placa: entrar na recepção" };
     return {
       nome: "bairro", camera,
-      entrar() { climaDoBairro(); }, sair() {},
+      entrar() { climaDaCidade(); }, sair() {},
       quadro(c, dt, t) { qctx.imageSmoothingEnabled = false; cena.quadro(qctx, dt, t); c.drawImage(quadro, 0, 0); },
       clique(x, y) { cena.clique(x, y); return null; },
       sobre(x, y) { return cena.sobre(x, y) ? porta : null; },
       alvos() { return [porta]; },
     };
   }
-  function climaDoBairro() {   // o bairro chove como a cidade dele (o vento público vai de 0 a 1, o Clima conta em km/h)
+  function climaDaCidade() {   // a cidade e o bairro chovem como ela (o vento público vai de 0 a 1, o Clima conta em km/h)
     const c = mapa && atualCidade && mapa.porId.get(atualCidade);
     Clima.definir(c ? { tipo: c.tempo.tipo, vento: Math.round(c.tempo.vento * 50) } : null);
   }
@@ -111,7 +112,7 @@ const Mundo = (() => {
     if (!mapa) return { ir: "bairro", cidade: null };
     let ir = a.ir, id = a.cidade;
     if (ir === "cidade" && !mapa.porId.has(id)) ir = "brasil";
-    if (ir === "bairro") id = mapa.porId.has(id) ? id : ultimaCidade || mapa.casa || null;
+    if (ir === "bairro") id = mapa.casa || (mapa.porId.has(id) ? id : ultimaCidade || null);
     if (!niveis[ir]) ir = "brasil";
     return { ir, cidade: ir === "brasil" || ir === "globo" ? null : id };
   }
@@ -129,8 +130,8 @@ const Mundo = (() => {
     const cam = nivel.camera, c = a.cidade && mapa && mapa.porId.get(a.cidade);
     if (ORDEM.indexOf(a.ir) > ORDEM.indexOf(nome)) {   // descendo: mergulha na cidade (ou no meio da tela)
       if (nome === "brasil" && c) cam.voar(c.x, c.y, 4);
+      else if (nivel.mergulho) cam.zoomPara(4, ...cam.tela(...nivel.mergulho()));   // do globo, no Brasil; da cidade, na casa
       else if (c) cam.zoomPara(4, ...cam.tela(c.x, c.y));
-      else if (nivel.mergulho) cam.zoomPara(4, ...cam.tela(...nivel.mergulho()));   // do globo: mergulha no Brasil
     } else cam.zoomPara(1, cam.W / 2, cam.H / 2);
     trans = { fase: 0, k: 0, a, opcoes };
   }
@@ -148,7 +149,7 @@ const Mundo = (() => {
       ? "Globo terrestre em pixel art girando, com a noite de agora, as luzes das cidades do Brasil, nuvens e a lua"
       : nome === "brasil"
       ? "Mapa do Brasil em pixel art com as capitais e Mateus Leme, o tempo de agora em cada uma, aviões nas rotas e a noite pelo horário"
-      : nome === "cidade" ? `Vista de perto de ${c.nome} no mapa, com o tempo de agora`
+      : nome === "cidade" ? `${c.nome} vista de cima em pixel art, com ${c.marco ? "o marco da cidade" : "prédios"} no centro, quadras com chalés, carros nas ruas e o tempo de agora${mapa.casa === c.id ? ", e o chalé do escritório com a placa" : ""}`
       : "Bairro com o chalé deste escritório, rua, pessoas, cachorro, carro e céu do horário atual");
     montarAlvos(); destacar(null); mostrar();
   }
@@ -167,7 +168,11 @@ const Mundo = (() => {
     else if (nome === "brasil") {
       const casa = mapa.casa && mapa.porId.get(mapa.casa);
       estado.textContent = `Brasil, ${hora}. Escolha uma cidade no mapa.${casa ? ` O escritório fica em ${casa.nome}.` : ""}`;
-    } else if (nome === "cidade") estado.textContent = `${c.nome} (${c.uf}), ${mapa.texto(c)}. Clique no mapa para descer ao bairro.`;
+    } else if (nome === "cidade") {
+      const casa = mapa.casa && mapa.porId.get(mapa.casa);
+      estado.textContent = `${c.nome} (${c.uf}), ${mapa.texto(c)}. ` + (casa === c ? "O chalé com a placa é o escritório: clique nele para descer ao bairro."
+        : casa ? `O escritório fica em ${casa.nome}; Esc volta ao mapa.` : "Esc volta ao mapa.");
+    }
     else estado.textContent = `${hora} · ${Clima.texto()}${c ? " · " + c.nome : ""}`;
   }
 
@@ -345,7 +350,7 @@ const Mundo = (() => {
       .then(d => {
         if (mapa) mapa.clima(d);
         if (nome === "bairro" && !atualCidade && mapa && mapa.casa) atualCidade = ultimaCidade = mapa.casa;   // #bairro direto: o da casa
-        if (nome === "bairro") climaDoBairro();
+        if (nome === "bairro" || nome === "cidade") climaDaCidade();
         montarAlvos(); mostrar();
       });
   }
@@ -353,7 +358,8 @@ const Mundo = (() => {
     .then(r => r.ok ? r.json() : Promise.reject(new Error("mundo.json " + r.status)))
     .then(dados => {
       mapa = MundoMapa.criar({ dados, Camera, reduzido });
-      Object.assign(niveis, mapa.niveis, { globo: Globo.criar({ dados, Camera, reduzido }) });
+      Object.assign(niveis, mapa.niveis, { globo: Globo.criar({ dados, Camera, reduzido }),
+        cidade: MundoCidade.criar({ dados, Camera, reduzido, mapa, clima: climaDaCidade }) });
     })
     .catch(() => { mapa = null; })   // sem o mapa, a página segue com o bairro, como antes
     .then(() => {

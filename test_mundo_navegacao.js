@@ -6,6 +6,7 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 
 const MUNDO = JSON.parse(fs.readFileSync("static/mundo/mundo.json", "utf8"));
+const ATLAS = JSON.parse(fs.readFileSync("static/mundo/atlas.json", "utf8"));
 const CLIMA = { cidades: { recife: { tipo: "chuva", vento: 0.3, noite: false } }, casa: "mateus-leme", versao: MUNDO.versao };
 
 function elemento() {
@@ -25,9 +26,11 @@ function elemento() {
 async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false, tela = [640, 400, 1] } = {}) {
   const quadros = [], requisicoes = [], intervalos = [];
   // putImageData conta as passadas pixel a pixel do globo; getImageData dá pixels zerados quando o teste faz uma imagem carregar
+  // drawImage guarda o recorte de origem [sx, sy, sw, sh] quando o teste liga contexto.gravar (um array)
   const ctx = new Proxy({}, { get: (_, k) => ["createLinearGradient", "createRadialGradient"].includes(k) ? () => ({ addColorStop() {} })
     : k === "getTransform" ? () => ({ a: 1 }) : k === "getImageData" ? (x, y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4) })
-    : k === "putImageData" ? () => { contexto.passadas = (contexto.passadas || 0) + 1; } : () => {}, set: () => true });
+    : k === "putImageData" ? () => { contexto.passadas = (contexto.passadas || 0) + 1; }
+    : k === "drawImage" ? (img, ...a) => { if (contexto.gravar) contexto.gravar.push(a.slice(0, 4)); } : () => {}, set: () => true });
   const canvas = elemento(); canvas.getContext = () => ctx;
   canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: tela[0], height: tela[1] });
   const ids = ["mundo", "entrar", "mundo-estado", "mundo-alvos", "mundo-dica", "mundo-voltar", "mundo-mais", "mundo-menos"];
@@ -60,12 +63,13 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
     fetch: async (url, opcoes) => {
       requisicoes.push([url, opcoes]);
       if (url.startsWith("/mundo/mundo.json")) return { ok: true, json: async () => JSON.parse(JSON.stringify(MUNDO)) };
+      if (url.startsWith("/mundo/atlas.json")) return { ok: true, json: async () => JSON.parse(JSON.stringify(ATLAS)) };
       if (climaFalha) throw new Error("rede");
       return { ok: true, json: async () => clima };
     },
   };
   vm.createContext(contexto);
-  for (const f of ["static/mundo_bairro.js", "static/mundo_mapa.js", "static/mundo_globo.js", "static/mundo.js"]) vm.runInContext(fs.readFileSync(f, "utf8"), contexto, { filename: f });
+  for (const f of ["static/mundo_bairro.js", "static/mundo_mapa.js", "static/mundo_globo.js", "static/mundo_cidade.js", "static/mundo.js"]) vm.runInContext(fs.readFileSync(f, "utf8"), contexto, { filename: f });
   for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r));   // mundo.json e clima chegam
   let relogio = 0;
   const rodar = (n = 1) => { for (let i = 0; i < n; i++) { const f = quadros.shift(); if (!f) return; relogio += 16; f(relogio); } };
@@ -107,8 +111,8 @@ async function principal() {
   assert.equal(op.method, "POST"); assert.equal(op.credentials, "omit"); assert.equal(op.body, "{}");
   assert.ok(c.intervalos.includes(15 * 60 * 1000));
 
-  // Esc no bairro sobe para a cidade; Esc na cidade sobe para o Brasil. O bairro usa o tempo da cidade.
-  const e = await abrir("#cidade=recife");
+  // Esc no bairro sobe para a cidade; Esc na cidade sobe para o Brasil. O bairro usa o tempo da cidade (a casa).
+  const e = await abrir("#cidade=recife", { clima: { ...CLIMA, casa: "recife" } });
   assert.equal(e.M.nivel, "cidade");
   e.M.ir("bairro"); e.rodar(40);
   assert.equal(e.contexto.location.hash, "#bairro");
@@ -152,7 +156,65 @@ async function principal() {
   k.clicar(...k.M.camera.tela(manaus.x, manaus.y)); k.rodar(40);
   assert.equal(k.M.nivel, "cidade"); assert.equal(k.contexto.location.hash, "#cidade=manaus");
   k.clicar(320, 200); k.rodar(40);
-  assert.equal(k.M.nivel, "bairro", "a cidade provisória leva ao bairro");
+  assert.equal(k.M.nivel, "cidade", "Manaus não é a casa: o clique na cidade não desce ao bairro");
+
+  // nível Cidade: a planta sai da semente do id (6 a 10 chalés decorativos e carros nas ruas)
+  const Cid = k.contexto.window.MundoCidade, planta = id => JSON.stringify(Cid.planta(id));
+  assert.equal(planta("recife"), planta("recife"), "a mesma cidade, a mesma planta");
+  assert.notEqual(planta("recife"), planta("manaus"));
+  for (const cc of MUNDO.cidades) {
+    const p = Cid.planta(cc.id);
+    assert.ok(p.chales.length >= 6 && p.chales.length <= 10, `${cc.id}: ${p.chales.length} chalés`);
+    assert.ok(p.carros.length > 0, cc.id);
+    assert.ok(["predios-1", "predios-2"].includes(p.predios), cc.id);
+  }
+  const espera = async () => { for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r)); };
+  // na casa, o chalé com placa tem a porta: o clique nela leva a #bairro
+  const ca = await abrir("#cidade=mateus-leme");
+  ca.rodar(5);
+  assert.equal(ca.M.nivel, "cidade");
+  const portas = ca.M.niveis.cidade.alvos();
+  assert.equal(portas.length, 1); assert.equal(portas[0].id, "porta"); assert.deepEqual({ ...portas[0].acao }, { ir: "bairro", cidade: "mateus-leme" });
+  ca.clicar(...ca.M.camera.tela(portas[0].x, portas[0].y - 10)); ca.rodar(40);
+  assert.equal(ca.M.nivel, "bairro", "a porta da casa desce ao bairro"); assert.equal(ca.contexto.location.hash, "#bairro");
+  // fora da casa, nenhum alvo e nenhum clique desce; o bairro é sempre o da casa
+  const mn = await abrir("#cidade=manaus");
+  mn.rodar(5);
+  assert.equal(mn.M.niveis.cidade.alvos().length, 0, "Manaus não tem chalé com placa");
+  for (let sx = 20; sx < 640; sx += 60) for (let sy = 20; sy < 400; sy += 60) { mn.clicar(sx, sy); mn.rodar(); }
+  mn.rodar(40);
+  assert.equal(mn.M.nivel, "cidade", "nenhum ponto de Manaus desce ao bairro");
+  mn.M.ir("bairro"); mn.rodar(40);
+  assert.equal(mn.M.nivel, "bairro");
+  mn.tecla("Escape"); mn.rodar(40);
+  assert.equal(mn.contexto.location.hash, "#cidade=mateus-leme", "o bairro é o da casa: Esc sobe para ela");
+  // cidade sem marco: desenha os prédios genéricos da planta (e nenhum marco) assim que o atlas chega, sem erro
+  for (const [id, peca] of [["recife", Cid.planta("recife").predios], ["belo-horizonte", "marco-pampulha"]]) {
+    const sm = await abrir("#cidade=" + id);
+    await espera();
+    assert.ok(sm.requisicoes.some(([u]) => u.startsWith("/mundo/atlas.json")), "a cidade pede o atlas");
+    for (const img of sm.contexto.imagens || []) img.carregar();
+    sm.contexto.gravar = [];
+    sm.rodar(3);
+    const usados = new Set(sm.contexto.gravar.map(r => JSON.stringify(r)));
+    assert.ok(usados.has(JSON.stringify(ATLAS.quadros[peca])), `${id}: desenha ${peca}`);
+    const marcos = Object.keys(ATLAS.quadros).filter(n => n.startsWith("marco-") && n !== peca);
+    assert.ok(!marcos.some(n => usados.has(JSON.stringify(ATLAS.quadros[n]))), `${id}: nenhum outro marco`);
+    assert.equal(sm.M.nivel, "cidade"); assert.equal(sm.quadros.length, 1);
+  }
+  // a cidade usa o tempo dela; com movimento reduzido os carros ficam parados e não há partículas (nada de Clima.desenhar)
+  const temporal = { cidades: { recife: { tipo: "tempestade", vento: 1, noite: false } }, casa: null, versao: 1 };
+  for (const reduz of [true, false]) {
+    const z = await abrir("#cidade=recife", { clima: temporal, reduzido: reduz });
+    await espera();
+    for (const img of z.contexto.imagens || []) img.carregar();
+    assert.equal(z.contexto.clima.tipo, "tempestade", "a cidade chove como ela");
+    const antes = JSON.stringify(z.M.niveis.cidade.carros), d0 = z.contexto.desenhos || 0;
+    z.rodar(60);
+    const depois = JSON.stringify(z.M.niveis.cidade.carros), d1 = (z.contexto.desenhos || 0) - d0;
+    if (reduz) { assert.equal(depois, antes, "reduzido: carros parados"); assert.equal(d1, 0, "reduzido: sem partículas"); }
+    else { assert.notEqual(depois, antes, "os carros andam"); assert.ok(d1 >= 60, "o clima desenha a cada quadro"); }
+  }
 
   // a câmera fica presa à caixa: 50 arrastes para o mesmo lado e zoom de 1x a 4x
   const a = await abrir("#brasil");
@@ -202,7 +264,8 @@ async function principal() {
   }
   const pc = await abrir("#cidade=recife", { tela: CEL });
   pc.rodar(30);
-  assert.ok(Math.abs(pc.M.camera.base - 9.75) < 1e-9, "cidade: base " + pc.M.camera.base);
+  const [, , cw, ch] = pc.M.camera.caixa;
+  assert.ok(Math.abs(pc.M.camera.base - Math.min(1170 / cw, 1521 / ch)) < 1e-9, "cidade: base " + pc.M.camera.base);
   assert.equal(pc.M.camera.z, 1, "cidade entra em z = 1"); assert.equal(pc.M.camera.alvoZ, 1);
 
   // aba escondida: nenhum quadro novo; de volta, um só
