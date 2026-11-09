@@ -136,6 +136,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "ceu.js": "text/javascript; charset=utf-8", "clima.js": "text/javascript; charset=utf-8",
     "festas.js": "text/javascript; charset=utf-8", "efeitos.js": "text/javascript; charset=utf-8",
     "estilo.css": "text/css; charset=utf-8", "tema/atlas.png": "image/png", "tema/atlas.json": "application/json",
+    "mundo/terra.png": "image/png", "mundo/brasil.png": "image/png", "mundo/mundo.json": "application/json",
     "logo.png": "image/png", "fontes/figtree.ttf": "font/ttf", "fontes/silkscreen.ttf": "font/ttf",
     "fontes/source-sans-3.woff2": "font/woff2", "fontes/doto.woff2": "font/woff2",
     "entrar.css": "text/css; charset=utf-8", "entrar.js": "text/javascript; charset=utf-8",
@@ -1644,15 +1645,26 @@ def ler_mundo(caminho=ARQ_MUNDO):
         return 0, []
 
 
+CASA_MAX_KM = 300
+
+
+def distancia_km(lat1, lon1, lat2, lon2):
+    """Haversine, com a Terra de 6371 km de raio."""
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    a = math.sin((p2 - p1) / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(math.radians(lon2 - lon1) / 2) ** 2
+    return 2 * 6371 * math.asin(math.sqrt(min(1, a)))
+
+
 def cidade_do_escritorio(clima, cidades):
-    """O id da cidade do mapa mais perto das coordenadas do clima configurado; sem coordenadas (ou sem cidades), None."""
+    """O id da cidade do mapa mais perto das coordenadas do clima configurado, até CASA_MAX_KM; sem coordenadas, sem
+    cidades ou longe demais (um escritório fora do mapa), None."""
     if not isinstance(clima, dict) or not cidades:
         return None
     lat, lon = clima.get("lat"), clima.get("lon")
     if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (lat, lon)):
         return None
-    encolhe = math.cos(math.radians(lat))   # um grau de longitude encolhe longe do equador
-    return min(cidades, key=lambda c: (c["lat"] - lat) ** 2 + ((c["lon"] - lon) * encolhe) ** 2)["id"]
+    km, cid = min((distancia_km(lat, lon, c["lat"], c["lon"]), c["id"]) for c in cidades)
+    return cid if km <= CASA_MAX_KM else None
 
 
 def _medida(v):
@@ -2679,7 +2691,7 @@ class Pagina(BaseHTTPRequestHandler):
                 # o mapa do mundo: só tipo, vento (0..1) e noite por cidade, e o id da cidade mais perto do escritório
                 mundo = getattr(self.server, "clima_mundo", None)
                 if not mundo or not mundo.cidades:
-                    return self._json(200, {"cidades": {}, "casa": None})
+                    return self._json(200, {"cidades": {}, "casa": None, "versao": 0})
                 return self._json(200, {"cidades": mundo.foto(), "versao": mundo.versao,
                                         "casa": cidade_do_escritorio(clima_vigente()[0], mundo.cidades)})
             elif rota == "/api/visitas/entrar" and set(dados) == {"convite"}:

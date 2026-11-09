@@ -156,8 +156,12 @@ class Casa(unittest.TestCase):
         self.assertIsNone(e.cidade_do_escritorio({"cidade": "Recife"}, cidades))
         self.assertIsNone(e.cidade_do_escritorio(RECIFE, []))
         self.assertEqual(e.cidade_do_escritorio(RECIFE, cidades), "recife")
-        self.assertEqual(e.cidade_do_escritorio({"cidade": "Santos", "lat": -23.96, "lon": -46.33}, cidades), "sao-paulo")
-        self.assertEqual(e.cidade_do_escritorio({"cidade": "Betim", "lat": -19.97, "lon": -44.2}, cidades), "mateus-leme")
+        self.assertEqual(e.cidade_do_escritorio({"cidade": "Mateus Leme", "lat": -19.98, "lon": -44.43}, cidades),
+                         "mateus-leme")
+        self.assertEqual(e.cidade_do_escritorio({"cidade": "Campinas", "lat": -22.91, "lon": -47.06}, cidades), "sao-paulo")
+        # mais de 300 km da cidade mais perto do mapa: sem casa
+        self.assertIsNone(e.cidade_do_escritorio({"cidade": "Lisboa", "lat": 38.72, "lon": -9.14}, cidades))
+        self.assertAlmostEqual(e.distancia_km(-23.55, -46.63, -22.91, -47.06), 83.6, delta=1)
 
     def test_mundo_ausente(self):
         with tempfile.TemporaryDirectory() as pasta:
@@ -214,9 +218,9 @@ class Rota(unittest.TestCase):
     def test_rota_sem_mundo(self):
         self.servidor.clima_mundo = e.ClimaMundo(0, [])
         with patch.object(e, "clima_vigente", lambda: (RECIFE, "arquivo")):
-            self.assertEqual(self.pedir({})[2], {"cidades": {}, "casa": None})
+            self.assertEqual(self.pedir({})[2], {"cidades": {}, "casa": None, "versao": 0})
         del self.servidor.clima_mundo   # servidor sem a thread: mesma resposta
-        self.assertEqual(self.pedir({})[2], {"cidades": {}, "casa": None})
+        self.assertEqual(self.pedir({})[2], {"cidades": {}, "casa": None, "versao": 0})
 
     def test_log_sem_ip_nem_cidade(self):
         saida = io.StringIO()
@@ -234,6 +238,19 @@ class Rota(unittest.TestCase):
         for nome in ("mundo/terra.png", "mundo/brasil.png", "mundo/mundo.json", "mundo/atlas.png", "mundo/atlas.json",
                      "mundo_globo.js", "mundo_mapa.js", "mundo_cidade.js", "mundo_bairro.js"):
             self.assertIn(nome, e.PUBLICOS)
+
+    def test_arquivos_do_mundo_sem_cookie(self):
+        for nome, tipo in (("mundo/brasil.png", "image/png"), ("mundo/mundo.json", "application/json")):
+            conexao = http.client.HTTPConnection(*self.servidor.server_address, timeout=3)
+            try:
+                conexao.request("GET", "/" + nome)
+                resposta = conexao.getresponse()
+                corpo = resposta.read()
+                self.assertEqual((resposta.status, resposta.getheader("Content-Type")), (200, tipo), nome)
+                with open(os.path.join(e.ESTATICO, nome), "rb") as f:
+                    self.assertEqual(corpo, f.read(), nome)
+            finally:
+                conexao.close()
 
 
 if __name__ == "__main__":
