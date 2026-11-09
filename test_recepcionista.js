@@ -34,7 +34,8 @@ async function tela() {
     addEventListener(tipo, fn) { this["on" + tipo] = fn; }, replaceChildren(...filhos) { this.filhos = filhos; },
     focus() {}, select() {} });
   ["empresa", "instrucoes", "copiar", "ligar", "salvar", "limpar", "estado", "situacao", "faltam", "nome", "faz", "site",
-    "contato", "horario", "evitar", "anfitriao", "canal", "confirmar"].forEach(novo);
+    "contato", "horario", "evitar", "anfitriao", "canal", "confirmar", "bloco-senha", "senha"].forEach(novo);
+  el["bloco-senha"].hidden = true;
   const corpos = [];
   let resposta = { origem: "nenhum", tela: "livre", anfitrioes: [], canal: "", nomes: [], faltam: ["Escolha o recepcionista e o canal das visitas."] };
   const contexto = {
@@ -95,5 +96,51 @@ async function tela() {
   assert.equal(el.salvar.disabled, true, "tela desligada no servidor: não salva");
 }
 
+async function senhaAliMesmo() {
+  // modo resposta fechado (403 com codigo modo_fechado): a senha vai na própria tela, sem passar pela tela Conversas
+  const el = {};
+  const novo = id => (el[id] = { id, value: "", textContent: "", disabled: false, hidden: false, dataset: {},
+    addEventListener(tipo, fn) { this["on" + tipo] = fn; }, replaceChildren() {}, focus() { this.focado = true; }, select() {} });
+  ["empresa", "instrucoes", "copiar", "ligar", "salvar", "limpar", "estado", "situacao", "faltam", "nome", "faz", "site",
+    "contato", "horario", "evitar", "anfitriao", "canal", "confirmar", "bloco-senha", "senha"].forEach(novo);
+  el["bloco-senha"].hidden = true;
+  const urls = [];
+  let aberto = false;
+  const contexto = {
+    document: { getElementById: id => el[id], createElement: () => ({}) }, navigator: {},
+    fetch: async (url, opcoes) => {
+      const corpo = JSON.parse(opcoes.body);
+      urls.push(url);
+      if (url === "/api/conversa/modo") {
+        if (corpo.senha !== "certa") return { ok: false, json: async () => ({ erro: "senha_incorreta", mensagem: "Senha incorreta." }) };
+        aberto = true; return { ok: true, json: async () => ({ resta_s: 3600 }) };
+      }
+      if (!Object.keys(corpo).length) return { ok: true, json: async () => ({ origem: "nenhum", tela: "livre", faltam: [] }) };
+      if (!aberto) return { ok: false, json: async () => ({ erro: "Para trocar o recepcionista, confirme a senha do escritório.", codigo: "modo_fechado" }) };
+      return { ok: true, json: async () => ({ anfitriao: "recepcao", canal: "c1", nome: "Recepção", canal_nome: "visitas" }) };
+    },
+  };
+  vm.runInNewContext(codigo, contexto);
+  await new Promise(r => setImmediate(r));
+  el.anfitriao.value = "@recepcao"; el.canal.value = "https://app.agentes.chat/org/x/c/y";
+  const ev = { preventDefault() {} };
+  await el.ligar.onsubmit(ev);
+  assert.equal(el["bloco-senha"].hidden, false, "o servidor pediu a senha: o campo aparece");
+  assert.equal(el.senha.focado, true);
+  assert.match(el.estado.textContent, /confirme a senha/);
+  await el.ligar.onsubmit(ev);   // vazio: nada sai
+  assert.equal(el.estado.textContent, "Digite a senha do escritório.");
+  el.senha.value = "errada";
+  await el.ligar.onsubmit(ev);
+  assert.equal(el.estado.textContent, "Senha incorreta.");
+  assert.equal(el["bloco-senha"].hidden, false);
+  assert.equal(el.senha.value, "", "a senha não fica no campo");
+  el.senha.value = "certa";
+  await el.ligar.onsubmit(ev);
+  assert.equal(el["bloco-senha"].hidden, true);
+  assert.match(el.confirmar.textContent, /^Recepção \(@recepcao\) vai atender no canal #visitas\./);
+  assert.deepEqual(urls.filter(u => u === "/api/conversa/modo").length, 2);
+}
+
 instrucoes();
-tela().then(() => console.log("ok"), e => { console.error(e); process.exit(1); });
+tela().then(senhaAliMesmo).then(() => console.log("ok"), e => { console.error(e); process.exit(1); });

@@ -19,7 +19,7 @@ button { min-height: 48px; padding: 0 18px; margin-top: 12px; border: 0; border-
 button:disabled { opacity: .55; cursor: default; }
 .secundario { align-self: flex-start; background: transparent; color: #f2f2f3; border: 1px solid #777; }
 :focus-visible { outline: 3px solid #f5b83d; outline-offset: 3px; }
-input:not([type]), input[type="text"] { display: block; width: 100%; min-height: 44px; margin-bottom: 14px; border: 1px solid #555560; border-radius: 8px; padding: 0 12px; background: #17171a; color: inherit; font: inherit; }
+input:not([type]), input[type="text"], input[type="password"] { display: block; width: 100%; min-height: 44px; margin-bottom: 14px; border: 1px solid #555560; border-radius: 8px; padding: 0 12px; background: #17171a; color: inherit; font: inherit; }
 .campos textarea { margin-bottom: 14px; }
 .campos { margin-bottom: 28px; }
 .marcar { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; }

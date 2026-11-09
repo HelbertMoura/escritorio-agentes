@@ -2285,9 +2285,9 @@ class Pagina(BaseHTTPRequestHandler):
         if "limpar" not in dados and tela_recepcao() == "fechada":
             return self._json(403, {"erro": "Esta tela está desligada neste servidor. Quem administra o servidor liga "
                                             "com ESCRITORIO_VISITAS_TELA=1 ou define ESCRITORIO_VISITAS_ANFITRIOES."})
-        if not self._modo_resposta():
-            return self._json(403, {"erro": "Para trocar o recepcionista, abra antes o modo resposta (com a senha) "
-                                            "na tela Conversas."})
+        if not self._modo_resposta():   # "codigo": a tela pede a senha ali mesmo e tenta de novo
+            return self._json(403, {"erro": "Para trocar o recepcionista, confirme a senha do escritório. Ela abre o "
+                                            "modo resposta por 1 hora neste navegador.", "codigo": "modo_fechado"})
         if "limpar" in dados:
             with TRAVA_AJUSTES:
                 try:
@@ -2448,9 +2448,10 @@ class Pagina(BaseHTTPRequestHandler):
                         return self._json(400, {"erro": "Este agente não pode receber visitas."})
                     # como o envio pela tela Conversas: a sala escreve no agentes.chat em nome da conexão, então
                     # exige o modo resposta aberto com a senha nesta sessão e neste navegador
-                    if not self._modo_resposta():
-                        return self._json(403, {"erro": "Para pôr um agente na sala, abra antes o modo resposta "
-                                                        "(com a senha) na tela Conversas."})
+                    if not self._modo_resposta():   # "codigo": a tela pede a senha ali mesmo e tenta de novo
+                        return self._json(403, {"erro": "Para pôr um agente na sala, confirme a senha do escritório. "
+                                                        "Ela abre o modo resposta por 1 hora neste navegador.",
+                                                "codigo": "modo_fechado"})
                     nome = limpa_texto(escolhido.get("nome") or escolhido.get("handle") or "Agente", 60)[0]
                     return self._json(200, {"convite": salas.criar({"id": escolhido["id"], "nome": nome})})
                 if rota.endswith("/recepcionista"):

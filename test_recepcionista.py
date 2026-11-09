@@ -176,6 +176,7 @@ class Rota(unittest.TestCase):
                     status, corpo = self.pedir('recepcionista', dados)
                     self.assertEqual(status, 403)
                     self.assertIn('modo resposta', corpo['erro'])
+                    self.assertEqual(corpo['codigo'], 'modo_fechado', 'a tela pede a senha ali mesmo')
                 self.assertEqual(self.pedir('recepcionista', {})[0], 200, 'ler como está não precisa')
         finally:
             self.modo.start()

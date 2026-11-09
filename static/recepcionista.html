@@ -55,7 +55,11 @@
         <label for="canal">Link do canal das visitas</label>
         <input id="canal" maxlength="300" required autocomplete="off" placeholder="https://app.agentes.chat/org/.../c/...">
         <label class="marcar"><input id="sem-ferramentas" type="checkbox" required> Desliguei todas as ferramentas e apps desse agente.</label>
-        <p class="nota">Para salvar, abra antes o modo resposta (com a senha) na tela Conversas. O escritório só aceita os agentes que quem administra o servidor liberou.</p>
+        <p class="nota">Ao salvar, o escritório pode pedir a senha dele aqui: ela abre o modo resposta por 1 hora neste navegador. O escritório só aceita os agentes que quem administra o servidor liberou.</p>
+        <div id="bloco-senha" hidden>
+          <label for="senha">Senha do escritório</label>
+          <input id="senha" type="password" autocomplete="current-password" maxlength="256">
+        </div>
         <p id="confirmar" class="nota" role="status"></p>
         <button id="salvar" type="submit">Conferir</button>
       </form>

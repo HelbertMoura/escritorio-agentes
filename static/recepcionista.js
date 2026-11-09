@@ -40,15 +40,34 @@ function instrucoesRecepcionista(d) {
   const empresa = $("empresa"), instrucoes = $("instrucoes"), copiar = $("copiar");
   const ligar = $("ligar"), salvar = $("salvar"), limpar = $("limpar"), estado = $("estado");
   const situacao = $("situacao"), faltam = $("faltam"), confirmar = $("confirmar");
+  const blocoSenha = $("bloco-senha"), senha = $("senha");
   let ocupada = false, fechada = false, conferido = "";
 
-  async function pedir(dados) {
-    const resposta = await fetch("/api/visitas/recepcionista", { method: "POST", credentials: "same-origin", cache: "no-store",
+  async function pedir(dados, url) {
+    const resposta = await fetch(url || "/api/visitas/recepcionista", { method: "POST", credentials: "same-origin", cache: "no-store",
       headers: { "Content-Type": "application/json" }, body: JSON.stringify(dados) });
     const corpo = await resposta.json().catch(() => ({}));
-    if (!resposta.ok) throw new Error(typeof corpo.erro === "string" && corpo.erro.length > 3 ? corpo.erro :
-      "Não foi possível concluir. Verifique sua sessão e tente novamente.");
+    if (!resposta.ok) {
+      // /api/conversa/modo manda o código em "erro" e o texto em "mensagem"
+      const texto = typeof corpo.mensagem === "string" ? corpo.mensagem : corpo.erro;
+      const falha = new Error(typeof texto === "string" && texto.length > 3 ? texto :
+        "Não foi possível concluir. Verifique sua sessão e tente novamente.");
+      falha.codigo = typeof corpo.codigo === "string" ? corpo.codigo : "";
+      throw falha;
+    }
     return corpo;
+  }
+  // a senha vai aqui mesmo, sem passar pela tela Conversas: o servidor pediu (codigo modo_fechado) e a pessoa digitou
+  async function abrirModoSePedido() {
+    if (blocoSenha.hidden) return;
+    const valor = senha.value; senha.value = "";
+    if (!valor) { senha.focus(); throw new Error("Digite a senha do escritório."); }
+    await pedir({ senha: valor }, "/api/conversa/modo");
+    blocoSenha.hidden = true;
+  }
+  function falhou(e) {
+    estado.textContent = e.message;
+    if (e.codigo === "modo_fechado") { blocoSenha.hidden = false; senha.focus(); }
   }
 
   function mostrar(r) {
@@ -92,6 +111,7 @@ function instrucoesRecepcionista(d) {
     const dados = { anfitriao: $("anfitriao").value, canal: $("canal").value }, chave = JSON.stringify(dados);
     ocupada = true; salvar.disabled = limpar.disabled = true; estado.textContent = "Conferindo no agentes.chat...";
     try {
+      await abrirModoSePedido();
       if (conferido !== chave) {
         const r = await pedir({ ...dados, conferir: true });
         const canal = typeof r.canal_nome === "string" && r.canal_nome ? `#${r.canal_nome}` : "um canal sem nome";
@@ -104,16 +124,17 @@ function instrucoesRecepcionista(d) {
       delete ligar.dataset.mexido;
       desconferir();
       estado.textContent = "Recepcionista salvo. Ao criar um convite, escolha ele como agente na sala.";
-    } catch (e) { estado.textContent = e.message; desconferir(); }
+    } catch (e) { falhou(e); desconferir(); }
     finally { ocupada = false; salvar.disabled = fechada; limpar.disabled = false; }
   });
   limpar.addEventListener("click", async () => {
     if (ocupada) return;
     ocupada = true; salvar.disabled = limpar.disabled = true;
     try {
+      await abrirModoSePedido();
       mostrar(await pedir({ limpar: true }));
       estado.textContent = "Recepcionista tirado desta tela.";
-    } catch (e) { estado.textContent = e.message; }
+    } catch (e) { falhou(e); }
     finally { ocupada = false; salvar.disabled = fechada; limpar.disabled = false; }
   });
   pedir({}).then(mostrar).catch(e => { situacao.textContent = e.message; });
