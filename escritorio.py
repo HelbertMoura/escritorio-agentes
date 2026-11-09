@@ -1263,9 +1263,11 @@ class PonteVisitas(threading.Thread):
     def _devolver(self, chave, ponte, textos):
         fila = ponte.setdefault("atrasadas", [])
         fila.extend(textos)
-        if len(fila) > self.FILA_MAX:   # ficam as mais novas; a sala sabe que algo se perdeu
+        if len(fila) > self.FILA_MAX:   # ficam as mais novas; a sala sabe que algo se perdeu, uma vez até o envio voltar
             del fila[:-self.FILA_MAX]
-            self.salas.publicar(chave, self.AVISO_FILA)
+            if not ponte.get("fila_avisada"):
+                ponte["fila_avisada"] = True
+                self.salas.publicar(chave, self.AVISO_FILA)
 
     def _avisar(self, chave, ponte, texto):
         if not ponte.get("avisado"):
@@ -1318,6 +1320,7 @@ class PonteVisitas(threading.Thread):
             log(evento="visita_agente", resultado="erro_envio", erro=type(e).__name__)
             self._avisar(chave, ponte, "Não consegui levar a mensagem ao agente; a equipe pode responder por aqui.")
             return
+        ponte.pop("fila_avisada", None)   # o envio voltou: um novo estouro da fila avisa de novo
         tarefa = res.get("task_id") if isinstance(res, dict) else None
         if isinstance(tarefa, str) and 0 < len(tarefa) <= 64:
             tarefas = ponte.setdefault("tarefas", [])
@@ -2259,6 +2262,11 @@ class Pagina(BaseHTTPRequestHandler):
                     escolhido = next((a for a in self._anfitrioes() if a["id"] == dados["agente"]), None)
                     if not escolhido:
                         return self._json(400, {"erro": "Este agente não pode receber visitas."})
+                    # como o envio pela tela Conversas: a sala escreve no agentes.chat em nome da conexão, então
+                    # exige o modo resposta aberto com a senha nesta sessão e neste navegador
+                    if not self._modo_resposta():
+                        return self._json(403, {"erro": "Para pôr um agente na sala, abra antes o modo resposta "
+                                                        "(com a senha) na tela Conversas."})
                     nome = limpa_texto(escolhido.get("nome") or escolhido.get("handle") or "Agente", 60)[0]
                     return self._json(200, {"convite": salas.criar({"id": escolhido["id"], "nome": nome})})
                 if rota.endswith("/revogar") and set(dados) == {"convite"}:

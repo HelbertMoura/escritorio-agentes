@@ -111,7 +111,14 @@ class VisitasHTTP(unittest.TestCase):
                 self.assertEqual(self.pedir('criar', {'agente': 'ag-1'}, admin=True)[0], 400)
         with patch.object(e, 'ANFITRIOES_VISITAS', {'senku'}), patch.object(e, 'CANAL_VISITAS', canal), \
                 patch.object(e.Pagina, '_pode_responder', lambda self: True):
-            self._agente_autorizado()
+            # sem o modo resposta aberto com a senha, como no envio pela tela Conversas, não cria sala com agente
+            with patch.object(e.Pagina, '_modo_resposta', lambda self: None):
+                status, _, dados = self.pedir('criar', {'agente': 'ag-1'}, admin=True)
+                self.assertEqual(status, 403)
+                self.assertIn('modo resposta', dados['erro'])
+                self.assertEqual(self.pedir('criar', {}, admin=True)[0], 200, 'sala só de pessoas não precisa')
+            with patch.object(e.Pagina, '_modo_resposta', lambda self: (3600, 28800)):
+                self._agente_autorizado()
 
     def _agente_autorizado(self):
         self.assertEqual(self.pedir('anfitrioes', {})[0], 401)

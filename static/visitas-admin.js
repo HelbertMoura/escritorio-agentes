@@ -15,7 +15,10 @@
   async function pedir(acao, dados) {
     const resposta = await fetch(`/api/visitas/${acao}`, { method: "POST", credentials: "same-origin", cache: "no-store",
       headers: { "Content-Type": "application/json" }, body: JSON.stringify(dados) });
-    if (!resposta.ok) throw new Error("Não foi possível concluir. Verifique sua sessão e tente novamente.");
+    if (!resposta.ok) {
+      const motivo = await resposta.json().then(d => (typeof d.erro === "string" ? d.erro : ""), () => "");
+      throw new Error(motivo || "Não foi possível concluir. Verifique sua sessão e tente novamente.");
+    }
     return resposta.json();
   }
   criar.addEventListener("click", async () => {

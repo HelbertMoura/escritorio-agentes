@@ -66,4 +66,18 @@ async function comAgente() {
   await elementos.criar.click();
   assert.equal(JSON.stringify(corpos), '[{"agente":"ag-1"}]');
 }
-(async () => { for (const scenario of ["antes", "depois"]) await testar(scenario); await concorrencia(); await comAgente(); })().catch(e => { console.error(e); process.exitCode = 1; });
+async function semModoResposta() {
+  // o servidor recusa (403, modo resposta fechado): a tela mostra o motivo dele, sem link de convite
+  const elementos = Object.fromEntries(["criar", "copiar", "entrar", "revogar", "link", "estado", "agente"].map(id => [id, { disabled: false, value: "", textContent: "", append() {}, addEventListener(_, fn) { this.click = fn; } }]));
+  const contexto = { document: { getElementById: id => elementos[id], createElement: () => ({}) }, location: { origin: "https://exemplo.test" }, navigator: {}, window: {}, fetch: async url => {
+    if (url === "/api/visitas/anfitrioes") return { ok: true, json: async () => ({ agentes: [{ id: "ag-1", nome: "Senku" }] }) };
+    return { ok: false, json: async () => ({ erro: "Para pôr um agente na sala, abra antes o modo resposta (com a senha) na tela Conversas." }) };
+  } };
+  vm.runInNewContext(fs.readFileSync("static/visitas-admin.js", "utf8"), contexto);
+  await new Promise(resolve => setImmediate(resolve));
+  elementos.agente.value = "ag-1";
+  await elementos.criar.click();
+  assert.match(elementos.estado.textContent, /modo resposta/);
+  assert.equal(elementos.link.value, "");
+}
+(async () => { for (const scenario of ["antes", "depois"]) await testar(scenario); await concorrencia(); await comAgente(); await semModoResposta(); })().catch(e => { console.error(e); process.exitCode = 1; });

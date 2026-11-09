@@ -120,6 +120,21 @@ class PonteTest(unittest.TestCase):
         self.assertEqual(len(ponte['atrasadas']), e.PonteVisitas.FILA_MAX)
         self.assertEqual(ponte['atrasadas'][-1], 'msg 29', 'ficam as mais novas')
 
+    def test_aviso_de_fila_sai_uma_vez_por_pausa(self):
+        def pausa_com_estouro(prefixo):
+            self.ponte.pausa_ate = self.tempo + 600
+            for n in range(40):
+                self.tempo += 2
+                self.salas.enviar(self.visita, f'{prefixo} {n}')
+                self.passo()
+            return self.salas.receber(self.visita).count(e.PonteVisitas.AVISO_FILA)
+        self.assertEqual(pausa_com_estouro('msg'), 1, '20 estouros na mesma pausa, um aviso só')
+        self.ponte.pausa_ate = self.tempo   # a pausa acaba: o envio volta e a marca se apaga
+        self.passo()
+        self.assertEqual(sum(n == 'send_to_agent' for n, _ in self.mcp.chamadas), 1)
+        self.assertNotIn('fila_avisada', self.salas.pendencias()[0][2])
+        self.assertEqual(pausa_com_estouro('nova'), 1, 'a pausa seguinte avisa de novo')
+
     def test_429_pausa_com_teto_e_avisa_o_leitor(self):
         def limitado(nome, args, token):
             raise e.Limitado('86400')
