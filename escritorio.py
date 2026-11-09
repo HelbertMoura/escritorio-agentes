@@ -1847,9 +1847,12 @@ def tela_recepcao():
     return "livre" if TELA_VISITAS else "fechada"
 
 
-def tela_aceita(handle):
+def tela_aceita(handle, canal=None):
+    """No "limite", o agente precisa estar em ESCRITORIO_VISITAS_ANFITRIOES e o canal ser o ESCRITORIO_VISITAS_CANAL
+    (que o main() exige junto com a lista): a tela escolhe quem atende, não onde ele lê. canal=None confere só o agente."""
     modo = tela_recepcao()
-    return modo == "livre" or (modo == "limite" and handle in ANFITRIOES_VISITAS)
+    return modo == "livre" or (modo == "limite" and handle in ANFITRIOES_VISITAS and
+                               (canal is None or canal == CANAL_VISITAS))
 
 
 def recepcao_vigente():
@@ -1858,7 +1861,7 @@ def recepcao_vigente():
     ESCRITORIO_VISITAS_CANAL. Sem nenhum: (set(), "", "nenhum")."""
     tela = None if tela_recepcao() == "fechada" else \
         ajustes.ler(ARQ_RECEPCAO, RECEPCAO_BYTES, ajustes.validar_arquivo_recepcao, log, "recepcao")
-    if tela and tela_aceita(tela["anfitriao"]):
+    if tela and tela_aceita(tela["anfitriao"], tela["canal"]):
         return {tela["anfitriao"]}, tela["canal"], "tela"
     if ANFITRIOES_VISITAS and CANAL_VISITAS:
         return set(ANFITRIOES_VISITAS), CANAL_VISITAS, "variaveis"
@@ -2311,6 +2314,9 @@ class Pagina(BaseHTTPRequestHandler):
         canal = canal.lower() if UUID_MCP.fullmatch(canal) else canal_da_url(canal)
         if not canal:
             return 400, {"erro": "Cole o link do canal no agentes.chat (o endereço com /c/ no meio) ou o id dele."}
+        if not tela_aceita(handle, canal):   # também antes de chamar o agentes.chat
+            return 400, {"erro": "Neste servidor o canal das visitas é o de ESCRITORIO_VISITAS_CANAL. Use esse canal ou "
+                                 "peça a quem administra o servidor."}
         lido = next((a for a in self._agentes_lidos() if str(a.get("handle", "")).lower() == handle), None)
         if not lido:
             return 400, {"erro": "Esse agente não aparece na leitura do agentes.chat. Confira o @ e espere a próxima "

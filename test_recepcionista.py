@@ -50,7 +50,9 @@ class Arquivo(unittest.TestCase):
                 self.assertEqual(e.tela_recepcao(), 'limite', 'a lista vale mais que TELA=1')
                 self.assertEqual(e.recepcao_vigente(), ({'a', 'b'}, OUTRO, 'variaveis'), 'recepcao fora da lista')
                 salvar('a')
-                self.assertEqual(e.recepcao_vigente(), ({'a'}, CANAL, 'tela'))
+                self.assertEqual(e.recepcao_vigente(), ({'a', 'b'}, OUTRO, 'variaveis'), 'canal fora da variável')
+                with patch.object(e, 'CANAL_VISITAS', CANAL):
+                    self.assertEqual(e.recepcao_vigente(), ({'a'}, CANAL, 'tela'))
                 with open(arq, 'w') as f:   # ilegível: volta às variáveis, com 1 log
                     f.write('{')
                 with redirect_stdout(io.StringIO()):
@@ -181,7 +183,7 @@ class Rota(unittest.TestCase):
 
     def test_lista_do_servidor_limita_a_tela(self):
         """A revisão do #2: com ESCRITORIO_VISITAS_ANFITRIOES só com recepcao, a tela não põe outro agente na sala."""
-        with patch.object(e, 'ANFITRIOES_VISITAS', {'recepcao'}), patch.object(e, 'CANAL_VISITAS', OUTRO), \
+        with patch.object(e, 'ANFITRIOES_VISITAS', {'recepcao'}), patch.object(e, 'CANAL_VISITAS', CANAL), \
                 patch.object(e, 'TELA_VISITAS', False):
             for dados in ({'anfitriao': '@interno', 'canal': CANAL},
                           {'anfitriao': 'interno', 'canal': CANAL, 'conferir': True}):
@@ -199,6 +201,22 @@ class Rota(unittest.TestCase):
                 f.write(ajustes.bytes_da_recepcao({'anfitriao': 'interno', 'canal': CANAL}))
             self.assertEqual(self.pedir('recepcionista', {})[1]['origem'], 'variaveis')
             self.assertEqual(self.pedir('criar', {'agente': 'ag-2'})[0], 400)
+
+    def test_canal_da_variavel_limita_a_tela(self):
+        """A revisão do bcbc634: com a lista definida, a tela não troca o ESCRITORIO_VISITAS_CANAL por outro canal."""
+        with patch.object(e, 'ANFITRIOES_VISITAS', {'recepcao'}), patch.object(e, 'CANAL_VISITAS', OUTRO), \
+                patch.object(e, 'TELA_VISITAS', True):
+            for dados in ({'anfitriao': 'recepcao', 'canal': CANAL},
+                          {'anfitriao': 'recepcao', 'canal': CANAL, 'conferir': True}):
+                status, corpo = self.pedir('recepcionista', dados)
+                self.assertEqual(status, 400)
+                self.assertIn('ESCRITORIO_VISITAS_CANAL', corpo['erro'])
+            self.assertEqual(self.chamadas, [], 'recusa antes de chamar o agentes.chat')
+            self.assertFalse(os.path.exists(self.arq))
+            with open(self.arq, 'wb') as f:   # arquivo antigo com outro canal: não vale
+                f.write(ajustes.bytes_da_recepcao({'anfitriao': 'recepcao', 'canal': CANAL}))
+            estado = self.pedir('recepcionista', {})[1]
+            self.assertEqual((estado['origem'], estado['canal']), ('variaveis', OUTRO))
 
     def test_tela_fechada_sem_lista_nem_permissao(self):
         with open(self.arq, 'wb') as f:

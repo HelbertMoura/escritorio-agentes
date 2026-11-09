@@ -59,7 +59,7 @@ function instrucoesRecepcionista(d) {
     situacao.textContent = (r.origem === "tela" ? `Recepcionista: ${quem}, salvo nesta tela.` :
       r.origem === "variaveis" ? `Recepcionista vindo das variáveis do servidor: ${quem}.` :
       "Nenhum recepcionista ligado. A sala de reunião recebe só pessoas da equipe.") +
-      (r.tela === "limite" ? ` O servidor libera nesta tela só: ${liberados.join(", ")}.` : "");
+      (r.tela === "limite" ? ` O servidor libera nesta tela só: ${liberados.join(", ")}, no canal das variáveis do servidor.` : "");
     fechada = r.tela === "fechada"; salvar.disabled = fechada;
     faltam.replaceChildren(...(Array.isArray(r.faltam) ? r.faltam : []).filter(t => typeof t === "string").map(t => {
       const item = document.createElement("li"); item.textContent = t; return item;
