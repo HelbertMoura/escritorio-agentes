@@ -132,6 +132,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "mundo.html": "text/html; charset=utf-8", "mundo.js": "text/javascript; charset=utf-8",
     "mundo_bairro.js": "text/javascript; charset=utf-8", "mundo_mapa.js": "text/javascript; charset=utf-8",
     "mundo_globo.js": "text/javascript; charset=utf-8", "mundo_cidade.js": "text/javascript; charset=utf-8",
+    "mundo_cidade_planta.js": "text/javascript; charset=utf-8",
     "index.html": "text/html; charset=utf-8", "app.js": "text/javascript; charset=utf-8",
     "avatar.js": "text/javascript; charset=utf-8", "mapa.js": "text/javascript; charset=utf-8",
     "vida.js": "text/javascript; charset=utf-8", "som.js": "text/javascript; charset=utf-8",
@@ -2283,7 +2284,7 @@ PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "fontes/figtree.ttf", "fonte
             "mundo.html", "mundo.js", "ceu.js", "clima.js", "som.js",  # bairro público: só código de desenho e som, sem dados
             # mapa do mundo: imagens, cidades e código de desenho, sem dados do escritório
             "mundo/terra.png", "mundo/brasil.png", "mundo/mundo.json", "mundo/atlas.png", "mundo/atlas.json",
-            "mundo_globo.js", "mundo_mapa.js", "mundo_cidade.js", "mundo_bairro.js",
+            "mundo_globo.js", "mundo_mapa.js", "mundo_cidade.js", "mundo_cidade_planta.js", "mundo_bairro.js",
             "fontes/doto.woff2", "logo.png",  # liberados na tela de login
             # PWA: o navegador busca o manifesto sem cookie; nenhum deles tem segredo. O sw.js fica na raiz (escopo /)
             "manifest.webmanifest", "sw.js", "icone-180.png", "icone-192.png", "icone-512.png", "icone-mascara-512.png"}

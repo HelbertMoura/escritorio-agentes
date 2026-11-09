@@ -243,22 +243,40 @@ def montar(fontes, saida):
     return mundo
 
 
-GENERICOS = ["predios-1", "predios-2", "chale-1", "chale-2", "chale-3", "chale-4", "arvore-1", "arvore-2", "arvore-3",
-             "carro-1", "carro-2", "carro-3", "carro-4", "aviao-1", "aviao-2"]
+ARTE = os.path.join(RAIZ, "arte", "pixellab", "mundo")   # a arte do PixelLab (marcos e peças genéricas)
+# as peças que toda cidade pode usar: prédios, chalés, árvores, carros, aviões, a praça e o mobiliário da rua
+GENERICOS = ([f"predios-{i}" for i in range(1, 7)] + [f"chale-{i}" for i in range(1, 9)] + ["arvore-1", "arvore-2", "arvore-3"]
+             + ["carro-1", "carro-2", "carro-3", "carro-4", "aviao-1", "aviao-2"]
+             + ["praca-1", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1", "onibus-1"])
+# desenhadas pelo PixelLab grandes demais para a cidade: entram no atlas na metade (o navegador desenha 1:1)
+METADE = {"carro-1", "carro-2", "carro-3", "carro-4", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1", "onibus-1"}
 ATLAS_LARGURA = 512
 
 
+def metade(im):
+    """A peça na metade, sem borrão nem borda translúcida: cada bloco 2x2 vira um pixel com a média das cores opacas
+    (pela pré-multiplicação do alfa), opaco se a maior parte do bloco era opaca. Recortada de novo pelo alfa."""
+    from PIL import Image
+    w, h = im.size
+    par = Image.new("RGBA", (w + w % 2, h + h % 2))
+    par.paste(im, (0, 0))
+    menor = par.convert("RGBa").reduce(2).convert("RGBA")
+    menor.putalpha(menor.getchannel("A").point(lambda a: 255 if a >= 128 else 0))
+    return menor.crop(menor.getchannel("A").getbbox())
+
+
 def montar_atlas(arte, cidades, saida):
-    """atlas.png e atlas.json em `saida` com a arte do PixelLab (`arte`): os marcos das cidades que têm um e as peças
-    genéricas. Cada peça vai recortada pela caixa do alfa (o código ancora pelo pé do recorte) e empilhada em
-    prateleiras, da mais alta para a mais baixa. Marco sem arte fica de fora (a cidade usa os prédios genéricos);
-    peça genérica sem arte é erro."""
+    """atlas.png e atlas.json em `saida` com a arte do PixelLab (`arte`): os marcos das cidades e as peças genéricas.
+    Cada peça vai recortada pela caixa do alfa (o código ancora pelo pé do recorte), as de METADE já reduzidas, e é
+    empilhada em prateleiras, da mais alta para a mais baixa. Marco sem arte fica de fora (a cidade usa os prédios
+    genéricos); peça genérica sem arte é erro."""
     from PIL import Image
     pecas = {}
 
     def abrir(nome):
         im = Image.open(os.path.join(arte, nome + ".png")).convert("RGBA")
-        return im.crop(im.getchannel("A").getbbox())
+        im = im.crop(im.getchannel("A").getbbox())
+        return metade(im) if nome in METADE else im
     for nome in GENERICOS:
         if not os.path.exists(os.path.join(arte, nome + ".png")):
             raise FileNotFoundError(f"atlas: falta a arte {nome}.png em {arte}")
@@ -298,8 +316,7 @@ def main():
     saida = sys.argv[2] if len(sys.argv) > 2 else SAIDA
     mundo = montar(entrada, saida)
     print(f"mundo: {len(mundo['cidades'])} cidades, {len(mundo['rotas'])} rotas, versão {mundo['versao']} -> {os.path.normpath(saida)}")
-    arte = os.path.join(entrada, "..", "pixellab", "mundo")   # arte/mundo -> arte/pixellab/mundo
-    atlas = montar_atlas(arte, ler(os.path.join(entrada, "cidades.json")), saida)
+    atlas = montar_atlas(ARTE, ler(os.path.join(entrada, "cidades.json")), saida)
     print(f"atlas: {len(atlas['quadros'])} peças, versão {atlas['versao']} -> {os.path.normpath(saida)}")
 
 

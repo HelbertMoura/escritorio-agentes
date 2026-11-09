@@ -16,8 +16,21 @@ sys.path.insert(0, os.path.join(RAIZ, "ferramentas"))  # com -I a pasta não ent
 
 UFS = {"AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA",
        "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"}
-COM_MARCO = {"rio-de-janeiro", "belo-horizonte", "sao-paulo", "brasilia", "salvador", "manaus",
-             "belem", "florianopolis", "porto-alegre", "mateus-leme"}
+ARTE = os.path.join(RAIZ, "arte", "pixellab", "mundo")
+MARCOS = {"rio-de-janeiro": "cristo", "belo-horizonte": "pampulha", "sao-paulo": "paulista", "brasilia": "congresso",
+          "salvador": "pelourinho", "manaus": "teatro-amazonas", "belem": "ver-o-peso", "florianopolis": "hercilio-luz",
+          "porto-alegre": "mercado-publico", "mateus-leme": "matriz-mateus-leme",
+          "rio-branco": "palacio-rio-branco", "maceio": "jangada", "macapa": "fortaleza-macapa",
+          "fortaleza": "catedral-fortaleza", "vitoria": "convento-penha", "goiania": "tres-racas",
+          "sao-luis": "casarao-azulejos", "cuiaba": "igreja-rosario", "campo-grande": "obelisco",
+          "joao-pessoa": "farol-cabo-branco", "curitiba": "jardim-botanico", "recife": "recife-antigo",
+          "teresina": "ponte-estaiada", "natal": "forte-reis-magos", "porto-velho": "tres-caixas-dagua",
+          "boa-vista": "garimpeiro", "aracaju": "arcos-atalaia", "palmas": "palacio-araguaia"}
+# as peças que toda cidade pode usar; carros e mobiliário entram no atlas já na metade do desenho
+GENERICOS = ({f"predios-{i}" for i in range(1, 7)} | {f"chale-{i}" for i in range(1, 9)}
+             | {f"arvore-{i}" for i in range(1, 4)} | {f"carro-{i}" for i in range(1, 5)} | {"aviao-1", "aviao-2"}
+             | {"praca-1", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1", "onibus-1"})
+METADE = {"carro-1", "carro-2", "carro-3", "carro-4", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1", "onibus-1"}
 
 
 class Cidades(unittest.TestCase):
@@ -34,13 +47,16 @@ class Cidades(unittest.TestCase):
             self.assertTrue(c["nome"].strip(), c["id"])
             self.assertTrue(-34 <= c["lat"] <= 6, c["id"])
             self.assertTrue(-74 <= c["lon"] <= -34, c["id"])
-            if c["marco"] is not None:
-                self.assertRegex(c["marco"], r"^[a-z-]+$")
+            self.assertRegex(c["marco"], r"^[a-z-]+$")   # as 28 têm marco
 
         por_id = {c["id"]: c for c in cidades}
         self.assertEqual({c["uf"] for c in cidades}, UFS)
         self.assertEqual(por_id["mateus-leme"]["uf"], "MG")
-        self.assertEqual({c["id"] for c in cidades if c["marco"] is not None}, COM_MARCO)
+        self.assertEqual({c["id"]: c["marco"] for c in cidades}, MARCOS)
+
+    def test_todo_marco_tem_arte(self):
+        for cid, marco in MARCOS.items():
+            self.assertTrue(os.path.isfile(os.path.join(ARTE, f"marco-{marco}.png")), cid)
 
 
 class Preencher(unittest.TestCase):
@@ -128,16 +144,14 @@ class Montagem(unittest.TestCase):
         """O atlas sai igual a cada montagem, com as peças pedidas, cada uma dentro da imagem e sem sobrepor outra."""
         pasta = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, pasta, True)
-        atlas = self.atlas(os.path.join(RAIZ, "arte", "pixellab", "mundo"), pasta)
+        atlas = self.atlas(ARTE, pasta)
         for nome in ("atlas.png", "atlas.json"):
             self.assertEqual(self.sha(self.pastas[0], nome), self.sha(pasta, nome), nome)
-        with open(CIDADES, encoding="utf-8") as f:
-            marcos = {"marco-" + c["marco"] for c in json.load(f) if c["marco"]}
-        nomes = marcos | {"predios-1", "predios-2", "chale-1", "chale-2", "chale-3", "chale-4", "aviao-1", "aviao-2",
-                          "carro-1", "carro-2", "carro-3", "carro-4", "arvore-1", "arvore-2", "arvore-3"}
+        marcos = {"marco-" + m for m in MARCOS.values()}   # as 28 cidades: todo marco tem quadro no atlas
+        self.assertEqual(len(marcos), 28)
         self.assertEqual(set(atlas), {"versao", "quadros"})
         self.assertIsInstance(atlas["versao"], int)
-        self.assertEqual(set(atlas["quadros"]), nomes)
+        self.assertEqual(set(atlas["quadros"]), marcos | GENERICOS)
         with open(os.path.join(pasta, "atlas.png"), "rb") as f:
             cabeca = f.read(24)
         largura, altura = int.from_bytes(cabeca[16:20], "big"), int.from_bytes(cabeca[20:24], "big")
@@ -160,12 +174,37 @@ class Montagem(unittest.TestCase):
         quadros = self.atlas(arte, pasta)["quadros"]
         self.assertNotIn("marco-cristo", quadros)
         self.assertIn("marco-pampulha", quadros)
-        self.assertTrue({"predios-1", "predios-2"} <= set(quadros))
+        self.assertTrue(GENERICOS <= set(quadros))
         # sem uma peça genérica (que toda cidade usa), a montagem para com erro
         os.remove(os.path.join(arte, "predios-2.png"))
         with self.assertRaises(AssertionError) as erro:
             self.atlas(arte, pasta)
         self.assertIn("predios-2", str(erro.exception))
+
+    def test_atlas_na_escala_final(self):
+        """Carros e mobiliário entram no atlas na metade da arte (o navegador desenha 1:1); o resto, inteiro. O alfa
+        do atlas inteiro fica binário (pixel nítido, sem borda translúcida)."""
+        with open(os.path.join(self.pastas[0], "atlas.json"), encoding="utf-8") as f:
+            quadros = json.load(f)["quadros"]
+        medir = ("import json, os, sys\nfrom PIL import Image\nat = Image.open(sys.argv[1]).convert('RGBA')\n"
+                 "alfa = sorted(set(at.getchannel('A').tobytes()))\ntam = {}\n"
+                 "for nome in json.loads(sys.argv[3]):\n"
+                 "    im = Image.open(os.path.join(sys.argv[2], nome + '.png')).convert('RGBA')\n"
+                 "    x0, y0, x1, y1 = im.getchannel('A').getbbox()\n    tam[nome] = [x1 - x0, y1 - y0]\n"
+                 "print(json.dumps([alfa, tam]))")
+        r = subprocess.run([sys.executable, "-c", medir, os.path.join(self.pastas[0], "atlas.png"), ARTE,
+                            json.dumps(sorted(GENERICOS))], capture_output=True, text=True, timeout=60)
+        if r.returncode:
+            raise AssertionError(r.stderr)
+        alfa, tam = json.loads(r.stdout)
+        self.assertEqual(alfa, [0, 255])
+        for nome, (w, h) in tam.items():
+            qw, qh = quadros[nome][2:]
+            if nome in METADE:   # metade arredondada para cima; o recorte do alfa pode tirar uma linha da borda
+                self.assertTrue((w + 1) // 2 - 1 <= qw <= (w + 1) // 2 and (h + 1) // 2 - 1 <= qh <= (h + 1) // 2,
+                                (nome, w, h, qw, qh))
+            else:
+                self.assertEqual([qw, qh], [w, h], nome)
 
     def test_rotas(self):
         rotas = self.mundo["rotas"]

@@ -1,5 +1,5 @@
 {
- "versao": 3655511649,
+ "versao": 3235952852,
  "cidades": [
   {
    "id": "rio-branco",
@@ -9,7 +9,7 @@
    "lon": -67.81,
    "x": 61,
    "y": 159,
-   "marco": null
+   "marco": "palacio-rio-branco"
   },
   {
    "id": "maceio",
@@ -19,7 +19,7 @@
    "lon": -35.74,
    "x": 382,
    "y": 156,
-   "marco": null
+   "marco": "jangada"
   },
   {
    "id": "macapa",
@@ -29,7 +29,7 @@
    "lon": -51.07,
    "x": 229,
    "y": 59,
-   "marco": null
+   "marco": "fortaleza-macapa"
   },
   {
    "id": "manaus",
@@ -59,7 +59,7 @@
    "lon": -38.53,
    "x": 354,
    "y": 97,
-   "marco": null
+   "marco": "catedral-fortaleza"
   },
   {
    "id": "brasilia",
@@ -79,7 +79,7 @@
    "lon": -40.34,
    "x": 336,
    "y": 263,
-   "marco": null
+   "marco": "convento-penha"
   },
   {
    "id": "goiania",
@@ -89,7 +89,7 @@
    "lon": -49.26,
    "x": 247,
    "y": 226,
-   "marco": null
+   "marco": "tres-racas"
   },
   {
    "id": "sao-luis",
@@ -99,7 +99,7 @@
    "lon": -44.3,
    "x": 297,
    "y": 85,
-   "marco": null
+   "marco": "casarao-azulejos"
   },
   {
    "id": "cuiaba",
@@ -109,7 +109,7 @@
    "lon": -56.1,
    "x": 178,
    "y": 216,
-   "marco": null
+   "marco": "igreja-rosario"
   },
   {
    "id": "campo-grande",
@@ -119,7 +119,7 @@
    "lon": -54.62,
    "x": 193,
    "y": 264,
-   "marco": null
+   "marco": "obelisco"
   },
   {
    "id": "belo-horizonte",
@@ -149,7 +149,7 @@
    "lon": -34.86,
    "x": 391,
    "y": 131,
-   "marco": null
+   "marco": "farol-cabo-branco"
   },
   {
    "id": "curitiba",
@@ -159,7 +159,7 @@
    "lon": -49.27,
    "x": 247,
    "y": 314,
-   "marco": null
+   "marco": "jardim-botanico"
   },
   {
    "id": "recife",
@@ -169,7 +169,7 @@
    "lon": -34.88,
    "x": 391,
    "y": 139,
-   "marco": null
+   "marco": "recife-antigo"
   },
   {
    "id": "teresina",
@@ -179,7 +179,7 @@
    "lon": -42.8,
    "x": 312,
    "y": 110,
-   "marco": null
+   "marco": "ponte-estaiada"
   },
   {
    "id": "rio-de-janeiro",
@@ -199,7 +199,7 @@
    "lon": -35.21,
    "x": 387,
    "y": 117,
-   "marco": null
+   "marco": "forte-reis-magos"
   },
   {
    "id": "porto-alegre",
@@ -219,7 +219,7 @@
    "lon": -63.9,
    "x": 101,
    "y": 147,
-   "marco": null
+   "marco": "tres-caixas-dagua"
   },
   {
    "id": "boa-vista",
@@ -229,7 +229,7 @@
    "lon": -60.67,
    "x": 133,
    "y": 31,
-   "marco": null
+   "marco": "garimpeiro"
   },
   {
    "id": "florianopolis",
@@ -259,7 +259,7 @@
    "lon": -37.07,
    "x": 369,
    "y": 169,
-   "marco": null
+   "marco": "arcos-atalaia"
   },
   {
    "id": "palmas",
@@ -269,7 +269,7 @@
    "lon": -48.33,
    "x": 256,
    "y": 161,
-   "marco": null
+   "marco": "palacio-araguaia"
   },
   {
    "id": "mateus-leme",

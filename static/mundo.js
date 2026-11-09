@@ -144,15 +144,15 @@ const Mundo = (() => {
     nivel.entrar({ cidade: atualCidade, de: deCidade, nivel: deNivel });
     endereco(a, opcoes.substituir);
     voltar.disabled = !ACIMA[nome];
-    const c = atualCidade && mapa && mapa.porId.get(atualCidade);
-    canvas.setAttribute("aria-label", nome === "globo"
-      ? "Globo terrestre em pixel art girando, com a noite de agora, as luzes das cidades do Brasil, nuvens e a lua"
-      : nome === "brasil"
-      ? "Mapa do Brasil em pixel art com as capitais e Mateus Leme, o tempo de agora em cada uma, aviões nas rotas e a noite pelo horário"
-      : nome === "cidade" ? `${c.nome} vista de cima em pixel art, com ${c.marco ? "o marco da cidade" : "prédios"} no centro, quadras com chalés, carros nas ruas e o tempo de agora${mapa.casa === c.id ? ", e o chalé do escritório com a placa" : ""}`
-      : "Bairro com o chalé deste escritório, rua, pessoas, cachorro, carro e céu do horário atual");
-    montarAlvos(); destacar(null); mostrar();
+    rotular(); montarAlvos(); destacar(null); mostrar();
   }
+  // o rótulo do canvas; o da cidade vem dela (marco, chalé da casa) e é refeito quando a casa ou o atlas chegam
+  const ROTULOS = {
+    globo: "Globo terrestre em pixel art girando, com a noite de agora, as luzes das cidades do Brasil, nuvens e a lua",
+    brasil: "Mapa do Brasil em pixel art com as capitais e Mateus Leme, o tempo de agora em cada uma, aviões nas rotas e a noite pelo horário",
+    bairro: "Bairro com o chalé deste escritório, rua, pessoas, cachorro, carro e céu do horário atual",
+  };
+  function rotular() { if (nivel) canvas.setAttribute("aria-label", nivel.rotulo ? nivel.rotulo() : ROTULOS[nome]); }
   function subir() { if (nivel && ACIMA[nome]) ir(ACIMA[nome], { cidade: atualCidade }); }
   function executar(a) { if (a && a.ir) ir(a.ir, a); }
   // roda, botões, teclado, duplo clique e pinça: o globo decide o próprio zoom (desce ao Brasil); os outros níveis aproximam
@@ -246,6 +246,9 @@ const Mundo = (() => {
       ctx.setTransform(cam.P, 0, 0, cam.P, ox, oy);
       const acao = nivel.quadro(ctx, dt, t);   // o globo devolve o mergulho quando termina de girar até o Brasil
       ctx.setTransform(1, 0, 0, 1, 0, 0);
+      // a chuva do som só vale na cidade e no bairro (o Clima a ajusta a cada quadro); no globo e no Brasil, vai a zero
+      // aos poucos (Som.chuva aproxima o volume a cada chamada)
+      if ((nome === "globo" || nome === "brasil") && window.Som && Som.ligado) Som.chuva(0);
       if (trans) cortina(trans.fase === 0 ? trans.k : 1 - trans.k);
       posicionar();
       if (acao && !trans) executar(acao);
@@ -351,7 +354,7 @@ const Mundo = (() => {
         if (mapa) mapa.clima(d);
         if (nome === "bairro" && !atualCidade && mapa && mapa.casa) atualCidade = ultimaCidade = mapa.casa;   // #bairro direto: o da casa
         if (nome === "bairro" || nome === "cidade") climaDaCidade();
-        montarAlvos(); mostrar();
+        rotular(); montarAlvos(); mostrar();
       });
   }
   fetch("/mundo/mundo.json", { credentials: "omit", cache: "no-cache" })
@@ -359,7 +362,8 @@ const Mundo = (() => {
     .then(dados => {
       mapa = MundoMapa.criar({ dados, Camera, reduzido });
       Object.assign(niveis, mapa.niveis, { globo: Globo.criar({ dados, Camera, reduzido }),
-        cidade: MundoCidade.criar({ dados, Camera, reduzido, mapa, clima: climaDaCidade }) });
+        cidade: MundoCidade.criar({ dados, Camera, reduzido, mapa, clima: climaDaCidade,
+          avisar: () => { if (nome === "cidade") { rotular(); montarAlvos(); } } }) });   // o atlas chegou: placa, porta e marco
     })
     .catch(() => { mapa = null; })   // sem o mapa, a página segue com o bairro, como antes
     .then(() => {

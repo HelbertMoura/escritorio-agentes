@@ -23,7 +23,7 @@ function elemento() {
   return el;
 }
 
-async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false, tela = [640, 400, 1] } = {}) {
+async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false, tela = [640, 400, 1], atlas = ATLAS, som = null } = {}) {
   const quadros = [], requisicoes = [], intervalos = [];
   // putImageData conta as passadas pixel a pixel do globo; getImageData dá pixels zerados quando o teste faz uma imagem carregar
   // drawImage guarda o recorte de origem [sx, sy, sw, sh] quando o teste liga contexto.gravar (um array)
@@ -50,12 +50,14 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
     },
     performance: { now: () => 0 }, requestAnimationFrame: f => quadros.push(f),
     setInterval(f, ms) { intervalos.push(ms); }, clearInterval() {}, setTimeout, Math, Promise, JSON, URLSearchParams,
-    // as imagens só carregam quando o teste pede (carregar)
+    // as imagens só carregam (ou falham) quando o teste pede (carregar, falhar)
     Image: class {
-      constructor() { this.complete = false; this.naturalWidth = 0; this.ouvintes = []; (contexto.imagens ||= []).push(this); }
-      addEventListener(t, f) { if (t === "load") this.ouvintes.push(f); }
-      carregar() { for (const f of this.ouvintes) f(); }
+      constructor() { this.complete = false; this.naturalWidth = 0; this.ouvintes = {}; (contexto.imagens ||= []).push(this); }
+      addEventListener(t, f) { (this.ouvintes[t] ||= []).push(f); }
+      carregar() { for (const f of this.ouvintes.load || []) f(); }
+      falhar() { for (const f of this.ouvintes.error || []) f(); }
     },
+    Som: som,
     Ceu: { agora: () => ({ h: 12, cima: "#3d95ee", baixo: "#a9d8ff", escuro: 0, hora: "12:00" }) },
     // desenhar conta as chamadas: as partículas de chuva e neve e o clarão do raio só saem do Clima.desenhar
     Clima: { definir(c) { contexto.clima = c; }, tipo: () => (contexto.clima && contexto.clima.tipo) || "limpo", texto: () => "céu limpo",
@@ -63,13 +65,16 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
     fetch: async (url, opcoes) => {
       requisicoes.push([url, opcoes]);
       if (url.startsWith("/mundo/mundo.json")) return { ok: true, json: async () => JSON.parse(JSON.stringify(MUNDO)) };
-      if (url.startsWith("/mundo/atlas.json")) return { ok: true, json: async () => JSON.parse(JSON.stringify(ATLAS)) };
+      if (url.startsWith("/mundo/atlas.json")) return { ok: true, json: async () => JSON.parse(JSON.stringify(atlas)) };
       if (climaFalha) throw new Error("rede");
       return { ok: true, json: async () => clima };
     },
   };
   vm.createContext(contexto);
-  for (const f of ["static/mundo_bairro.js", "static/mundo_mapa.js", "static/mundo_globo.js", "static/mundo_cidade.js", "static/mundo.js"]) vm.runInContext(fs.readFileSync(f, "utf8"), contexto, { filename: f });
+  contexto.window.Som = som;
+  const scripts = ["static/avatar.js", "static/mundo_bairro.js", "static/mundo_mapa.js", "static/mundo_globo.js",
+    "static/mundo_cidade_planta.js", "static/mundo_cidade.js", "static/mundo.js"];
+  for (const f of scripts) vm.runInContext(fs.readFileSync(f, "utf8"), contexto, { filename: f });
   for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r));   // mundo.json e clima chegam
   let relogio = 0;
   const rodar = (n = 1) => { for (let i = 0; i < n; i++) { const f = quadros.shift(); if (!f) return; relogio += 16; f(relogio); } };
@@ -158,21 +163,49 @@ async function principal() {
   k.clicar(320, 200); k.rodar(40);
   assert.equal(k.M.nivel, "cidade", "Manaus não é a casa: o clique na cidade não desce ao bairro");
 
-  // nível Cidade: a planta sai da semente do id (6 a 10 chalés decorativos e carros nas ruas)
-  const Cid = k.contexto.window.MundoCidade, planta = id => JSON.stringify(Cid.planta(id));
+  // nível Cidade: a planta sai da semente do id, nas 28 cidades (sempre a mesma para o mesmo id)
+  const Cid = k.contexto.window.MundoCidade, CP = k.contexto.window.CidadePlanta, planta = id => JSON.stringify(Cid.planta(id));
   assert.equal(planta("recife"), planta("recife"), "a mesma cidade, a mesma planta");
   assert.notEqual(planta("recife"), planta("manaus"));
+  const BORDA = CP.E / 2 + CP.C;   // do eixo da rua ao fim da calçada
+  const cruza = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
   for (const cc of MUNDO.cidades) {
-    const p = Cid.planta(cc.id);
-    assert.ok(p.chales.length >= 6 && p.chales.length <= 10, `${cc.id}: ${p.chales.length} chalés`);
-    assert.ok(p.carros.length > 0, cc.id);
-    assert.ok(["predios-1", "predios-2"].includes(p.predios), cc.id);
+    const p = Cid.planta(cc.id), id = cc.id;
+    assert.equal(planta(id), JSON.stringify(p), `${id}: determinística`);
+    assert.ok(p.chales.length >= 6 && p.chales.length <= 10, `${id}: ${p.chales.length} chalés`);
+    assert.ok(p.chales.every(c => /^chale-[1-8]$/.test(c.peca)), id);
+    assert.ok(p.predios.length >= 2 && p.predios.length <= 5, `${id}: ${p.predios.length} prédios`);
+    assert.ok(p.predios.every(c => /^predios-[1-6]$/.test(c.peca)) && /^predios-[1-6]$/.test(p.centro.peca), id);
+    assert.equal(p.praca.peca, "praca-1", id);
+    assert.equal(p.mobiliario.map(m => m.peca).sort().join(), "banca-1,banco-poste-1,carrinho-1,ponto-onibus-1", id);
+    assert.ok(p.pedestres.length >= 8 && p.pedestres.length <= 14, `${id}: ${p.pedestres.length} pedestres`);
+    assert.ok(p.carros.length > 0, id);
+    // vagas distintas: nada divide chão com outra peça, e o que não é o ônibus fica fora da rua e da calçada
+    const itens = [p.centro, ...p.chales, ...p.predios, p.praca, ...p.arvores, ...p.mobiliario, p.casa, ...p.arredores];
+    for (const s of itens) {
+      assert.ok(s.r[0] <= s.x && s.x <= s.r[2] && s.r[1] <= s.y && s.y <= s.r[3], `${id}: o pé de ${s.peca} na vaga`);
+      assert.ok(!p.ruas.v.some(v => s.r[0] < v + BORDA && v - BORDA < s.r[2]), `${id}: ${s.peca} na rua (x)`);
+      assert.ok(!p.ruas.h.some(h => s.r[1] < h + BORDA && h - BORDA < s.r[3]), `${id}: ${s.peca} na rua (y)`);
+    }
+    const todos = [...itens, p.onibus];
+    for (let i = 0; i < todos.length; i++) for (let j = i + 1; j < todos.length; j++) {
+      assert.ok(!cruza(todos[i].r, todos[j].r), `${id}: ${todos[i].peca} e ${todos[j].peca} na mesma vaga`);
+    }
+    // o ônibus fica parado na faixa da rua junto ao ponto, e nenhum carro passa por essa faixa
+    assert.equal(p.onibus.peca, "onibus-1");
+    assert.ok(p.onibus.y < p.onibus.rua && p.onibus.y > p.onibus.rua - CP.E / 2, `${id}: ônibus na faixa de cima`);
+    assert.ok(p.carros.every(c => c.eixo !== "h" || c.rua !== p.onibus.rua || c.dir > 0), `${id}: carro na faixa do ônibus`);
   }
   const espera = async () => { for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r)); };
-  // na casa, o chalé com placa tem a porta: o clique nela leva a #bairro
+  const carregar = async m => { await espera(); for (const img of m.contexto.imagens || []) img.carregar(); m.rodar(2); };
+  // na casa, o chalé com placa tem a porta (só depois que o desenho do chalé chega): o clique nela leva a #bairro
   const ca = await abrir("#cidade=mateus-leme");
   ca.rodar(5);
   assert.equal(ca.M.nivel, "cidade");
+  assert.equal(ca.M.niveis.cidade.alvos().length, 0, "sem o desenho do chalé, nem placa nem porta");
+  await carregar(ca);
+  assert.match(ca.canvas["aria-label"], /chalé do escritório com a placa/, "a casa chegou do clima: o rótulo cita o chalé");
+  assert.match(ca.canvas["aria-label"], /o marco da cidade/);
   const portas = ca.M.niveis.cidade.alvos();
   assert.equal(portas.length, 1); assert.equal(portas[0].id, "porta"); assert.deepEqual({ ...portas[0].acao }, { ir: "bairro", cidade: "mateus-leme" });
   ca.clicar(...ca.M.camera.tela(portas[0].x, portas[0].y - 10)); ca.rodar(40);
@@ -188,9 +221,12 @@ async function principal() {
   assert.equal(mn.M.nivel, "bairro");
   mn.tecla("Escape"); mn.rodar(40);
   assert.equal(mn.contexto.location.hash, "#cidade=mateus-leme", "o bairro é o da casa: Esc sobe para ela");
-  // cidade sem marco: desenha os prédios genéricos da planta (e nenhum marco) assim que o atlas chega, sem erro
-  for (const [id, peca] of [["recife", Cid.planta("recife").predios], ["belo-horizonte", "marco-pampulha"]]) {
-    const sm = await abrir("#cidade=" + id);
+  // a arte do marco faltando no atlas: a cidade desenha os prédios genéricos da planta (e nenhum marco), sem erro, e o
+  // rótulo não promete o marco; com a arte, desenha o marco dela e nenhum outro
+  const semRecife = { ...ATLAS, quadros: { ...ATLAS.quadros } };
+  delete semRecife.quadros["marco-recife-antigo"];
+  for (const [id, peca, atlas] of [["recife", Cid.planta("recife").centro.peca, semRecife], ["belo-horizonte", "marco-pampulha", ATLAS]]) {
+    const sm = await abrir("#cidade=" + id, { atlas });
     await espera();
     assert.ok(sm.requisicoes.some(([u]) => u.startsWith("/mundo/atlas.json")), "a cidade pede o atlas");
     for (const img of sm.contexto.imagens || []) img.carregar();
@@ -201,20 +237,75 @@ async function principal() {
     const marcos = Object.keys(ATLAS.quadros).filter(n => n.startsWith("marco-") && n !== peca);
     assert.ok(!marcos.some(n => usados.has(JSON.stringify(ATLAS.quadros[n]))), `${id}: nenhum outro marco`);
     assert.equal(sm.M.nivel, "cidade"); assert.equal(sm.quadros.length, 1);
+    assert.equal(/marco/.test(sm.canvas["aria-label"]), peca.startsWith("marco-"), `${id}: ${sm.canvas["aria-label"]}`);
   }
-  // a cidade usa o tempo dela; com movimento reduzido os carros ficam parados e não há partículas (nada de Clima.desenhar)
+  // o atlas.png que falha ao carregar é pedido de novo na próxima entrada
+  const fa = await abrir("#cidade=manaus");
+  await espera();
+  for (const img of fa.contexto.imagens || []) img.falhar();
+  fa.tecla("Escape"); fa.rodar(40);
+  assert.equal(fa.M.nivel, "brasil");
+  fa.M.ir("cidade", { cidade: "manaus" }); fa.rodar(40); await espera();
+  assert.equal(fa.requisicoes.filter(([u]) => u.startsWith("/mundo/atlas.json")).length, 2, "a falha libera um novo pedido");
+  // a cidade usa o tempo dela; com movimento reduzido carros e pedestres ficam parados e não há partículas (nada de Clima.desenhar)
   const temporal = { cidades: { recife: { tipo: "tempestade", vento: 1, noite: false } }, casa: null, versao: 1 };
   for (const reduz of [true, false]) {
     const z = await abrir("#cidade=recife", { clima: temporal, reduzido: reduz });
-    await espera();
-    for (const img of z.contexto.imagens || []) img.carregar();
+    await carregar(z);
     assert.equal(z.contexto.clima.tipo, "tempestade", "a cidade chove como ela");
-    const antes = JSON.stringify(z.M.niveis.cidade.carros), d0 = z.contexto.desenhos || 0;
+    const cid = z.M.niveis.cidade, antes = JSON.stringify([cid.carros, cid.pedestres]), d0 = z.contexto.desenhos || 0;
     z.rodar(60);
-    const depois = JSON.stringify(z.M.niveis.cidade.carros), d1 = (z.contexto.desenhos || 0) - d0;
-    if (reduz) { assert.equal(depois, antes, "reduzido: carros parados"); assert.equal(d1, 0, "reduzido: sem partículas"); }
-    else { assert.notEqual(depois, antes, "os carros andam"); assert.ok(d1 >= 60, "o clima desenha a cada quadro"); }
+    const depois = JSON.stringify([cid.carros, cid.pedestres]), d1 = (z.contexto.desenhos || 0) - d0;
+    if (reduz) { assert.equal(depois, antes, "reduzido: carros e pedestres parados"); assert.equal(d1, 0, "reduzido: sem partículas"); }
+    else {
+      assert.notEqual(JSON.stringify(cid.carros), JSON.stringify(JSON.parse(antes)[0]), "os carros andam");
+      assert.notEqual(JSON.stringify(cid.pedestres), JSON.stringify(JSON.parse(antes)[1]), "os pedestres andam");
+      assert.ok(d1 >= 60, "o clima desenha a cada quadro");
+    }
   }
+  // pedestres: sempre na calçada ou na faixa de pedestre (nunca no meio da rua nem dentro das quadras), virando nas
+  // esquinas e atravessando nas faixas
+  const pe = await abrir("#cidade=curitiba"), pp = Cid.planta("curitiba");
+  await carregar(pe);
+  const banda = d => d >= CP.E / 2 - 1e-6 && d <= BORDA + 1e-6;
+  const naCalcadaH = (x, y) => pp.ruas.h.some(h => banda(Math.abs(y - h))), naCalcadaV = (x, y) => pp.ruas.v.some(v => banda(Math.abs(x - v)));
+  let faixas = 0, viradas = 0;
+  const lado = pe.M.niveis.cidade.pedestres.map(([x, y]) => naCalcadaH(x, y));
+  for (let i = 0; i < 2000; i++) {
+    pe.rodar();
+    pe.M.niveis.cidade.pedestres.forEach(([x, y], j) => {
+      const h = naCalcadaH(x, y), v = naCalcadaV(x, y);
+      assert.ok(h || v, `pedestre ${j} fora da calçada e da faixa: ${x}, ${y}`);
+      if (h && pp.ruas.v.some(rv => Math.abs(x - rv) < CP.E / 2 - 1) || v && pp.ruas.h.some(rh => Math.abs(y - rh) < CP.E / 2 - 1)) faixas++;
+      if (h !== v && h !== lado[j]) { viradas++; lado[j] = h; }
+    });
+  }
+  assert.ok(faixas > 0, "algum pedestre atravessou na faixa"); assert.ok(viradas > 0, "algum pedestre virou a esquina");
+  // tela larga (a vista passa da caixa): o carro só dá a volta fora da vista, com o desenho todo para fora
+  const lg = await abrir("#cidade=recife", { tela: [1600, 400, 1] });
+  await carregar(lg);
+  const lc = lg.M.camera, [vx0, vy0] = lc.mundo(0, 0), [vx1, vy1] = lc.mundo(lc.W, lc.H);
+  assert.ok(vx0 < -100 && vx1 > CP.W + 100, `a vista passa da caixa: ${vx0} a ${vx1}`);
+  let antesCarros = lg.M.niveis.cidade.carros, voltas = 0;
+  for (let i = 0; i < 5000; i++) {
+    lg.rodar();
+    const agora = lg.M.niveis.cidade.carros;
+    agora.forEach(([x, y], j) => {
+      const [ax, ay] = antesCarros[j];
+      if (Math.abs(x - ax) + Math.abs(y - ay) < 5) return;
+      voltas++;
+      for (const [px, py] of [[ax, ay], [x, y]]) assert.ok(px <= vx0 - 10 || px >= vx1 + 10 || py <= vy0 - 10 || py >= vy1 + 10, `volta dentro da vista: ${px}, ${py}`);
+    });
+    antesCarros = agora;
+  }
+  assert.ok(voltas > 0, "algum carro deu a volta");
+  // ao sair da cidade para o Brasil, a chuva do som vai a zero
+  const chamadas = [], somFalso = { ligado: true, chuva(v) { chamadas.push(v); } };
+  const sc = await abrir("#cidade=recife", { som: somFalso });
+  sc.rodar(10);
+  sc.tecla("Escape"); sc.rodar(60);
+  assert.equal(sc.M.nivel, "brasil");
+  assert.ok(chamadas.length >= 30 && chamadas.slice(-30).every(v => v === 0), "no Brasil, Som.chuva(0) a cada quadro");
 
   // a câmera fica presa à caixa: 50 arrastes para o mesmo lado e zoom de 1x a 4x
   const a = await abrir("#brasil");
