@@ -24,8 +24,10 @@ function elemento() {
 
 async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false, tela = [640, 400, 1] } = {}) {
   const quadros = [], requisicoes = [], intervalos = [];
+  // putImageData conta as passadas pixel a pixel do globo; getImageData dá pixels zerados quando o teste faz uma imagem carregar
   const ctx = new Proxy({}, { get: (_, k) => ["createLinearGradient", "createRadialGradient"].includes(k) ? () => ({ addColorStop() {} })
-    : k === "getTransform" ? () => ({ a: 1 }) : () => {}, set: () => true });
+    : k === "getTransform" ? () => ({ a: 1 }) : k === "getImageData" ? (x, y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4) })
+    : k === "putImageData" ? () => { contexto.passadas = (contexto.passadas || 0) + 1; } : () => {}, set: () => true });
   const canvas = elemento(); canvas.getContext = () => ctx;
   canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: tela[0], height: tela[1] });
   const ids = ["mundo", "entrar", "mundo-estado", "mundo-alvos", "mundo-dica", "mundo-voltar", "mundo-mais", "mundo-menos"];
@@ -45,7 +47,12 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
     },
     performance: { now: () => 0 }, requestAnimationFrame: f => quadros.push(f),
     setInterval(f, ms) { intervalos.push(ms); }, clearInterval() {}, setTimeout, Math, Promise, JSON, URLSearchParams,
-    Image: class { constructor() { this.complete = false; this.naturalWidth = 0; } addEventListener() {} },
+    // as imagens só carregam quando o teste pede (carregar)
+    Image: class {
+      constructor() { this.complete = false; this.naturalWidth = 0; this.ouvintes = []; (contexto.imagens ||= []).push(this); }
+      addEventListener(t, f) { if (t === "load") this.ouvintes.push(f); }
+      carregar() { for (const f of this.ouvintes) f(); }
+    },
     Ceu: { agora: () => ({ h: 12, cima: "#3d95ee", baixo: "#a9d8ff", escuro: 0, hora: "12:00" }) },
     // desenhar conta as chamadas: as partículas de chuva e neve e o clarão do raio só saem do Clima.desenhar
     Clima: { definir(c) { contexto.clima = c; }, tipo: () => (contexto.clima && contexto.clima.tipo) || "limpo", texto: () => "céu limpo",
@@ -221,6 +228,20 @@ async function principal() {
   assert.notEqual(r1, r0, "o arraste gira o globo à mão");
   gr.rodar(60);
   assert.equal(JSON.stringify(gr.M.niveis.globo.rotacao), r1, "reduzido: sem inércia nem giro depois do arraste");
+  // com o Brasil longe depois do arraste, o foco no Brasil (Tab) realça sem girar o globo até ele
+  gr.elementos["mundo-alvos"].filhos[0].disparar("focus"); gr.rodar(30);
+  assert.equal(gr.M.niveis.globo.destaque, "brasil");
+  assert.equal(JSON.stringify(gr.M.niveis.globo.rotacao), r1, "reduzido: o foco no Brasil não gira o globo");
+  // terra.png e brasil.png chegam depois dos primeiros quadros: com movimento reduzido e nada mexendo, o globo se refaz
+  const gi = await abrir("", { reduzido: true });
+  gi.rodar(30);
+  const passadas = gi.contexto.passadas;
+  assert.ok(passadas > 0, "o primeiro quadro desenha o globo");
+  gi.rodar(30);
+  assert.equal(gi.contexto.passadas, passadas, "reduzido e parado: sem passada nova");
+  for (const img of gi.contexto.imagens) img.carregar();
+  gi.rodar(2);
+  assert.ok(gi.contexto.passadas > passadas, "reduzido: as imagens que chegam refazem a passada");
 
   // movimento reduzido: nem aviões nem partículas; sem ele, até 6 aviões e partículas sobre as cidades
   const tempo = { cidades: Object.fromEntries(MUNDO.cidades.map((c, i) => [c.id, { tipo: ["chuva", "neve", "tempestade", "garoa"][i % 4], vento: 0.5, noite: false }])), casa: null, versao: 1 };

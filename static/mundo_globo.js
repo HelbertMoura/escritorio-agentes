@@ -104,6 +104,7 @@ const Globo = (() => {
         const k = j * 360 + i, cl = perto([d[k * 4], d[k * 4 + 1], d[k * 4 + 2]], TERRA);
         classe[k] = cl; cor.set(bioma(i, j, cl), k * 3);
       }
+      feito.chave = "";   // a passada guardada era só de mar: refaz (com movimento reduzido, nada mais a refaria)
     });
     ler("/mundo/brasil.png?v=" + versao, 400, 400, d => {   // a célula é do Brasil se 4 de 9 amostras do brasil.png forem
       for (let j = 84; j < 124; j++) for (let i = 106; i < 146; i++) {
@@ -120,6 +121,7 @@ const Globo = (() => {
         for (let b = -2; b <= 2 && !sim; b++) for (let a = -2; a <= 2 && !sim; a++) sim = brasil[(j + b) * 360 + i + a];
         alvoBrasil[j * 360 + i] = sim;
       }
+      feito.chave = "";
     });
     // a cor do dia: o terra.png com gelo nos polos e na Groenlândia, desertos, floresta tropical e taiga
     function bioma(i, j, cl) {
@@ -262,7 +264,7 @@ const Globo = (() => {
           if (dist <= passo || dist < 0.5) { lon0 = voo.lon; lat0 = voo.lat; vel = 0; if (voo.descer) acao = { ir: "brasil" }; voo = null; }
           else { lon0 = norm(lon0 + dl / dist * passo); lat0 += df / dist * passo; }
         } else if (!segurando) {
-          if (nivel.destaque === "brasil" && visao(LAT0, LON0) < Math.cos(35 * RAD)) voo = { lon: LON0, lat: LAT0, descer: false };
+          if (!reduzido && nivel.destaque === "brasil" && visao(LAT0, LON0) < Math.cos(35 * RAD)) voo = { lon: LON0, lat: LAT0, descer: false };
           const base = reduzido || nivel.destaque ? 0 : -GIRO;
           vel = reduzido ? 0 : vel + (base - vel) * (1 - Math.exp(-dt * 1.5));
           if (vel) lon0 = norm(lon0 + vel * dt);
