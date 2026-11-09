@@ -3008,7 +3008,8 @@ def main():
     if CABECALHO_VISITAS not in CABECALHOS_ORIGEM:
         sys.exit("ESCRITORIO_VISITAS_CABECALHO precisa ser X-Real-IP ou CF-Connecting-IP")
     if TELA_VISITAS_BRUTA not in LIGADO + DESLIGADO:
-        sys.exit("ESCRITORIO_VISITAS_TELA precisa ser 1 (liga) ou vazia/0 (desliga)")
+        sys.exit("ESCRITORIO_VISITAS_TELA precisa ser 1, true, sim, yes ou on (liga) ou vazia, 0, false, não, no "
+                 "ou off (desliga)")
     if CANAL_VISITAS and not UUID_MCP.fullmatch(CANAL_VISITAS):
         sys.exit("ESCRITORIO_VISITAS_CANAL precisa ser o id (uuid) de um canal do agentes.chat só para visitas")
     if bool(ANFITRIOES_VISITAS) != bool(CANAL_VISITAS):
