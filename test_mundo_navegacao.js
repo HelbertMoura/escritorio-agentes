@@ -144,7 +144,9 @@ async function principal() {
   const solta = a.M.Camera([0, 0, 400, 400]);
   solta.tamanho(640, 400, 1); solta.x = -999; solta.y = 9999; solta.z = 9; solta.limitar();
   assert.equal(solta.z, 4); assert.ok(solta.x - 320 / solta.P >= 0 && solta.y + 200 / solta.P <= 400);
-  // a 1x o mapa inteiro cabe: celular (canvas de 1170 px, dpr 3) e o palco do desktop de 1280x800
+  // a 1x o mapa inteiro cabe na maior escala possível (fracionária): celular (canvas de 1170 px, dpr 3) e desktop
+  const celular = a.M.Camera([0, 0, 400, 400]).tamanho(1170, 1521, 3);
+  assert.ok(celular.P >= 2.9 && celular.P <= 2.93, "escala a 1x no celular: " + celular.P);
   for (const [w, h, d] of [[1170, 1521, 3], [1170, 1290, 3], [940, 800, 1]]) {
     const c = a.M.Camera([0, 0, 400, 400]).tamanho(w, h, d);
     assert.ok(c.x - w / 2 / c.P <= 0 && c.x + w / 2 / c.P >= 400, `x de 0 a 400 inteiro em ${w}x${h}`);

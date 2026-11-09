@@ -5,8 +5,9 @@
 // segue só pela porta do chalé, como antes. O tempo das cidades vem de POST /api/mundo/clima ao abrir e a cada 15 min.
 "use strict";
 const Mundo = (() => {
-  // Câmera de um nível: centro (x, y) no mundo e zoom z de 1x a 4x sobre a escala base, a maior escala inteira em que a
-  // caixa do nível cabe inteira na tela. Parada, a escala final (base·z) é inteira e a origem cai em pixel inteiro.
+  // Câmera de um nível: centro (x, y) no mundo e zoom z de 1x a 4x sobre a escala base, a maior escala (pode ser
+  // fracionária) em que a caixa do nível cabe inteira na tela. Acima de 1x, parada, a escala final (base·z) é inteira;
+  // a origem cai sempre em pixel inteiro.
   function Camera(caixa) {
     const MIN = 1, MAX = 4, prender = z => Math.min(MAX, Math.max(MIN, z));
     const c = {
@@ -18,7 +19,7 @@ const Mundo = (() => {
       limitar(nova) {
         if (nova) c.caixa = nova;
         const [x0, y0, x1, y1] = c.caixa;
-        c.base = Math.max(1, Math.floor(Math.min(c.W / (x1 - x0), c.H / (y1 - y0))));   // a 1x a caixa cabe inteira
+        c.base = Math.max(0.05, Math.min(c.W / (x1 - x0), c.H / (y1 - y0)));   // a 1x a caixa cabe inteira, na maior escala
         c.z = prender(Number.isFinite(c.z) ? c.z : 1); c.alvoZ = prender(Number.isFinite(c.alvoZ) ? c.alvoZ : 1);
         const mw = c.W / 2 / c.P, mh = c.H / 2 / c.P;
         c.x = mw * 2 >= x1 - x0 || !Number.isFinite(c.x) ? (x0 + x1) / 2 : Math.min(x1 - mw, Math.max(x0 + mw, c.x));

@@ -34,7 +34,7 @@ const MundoMapa = (() => {
   function semente(s) { return () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff); }
   // U: pixels da tela por pixel de sprite. 2 px de CSS, mas não mais que a escala base do nível (no celular o ícone não
   // cobre as cidades vizinhas) e nunca menos que 1 px de CSS (para continuar legível)
-  function unidade(cam) { return Math.max(1, Math.min(Math.round(2 * cam.dpr), Math.max(cam.base, Math.round(cam.dpr)))); }
+  function unidade(cam) { return Math.max(1, Math.min(Math.round(2 * cam.dpr), Math.max(Math.round(cam.base), Math.round(cam.dpr)))); }
 
   // telas pequenas guardadas: o sprite é pintado uma vez por cor e escala, e depois só copiado
   const telas = new Map();
@@ -186,7 +186,7 @@ const MundoMapa = (() => {
       for (let i = gotas.length - 1; i >= 0; i--) if (gotas[i].resp < 0) gotas.splice(i, 1);
       if (mascara) {
         while (brilhos.length < 26) {
-          const x = Math.floor(Math.random() * W), y = Math.floor(Math.random() * H);
+          const x = Math.floor(Math.random() * (W + 160)) - 80, y = Math.floor(Math.random() * (H + 160)) - 80;   // o mar segue além da imagem
           if (!terra(x, y)) brilhos.push({ x: x + 0.5, y: y + 0.5, v: 0.6 + Math.random() * 1.4, total: 0 }); else if (Math.random() < 0.5) break;
         }
         for (const b of brilhos) { b.total = b.total || b.v; b.v -= dt; }
@@ -210,16 +210,7 @@ const MundoMapa = (() => {
       const tx = x => Math.round(ox + x * P), ty = y => Math.round(oy + y * P);
       ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = MAR; ctx.fillRect(0, 0, TW, TH);
       ctx.setTransform(P, 0, 0, P, ox, oy);
-      if (pronta()) {   // além da imagem, as bordas esticadas: a terra e o mar continuam
-        const E = 4000;
-        ctx.drawImage(imagem, 0, 0, 1, H, -E, 0, E, H); ctx.drawImage(imagem, W - 1, 0, 1, H, W, 0, E, H);
-        ctx.drawImage(imagem, 0, 0, W, 1, 0, -E, W, E); ctx.drawImage(imagem, 0, H - 1, W, 1, 0, H, W, E);
-        ctx.drawImage(imagem, 0, 0, 1, 1, -E, -E, E, E); ctx.drawImage(imagem, W - 1, 0, 1, 1, W, -E, E, E);
-        ctx.drawImage(imagem, 0, H - 1, 1, 1, -E, H, E, E); ctx.drawImage(imagem, W - 1, H - 1, 1, 1, W, H, E, E);
-        ctx.drawImage(imagem, 0, 0);
-        ctx.fillStyle = "rgba(4,8,20,.38)";   // fora da imagem, um véu: as faixas esticadas leem como borda do mapa
-        ctx.fillRect(-E, -E, E * 2 + W, E); ctx.fillRect(-E, H, E * 2 + W, E); ctx.fillRect(-E, 0, E, H); ctx.fillRect(W, 0, E, H);
-      }
+      if (pronta()) ctx.drawImage(imagem, 0, 0);   // fora da imagem fica o mar liso (e o brilho do sol nele)
       const nuvens = [];
       for (const c of cidades) {   // o chão de cada cidade: neve assentada, chão molhado, neblina
         const k = c.tempo.tipo;
