@@ -46,8 +46,8 @@ const Mundo = (() => {
         if (noite) { ctx.fillStyle = "rgba(255,217,119,.25)"; ctx.beginPath(); ctx.arc(p.x + 6, p.y - 2, 16, 0, Math.PI * 2); ctx.fill(); }
       }
     }
-    function arvore(x, neve, t) { // a copa balança com o vento (o tronco fica)
-      const d = Math.round(Clima.balanco ? Clima.balanco(t, x * 0.37) : 0);
+    function arvore(x, neve) { // a copa balança com o vento (o tronco fica)
+      const d = Math.round(Clima.balanco ? Clima.balanco(x * 0.37) : 0);
       ctx.fillStyle = "#5a3a22"; ctx.fillRect(x - 2, CALCADA - 14, 4, 14);
       ctx.fillStyle = neve ? "#dfe8ee" : "#3f8a3c"; ctx.beginPath(); ctx.arc(x + d, CALCADA - 20, 10, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = neve ? "#ffffff" : "#5aa64f"; ctx.beginPath(); ctx.arc(x - 3 + d, CALCADA - 23, 5, 0, Math.PI * 2); ctx.fill();
@@ -66,7 +66,7 @@ const Mundo = (() => {
       const ceu = Ceu.agora(), noite = ceu.escuro > 0.5, neve = Clima.tipo() === "neve";
       const g = ctx.createLinearGradient(0, 0, 0, RUA); g.addColorStop(0, ceu.cima); g.addColorStop(1, ceu.baixo);
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-      const fechado = { nublado: 0.18, neblina: 0.25, garoa: 0.3, chuva: 0.4, tempestade: 0.6 }[Clima.tipo()] || 0;   // céu carregado
+      const fechado = { nublado: 0.18, neblina: 0.25, garoa: 0.3, chuva: 0.4, tempestade: 0.6, neve: 0.3 }[Clima.tipo()] || 0;   // céu carregado
       const encoberto = fechado >= 0.3;   // com chuva, nem sol, nem lua, nem estrelas
       if (fechado) { ctx.fillStyle = `rgba(62,68,86,${fechado})`; ctx.fillRect(0, 0, W, RUA); }
       if (noite && !encoberto) { ctx.fillStyle = "#fff"; for (let i = 0; i < 40; i++) ctx.fillRect((i * 97) % W, (i * 41) % 70, 1, 1); }
@@ -82,7 +82,7 @@ const Mundo = (() => {
       }
       ctx.fillStyle = neve ? "#e9eef5" : "#5c9a4a"; ctx.fillRect(0, 96, W, CALCADA - 96);           // colina e grama
       ctx.fillStyle = neve ? "#d8e0ea" : "#4b8a3e"; ctx.beginPath(); ctx.ellipse(250, 100, 120, 18, 0, Math.PI, 0); ctx.fill();
-      for (const x of ARVORES) arvore(x, neve, t);
+      for (const x of ARVORES) arvore(x, neve);
       for (const c of CHALES) chale(c, noite, neve);
       ctx.fillStyle = "#b9b4a6"; ctx.fillRect(0, CALCADA, W, RUA - CALCADA);                     // calçada
       ctx.fillStyle = "#3a3a42"; ctx.fillRect(0, RUA, W, H - RUA);                               // rua

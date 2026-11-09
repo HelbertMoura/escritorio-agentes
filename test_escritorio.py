@@ -835,7 +835,8 @@ class Estaticos(unittest.TestCase):
         # todo <script src>, <link href> e <img src> local das páginas tem que estar em ARQUIVOS e existir no disco;
         # o que a tela de login carrega tem que ser público (sem sessão, o resto vira redirecionamento para /entrar)
         ref = re.compile(r"<(?:script|link|img)\b[^>]*?\b(?:src|href)\s*=\s*[\"']([^\"']+)[\"']", re.I)
-        for pagina, publico in (("index.html", False), ("entrar.html", True), ("construir.html", False), ("aviso.html", True)):
+        for pagina, publico in (("index.html", False), ("entrar.html", True), ("construir.html", False), ("aviso.html", True),
+                                ("visita.html", True), ("mundo.html", True), ("recepcionista.html", False), ("visitas-admin.html", False)):
             with open(os.path.join(e.ESTATICO, pagina), encoding="utf-8") as f:
                 html = f.read()
             if pagina == "entrar.html":

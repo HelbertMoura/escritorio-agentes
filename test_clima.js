@@ -46,9 +46,12 @@ function inclinacao(Clima) {
 {
   const { Clima } = carregar();
   Clima.definir({ tipo: "limpo", vento: 3 });
-  const t = rodar(Clima, 5);
+  let t = rodar(Clima, 5);
   assert.equal(Clima.vento, 0);
-  for (let k = 0; k < 50; k++) assert.ok(Math.abs(Clima.balanco(t + k * 97, 1)) <= 0.8 + 1e-9);
+  for (let k = 0; k < 50; k++) {
+    t += 50; Clima.desenhar(tela().ctx, PREDIO, 0.05, t, null);
+    assert.ok(Math.abs(Clima.balanco(1)) <= 0.8 + 1e-9);
+  }
 }
 
 // vento real: a chuva deita e as copas pendem para o lado do vento
@@ -56,12 +59,45 @@ function inclinacao(Clima) {
   const calmo = carregar(), forte = carregar();
   calmo.Clima.definir({ tipo: "chuva", vento: 0 });
   forte.Clima.definir({ tipo: "chuva", vento: 60 });
-  rodar(calmo.Clima, 5); const t = rodar(forte.Clima, 5);
+  rodar(calmo.Clima, 5); let t = rodar(forte.Clima, 5);
   assert.ok(forte.Clima.vento > 0.5, `vento ${forte.Clima.vento}`);
   assert.ok(inclinacao(forte.Clima) > inclinacao(calmo.Clima) + 2, "a chuva com vento deita mais");
   let media = 0;
-  for (let k = 0; k < 200; k++) media += forte.Clima.balanco(t + k * 37, 0) / 200;
+  for (let k = 0; k < 200; k++) {
+    t += 50; forte.Clima.desenhar(tela().ctx, PREDIO, 0.05, t, null);
+    media += forte.Clima.balanco(0) / 200;
+  }
   assert.ok(media < -1, `a copa pende para o lado do vento (${media})`);
+}
+
+// tela aberta por horas com vento: a copa e a neve da janela andam suave, sem tremer quadro a quadro
+// (antes a fase era o tempo total dividido por um vento que muda, e saltava até 5 px por quadro)
+{
+  const passoMax = (busca, minutos, medir, volta = Infinity) => {
+    const { Clima } = carregar(busca);
+    Clima.definir({ tipo: "limpo" });
+    let t = 0, antes = null, maior = 0;
+    for (let i = 0; i < minutos * 60 * 60; i++) {   // 60 quadros por segundo
+      t += 1000 / 60; Clima.desenhar(tela().ctx, PREDIO, 1 / 60, t, null);
+      const agora = medir(Clima, t);
+      if (antes !== null && i > 60) maior = Math.max(maior, ...agora.map((v, k) => { const d = Math.abs(v - antes[k]); return Math.min(d, volta - d); }));
+      antes = agora;
+    }
+    return maior;
+  };
+  const copa = (Clima) => [Clima.balanco(0), Clima.balanco(1.7)];
+  const tempestade = passoMax("?clima=tempestade&vento=80", 10, copa);
+  assert.ok(tempestade <= 0.3, `a copa anda no máximo 0,3 px por quadro na tempestade (${tempestade})`);
+  const chuva = passoMax("?clima=chuva", 30, copa);
+  assert.ok(chuva <= 0.3, `nem depois de 30 min de chuva (${chuva})`);
+  // neve na janela: posição x de cada floco; a volta (passa da borda e reaparece do outro lado) não conta como salto
+  const flocos = (Clima, t) => {
+    const janela = tela();
+    Clima.naJanela(janela.ctx, { x: 0, y: 0, w: 1000, h: 12 }, t);
+    return janela.chamadas.filter(c => c[0] === "fillRect" && c[3] === 1).map(c => c[1]);
+  };
+  const neve = passoMax("?clima=neve&vento=60", 10, flocos, 1000);
+  assert.ok(neve <= 0.5, `o floco da janela anda no máximo 0,5 px por quadro (${neve})`);
 }
 
 // rajadas: o vento varia com o tempo, sem tranco de um quadro para o outro

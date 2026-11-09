@@ -13,6 +13,9 @@ const Clima = (() => {
   const VENTO_MINIMO = { tempestade: 0.45, chuva: 0.12, garoa: 0.05, neve: 0.1 };   // tempestade sempre venta
   let atual = { tipo: "limpo" }, gotas = [], flocos = [], respingos = [], folhas = [], neveAcumulada = 0, raio = 0, proxRaio = 6, nuvens = [];
   let vento = 0, perto = 1, faisca = null;   // vento de agora (0 a 1, com rajadas); o raio: quão perto e o desenho dele
+  // o balanço das copas e o desvio da neve na janela andam quadro a quadro (somam dt): multiplicar o tempo
+  // total por um vento que muda faria a fase pular de um quadro para o outro, e a copa tremeria
+  let giro = 0, desvio = 0;
 
   function definir(c) {
     atual = simulado ? { tipo: simulado } : (c || { tipo: "limpo" });
@@ -28,10 +31,13 @@ const Clima = (() => {
   function soprar(dt, t) {
     const f = forca(), alvo = f * (0.7 + 0.3 * Math.sin(t / 2100) + 0.25 * Math.max(0, Math.sin(t / 650)));
     vento += (alvo - vento) * Math.min(1, dt * 2);
+    // mais vento, balanço mais rápido; a rajada passa de 1 e, sem o teto, o divisor chegava a zero
+    giro += dt * 1000 / (1500 - Math.min(1, vento) * 1100);
+    desvio += dt * vento * 1000 / 60;
   }
   // desvio da copa de uma árvore lá fora, em px (negativo: o vento sopra para a esquerda)
-  function balanco(t, fase) {
-    return -vento * 2.5 + Math.sin(t / (1500 - vento * 1200) + fase) * (0.8 + vento * 1.6);
+  function balanco(fase) {
+    return -vento * 2.5 + Math.sin(giro + fase) * (0.8 + vento * 1.6);
   }
   function chove() { return ["chuva", "garoa", "tempestade"].includes(tipo()); }
   function texto(curto) { // curto: só a temperatura (relógio do celular)
@@ -152,7 +158,7 @@ const Clima = (() => {
         ctx.fillRect(x, y, 1, 3);
       }
     }
-    if (k === "neve") { ctx.fillStyle = "#ffffff"; for (let i = 0; i < 6; i++) ctx.fillRect(j.x + (((i * 5 + t / 400 - t * vento / 60) % j.w) + j.w) % j.w, j.y + ((t / 120 + i * 9) % j.h), 1, 1); ctx.fillRect(j.x, j.y + j.h - 2, j.w, 2); }
+    if (k === "neve") { ctx.fillStyle = "#ffffff"; for (let i = 0; i < 6; i++) ctx.fillRect(j.x + (((i * 5 + t / 400 - desvio) % j.w) + j.w) % j.w, j.y + ((t / 120 + i * 9) % j.h), 1, 1); ctx.fillRect(j.x, j.y + j.h - 2, j.w, 2); }
     if (raio > 0.05) {
       ctx.fillStyle = `rgba(255,255,255,${raio})`; ctx.fillRect(j.x, j.y, j.w, j.h);
       if (faisca && raio > 0.35 && j.h >= 8) { // o raio visto pela janela: um zigue-zague escuro sobre o clarão
