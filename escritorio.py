@@ -2944,6 +2944,10 @@ class Servidor(ThreadingHTTPServer):
             self.salas_visitas.limpar()
             self._proxima_limpeza_visitas = agora + 30
 
+    def handle_error(self, request, client_address):
+        # o padrão do socketserver imprime o endereço da conexão (sem proxy, o IP do visitante) e o traceback
+        log(evento="http", resultado="erro", erro=type(sys.exc_info()[1]).__name__)
+
 
 def vento_publico(kmh):
     """Vento para o bairro público: km/h arredondado de 10 em 10, de 0 a 120; sem número válido, 0."""
