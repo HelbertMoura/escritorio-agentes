@@ -70,6 +70,8 @@ ANFITRIOES_VISITAS = {h.strip().lstrip("@").lower() for h in os.environ.get("ESC
                       if h.strip()}
 CANAL_VISITAS = os.environ.get("ESCRITORIO_VISITAS_CANAL", "").strip().lower()
 MAX_TEXTO_VISITA = 1000
+ROTAS_ADMIN_VISITAS = ("/api/visitas/criar", "/api/visitas/revogar", "/api/visitas/anfitrioes",
+                       "/api/visitas/recepcionista")
 ORG = os.environ.get("AGENTES_ORG", "").strip().lower()  # id da organização no agentes.chat; obrigatório no main()
 TIMES = os.environ.get("ESCRITORIO_TIMES", os.path.join(os.path.dirname(os.path.abspath(__file__)), "times.json"))
 DADOS = os.environ.get("ESCRITORIO_DADOS", os.path.join(os.path.dirname(os.path.abspath(__file__)), "dados"))
@@ -111,7 +113,8 @@ URL_APP = re.compile(r"https://app\.agentes\.chat/org/" + re.escape(ORG) + r"/c/
 ARQUIVOS = {  # estáticos servidos (lista fechada)
     "visita.html": "text/html; charset=utf-8", "visita.js": "text/javascript; charset=utf-8",
     "visita.css": "text/css; charset=utf-8", "visitas-admin.html": "text/html; charset=utf-8",
-    "visitas-admin.js": "text/javascript; charset=utf-8",
+    "visitas-admin.js": "text/javascript; charset=utf-8", "recepcionista.html": "text/html; charset=utf-8",
+    "recepcionista.js": "text/javascript; charset=utf-8",
     "mundo.html": "text/html; charset=utf-8", "mundo.js": "text/javascript; charset=utf-8",
     "index.html": "text/html; charset=utf-8", "app.js": "text/javascript; charset=utf-8",
     "avatar.js": "text/javascript; charset=utf-8", "mapa.js": "text/javascript; charset=utf-8",
@@ -1210,8 +1213,9 @@ class Respostas:
 class PonteVisitas(threading.Thread):
     """Leva as mensagens das salas de visita com agente anfitrião ao agentes.chat e traz as respostas de volta à sala.
 
-    Desligada por padrão. Só age em sala criada com um anfitrião da lista ESCRITORIO_VISITAS_ANFITRIOES (o servidor
-    confere ao criar, junto com o modo "responder" e a escrita da conexão). O envio vai a ESCRITORIO_VISITAS_CANAL, um
+    Desligada por padrão. Só age em sala criada com um anfitrião autorizado: o recepcionista da tela ou um da lista
+    ESCRITORIO_VISITAS_ANFITRIOES (o servidor confere ao criar, junto com o modo "responder" e a escrita da conexão; a
+    ponte confere de novo a cada passo, e um anfitrião trocado deixa de receber). O envio vai ao canal de visitas, um
     canal só para visitas, nunca à conversa direta do usuário com o agente (send_to_agent com channel_id). As respostas
     vêm de read_conversation da tarefa. A sala fica na memória; o que vai ao agentes.chat fica guardado lá, e o
     visitante é avisado ao entrar. No log, só o tipo do erro e contagens: nada de texto, convite, sessão, agente,
@@ -1225,9 +1229,10 @@ class PonteVisitas(threading.Thread):
                  "aparece na sala.\n\n")
     AVISO_FILA = "Algumas mensagens antigas não chegaram ao agente; a equipe pode responder por aqui."
 
-    def __init__(self, salas, leitor, canal, relogio=time.time):
+    def __init__(self, salas, leitor, recepcao, relogio=time.time):
         super().__init__(daemon=True)
-        self.salas, self.leitor, self.canal, self.agora = salas, leitor, canal, relogio
+        # recepcao() -> (handles, canal, ...): lida a cada passo, a tela troca o recepcionista sem reiniciar
+        self.salas, self.leitor, self.recepcao, self.agora = salas, leitor, recepcao, relogio
         self.envios, self.leituras = collections.deque(), collections.deque()
         self.pausa_ate = 0
 
@@ -1252,12 +1257,15 @@ class PonteVisitas(threading.Thread):
             token = self.leitor.cred.token()
         except Exception:
             token = None
+        handles, canal = self.recepcao()[:2]
+        autorizados = {a["id"] for a in self.leitor.foto().get("agentes") or []
+                       if isinstance(a, dict) and str(a.get("handle", "")).lower() in handles}
         for chave, agente, ponte, textos in pendentes:
-            if not token or not self.canal:
+            if not token or not canal or agente["id"] not in autorizados:
                 self._avisar(chave, ponte, "O agente não está disponível agora; a equipe pode responder por aqui.")
                 continue
             if textos or ponte.get("atrasadas"):
-                self._enviar(chave, agente, ponte, textos, token, agora)
+                self._enviar(chave, agente, ponte, textos, token, agora, canal)
             self._ler(chave, agente, ponte, token, agora)
 
     def _devolver(self, chave, ponte, textos):
@@ -1292,7 +1300,7 @@ class PonteVisitas(threading.Thread):
             fila.popleft()
         return len(fila)
 
-    def _enviar(self, chave, agente, ponte, textos, token, agora):
+    def _enviar(self, chave, agente, ponte, textos, token, agora, canal):
         textos = ponte.pop("atrasadas", []) + textos
         da_sala = ponte.setdefault("envios", collections.deque())
         if self._janela(self.envios, agora) >= self.ENVIOS_POR_MINUTO or \
@@ -1310,7 +1318,7 @@ class PonteVisitas(threading.Thread):
         self.envios.append(agora)
         da_sala.append(agora)
         try:
-            res = self._chamar("send_to_agent", {"agent": agente["id"], "channel_id": self.canal, "message": corpo[:8000],
+            res = self._chamar("send_to_agent", {"agent": agente["id"], "channel_id": canal, "message": corpo[:8000],
                                                  "idempotency_key": secrets.token_urlsafe(16), "wait_seconds": 0}, token)
         except Limitado as e:
             self._pausar(agora, e.retry_after)
@@ -1816,6 +1824,21 @@ def clima_vigente(do_arquivo=None):
     return do_arquivo, "arquivo" if do_arquivo else "nenhum"
 
 
+ARQ_RECEPCAO = os.path.join(DADOS, "recepcao.json")
+RECEPCAO_BYTES = 512
+
+
+def recepcao_vigente():
+    """(anfitriões, canal, origem) da sala de visitas: o recepcionista salvo pela tela (dados/recepcao.json), senão o
+    das variáveis ESCRITORIO_VISITAS_ANFITRIOES e ESCRITORIO_VISITAS_CANAL. Sem nenhum: (set(), "", "nenhum")."""
+    tela = ajustes.ler(ARQ_RECEPCAO, RECEPCAO_BYTES, ajustes.validar_arquivo_recepcao, log, "recepcao")
+    if tela:
+        return {tela["anfitriao"]}, tela["canal"], "tela"
+    if ANFITRIOES_VISITAS and CANAL_VISITAS:
+        return set(ANFITRIOES_VISITAS), CANAL_VISITAS, "variaveis"
+    return set(), "", "nenhum"
+
+
 def festas_salvas():
     return ajustes.ler(ARQ_FESTAS, FESTAS_BYTES, lambda d: ajustes.validar_festas(d, arquivo=True), log, "festas") \
         or ajustes.festas_vazias()
@@ -2187,14 +2210,107 @@ class Pagina(BaseHTTPRequestHandler):
         return self.server.acesso.sessao(self._token())
 
     def _anfitrioes(self):
-        """Agentes que podem receber visitas agora: handle em ESCRITORIO_VISITAS_ANFITRIOES, canal de visitas válido e
-        o mesmo controle do envio de mensagens (modo "responder" e conexão com escrita). Sem isso, lista vazia."""
-        if not ANFITRIOES_VISITAS or not UUID_MCP.fullmatch(CANAL_VISITAS) or not self._pode_responder():
+        """Agentes que podem receber visitas agora: o recepcionista da tela (ou os handles de
+        ESCRITORIO_VISITAS_ANFITRIOES), canal de visitas válido e o mesmo controle do envio de mensagens (modo
+        "responder" e conexão com escrita). Sem isso, lista vazia."""
+        handles, canal, _ = recepcao_vigente()
+        if not handles or not UUID_MCP.fullmatch(canal) or not self._pode_responder():
             return []
-        leitor = getattr(self.server, "leitor", None)
-        agentes = leitor.foto().get("agentes", []) if leitor else []
         return [{"id": a["id"], "nome": limpa_texto(a.get("nome") or a.get("handle") or "Agente", 60)[0]}
-                for a in agentes if isinstance(a.get("id"), str) and str(a.get("handle", "")).lower() in ANFITRIOES_VISITAS]
+                for a in self._agentes_lidos() if str(a.get("handle", "")).lower() in handles]
+
+    def _agentes_lidos(self):
+        leitor = getattr(self.server, "leitor", None)
+        agentes = leitor.foto().get("agentes") if leitor else None
+        return [a for a in agentes or [] if isinstance(a, dict) and isinstance(a.get("id"), str)]
+
+    def _recepcionista(self, dados):
+        """POST /api/visitas/recepcionista (já com sessão). {} lê como está; {"anfitriao", "canal"} salva o
+        recepcionista; {"limpar": true} volta às variáveis do servidor. Salvar e limpar pedem o modo resposta aberto,
+        como pôr um agente na sala: quem escolhe o recepcionista escolhe quem lê o que os visitantes escrevem."""
+        if not dados:
+            return self._json(200, self._estado_recepcao())
+        if set(dados) not in ({"anfitriao", "canal"}, {"limpar"}) or dados.get("limpar", True) is not True:
+            return self._json(400, {"erro": "Pedido inválido."})
+        if not self._modo_resposta():
+            return self._json(403, {"erro": "Para trocar o recepcionista, abra antes o modo resposta (com a senha) "
+                                            "na tela Conversas."})
+        if "limpar" in dados:
+            with TRAVA_AJUSTES:
+                try:
+                    if os.path.exists(ARQ_RECEPCAO):
+                        os.unlink(ARQ_RECEPCAO)
+                except OSError as x:
+                    log(evento="recepcao", resultado="nao_gravou", detalhe=type(x).__name__)
+                    return self._json(500, {"erro": "Não deu para salvar agora."})
+            log(evento="recepcao", resultado="limpa", usuario=self._usuario())
+            return self._json(200, self._estado_recepcao())
+        st, corpo = self._conferir_recepcao(dados["anfitriao"], dados["canal"])
+        if st != 200:
+            return self._json(st, corpo)
+        with TRAVA_AJUSTES:
+            try:
+                gravar(ARQ_RECEPCAO, ajustes.bytes_da_recepcao(corpo))
+            except OSError as x:
+                log(evento="recepcao", resultado="nao_gravou", detalhe=type(x).__name__)
+                return self._json(500, {"erro": "Não deu para salvar agora."})
+        log(evento="recepcao", resultado="salva", usuario=self._usuario())   # sem o agente nem o canal
+        return self._json(200, self._estado_recepcao())
+
+    def _conferir_recepcao(self, anfitriao, canal):
+        """(200, {"anfitriao", "canal"}) com o agente na leitura do agentes.chat e o canal num list_channels fresco da
+        conta conectada; senão (status, {"erro"}). A mensagem é nossa, sem repetir o que veio."""
+        handle = anfitriao.strip().lstrip("@").lower() if isinstance(anfitriao, str) else ""
+        if not HANDLE_OK.fullmatch(handle):
+            return 400, {"erro": "Escreva o @ do agente, como aparece no agentes.chat."}
+        canal = canal.strip() if isinstance(canal, str) else ""
+        canal = canal.lower() if UUID_MCP.fullmatch(canal) else canal_da_url(canal)
+        if not canal:
+            return 400, {"erro": "Cole o link do canal no agentes.chat (o endereço com /c/ no meio) ou o id dele."}
+        if not any(str(a.get("handle", "")).lower() == handle for a in self._agentes_lidos()):
+            return 400, {"erro": "Esse agente não aparece na leitura do agentes.chat. Confira o @ e espere a próxima "
+                                 "leitura, se ele acabou de ser criado."}
+        respostas = getattr(self.server, "respostas", None)
+        leitor = getattr(self.server, "leitor", None)
+        agora = time.time()
+        if not respostas or not leitor or leitor.pausado(agora):
+            return 503, {"erro": "O agentes.chat não está disponível agora; tente de novo em alguns minutos."}
+        try:
+            token = leitor.cred.token()
+        except Exception:
+            token = None
+        if not token:
+            return 503, {"erro": "O escritório não está conectado ao agentes.chat agora."}
+        try:
+            ids = respostas._canais(token, agora)[0]
+        except Limitado as e:
+            leitor.pausa_ate = max(leitor.pausa_ate, agora + espera_429(e.retry_after, 1))
+            return 503, {"erro": "O agentes.chat pediu uma pausa; tente de novo em alguns minutos."}
+        except Exception as e:
+            log(evento="recepcao", resultado="erro_canais", erro=type(e).__name__)
+            return 502, {"erro": "Não deu para conferir o canal no agentes.chat; tente de novo."}
+        if canal not in ids:
+            return 400, {"erro": "Esse canal não aparece para a conta conectada ao escritório. Confira o link e se a "
+                                 "conta participa dele."}
+        return 200, {"anfitriao": handle, "canal": canal}
+
+    def _estado_recepcao(self):
+        """Como está o recepcionista e o que falta para ele atender. Só para quem entrou no escritório."""
+        handles, canal, origem = recepcao_vigente()
+        lidos = {str(a.get("handle", "")).lower(): a for a in self._agentes_lidos()}
+        faltam = []
+        if origem == "nenhum":
+            faltam.append("Escolha o recepcionista e o canal das visitas.")
+        elif not any(h in lidos for h in handles):
+            faltam.append("O recepcionista não aparece na leitura do agentes.chat.")
+        if carregar_times()["conversas"] != "responder":
+            faltam.append('Ponha "conversas": "responder" no times.json.')
+        cred = getattr(self.server, "cred", None)
+        if not cred or not cred.tem_escrita():
+            faltam.append("Conecte o escritório de novo com o acesso de mandar tarefas aos agentes.")
+        return {"origem": origem, "anfitrioes": sorted(handles), "canal": canal,
+                "nomes": [limpa_texto(lidos[h].get("nome") or h, 60)[0] for h in sorted(handles) if h in lidos],
+                "faltam": faltam}
 
     def _pode_responder(self):
         """Fase R: modo "responder" no times.json, conexão com escrita e fora da prévia (calculado aqui, nunca no cliente)."""
@@ -2242,14 +2358,14 @@ class Pagina(BaseHTTPRequestHandler):
             return self._json(415, {"erro": "Envie JSON."})
         try:
             salas = self.server.salas_visitas
-            if rota not in ("/api/visitas/criar", "/api/visitas/revogar", "/api/visitas/anfitrioes"):
+            if rota not in ROTAS_ADMIN_VISITAS:
                 origem_cliente = origem_visita(self.client_address[0], self.headers, self.server.proxy_visitas,
                                                getattr(self.server, 'cabecalho_visitas', 'X-Real-IP'))
                 salas.limitar_origem(origem_cliente, publica=rota == "/api/visitas/recepcao")
             dados = ajustes.json_estrito(self._corpo(8192))
             if not isinstance(dados, dict):
                 raise ValueError("Pedido inválido.")
-            if rota in ("/api/visitas/criar", "/api/visitas/revogar", "/api/visitas/anfitrioes"):
+            if rota in ROTAS_ADMIN_VISITAS:
                 if not self._usuario() or self._previa():
                     return self._json(401, {"erro": "Entre para administrar visitas."})
                 if rota.endswith("/criar") and not dados:
@@ -2269,6 +2385,8 @@ class Pagina(BaseHTTPRequestHandler):
                                                         "(com a senha) na tela Conversas."})
                     nome = limpa_texto(escolhido.get("nome") or escolhido.get("handle") or "Agente", 60)[0]
                     return self._json(200, {"convite": salas.criar({"id": escolhido["id"], "nome": nome})})
+                if rota.endswith("/recepcionista"):
+                    return self._recepcionista(dados)
                 if rota.endswith("/revogar") and set(dados) == {"convite"}:
                     return self._json(200, {"ok": salas.revogar(dados["convite"])})
             elif rota == "/api/visitas/recepcao" and not dados:
@@ -2455,7 +2573,7 @@ class Pagina(BaseHTTPRequestHandler):
                 corpo = f.read()
         except FileNotFoundError:   # da lista, mas ainda fora da pasta (um script novo que chega em outro land)
             return self._envia(404, b"")
-        cache = ("no-store" if nome in ("visita.html", "visitas-admin.html", "mundo.html") else
+        cache = ("no-store" if nome in ("visita.html", "visitas-admin.html", "recepcionista.html", "mundo.html") else
                  "public, max-age=3600" if nome.endswith((".png", ".ttf", ".woff2")) else "no-cache")
         return self._envia(200, corpo, ARQUIVOS[nome], cache=cache)
 
@@ -2664,9 +2782,8 @@ class Pagina(BaseHTTPRequestHandler):
         self.lido = self.rfile.read(int(tam)) if re.fullmatch(r"[0-9]{1,7}", tam) and int(tam) <= CORPO_ANTES else None
         rota = urllib.parse.urlsplit(self.path).path
         acesso = self.server.acesso
-        if rota in ("/api/visitas/criar", "/api/visitas/revogar", "/api/visitas/anfitrioes", "/api/visitas/entrar",
-                    "/api/visitas/enviar", "/api/visitas/receber", "/api/visitas/sair", "/api/visitas/mapa",
-                    "/api/visitas/recepcao"):
+        if rota in ROTAS_ADMIN_VISITAS or rota in ("/api/visitas/entrar", "/api/visitas/enviar", "/api/visitas/receber",
+                                                   "/api/visitas/sair", "/api/visitas/mapa", "/api/visitas/recepcao"):
             return self._post_visitas(rota)
         if rota in ("/api/conversa/modo", "/api/conversa/modo/fechar", "/api/conversa/responder"):
             return self._post_resposta(rota)
@@ -2861,9 +2978,10 @@ def main():
         log(evento="acesso", resultado="aguardando_primeiro_usuario", ver_codigo=ver)   # o código em si nunca vai ao log
     srv.clima = clima
     srv.clima.start()
-    if ANFITRIOES_VISITAS and CANAL_VISITAS:   # agente na sala de visitas: só com as duas configuradas
-        srv.ponte_visitas = PonteVisitas(srv.salas_visitas, leitor, CANAL_VISITAS)
-        srv.ponte_visitas.start()
+    # agente na sala de visitas: a ponte só chama o agentes.chat por sala criada com um anfitrião, e o recepcionista
+    # (com o canal) pode chegar pela tela depois
+    srv.ponte_visitas = PonteVisitas(srv.salas_visitas, leitor, recepcao_vigente)
+    srv.ponte_visitas.start()
     if BIND == "0.0.0.0":
         log(evento="inicio", aviso="use só em container, atrás de um proxy HTTPS")
     log(evento="inicio", versao=VERSAO, onde=f"{BIND}:{PORTA}", base=BASE)

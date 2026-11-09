@@ -19,6 +19,15 @@ button { min-height: 48px; padding: 0 18px; margin-top: 12px; border: 0; border-
 button:disabled { opacity: .55; cursor: default; }
 .secundario { align-self: flex-start; background: transparent; color: #f2f2f3; border: 1px solid #777; }
 :focus-visible { outline: 3px solid #f5b83d; outline-offset: 3px; }
+input:not([type]), input[type="text"] { display: block; width: 100%; min-height: 44px; margin-bottom: 14px; border: 1px solid #555560; border-radius: 8px; padding: 0 12px; background: #17171a; color: inherit; font: inherit; }
+.campos textarea { margin-bottom: 14px; }
+.campos { margin-bottom: 28px; }
+.marcar { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; }
+.marcar input { width: 20px; height: 20px; margin: 2px 0 0; flex: none; }
+.passos { padding-left: 20px; }
+.passos li { margin-bottom: 6px; }
+.conversa h2 + .nota, .conversa h2 + label { margin-top: 8px; }
+.conversa h2:not(:first-child) { margin-top: 36px; }
 select { display: block; width: 100%; min-height: 44px; border: 1px solid #555560; border-radius: 8px; padding: 0 12px; background: #17171a; color: inherit; font: inherit; }
 .aviso { margin: 8px 0; padding: 10px 12px; border-left: 3px solid #f5b83d; background: #1d1a12; color: #f2e6c8; font-size: 14px; }
 .mundo { max-width: 980px; margin: 0 auto; padding: clamp(24px, 5vw, 64px); }

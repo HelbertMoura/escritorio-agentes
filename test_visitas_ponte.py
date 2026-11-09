@@ -38,8 +38,10 @@ class PonteTest(unittest.TestCase):
         self.salas = Salas(lambda: self.tempo)
         self.mcp = MCPFalso()
         cred = SimpleNamespace(token=lambda: 'tok')
-        self.leitor = SimpleNamespace(mcp=self.mcp, cred=cred, pausado=lambda agora=None: False, pausa_ate=0)
-        self.ponte = e.PonteVisitas(self.salas, self.leitor, CANAL, relogio=lambda: self.tempo)
+        self.leitor = SimpleNamespace(mcp=self.mcp, cred=cred, pausado=lambda agora=None: False, pausa_ate=0,
+                                      foto=lambda: {'agentes': [{'id': 'ag-1', 'handle': 'senku'}]})
+        self.recepcao = ({'senku'}, CANAL, 'tela')
+        self.ponte = e.PonteVisitas(self.salas, self.leitor, lambda: self.recepcao, relogio=lambda: self.tempo)
         self.convite = self.salas.criar({'id': 'ag-1', 'nome': 'Senku'})
         self.visita = self.salas.entrar(self.convite)
 
@@ -165,7 +167,7 @@ class PonteTest(unittest.TestCase):
                 tempos.append(self.tempo)
             return self.mcp.ferramenta_original(nome, args, token)
         self.mcp.ferramenta = contar
-        unica = e.PonteVisitas(Salas(lambda: self.tempo), self.leitor, CANAL, relogio=lambda: self.tempo)
+        unica = e.PonteVisitas(Salas(lambda: self.tempo), self.leitor, lambda: self.recepcao, relogio=lambda: self.tempo)
         c = unica.salas.criar({'id': 'ag-1', 'nome': 'Senku'})
         p = unica.salas.entrar(c)
         unica.salas.enviar(p, 'oi')
