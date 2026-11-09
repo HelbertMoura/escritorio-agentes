@@ -87,6 +87,17 @@ class Montagem(unittest.TestCase):
             shutil.rmtree(p, ignore_errors=True)
 
     @classmethod
+    def cores(cls, pontos):
+        """Cor '#rrggbb' de cada (x, y) do brasil.png montado, lida pelo Pillow no processo filho."""
+        ler = ("import json, sys\nfrom PIL import Image\nim = Image.open(sys.argv[1]).convert('RGB')\n"
+               "print(json.dumps(['#%02x%02x%02x' % im.getpixel(tuple(p)) for p in json.loads(sys.argv[2])]))")
+        r = subprocess.run([sys.executable, "-c", ler, os.path.join(cls.pastas[0], "brasil.png"), json.dumps(pontos)],
+                           capture_output=True, text=True, timeout=60)
+        if r.returncode:
+            raise AssertionError(r.stderr)
+        return json.loads(r.stdout)
+
+    @classmethod
     def montar(cls, pasta):
         r = subprocess.run([sys.executable, "-B", cls.SCRIPT, cls.ENTRADA, pasta], capture_output=True, text=True,
                            encoding="utf-8", errors="replace", timeout=120)
@@ -125,6 +136,26 @@ class Montagem(unittest.TestCase):
                 cabeca = f.read(24)
             self.assertEqual(cabeca[1:4], b"PNG", nome)
             self.assertEqual((int.from_bytes(cabeca[16:20], "big"), int.from_bytes(cabeca[20:24], "big")), tamanho, nome)
+
+    def test_cidades_em_terra(self):
+        import montar_mundo as mm
+        brasil = {mm.PALETA[n] for n in ("terra", "terra_alta", "serra", "borda_uf", "borda_pais")}
+        cidades = self.mundo["cidades"]
+        for c, cor in zip(cidades, self.cores([[c["x"], c["y"]] for c in cidades])):
+            self.assertIn(cor, brasil, c["id"])
+            x0, y0 = mm.para_pixel(c["lat"], c["lon"], mm.CAIXA_BRASIL, 400, 400)
+            self.assertLessEqual((c["x"] - x0) ** 2 + (c["y"] - y0) ** 2, 36, c["id"])
+        movidas = {c["id"] for c in cidades
+                   if (c["x"], c["y"]) != mm.para_pixel(c["lat"], c["lon"], mm.CAIXA_BRASIL, 400, 400)}
+        self.assertTrue({"belem", "recife", "rio-de-janeiro", "florianopolis"} <= movidas, movidas)
+
+    def test_vizinhos_destacados(self):
+        import montar_mundo as mm
+        paraguai = mm.para_pixel(-23.0, -58.0, mm.CAIXA_BRASIL, 400, 400)
+        mato_grosso = mm.para_pixel(-13.0, -56.0, mm.CAIXA_BRASIL, 400, 400)
+        cor_py, cor_mt = self.cores([list(paraguai), list(mato_grosso)])
+        self.assertEqual(cor_py, mm.PALETA["vizinho"])
+        self.assertIn(cor_mt, {mm.PALETA[n] for n in ("terra", "terra_alta", "serra")})
 
     def test_estaticos_em_dia(self):
         """static/mundo/ versionado bate com o que a ferramenta gera hoje."""

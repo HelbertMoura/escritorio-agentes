@@ -23,13 +23,15 @@ W_BRASIL, H_BRASIL = 400, 400
 CAIXA_TERRA = (-180.0, -90.0, 180.0, 90.0)
 W_TERRA, H_TERRA = 360, 180  # 1° por pixel
 PALETA = {"mar": "#1d3b5c", "mar_raso": "#2a5a7c", "terra": "#5a8a3c", "terra_alta": "#7a9a4a",
-          "serra": "#8a7a5a", "borda_uf": "#3e5e2a", "rio": "#3a7ab0"}  # rio: sem uso até haver fonte de rios
+          "serra": "#8a7a5a", "borda_uf": "#3e5e2a", "rio": "#3a7ab0",  # rio: sem uso até haver fonte de rios
+          "vizinho": "#4a5a3e", "borda_pais": "#2e3a22"}  # só no brasil.png
 UFS_SERRA = {"MG", "ES", "RJ", "SP", "PR", "SC", "RS"}
 COSTA, INTERIOR = 3, 20  # faixas de relevo: 0–3, 4–20 e 21+ pixels da costa
 NAO_CAPITAIS = {"mateus-leme"}
 ROTA_MAX_KM, ROTAS_MAX = 1500, 40
 ESTRANGEIRO = "--"  # rótulo da terra de outros países no mapa do Brasil
 FRESTA_LONGE_DO_MAR = 4  # pixels: ver desenhar_brasil()
+CIDADE_RAIO = 6  # pixels: até onde a cidade da costa pode ser puxada para a terra brasileira
 
 
 def para_pixel(lat, lon, caixa, w, h):
@@ -96,6 +98,14 @@ def distancias(dentro, w, h, rodar=False):
     return dist
 
 
+def vizinhos4(x, y):
+    return (x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)
+
+
+def vizinhos8(x, y):
+    return [(x + dx, y + dy) for dy in (-1, 0, 1) for dx in (-1, 0, 1) if dx or dy]
+
+
 def relevo(dist_costa, uf=None):
     if dist_costa <= COSTA:
         return "terra"
@@ -115,7 +125,8 @@ def pintar(w, h, cor_de):
 
 
 def desenhar(rotulo, w, h, rodar=False):
-    """Mar raso perto da costa, relevo na terra e borda de 1 pixel em volta de cada UF.
+    """Mar raso perto da costa, relevo na terra, vizinhos numa cor só e borda de 1 pixel em volta de cada UF
+    (borda_pais contra vizinho, borda_uf contra outra UF).
     rotulo: pixel -> UF, ESTRANGEIRO ou None (terra sem UF); pixel ausente é mar."""
     terra = set(rotulo)
     da_terra = distancias(terra, w, h, rodar)                   # na terra: passos até o mar
@@ -125,10 +136,14 @@ def desenhar(rotulo, w, h, rodar=False):
         if (x, y) not in terra:
             return "mar_raso" if do_mar[(x, y)] <= COSTA else "mar"
         uf = rotulo[(x, y)]
-        if uf and uf != ESTRANGEIRO:
-            for v in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
-                if v in terra and rotulo[v] != uf:
-                    return "borda_uf"
+        if uf == ESTRANGEIRO:
+            return "vizinho"
+        if uf:
+            outros = {rotulo[v] for v in vizinhos4(x, y) if v in terra} - {uf}
+            if ESTRANGEIRO in outros:
+                return "borda_pais"
+            if outros:
+                return "borda_uf"
         return relevo(da_terra[(x, y)], uf)
     return pintar(w, h, cor)
 
@@ -154,17 +169,35 @@ def desenhar_brasil(paises, estados):
             brasil_110m |= pixels
         else:
             rotulo.update(dict.fromkeys(pixels, ESTRANGEIRO))
-    # O 1:110m e o 1:50m não casam: sobra Brasil 110m fora das UFs. Longe do mar é fresta de fronteira
-    # e vira terra do vizinho; perto da costa (onde o 110m avança sobre o mar e as lagoas do 50m) é mar.
-    ate_o_mar = distancias(brasil_110m | set(rotulo), W_BRASIL, H_BRASIL)
-    for px in brasil_110m - set(rotulo):
-        if ate_o_mar[px] > FRESTA_LONGE_DO_MAR:
-            rotulo[px] = ESTRANGEIRO
+    ate_o_mar = distancias(brasil_110m | set(rotulo), W_BRASIL, H_BRASIL)  # mar do 1:110m
     for e in sorted(estados, key=lambda e: e["properties"]["postal"]):
         uf = e["properties"]["postal"]
         for px in preencher_aneis(aneis_em_pixels(e["geometry"], CAIXA_BRASIL, W_BRASIL, H_BRASIL), W_BRASIL, H_BRASIL):
             rotulo[px] = uf
-    return desenhar(rotulo, W_BRASIL, H_BRASIL)
+    # O 1:110m e o 1:50m não casam: sobra Brasil 110m fora das UFs. Longe do mar e ligada a um vizinho, é
+    # fresta de fronteira e vira terra do vizinho; o resto (costa e canais da foz do Amazonas) fica água.
+    fresta = {px for px in brasil_110m - set(rotulo) if ate_o_mar[px] > FRESTA_LONGE_DO_MAR}
+    fila = deque(px for px in sorted(fresta) if any(rotulo.get(v) == ESTRANGEIRO for v in vizinhos8(*px)))
+    rotulo.update(dict.fromkeys(fila, ESTRANGEIRO))
+    while fila:
+        for v in vizinhos8(*fila.popleft()):
+            if v in fresta and v not in rotulo:
+                rotulo[v] = ESTRANGEIRO
+                fila.append(v)
+    return desenhar(rotulo, W_BRASIL, H_BRASIL), rotulo
+
+
+def na_terra(cidade, rotulo):
+    """Pixel da cidade no brasil.png: o de para_pixel ou, se ele cair fora do Brasil (cidade da costa,
+    de ilha ou de baía), o pixel de UF mais perto em distância euclidiana, até CIDADE_RAIO."""
+    x, y = para_pixel(cidade["lat"], cidade["lon"], CAIXA_BRASIL, W_BRASIL, H_BRASIL)
+    perto = sorted((dx * dx + dy * dy, dy, dx) for dy in range(-CIDADE_RAIO, CIDADE_RAIO + 1)
+                   for dx in range(-CIDADE_RAIO, CIDADE_RAIO + 1)
+                   if dx * dx + dy * dy <= CIDADE_RAIO ** 2 and rotulo.get((x + dx, y + dy)) not in (None, ESTRANGEIRO))
+    if not perto:
+        raise ValueError(f"cidade {cidade['id']}: nenhum pixel do Brasil a até {CIDADE_RAIO} px de ({x}, {y})")
+    _, dy, dx = perto[0]
+    return x + dx, y + dy
 
 
 def km(a, b):
@@ -186,12 +219,12 @@ def montar(fontes, saida):
     cidades = ler(os.path.join(fontes, "cidades.json"))
     paises = ler(os.path.join(fontes, "fontes", "ne_110m_admin_0_countries.geojson"))["features"]
     estados = ler(os.path.join(fontes, "fontes", "ne_50m_admin_1_states_provinces_lakes.geojson"))["features"]
-    terra, brasil = desenhar_terra(paises), desenhar_brasil(paises, estados)
+    terra, (brasil, rotulo) = desenhar_terra(paises), desenhar_brasil(paises, estados)
 
     mundo = {
         "cidades": [{"id": c["id"], "nome": c["nome"], "uf": c["uf"], "lat": c["lat"], "lon": c["lon"],
                      "x": x, "y": y, "marco": c["marco"]}
-                    for c in cidades for x, y in [para_pixel(c["lat"], c["lon"], CAIXA_BRASIL, W_BRASIL, H_BRASIL)]],
+                    for c in cidades for x, y in [na_terra(c, rotulo)]],
         "rotas": rotas(cidades),
         "niveis": {"brasil": {"w": W_BRASIL, "h": H_BRASIL, "caixa": list(CAIXA_BRASIL)}},
     }
