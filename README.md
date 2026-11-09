@@ -213,7 +213,7 @@ In `times.json` (start by copying `times.exemplo.json`; the installer does that 
 | `expediente` | office hours, `{"abre": "07:00", "fecha": "20:00"}` (HH:MM, the default). Outside them, agents without a task go home and a banner says when the office opens. `abre` later than `fecha` is a shift past midnight (`22:00` to `06:00`); the Customize screen overrides it |
 | `conversas` | `"ler"` adds **See conversation** to an agent's card and the **Conversations** page, with the tasks in progress and the ones that ended today: the latest 20 messages of each one's conversation (the task's thread; if no one wrote in it, the conversation's loose messages), read on demand (`read_conversation`, still the `read` scope). Off by default; read the warning in [Security](#security) before turning it on. `"responder"` does the same and lets you **send messages** to the agents in the day's direct conversations, from the Conversations page (`read write` scope; see [Security](#security)) |
 
-To test without waiting, add to the URL: `?hora=21.5`, `?clima=tempestade` (`chuva`, `garoa`, `neve`, `neblina`, `nublado`, `limpo`) and `?data=2026-12-25`. The **Simulation** panel builds these for you.
+To test without waiting, add to the URL: `?hora=21.5`, `?clima=tempestade` (`chuva`, `garoa`, `neve`, `neblina`, `nublado`, `limpo`), `?vento=60` (km/h, 0 to 120: tilts rain and snow, sways the outdoor trees and, when strong, blows leaves) and `?data=2026-12-25`. The **Simulation** panel builds these for you.
 
 ## Social life
 

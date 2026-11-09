@@ -1,7 +1,7 @@
 // Mundo dos escritórios, primeira entrega: um bairro em pixel art com o chalé deste escritório.
 // A porta leva à recepção pública (ou à visita, quando o link trouxe convite). Os chalés vizinhos são
 // cenário: a descoberta de outros escritórios ainda não existe, e nada aqui vem de outro servidor.
-// Céu pelo horário (Ceu) e clima do escritório (Clima); ?hora= e ?clima= simulam, como no escritório.
+// Céu pelo horário (Ceu) e clima do escritório (Clima), com vento; ?hora=, ?clima= e ?vento= simulam, como no escritório.
 "use strict";
 const Mundo = (() => {
   const W = 320, H = 180, RUA = 150, CALCADA = 138;
@@ -46,10 +46,11 @@ const Mundo = (() => {
         if (noite) { ctx.fillStyle = "rgba(255,217,119,.25)"; ctx.beginPath(); ctx.arc(p.x + 6, p.y - 2, 16, 0, Math.PI * 2); ctx.fill(); }
       }
     }
-    function arvore(x, neve) {
+    function arvore(x, neve) { // a copa balança com o vento (o tronco fica)
+      const d = Math.round(Clima.balanco ? Clima.balanco(x * 0.37) : 0);
       ctx.fillStyle = "#5a3a22"; ctx.fillRect(x - 2, CALCADA - 14, 4, 14);
-      ctx.fillStyle = neve ? "#dfe8ee" : "#3f8a3c"; ctx.beginPath(); ctx.arc(x, CALCADA - 20, 10, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = neve ? "#ffffff" : "#5aa64f"; ctx.beginPath(); ctx.arc(x - 3, CALCADA - 23, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = neve ? "#dfe8ee" : "#3f8a3c"; ctx.beginPath(); ctx.arc(x + d, CALCADA - 20, 10, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = neve ? "#ffffff" : "#5aa64f"; ctx.beginPath(); ctx.arc(x - 3 + d, CALCADA - 23, 5, 0, Math.PI * 2); ctx.fill();
     }
     function pessoa(x, cor, t) {
       const passo = Math.floor(t / 180) % 2;
@@ -65,10 +66,14 @@ const Mundo = (() => {
       const ceu = Ceu.agora(), noite = ceu.escuro > 0.5, neve = Clima.tipo() === "neve";
       const g = ctx.createLinearGradient(0, 0, 0, RUA); g.addColorStop(0, ceu.cima); g.addColorStop(1, ceu.baixo);
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-      if (noite) { ctx.fillStyle = "#fff"; for (let i = 0; i < 40; i++) ctx.fillRect((i * 97) % W, (i * 41) % 70, 1, 1); }
-      ctx.fillStyle = noite ? "#f2f0e0" : "#ffe27a"; ctx.beginPath(); ctx.arc(noite ? 270 : 50, 26, 9, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = noite ? "rgba(200,205,230,.35)" : "rgba(255,255,255,.85)";
-      for (const n of estado.nuvens) { n.x = (n.x + dt * 4) % (W + 40); ctx.fillRect(n.x - 30, n.y, 26, 6); ctx.fillRect(n.x - 24, n.y - 4, 14, 4); }
+      const fechado = { nublado: 0.18, neblina: 0.25, garoa: 0.3, chuva: 0.4, tempestade: 0.6, neve: 0.3 }[Clima.tipo()] || 0;   // céu carregado
+      const encoberto = fechado >= 0.3;   // com chuva, nem sol, nem lua, nem estrelas
+      if (fechado) { ctx.fillStyle = `rgba(62,68,86,${fechado})`; ctx.fillRect(0, 0, W, RUA); }
+      if (noite && !encoberto) { ctx.fillStyle = "#fff"; for (let i = 0; i < 40; i++) ctx.fillRect((i * 97) % W, (i * 41) % 70, 1, 1); }
+      if (!encoberto) { ctx.fillStyle = noite ? "#f2f0e0" : "#ffe27a"; ctx.beginPath(); ctx.arc(noite ? 270 : 50, 26, 9, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = encoberto ? "rgba(120,126,142,.9)" : noite ? "rgba(200,205,230,.35)" : "rgba(255,255,255,.85)";
+      const sopro = 4 + (Clima.vento || 0) * 30;   // as nuvens correm com o vento (para a esquerda, como a chuva)
+      for (const n of estado.nuvens) { n.x -= dt * sopro; if (n.x < -10) n.x += W + 40; ctx.fillRect(n.x - 30, n.y, 26, 6); ctx.fillRect(n.x - 24, n.y - 4, 14, 4); }
       const a = estado.aviao; // avião passa de vez em quando, com luz piscando
       if (a.espera > 0) a.espera -= dt; else {
         a.x += dt * 26; ctx.fillStyle = "#e8ecf2"; ctx.fillRect(a.x, 46, 14, 3); ctx.fillRect(a.x + 4, 43, 4, 9); ctx.fillRect(a.x, 42, 2, 4);
@@ -99,7 +104,9 @@ const Mundo = (() => {
         ctx.fillStyle = "rgba(255,217,119,.55)";
         for (const c of CHALES) { const topo = CALCADA - c.h; ctx.fillRect(c.x + 7, topo + 10, 8, 7); if (!c.vizinho) ctx.fillRect(c.x + c.w - 15, topo + 10, 8, 7); }
       }
-      Clima.desenhar(ctx, { W, H, predioRet: { x: -10, y: -10, w: 0, h: 0 } }, dt, t, null);
+      // o bairro tem céu (o raio aparece nele); som só se a pessoa já ligou o som no escritório (mesma config)
+      const som = window.Som && Som.ligado ? Som : null;
+      Clima.desenhar(ctx, { W, H, predioRet: { x: -10, y: -10, w: 0, h: 0 }, ceu: true }, dt, t, som);
       requestAnimationFrame(quadro);
     }
 
@@ -134,7 +141,7 @@ if (document.getElementById("mundo")) (() => {
   const mostrar = () => { estado.textContent = `${Ceu.agora().hora} · ${Clima.texto()}`; };
   fetch("/api/visitas/recepcao", { method: "POST", credentials: "omit", cache: "no-store",
     headers: { "Content-Type": "application/json" }, body: "{}" })
-    .then(r => r.ok ? r.json() : {}).then(d => Clima.definir({ tipo: d.clima || "limpo" }), () => Clima.definir(null))
+    .then(r => r.ok ? r.json() : {}).then(d => Clima.definir({ tipo: d.clima || "limpo", ...(typeof d.vento === "number" ? { vento: d.vento } : {}) }), () => Clima.definir(null))
     .finally(mostrar);
   setInterval(mostrar, 30000);
 })();
