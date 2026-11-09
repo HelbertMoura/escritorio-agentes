@@ -99,6 +99,17 @@ class PonteTest(unittest.TestCase):
         self.assertNotIn('primeira', log)
         self.assertEqual(json.loads(log.splitlines()[0])['resultado'], 'erro_envio')
 
+    def test_envio_sem_tarefa_avisa_a_sala_e_loga_so_os_nomes_dos_campos(self):
+        self.mcp.ferramenta = lambda nome, args, token: {'id': 'tarefa-secreta', 'status': 'queued', 'x y': 'z'}
+        self.salas.enviar(self.visita, 'oi')
+        self.salas.receber(self.visita)
+        log = self.passo()
+        linha = json.loads(log.splitlines()[0])
+        self.assertEqual((linha['resultado'], linha['campos'], linha['tipo']), ('enviado_sem_tarefa', ['id', 'status'], 'dict'))
+        self.assertNotIn('tarefa-secreta', log)
+        self.assertNotIn('queued', log)
+        self.assertEqual(sum('Não consegui trazer' in m for m in self.salas.receber(self.visita)), 1)
+
     def test_leitura_sem_o_agente_guarda_a_mensagem_e_avisa_de_novo_depois(self):
         sem = {'agentes': []}
         com = self.leitor.foto

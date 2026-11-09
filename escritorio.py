@@ -1356,7 +1356,14 @@ class PonteVisitas(threading.Thread):
             tarefas.append({"id": tarefa, "desde": agora, "proxima": agora + self.A_CADA, "espera": self.A_CADA})
             del tarefas[:-self.TAREFAS_POR_SALA]
             ponte["thread"] = True   # há o que ler: a sala segue nas pendências
-        log(evento="visita_agente", resultado="enviado", mensagens=len(textos))
+            log(evento="visita_agente", resultado="enviado", mensagens=len(textos))
+            return
+        # sem tarefa não há o que ler: a sala é avisada, e o log guarda só os nomes dos campos da resposta (nunca valores)
+        campos = sorted(c[:40] for c in res if isinstance(c, str) and re.fullmatch(r"[A-Za-z_]{1,40}", c))[:12] \
+            if isinstance(res, dict) else []
+        log(evento="visita_agente", resultado="enviado_sem_tarefa", mensagens=len(textos), tipo=type(res).__name__,
+            campos=campos)
+        self._avisar(chave, ponte, "Não consegui trazer a resposta do agente; a equipe pode responder por aqui.")
 
     def _ler(self, chave, agente, ponte, token, agora):
         tarefas = [t for t in ponte.get("tarefas", []) if agora - t["desde"] < self.VIDA_TAREFA]
