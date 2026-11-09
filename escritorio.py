@@ -27,6 +27,7 @@ import hmac
 import html
 import ipaddress
 import json
+import math
 import os
 import re
 import secrets
@@ -1624,6 +1625,102 @@ class Clima(threading.Thread):
             return self.estado
 
 
+ARQ_MUNDO = os.path.join(ESTATICO, "mundo", "mundo.json")
+
+
+def ler_mundo(caminho=ARQ_MUNDO):
+    """(versao, [{"id", "lat", "lon"}]) das cidades do mapa do mundo; ausente ou fora do formato, (0, [])."""
+    try:
+        with open(caminho, encoding="utf-8") as f:
+            d = json.loads(f.read(1_000_000))
+        cidades = [{"id": c["id"], "lat": float(c["lat"]), "lon": float(c["lon"])} for c in d["cidades"]]
+        if type(d["versao"]) is not int or not all(isinstance(c["id"], str) for c in cidades):
+            raise ValueError("formato")
+        return d["versao"], cidades
+    except FileNotFoundError:
+        return 0, []
+    except Exception as x:   # o mapa segue sem tempo; nada do arquivo vai ao log
+        log(evento="clima_mundo", resultado="mundo_invalido", detalhe=type(x).__name__)
+        return 0, []
+
+
+def cidade_do_escritorio(clima, cidades):
+    """O id da cidade do mapa mais perto das coordenadas do clima configurado; sem coordenadas (ou sem cidades), None."""
+    if not isinstance(clima, dict) or not cidades:
+        return None
+    lat, lon = clima.get("lat"), clima.get("lon")
+    if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (lat, lon)):
+        return None
+    encolhe = math.cos(math.radians(lat))   # um grau de longitude encolhe longe do equador
+    return min(cidades, key=lambda c: (c["lat"] - lat) ** 2 + ((c["lon"] - lon) * encolhe) ** 2)["id"]
+
+
+def _medida(v):
+    """Número finito e não negativo do Open-Meteo, senão 0."""
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v < 1000 else 0
+
+
+TEMPO_LIMPO = {"tipo": "limpo", "vento": 0, "noite": False}
+
+
+def tempo_publico(atual):
+    """Um "current" do Open-Meteo -> {"tipo", "vento" (0..1), "noite"}: sem temperatura nem coordenadas."""
+    if not isinstance(atual, dict):
+        return dict(TEMPO_LIMPO)
+    codigo = _medida(atual.get("weather_code"))
+    return {"tipo": tipo_do_clima(int(codigo) if codigo == int(codigo) else 0, _medida(atual.get("cloud_cover"))),
+            "vento": round(min(1, _medida(atual.get("wind_speed_10m")) / 50), 2),
+            "noite": atual.get("is_day") == 0}
+
+
+class ClimaMundo(threading.Thread):
+    """O tempo de agora nas cidades do mapa do mundo, numa consulta só ao Open-Meteo a cada 900 s. Na falha, fica o
+    último bom (ou o céu limpo); a cidade que faltar na resposta fica limpa. O log leva só o tipo do erro."""
+    A_CADA = 900
+
+    def __init__(self, versao, cidades):
+        super().__init__(daemon=True)
+        self.versao, self.cidades = versao, cidades
+        self.estado, self.trava, self.ultima = {}, threading.Lock(), None
+        self.relogio = time.monotonic
+
+    def run(self):
+        while True:
+            time.sleep(self.ciclo())
+
+    def ciclo(self):
+        """Uma volta. Devolve quantos segundos esperar até a próxima."""
+        agora = self.relogio()
+        if self.ultima is not None and agora - self.ultima < self.A_CADA:
+            return self.A_CADA - (agora - self.ultima)
+        self.ultima = agora
+        if not self.cidades:
+            return self.A_CADA
+        try:
+            atuais = self._consultar([(c["lat"], c["lon"]) for c in self.cidades])
+            novo = {c["id"]: tempo_publico(atual) for c, atual in zip(self.cidades, atuais)}
+            with self.trava:
+                self.estado = novo
+        except Exception as x:  # sem rede: o mapa segue com o último tempo bom
+            log(evento="clima_mundo", resultado="erro", detalhe=type(x).__name__)
+        return self.A_CADA
+
+    def _consultar(self, coords):
+        q = urllib.parse.urlencode({"latitude": ",".join(str(lat) for lat, _ in coords),
+                                    "longitude": ",".join(str(lon) for _, lon in coords),
+                                    "current": "weather_code,is_day,cloud_cover,wind_speed_10m"})
+        req = urllib.request.Request("https://api.open-meteo.com/v1/forecast?" + q, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+            d = json.loads(r.read(500_000))
+        # várias coordenadas: uma lista na mesma ordem; uma só: um objeto
+        return [item.get("current") if isinstance(item, dict) else None for item in (d if isinstance(d, list) else [d])]
+
+    def foto(self):
+        """{id: {"tipo", "vento", "noite"}} de todas as cidades; sem dado, céu limpo."""
+        with self.trava:
+            return {c["id"]: dict(self.estado.get(c["id"], TEMPO_LIMPO)) for c in self.cidades}
+
+
 class _SemRedirecionar(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *a, **k):
         return None   # o 3xx vira HTTPError: a busca só fala com o host fixo
@@ -2169,6 +2266,9 @@ def geometria_visita(config, foto, planta):
 PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "fontes/figtree.ttf", "fontes/silkscreen.ttf", "fontes/source-sans-3.woff2",
             "visita.html", "visita.js", "visita.css", "mapa.js", "tema/atlas.png", "tema/atlas.json",
             "mundo.html", "mundo.js", "ceu.js", "clima.js", "som.js",  # bairro público: só código de desenho e som, sem dados
+            # mapa do mundo: imagens, cidades e código de desenho, sem dados do escritório
+            "mundo/terra.png", "mundo/brasil.png", "mundo/mundo.json", "mundo/atlas.png", "mundo/atlas.json",
+            "mundo_globo.js", "mundo_mapa.js", "mundo_cidade.js", "mundo_bairro.js",
             "fontes/doto.woff2", "logo.png",  # liberados na tela de login
             # PWA: o navegador busca o manifesto sem cookie; nenhum deles tem segredo. O sw.js fica na raiz (escopo /)
             "manifest.webmanifest", "sw.js", "icone-180.png", "icone-192.png", "icone-512.png", "icone-mascara-512.png"}
@@ -2526,7 +2626,7 @@ class Pagina(BaseHTTPRequestHandler):
             if rota not in ROTAS_ADMIN_VISITAS:
                 origem_cliente = origem_visita(self.client_address[0], self.headers, self.server.proxy_visitas,
                                                getattr(self.server, 'cabecalho_visitas', 'X-Real-IP'))
-                salas.limitar_origem(origem_cliente, publica=rota == "/api/visitas/recepcao")
+                salas.limitar_origem(origem_cliente, publica=rota in ("/api/visitas/recepcao", "/api/mundo/clima"))
             dados = ajustes.json_estrito(self._corpo(8192))
             if not isinstance(dados, dict):
                 raise ValueError("Pedido inválido.")
@@ -2575,6 +2675,13 @@ class Pagina(BaseHTTPRequestHandler):
                 resposta["clima"] = tempo if tempo in TIPOS_CLIMA else "limpo"
                 resposta["vento"] = vento_publico(foto.get("vento"))
                 return self._json(200, resposta)
+            elif rota == "/api/mundo/clima" and not dados:
+                # o mapa do mundo: só tipo, vento (0..1) e noite por cidade, e o id da cidade mais perto do escritório
+                mundo = getattr(self.server, "clima_mundo", None)
+                if not mundo or not mundo.cidades:
+                    return self._json(200, {"cidades": {}, "casa": None})
+                return self._json(200, {"cidades": mundo.foto(), "versao": mundo.versao,
+                                        "casa": cidade_do_escritorio(clima_vigente()[0], mundo.cidades)})
             elif rota == "/api/visitas/entrar" and set(dados) == {"convite"}:
                 salas.limitar_sala(dados["convite"], convite=True)
                 sessao = salas.entrar(dados["convite"], origem=origem_cliente)
@@ -2952,7 +3059,8 @@ class Pagina(BaseHTTPRequestHandler):
         rota = urllib.parse.urlsplit(self.path).path
         acesso = self.server.acesso
         if rota in ROTAS_ADMIN_VISITAS or rota in ("/api/visitas/entrar", "/api/visitas/enviar", "/api/visitas/receber",
-                                                   "/api/visitas/sair", "/api/visitas/mapa", "/api/visitas/recepcao"):
+                                                   "/api/visitas/sair", "/api/visitas/mapa", "/api/visitas/recepcao",
+                                                   "/api/mundo/clima"):
             return self._post_visitas(rota)
         if rota in ("/api/conversa/modo", "/api/conversa/modo/fechar", "/api/conversa/responder"):
             return self._post_resposta(rota)
@@ -3161,6 +3269,8 @@ def main():
         log(evento="acesso", resultado="aguardando_primeiro_usuario", ver_codigo=ver)   # o código em si nunca vai ao log
     srv.clima = clima
     srv.clima.start()
+    srv.clima_mundo = ClimaMundo(*ler_mundo())   # o tempo das cidades do mapa do mundo: uma consulta a cada 15 min
+    srv.clima_mundo.start()
     # agente na sala de visitas: a ponte só chama o agentes.chat por sala criada com um anfitrião, e o recepcionista
     # (com o canal) pode chegar pela tela depois
     srv.ponte_visitas = PonteVisitas(srv.salas_visitas, leitor, lambda: recepcao_da_ponte(cred))
