@@ -1223,6 +1223,26 @@ class Orcamento(unittest.TestCase):
                            env=amb, capture_output=True, text=True, timeout=60)
         self.assertEqual(r.stdout.strip(), "30", r.stderr)
 
+    def test_variaveis_de_visita_toleram_grafia(self):
+        """x-real-ip é o mesmo cabeçalho (antes derrubava a subida) e TELA=true liga (antes era ignorado sem aviso)."""
+        cod = "import escritorio as e; print(e.CABECALHO_VISITAS, e.TELA_VISITAS)"
+        pasta = os.path.dirname(os.path.abspath(e.__file__))
+        for cab, tela, esperado in (("x-real-ip", "true", "X-Real-IP True"), (" cf-connecting-ip ", "Sim", "CF-Connecting-IP True"),
+                                    ("X-Real-IP", "", "X-Real-IP False"), ("X-Real-IP", "0", "X-Real-IP False")):
+            amb = {**os.environ, "ESCRITORIO_VISITAS_CABECALHO": cab, "ESCRITORIO_VISITAS_TELA": tela}
+            r = subprocess.run([sys.executable, "-c", cod], cwd=pasta, env=amb, capture_output=True, text=True, timeout=60)
+            self.assertEqual(r.stdout.strip(), esperado, r.stderr)
+
+    def test_tela_com_valor_desconhecido_nao_sobe(self):
+        antes = e.TELA_VISITAS_BRUTA
+        try:
+            e.TELA_VISITAS_BRUTA = "talvez"
+            with self.assertRaises(SystemExit) as c:
+                e.main()
+            self.assertIn("ESCRITORIO_VISITAS_TELA", str(c.exception.code))
+        finally:
+            e.TELA_VISITAS_BRUTA = antes
+
     def test_esperas(self):
         self.assertEqual(e.espera_429("120", 1), 120)
         self.assertEqual((e.espera_429("5", 1), e.espera_429("999999", 1)), (60, 3600))   # entre 60 s e 1 h

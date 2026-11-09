@@ -62,8 +62,16 @@ PORTA = int(os.environ.get("ESCRITORIO_PORTA", "7371"))
 BIND = os.environ.get("ESCRITORIO_BIND", "127.0.0.1")   # 0.0.0.0 só em container, atrás de um proxy HTTPS
 PROXY_VISITAS = os.environ.get("ESCRITORIO_VISITAS_PROXY", "").strip()
 # cabeçalho com o IP do visitante posto pelo proxy confiado: X-Real-IP (nginx, Caddy) ou CF-Connecting-IP (túnel Cloudflare)
-CABECALHO_VISITAS = os.environ.get("ESCRITORIO_VISITAS_CABECALHO", "X-Real-IP").strip()
 CABECALHOS_ORIGEM = ("X-Real-IP", "CF-Connecting-IP")
+
+
+def cabecalho_canonico(valor):
+    """Nome de cabeçalho HTTP não diferencia maiúsculas: x-real-ip vale X-Real-IP. Fora da lista, volta como veio."""
+    valor = valor.strip()
+    return next((c for c in CABECALHOS_ORIGEM if c.lower() == valor.lower()), valor)
+
+
+CABECALHO_VISITAS = cabecalho_canonico(os.environ.get("ESCRITORIO_VISITAS_CABECALHO", "X-Real-IP"))
 # agente na sala de visitas: desligado sem as duas. ANFITRIOES: handles autorizados (de preferência um recepcionista
 # sem ferramentas sensíveis), separados por vírgula. CANAL: id do canal do agentes.chat só para visitas.
 ANFITRIOES_VISITAS = {h.strip().lstrip("@").lower() for h in os.environ.get("ESCRITORIO_VISITAS_ANFITRIOES", "").split(",")
@@ -71,7 +79,9 @@ ANFITRIOES_VISITAS = {h.strip().lstrip("@").lower() for h in os.environ.get("ESC
 CANAL_VISITAS = os.environ.get("ESCRITORIO_VISITAS_CANAL", "").strip().lower()
 # tela /recepcionista.html: com ANFITRIOES definida, escolhe só entre eles; sem ela, só salva com TELA=1 (decisão de quem
 # administra o servidor, nunca só da senha do modo resposta)
-TELA_VISITAS = os.environ.get("ESCRITORIO_VISITAS_TELA", "").strip() == "1"
+LIGADO, DESLIGADO = ("1", "true", "sim", "yes", "on"), ("", "0", "false", "nao", "não", "no", "off")
+TELA_VISITAS_BRUTA = os.environ.get("ESCRITORIO_VISITAS_TELA", "").strip().lower()
+TELA_VISITAS = TELA_VISITAS_BRUTA in LIGADO
 MAX_TEXTO_VISITA = 1000
 ROTAS_ADMIN_VISITAS = ("/api/visitas/criar", "/api/visitas/revogar", "/api/visitas/anfitrioes",
                        "/api/visitas/recepcionista")
@@ -2996,6 +3006,8 @@ def main():
         sys.exit("ESCRITORIO_VISITAS_PROXY precisa ser um endereço IP exato")
     if CABECALHO_VISITAS not in CABECALHOS_ORIGEM:
         sys.exit("ESCRITORIO_VISITAS_CABECALHO precisa ser X-Real-IP ou CF-Connecting-IP")
+    if TELA_VISITAS_BRUTA not in LIGADO + DESLIGADO:
+        sys.exit("ESCRITORIO_VISITAS_TELA precisa ser 1 (liga) ou vazia/0 (desliga)")
     if CANAL_VISITAS and not UUID_MCP.fullmatch(CANAL_VISITAS):
         sys.exit("ESCRITORIO_VISITAS_CANAL precisa ser o id (uuid) de um canal do agentes.chat só para visitas")
     if bool(ANFITRIOES_VISITAS) != bool(CANAL_VISITAS):
