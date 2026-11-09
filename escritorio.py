@@ -130,6 +130,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "visitas-admin.js": "text/javascript; charset=utf-8", "recepcionista.html": "text/html; charset=utf-8",
     "recepcionista.js": "text/javascript; charset=utf-8",
     "mundo.html": "text/html; charset=utf-8", "mundo.js": "text/javascript; charset=utf-8",
+    "mundo_bairro.js": "text/javascript; charset=utf-8", "mundo_mapa.js": "text/javascript; charset=utf-8",
     "index.html": "text/html; charset=utf-8", "app.js": "text/javascript; charset=utf-8",
     "avatar.js": "text/javascript; charset=utf-8", "mapa.js": "text/javascript; charset=utf-8",
     "vida.js": "text/javascript; charset=utf-8", "som.js": "text/javascript; charset=utf-8",
