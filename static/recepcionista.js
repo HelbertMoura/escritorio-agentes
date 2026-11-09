@@ -39,8 +39,8 @@ function instrucoesRecepcionista(d) {
   const $ = id => document.getElementById(id);
   const empresa = $("empresa"), instrucoes = $("instrucoes"), copiar = $("copiar");
   const ligar = $("ligar"), salvar = $("salvar"), limpar = $("limpar"), estado = $("estado");
-  const situacao = $("situacao"), faltam = $("faltam");
-  let ocupada = false;
+  const situacao = $("situacao"), faltam = $("faltam"), confirmar = $("confirmar");
+  let ocupada = false, fechada = false, conferido = "";
 
   async function pedir(dados) {
     const resposta = await fetch("/api/visitas/recepcionista", { method: "POST", credentials: "same-origin", cache: "no-store",
@@ -55,9 +55,12 @@ function instrucoesRecepcionista(d) {
     const handles = Array.isArray(r.anfitrioes) ? r.anfitrioes.filter(h => typeof h === "string") : [];
     const nomes = Array.isArray(r.nomes) ? r.nomes.filter(n => typeof n === "string") : [];
     const quem = nomes.length ? `${nomes.join(", ")} (${handles.map(h => "@" + h).join(", ")})` : handles.map(h => "@" + h).join(", ");
-    situacao.textContent = r.origem === "tela" ? `Recepcionista: ${quem}, salvo nesta tela.` :
-      r.origem === "variaveis" ? `Recepcionista vindo das variáveis do servidor: ${quem}. Salvar aqui passa a valer no lugar delas.` :
-      "Nenhum recepcionista ligado. A sala de reunião recebe só pessoas da equipe.";
+    const liberados = Array.isArray(r.liberados) ? r.liberados.filter(h => typeof h === "string").map(h => "@" + h) : [];
+    situacao.textContent = (r.origem === "tela" ? `Recepcionista: ${quem}, salvo nesta tela.` :
+      r.origem === "variaveis" ? `Recepcionista vindo das variáveis do servidor: ${quem}.` :
+      "Nenhum recepcionista ligado. A sala de reunião recebe só pessoas da equipe.") +
+      (r.tela === "limite" ? ` O servidor libera nesta tela só: ${liberados.join(", ")}.` : "");
+    fechada = r.tela === "fechada"; salvar.disabled = fechada;
     faltam.replaceChildren(...(Array.isArray(r.faltam) ? r.faltam : []).filter(t => typeof t === "string").map(t => {
       const item = document.createElement("li"); item.textContent = t; return item;
     }));
@@ -78,17 +81,31 @@ function instrucoesRecepcionista(d) {
     try { await navigator.clipboard.writeText(instrucoes.value); estado.textContent = "Instruções copiadas."; }
     catch (_) { instrucoes.focus(); instrucoes.select(); estado.textContent = "Selecione e copie as instruções."; }
   });
-  ligar.addEventListener("input", () => { ligar.dataset.mexido = "1"; });
+  // Salvar em dois passos: o servidor confere e devolve os nomes; a pessoa vê em qual canal o agente vai ler e confirma
+  function desconferir() {
+    conferido = ""; confirmar.textContent = ""; salvar.textContent = "Conferir";
+  }
+  ligar.addEventListener("input", () => { ligar.dataset.mexido = "1"; desconferir(); });
   ligar.addEventListener("submit", async ev => {
     ev.preventDefault();
     if (ocupada) return;
+    const dados = { anfitriao: $("anfitriao").value, canal: $("canal").value }, chave = JSON.stringify(dados);
     ocupada = true; salvar.disabled = limpar.disabled = true; estado.textContent = "Conferindo no agentes.chat...";
     try {
-      mostrar(await pedir({ anfitriao: $("anfitriao").value, canal: $("canal").value }));
+      if (conferido !== chave) {
+        const r = await pedir({ ...dados, conferir: true });
+        const canal = typeof r.canal_nome === "string" && r.canal_nome ? `#${r.canal_nome}` : "um canal sem nome";
+        confirmar.textContent = `${typeof r.nome === "string" ? r.nome : ""} (@${r.anfitriao}) vai atender no canal ${canal}. ` +
+          "Ele lê o histórico desse canal: confirme que é um canal só para visitas, sem conversas da equipe.";
+        conferido = chave; salvar.textContent = "Confirmar e salvar"; estado.textContent = "";
+        return;
+      }
+      mostrar(await pedir(dados));
       delete ligar.dataset.mexido;
+      desconferir();
       estado.textContent = "Recepcionista salvo. Ao criar um convite, escolha ele como agente na sala.";
-    } catch (e) { estado.textContent = e.message; }
-    finally { ocupada = false; salvar.disabled = limpar.disabled = false; }
+    } catch (e) { estado.textContent = e.message; desconferir(); }
+    finally { ocupada = false; salvar.disabled = fechada; limpar.disabled = false; }
   });
   limpar.addEventListener("click", async () => {
     if (ocupada) return;
@@ -97,7 +114,7 @@ function instrucoesRecepcionista(d) {
       mostrar(await pedir({ limpar: true }));
       estado.textContent = "Recepcionista tirado desta tela.";
     } catch (e) { estado.textContent = e.message; }
-    finally { ocupada = false; salvar.disabled = limpar.disabled = false; }
+    finally { ocupada = false; salvar.disabled = fechada; limpar.disabled = false; }
   });
   pedir({}).then(mostrar).catch(e => { situacao.textContent = e.message; });
 })();

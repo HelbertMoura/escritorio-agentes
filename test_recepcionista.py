@@ -1,6 +1,7 @@
 # Copyright (C) 2026 Dev Maniac's
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Recepcionista da sala de visitas salvo pela tela: arquivo, prioridade sobre as variáveis e a rota de admin."""
+"""Recepcionista da sala de visitas salvo pela tela: arquivo, limite do servidor, prioridade sobre as variáveis, a rota
+de admin e o que a ponte confere a cada passo."""
 import http.client
 import io
 import json
@@ -17,6 +18,7 @@ import escritorio as e
 
 CANAL = '01a1bda0-9c52-74b8-8f93-79ac3cc91d90'
 OUTRO = '01a1bda0-9c52-74b8-8f93-79ac3cc91d91'
+SEM_NOME = '01a1bda0-9c52-74b8-8f93-79ac3cc91d92'
 
 
 class Arquivo(unittest.TestCase):
@@ -29,22 +31,40 @@ class Arquivo(unittest.TestCase):
             with self.assertRaises(ValueError):
                 ajustes.validar_arquivo_recepcao(ruim)
 
-    def test_tela_vale_mais_que_as_variaveis(self):
+    def test_tela_vale_mais_que_as_variaveis_dentro_do_limite(self):
         with tempfile.TemporaryDirectory() as pasta:
             arq = os.path.join(pasta, 'recepcao.json')
-            with patch.object(e, 'ARQ_RECEPCAO', arq), patch.object(e, 'ANFITRIOES_VISITAS', set()), \
-                    patch.object(e, 'CANAL_VISITAS', ''):
-                self.assertEqual(e.recepcao_vigente(), (set(), '', 'nenhum'))
-            with patch.object(e, 'ARQ_RECEPCAO', arq), patch.object(e, 'ANFITRIOES_VISITAS', {'a', 'b'}), \
-                    patch.object(e, 'CANAL_VISITAS', OUTRO):
-                self.assertEqual(e.recepcao_vigente(), ({'a', 'b'}, OUTRO, 'variaveis'))
+
+            def salvar(handle):
                 with open(arq, 'wb') as f:
-                    f.write(ajustes.bytes_da_recepcao({'anfitriao': 'recepcao', 'canal': CANAL}))
-                self.assertEqual(e.recepcao_vigente(), ({'recepcao'}, CANAL, 'tela'))
+                    f.write(ajustes.bytes_da_recepcao({'anfitriao': handle, 'canal': CANAL}))
+            with patch.object(e, 'ARQ_RECEPCAO', arq), patch.object(e, 'ANFITRIOES_VISITAS', set()), \
+                    patch.object(e, 'CANAL_VISITAS', ''), patch.object(e, 'TELA_VISITAS', False):
+                self.assertEqual(e.recepcao_vigente(), (set(), '', 'nenhum'))
+                salvar('recepcao')   # tela fechada no servidor: o arquivo não vale
+                self.assertEqual((e.tela_recepcao(), e.recepcao_vigente()), ('fechada', (set(), '', 'nenhum')))
+                with patch.object(e, 'TELA_VISITAS', True):
+                    self.assertEqual((e.tela_recepcao(), e.recepcao_vigente()), ('livre', ({'recepcao'}, CANAL, 'tela')))
+            with patch.object(e, 'ARQ_RECEPCAO', arq), patch.object(e, 'ANFITRIOES_VISITAS', {'a', 'b'}), \
+                    patch.object(e, 'CANAL_VISITAS', OUTRO), patch.object(e, 'TELA_VISITAS', True):
+                self.assertEqual(e.tela_recepcao(), 'limite', 'a lista vale mais que TELA=1')
+                self.assertEqual(e.recepcao_vigente(), ({'a', 'b'}, OUTRO, 'variaveis'), 'recepcao fora da lista')
+                salvar('a')
+                self.assertEqual(e.recepcao_vigente(), ({'a'}, CANAL, 'tela'))
                 with open(arq, 'w') as f:   # ilegível: volta às variáveis, com 1 log
                     f.write('{')
                 with redirect_stdout(io.StringIO()):
                     self.assertEqual(e.recepcao_vigente()[2], 'variaveis')
+
+    def test_ponte_so_recebe_com_responder_e_escrita(self):
+        com, sem = SimpleNamespace(tem_escrita=lambda: True), SimpleNamespace(tem_escrita=lambda: False)
+        vigente = ({'recepcao'}, CANAL, 'tela')
+        with patch.object(e, 'recepcao_vigente', lambda: vigente):
+            with patch.object(e, 'carregar_times', lambda: {'conversas': 'responder'}):
+                self.assertEqual(e.recepcao_da_ponte(com), vigente)
+                self.assertEqual(e.recepcao_da_ponte(sem), (set(), '', 'desligada'))
+            with patch.object(e, 'carregar_times', lambda: {'conversas': 'ler'}):
+                self.assertEqual(e.recepcao_da_ponte(com), (set(), '', 'desligada'))
 
 
 class AcessoFalso:
@@ -60,7 +80,7 @@ class Rota(unittest.TestCase):
 
         def ferramenta(nome, args, token):
             self.chamadas.append(nome)
-            return {'channels': [{'id': CANAL}]}
+            return {'channels': [{'id': CANAL, 'name': 'visitas‮\nescritório'}, {'id': SEM_NOME}]}
         leitor = SimpleNamespace(
             foto=lambda: {'agentes': [{'id': 'ag-1', 'nome': 'Recepção', 'handle': 'recepcao'},
                                       {'id': 'ag-2', 'nome': 'Interno', 'handle': 'interno'}]},
@@ -71,7 +91,8 @@ class Rota(unittest.TestCase):
         self.servidor.respostas = e.Respostas(leitor, None)
         self.servidor.cred = SimpleNamespace(tem_escrita=lambda: True)
         self.travas = [patch.object(e, 'ARQ_RECEPCAO', self.arq), patch.object(e, 'ANFITRIOES_VISITAS', set()),
-                       patch.object(e, 'CANAL_VISITAS', ''), patch.object(e.Pagina, '_pode_responder', lambda s: True),
+                       patch.object(e, 'CANAL_VISITAS', ''), patch.object(e, 'TELA_VISITAS', True),
+                       patch.object(e.Pagina, '_pode_responder', lambda s: True),
                        patch.object(e, 'carregar_times', lambda: {'conversas': 'responder'})]
         for t in self.travas:
             t.start()
@@ -105,9 +126,17 @@ class Rota(unittest.TestCase):
     def test_salva_confere_e_liga_o_anfitriao(self):
         self.assertEqual(self.pedir('recepcionista', {}, admin=False)[0], 401)
         st, estado = self.pedir('recepcionista', {})
-        self.assertEqual((st, estado['origem'], estado['faltam']), (200, 'nenhum', ['Escolha o recepcionista e o canal das visitas.']))
+        self.assertEqual((st, estado['origem'], estado['tela'], estado['faltam']),
+                         (200, 'nenhum', 'livre', ['Escolha o recepcionista e o canal das visitas.']))
         self.assertEqual(self.pedir('anfitrioes', {})[1], {'agentes': []})
         link = f'https://app.agentes.chat/org/{e.ORG}/c/{CANAL}'
+        st, conferido = self.pedir('recepcionista', {'anfitriao': '@recepcao', 'canal': link, 'conferir': True})
+        self.assertEqual((st, conferido), (200, {'anfitriao': 'recepcao', 'canal': CANAL, 'nome': 'Recepção',
+                                                 'canal_nome': 'visitas escritório'}))
+        self.assertFalse(os.path.exists(self.arq), 'conferir não salva')
+        self.assertEqual(self.pedir('recepcionista', {'anfitriao': 'recepcao', 'canal': SEM_NOME, 'conferir': True})[1]
+                         ['canal_nome'], '', 'canal sem nome')
+        del self.chamadas[:]
         st, estado = self.pedir('recepcionista', {'anfitriao': ' @Recepcao ', 'canal': link})
         self.assertEqual((st, estado['origem'], estado['anfitrioes'], estado['canal'], estado['nomes'], estado['faltam']),
                          (200, 'tela', ['recepcao'], CANAL, ['Recepção'], []))
@@ -127,6 +156,8 @@ class Rota(unittest.TestCase):
                  ({'anfitriao': 'a b', 'canal': CANAL}, 400, '@ do agente'),
                  ({'anfitriao': 'recepcao', 'canal': CANAL, 'extra': 1}, 400, 'Pedido inválido'),
                  ({'limpar': False}, 400, 'Pedido inválido'),
+                 ({'anfitriao': 'recepcao', 'canal': CANAL, 'conferir': 1}, 400, 'Pedido inválido'),
+                 ({'limpar': True, 'conferir': True}, 400, 'Pedido inválido'),
                  ({'anfitriao': 7, 'canal': CANAL}, 400, '@ do agente')]
         for dados, st, trecho in casos:
             status, corpo = self.pedir('recepcionista', dados)
@@ -138,7 +169,8 @@ class Rota(unittest.TestCase):
         self.modo.stop()
         try:
             with patch.object(e.Pagina, '_modo_resposta', lambda s: None):
-                for dados in ({'anfitriao': 'recepcao', 'canal': CANAL}, {'limpar': True}):
+                for dados in ({'anfitriao': 'recepcao', 'canal': CANAL}, {'limpar': True},
+                              {'anfitriao': 'recepcao', 'canal': CANAL, 'conferir': True}):
                     status, corpo = self.pedir('recepcionista', dados)
                     self.assertEqual(status, 403)
                     self.assertIn('modo resposta', corpo['erro'])
@@ -146,6 +178,44 @@ class Rota(unittest.TestCase):
         finally:
             self.modo.start()
         self.assertEqual(self.chamadas, [])
+
+    def test_lista_do_servidor_limita_a_tela(self):
+        """A revisão do #2: com ESCRITORIO_VISITAS_ANFITRIOES só com recepcao, a tela não põe outro agente na sala."""
+        with patch.object(e, 'ANFITRIOES_VISITAS', {'recepcao'}), patch.object(e, 'CANAL_VISITAS', OUTRO), \
+                patch.object(e, 'TELA_VISITAS', False):
+            for dados in ({'anfitriao': '@interno', 'canal': CANAL},
+                          {'anfitriao': 'interno', 'canal': CANAL, 'conferir': True}):
+                status, corpo = self.pedir('recepcionista', dados)
+                self.assertEqual(status, 400)
+                self.assertIn('liberados no servidor', corpo['erro'])
+            self.assertEqual(self.chamadas, [], 'recusa antes de chamar o agentes.chat')
+            self.assertFalse(os.path.exists(self.arq))
+            self.assertEqual(self.pedir('anfitrioes', {})[1], {'agentes': [{'id': 'ag-1', 'nome': 'Recepção'}]})
+            self.assertEqual(self.pedir('criar', {'agente': 'ag-2'})[0], 400)
+            st, estado = self.pedir('recepcionista', {'anfitriao': 'recepcao', 'canal': CANAL})
+            self.assertEqual((st, estado['origem'], estado['tela'], estado['liberados'], estado['canal']),
+                             (200, 'tela', 'limite', ['recepcao'], CANAL))
+            with open(self.arq, 'wb') as f:   # arquivo antigo com um agente que saiu da lista: não vale
+                f.write(ajustes.bytes_da_recepcao({'anfitriao': 'interno', 'canal': CANAL}))
+            self.assertEqual(self.pedir('recepcionista', {})[1]['origem'], 'variaveis')
+            self.assertEqual(self.pedir('criar', {'agente': 'ag-2'})[0], 400)
+
+    def test_tela_fechada_sem_lista_nem_permissao(self):
+        with open(self.arq, 'wb') as f:
+            f.write(ajustes.bytes_da_recepcao({'anfitriao': 'interno', 'canal': CANAL}))
+        with patch.object(e, 'TELA_VISITAS', False):
+            st, estado = self.pedir('recepcionista', {})
+            self.assertEqual((st, estado['origem'], estado['tela']), (200, 'nenhum', 'fechada'))
+            self.assertIn('ESCRITORIO_VISITAS_TELA=1', estado['faltam'][0])
+            for dados in ({'anfitriao': 'recepcao', 'canal': CANAL},
+                          {'anfitriao': 'recepcao', 'canal': CANAL, 'conferir': True}):
+                status, corpo = self.pedir('recepcionista', dados)
+                self.assertEqual(status, 403)
+                self.assertIn('desligada neste servidor', corpo['erro'])
+            self.assertEqual(self.pedir('anfitrioes', {})[1], {'agentes': []}, 'o arquivo antigo não vale')
+            self.assertEqual(self.pedir('recepcionista', {'limpar': True})[0], 200, 'tirar o arquivo antigo pode')
+        self.assertEqual(self.chamadas, [])
+        self.assertFalse(os.path.exists(self.arq))
 
     def test_mostra_o_que_falta(self):
         with patch.object(e, 'carregar_times', lambda: {'conversas': 'ler'}):

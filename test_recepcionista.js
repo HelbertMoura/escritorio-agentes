@@ -34,9 +34,9 @@ async function tela() {
     addEventListener(tipo, fn) { this["on" + tipo] = fn; }, replaceChildren(...filhos) { this.filhos = filhos; },
     focus() {}, select() {} });
   ["empresa", "instrucoes", "copiar", "ligar", "salvar", "limpar", "estado", "situacao", "faltam", "nome", "faz", "site",
-    "contato", "horario", "evitar", "anfitriao", "canal"].forEach(novo);
+    "contato", "horario", "evitar", "anfitriao", "canal", "confirmar"].forEach(novo);
   const corpos = [];
-  let resposta = { origem: "nenhum", anfitrioes: [], canal: "", nomes: [], faltam: ["Escolha o recepcionista e o canal das visitas."] };
+  let resposta = { origem: "nenhum", tela: "livre", anfitrioes: [], canal: "", nomes: [], faltam: ["Escolha o recepcionista e o canal das visitas."] };
   const contexto = {
     document: { getElementById: id => el[id], createElement: () => ({}) },
     navigator: { clipboard: { writeText: async t => { contexto.copiado = t; } } },
@@ -45,8 +45,9 @@ async function tela() {
       const corpo = JSON.parse(opcoes.body);
       corpos.push(corpo);
       if (corpo.anfitriao === "@ruim") return { ok: false, json: async () => ({ erro: "Esse agente não aparece na leitura do agentes.chat." }) };
-      if (corpo.anfitriao) resposta = { origem: "tela", anfitrioes: ["recepcao"], canal: "c1", nomes: ["Recepção"], faltam: [] };
-      if (corpo.limpar) resposta = { origem: "nenhum", anfitrioes: [], canal: "", nomes: [], faltam: [] };
+      if (corpo.conferir) return { ok: true, json: async () => ({ anfitriao: "recepcao", canal: "c1", nome: "Recepção", canal_nome: "visitas" }) };
+      if (corpo.anfitriao) resposta = { origem: "tela", tela: "livre", anfitrioes: ["recepcao"], canal: "c1", nomes: ["Recepção"], faltam: [] };
+      if (corpo.limpar) resposta = { origem: "nenhum", tela: contexto.tela || "livre", anfitrioes: [], canal: "", nomes: [], faltam: [] };
       return { ok: true, json: async () => resposta };
     },
   };
@@ -69,14 +70,29 @@ async function tela() {
   assert.equal(el.salvar.disabled, false);
 
   el.anfitriao.value = "@recepcao";
+  await el.ligar.onsubmit({ preventDefault() {} });   // primeiro só confere e mostra em qual canal o agente vai ler
+  assert.deepEqual(corpos.at(-1), { anfitriao: "@recepcao", canal: "https://app.agentes.chat/org/x/c/y", conferir: true });
+  assert.match(el.confirmar.textContent, /^Recepção \(@recepcao\) vai atender no canal #visitas\./);
+  assert.equal(el.salvar.textContent, "Confirmar e salvar");
+  assert.match(el.situacao.textContent, /Nenhum recepcionista/);
+
+  el.ligar.oninput();   // mexer no formulário pede conferir de novo
+  assert.equal(el.salvar.textContent, "Conferir");
+  await el.ligar.onsubmit({ preventDefault() {} });
+  assert.equal(corpos.at(-1).conferir, true);
   await el.ligar.onsubmit({ preventDefault() {} });
   assert.deepEqual(corpos.at(-1), { anfitriao: "@recepcao", canal: "https://app.agentes.chat/org/x/c/y" });
+  assert.equal(el.confirmar.textContent, "");
   assert.equal(el.situacao.textContent, "Recepcionista: Recepção (@recepcao), salvo nesta tela.");
   assert.equal(el.limpar.hidden, false);
 
   await el.limpar.onclick();
   assert.deepEqual(corpos.at(-1), { limpar: true });
   assert.equal(el.limpar.hidden, true);
+
+  contexto.tela = "fechada";
+  await el.limpar.onclick();
+  assert.equal(el.salvar.disabled, true, "tela desligada no servidor: não salva");
 }
 
 instrucoes();
