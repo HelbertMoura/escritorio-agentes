@@ -132,7 +132,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "mundo.html": "text/html; charset=utf-8", "mundo.js": "text/javascript; charset=utf-8",
     "mundo_bairro.js": "text/javascript; charset=utf-8", "mundo_mapa.js": "text/javascript; charset=utf-8",
     "mundo_globo.js": "text/javascript; charset=utf-8", "mundo_cidade.js": "text/javascript; charset=utf-8",
-    "mundo_cidade_planta.js": "text/javascript; charset=utf-8",
+    "mundo_cidade_planta.js": "text/javascript; charset=utf-8", "mundo_festa.js": "text/javascript; charset=utf-8",
     "index.html": "text/html; charset=utf-8", "app.js": "text/javascript; charset=utf-8",
     "avatar.js": "text/javascript; charset=utf-8", "mapa.js": "text/javascript; charset=utf-8",
     "vida.js": "text/javascript; charset=utf-8", "som.js": "text/javascript; charset=utf-8",
@@ -2098,6 +2098,17 @@ def festas_salvas():
         or ajustes.festas_vazias()
 
 
+# as chaves do calendário embutido (FESTAS de static/festas.js; test_mundo_clima confere que são as mesmas)
+FESTAS_CATALOGO = frozenset({"natal", "anonovo", "carnaval", "pascoa", "chines", "junina", "halloween", "independencia",
+                             "programador", "diwali", "namorados", "criancas", "trabalho"})
+
+
+def festas_desligadas():
+    """Para o mundo público: só as festas do calendário que a instalação desligou. As datas próprias (nome, data e
+    falas digitados em Personalizar) nunca saem daqui, e chave fora do catálogo é descartada."""
+    return [k for k in festas_salvas()["desligadas"] if k in FESTAS_CATALOGO]
+
+
 def equipe_salva():
     """dados/equipe.json validado, ou None (vale o times.json)."""
     return ajustes.ler(ARQ_EQUIPE, EQUIPE_BYTES, lambda d: ajustes.validar_equipe(d, arquivo=True), log, "equipe")
@@ -2285,6 +2296,7 @@ PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "fontes/figtree.ttf", "fonte
             # mapa do mundo: imagens, cidades e código de desenho, sem dados do escritório
             "mundo/terra.png", "mundo/brasil.png", "mundo/mundo.json", "mundo/atlas.png", "mundo/atlas.json",
             "mundo_globo.js", "mundo_mapa.js", "mundo_cidade.js", "mundo_cidade_planta.js", "mundo_bairro.js",
+            "mundo_festa.js", "festas.js",  # o calendário embutido; as datas próprias só chegam pelo /api/config
             "fontes/doto.woff2", "logo.png",  # liberados na tela de login
             # PWA: o navegador busca o manifesto sem cookie; nenhum deles tem segredo. O sw.js fica na raiz (escopo /)
             "manifest.webmanifest", "sw.js", "icone-180.png", "icone-192.png", "icone-512.png", "icone-mascara-512.png"}
@@ -2692,11 +2704,13 @@ class Pagina(BaseHTTPRequestHandler):
                 resposta["vento"] = vento_publico(foto.get("vento"))
                 return self._json(200, resposta)
             elif rota == "/api/mundo/clima" and not dados:
-                # o mapa do mundo: só tipo, vento (0..1) e noite por cidade, e o id da cidade mais perto do escritório
+                # o mapa do mundo: só tipo, vento (0..1) e noite por cidade, o id da cidade mais perto do escritório
+                # e as festas do calendário desligadas (nenhuma data própria)
                 mundo = getattr(self.server, "clima_mundo", None)
+                desligadas = festas_desligadas()
                 if not mundo or not mundo.cidades:
-                    return self._json(200, {"cidades": {}, "casa": None, "versao": 0})
-                return self._json(200, {"cidades": mundo.foto(), "versao": mundo.versao,
+                    return self._json(200, {"cidades": {}, "casa": None, "versao": 0, "festas_desligadas": desligadas})
+                return self._json(200, {"cidades": mundo.foto(), "versao": mundo.versao, "festas_desligadas": desligadas,
                                         "casa": cidade_do_escritorio(clima_vigente()[0], mundo.cidades)})
             elif rota == "/api/visitas/entrar" and set(dados) == {"convite"}:
                 salas.limitar_sala(dados["convite"], convite=True)

@@ -2,15 +2,19 @@
 // a planta de mundo_cidade_planta.js. Aqui ficam o desenho e a vida da rua:
 // - o chão (grama, calçadas com meio-fio, asfalto, faixa tracejada e faixas de pedestre);
 // - as peças pela profundidade (quem está mais abaixo desenha por cima): o marco no centro (ou os prédios genéricos,
-//   quando a arte dele falta), chalés, prédios, a praça, árvores, mobiliário, o ônibus parado, postes e pedestres;
-// - carros pela mão direita, girando o desenho (feito para o leste) conforme o sentido, e dando a volta fora da vista;
-// - pedestres (os bonecos do escritório, avatar.js, na metade) andando pela rede de calçadas e faixas da planta.
+//   quando a arte dele falta), chalés, prédios, a praça, árvores, mobiliário, postes e pedestres;
+// - carros pela mão direita, girando o desenho (feito para o leste) conforme o sentido, e dando a volta fora da vista.
+//   No cruzamento cabe um veículo por vez: quem chega espera do lado de fora enquanto houver outro lá dentro, e quem vai
+//   atrás na mesma faixa não encosta no da frente;
+// - pedestres (os bonecos do escritório, avatar.js, em 1:1) andando pela rede de calçadas e faixas da planta;
+// - os enfeites da festa do dia (mundo_festa.js), cada um na camada dele.
 // Só a cidade da casa tem o chalé com a placa, e só ele desce ao bairro ({ir: "bairro"}); placa e porta aparecem quando
 // o desenho do chalé chega. O tempo vem pelo Clima (o mundo.js o define); a noite, pelo Ceu. Com movimento reduzido,
 // carros e pedestres parados e nada de partículas. O atlas é pedido na primeira entrada numa cidade (e de novo se falhar).
 "use strict";
 const MundoCidade = (() => {
-  const { W, H, E, C } = CidadePlanta, FAIXA = 8, B = E / 2 + C, MEIO_CARRO = 16, PLACA_H = 12, BONECO = 0.5;
+  const { W, H, E, C } = CidadePlanta, FAIXA = 8, B = E / 2 + C, MEIO_CARRO = 16, PLACA_H = 12, POSTE = 28, FOLGA = 4;
+  const LUZ = [255, 214, 130];   // a cor dos postes, janelas e faróis à noite
   const CORES = { grama: "#5c9a4a", calcada: "#c9c3b3", meiofio: "#8f8a7d", praca: "#c8b88e", asfalto: "#3a3a42",
                   faixa: "#e9e3c9", zebra: "#dcd8cc" };
   const NEVE = { grama: "#e6edf4", calcada: "#d6dde7", meiofio: "#9aa3b0", praca: "#dfe5ee", asfalto: "#4a4c56",
@@ -41,12 +45,13 @@ const MundoCidade = (() => {
     return cv;
   }
 
-  function criar({ dados, Camera, reduzido, mapa, clima, avisar }) {
+  function criar({ dados, Camera, reduzido, mapa, clima, avisar, festa }) {
     const camera = Camera([0, 0, W, H]);
     const marcos = new Map((Array.isArray(dados && dados.cidades) ? dados.cidades : []).filter(c => c && typeof c.marco === "string").map(c => [c.id, c.marco]));
-    let id = null, p = CidadePlanta.planta(""), carros = [], pedestres = [], pecas = [], rua = Math.random;
+    let id = null, p = CidadePlanta.planta(""), carros = [], pedestres = [], pecas = [], postes = [], rua = Math.random;
     let atlas = null, quadros = {}, pedido = false, placa = null, fonte = false;
-    const lista = [], vista = [0, 0, W, H];
+    const lista = [], vista = [0, 0, W, H], brilhos = new Map();
+    const enfeites = MundoFesta.criar({ reduzido, alto: POSTE, recorte: nome => recorte(nome), atlas: () => atlas });
 
     function carregar() {   // o atlas, uma vez; se o json ou a imagem falharem, a próxima entrada tenta de novo
       if (pedido) return;
@@ -94,15 +99,28 @@ const MundoCidade = (() => {
       const [x0, y0] = camera.mundo(0, 0), [x1, y1] = camera.mundo(camera.W, camera.H);
       vista[0] = x0; vista[1] = y0; vista[2] = x1; vista[3] = y1;
     }
-    function mover(dt) {
-      for (const c of carros) {   // a volta acontece fora da caixa e fora da vista, com o carro inteiro escondido
-        if (!reduzido && dt > 0) {
-          const h = c.eixo === "h", lo = Math.min(0, vista[h ? 0 : 1]) - MEIO_CARRO, hi = Math.max(h ? W : H, vista[h ? 2 : 3]) + MEIO_CARRO;
-          c.s += c.dir * c.v * dt;
-          if (c.s > hi) c.s = lo; else if (c.s < lo) c.s = hi;
-        }
-        [c.x, c.y] = lugar(c);
+    // o carro no eixo dele: metade do comprimento, o trecho [s0, s1] que ocupa e se ele está no cruzamento (X, Y)
+    const meio = c => { const r = recorte(c.peca); return r ? r[2] / 2 : 13; };
+    const trecho = (c, s = c.s) => [s - meio(c), s + meio(c)];
+    const sobre = (a, b, folga = 0) => a[0] < b[1] + folga && b[0] < a[1] + folga;
+    const miolo = k => [k - E / 2, k + E / 2];
+    const dentro = (o, X, Y) => o.eixo === "h" ? o.rua === Y && sobre(trecho(o), miolo(X)) : o.rua === X && sobre(trecho(o), miolo(Y));
+    function andar(c, dt) {
+      const h = c.eixo === "h", lo = Math.min(0, vista[h ? 0 : 1]) - MEIO_CARRO, hi = Math.max(h ? W : H, vista[h ? 2 : 3]) + MEIO_CARRO;
+      let s = c.s + c.dir * c.v * dt;
+      if (s > hi || s < lo) s = s > hi ? lo : hi;   // a volta acontece fora da caixa e da vista, com o carro inteiro escondido
+      else for (const [X, Y] of p.cruzamentos) {   // não entra num cruzamento com outro veículo dentro
+        const k = h ? X : Y;
+        if (c.rua !== (h ? Y : X) || !sobre(trecho(c, s), miolo(k)) || sobre(trecho(c), miolo(k))) continue;
+        if (carros.some(o => o !== c && dentro(o, X, Y))) return;
       }
+      // o da mesma faixa (na frente, ou no lugar da volta) segura quem vem atrás
+      if (carros.some(o => o !== c && o.eixo === c.eixo && o.rua === c.rua && o.dir === c.dir && sobre(trecho(c, s), trecho(o), FOLGA))) return;
+      c.s = s;
+    }
+    function mover(dt) {
+      if (!reduzido && dt > 0) for (const c of carros) andar(c, dt);
+      for (const c of carros) [c.x, c.y] = lugar(c);
       const { nos, viz, peso } = p.rede;
       for (const a of pedestres) {   // de canto em canto; no canto, segue por outra calçada ou atravessa na faixa, sem voltar
         if (!reduzido) a.s += a.v * dt;
@@ -117,7 +135,7 @@ const MundoCidade = (() => {
         }
         const k = a.s / L;
         a.x = x0 + (x1 - x0) * k; a.y = y0 + (y1 - y0) * k;
-        a.b.x = Math.round(a.x / BONECO); a.b.y = Math.round(a.y / BONECO); a.b.olha = olhar(x1 - x0, y1 - y0);
+        a.b.x = Math.round(a.x); a.b.y = Math.round(a.y); a.b.olha = olhar(x1 - x0, y1 - y0);
       }
     }
     const naVista = (x0, y0, x1, y1) => x1 >= vista[0] && x0 <= vista[2] && y1 >= vista[1] && y0 <= vista[3];
@@ -151,25 +169,46 @@ const MundoCidade = (() => {
         }
       }
     }
-    function brilho(ctx, x, y, r, a) {
-      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-      g.addColorStop(0, `rgba(255,214,130,${a})`); g.addColorStop(1, "rgba(255,190,90,0)");
-      ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    // o brilho de uma luz à noite: o degradê pintado uma vez por raio, cor e escala (com pixels de sobra para o zoom) e
+    // depois só copiado; a força vem do globalAlpha
+    function brilho(ctx, x, y, r, a, cor = LUZ) {
+      const k = Math.max(1, Math.min(8, Math.ceil(camera.P))), chave = `${r}|${k}|${cor}`;
+      let tela = brilhos.get(chave);
+      if (!tela) {
+        const d = r * k * 2;
+        tela = document.createElement("canvas"); tela.width = tela.height = d;
+        const g = tela.getContext("2d"), gr = g.createRadialGradient(d / 2, d / 2, 0, d / 2, d / 2, d / 2);
+        gr.addColorStop(0, `rgba(${cor},1)`); gr.addColorStop(1, `rgba(${cor},0)`);
+        g.fillStyle = gr; g.fillRect(0, 0, d, d);
+        brilhos.set(chave, tela);
+      }
+      ctx.globalAlpha = Math.min(1, a); ctx.drawImage(tela, x - r, y - r, r * 2, r * 2); ctx.globalAlpha = 1;
     }
-    function desenhar(ctx, s, t, casa) {
-      if (s.ped) { if (window.Avatar) Avatar.boneco(ctx, s.b, t, BONECO); return; }
-      if (s.poste) { ctx.fillStyle = "#2a2a30"; ctx.fillRect(s.x, s.y - 7, 1, 7); ctx.fillRect(s.x - 1, s.y - 8, 3, 1); return; }
+    function desenhar(ctx, s, t, casa, escuro) {
+      if (s.ped) { if (window.Avatar) Avatar.boneco(ctx, s.b, t, 1); return; }
+      if (s.enfeite) return enfeites.desenhar(ctx, s);
+      if (s.poste) {   // o poste: base, haste com um filete de luz e o braço com a luminária sobre a rua
+        const x = s.x, y = s.y, l = s.lado;
+        ctx.fillStyle = "#24242b"; ctx.fillRect(x - 1, y - 2, 3, 2); ctx.fillRect(x, y - POSTE, 1, POSTE);
+        ctx.fillRect(Math.min(x, x + 3 * l), y - POSTE - 1, 4, 1); ctx.fillRect(x + 3 * l - (l < 0 ? 1 : 0), y - POSTE, 2, 1);
+        ctx.fillStyle = "#6b6b78"; ctx.fillRect(x + (l < 0 ? 1 : -1), y - POSTE + 1, 1, POSTE - 3);
+        ctx.fillStyle = "#f2e2b0"; ctx.fillRect(x + 3 * l - (l < 0 ? 1 : 0), y - POSTE + 1, 2, 1);
+        return enfeites.poste(ctx, s);
+      }
       let nome = s.peca;
       if (s === p.casa) nome = casa ? p.casa.peca : p.casa.arvore;   // fora da casa, a vaga dela tem uma árvore
       else if (s === p.centro && temMarco()) nome = "marco-" + marcos.get(id);
       peca(ctx, nome, s.x, s.y);
+      if (nome.startsWith("chale-")) enfeites.telhado(ctx, nome, s.x, s.y, escuro, t);
     }
 
     function quadro(ctx, dt, t) {
       const ceu = Ceu.agora(), escuro = Math.max(0, Math.min(1, ceu.escuro || 0)), tipo = Clima.tipo(), casa = portaPronta();
       medirVista();
       mover(dt);
+      enfeites.comecar(atlas && festa ? festa() : null, p, id, postes);
       chao(ctx, tipo === "neve" ? NEVE : CORES);
+      enfeites.chao(ctx, escuro, t);
       if (atlas) for (const c of carros) {   // os carros no chão, por baixo das construções (o atlas já os traz na escala)
         const r = recorte(c.peca);
         if (!r || !naVista(c.x - MEIO_CARRO, c.y - MEIO_CARRO, c.x + MEIO_CARRO, c.y + MEIO_CARRO)) continue;
@@ -179,9 +218,10 @@ const MundoCidade = (() => {
       }
       lista.length = 0;   // as peças na tela (os desenhos sobem até ~130 acima do pé), pela profundidade
       for (const s of pecas) if (naVista(s.x - 70, s.y - 130, s.x + 70, s.y + 4)) lista.push(s);
-      if (atlas) for (const a of pedestres) if (naVista(a.x - 8, a.y - 14, a.x + 8, a.y + 2)) lista.push(a);
+      for (const s of enfeites.itens) if (naVista(s.x - 120, s.y - 80, s.x + 120, s.y + 4)) lista.push(s);
+      if (atlas) for (const a of pedestres) if (naVista(a.x - 12, a.y - 24, a.x + 12, a.y + 3)) lista.push(a);
       lista.sort((a, b) => a.y - b.y || a.x - b.x);
-      if (atlas) for (const s of lista) desenhar(ctx, s, t, casa);
+      if (atlas) for (const s of lista) desenhar(ctx, s, t, casa, escuro);
       const [vx0, vy0, vx1, vy1] = vista, tela = [Math.floor(vx0), Math.floor(vy0), Math.ceil(vx1 - vx0) + 1, Math.ceil(vy1 - vy0) + 1];
       if (FECHADO[tipo]) { ctx.fillStyle = `rgba(62,68,86,${FECHADO[tipo] * 0.6})`; ctx.fillRect(...tela); }
       ctx.globalAlpha = 0.1; ctx.fillStyle = ceu.cima; ctx.fillRect(...tela); ctx.globalAlpha = 1;   // o tom do céu
@@ -194,7 +234,9 @@ const MundoCidade = (() => {
       if (escuro > 0.05) {   // à noite: postes, janelas, faróis e a casa acesos
         ctx.globalCompositeOperation = "lighter";
         for (const s of lista) {
-          if (s.poste) brilho(ctx, s.x + 0.5, s.y - 7, 16, 0.45 * escuro);
+          if (s.poste) {   // a luminária e a luz no chão embaixo dela
+            brilho(ctx, s.x + 3 * s.lado + 0.5, s.y - POSTE + 1.5, 16, 0.5 * escuro); brilho(ctx, s.x + 3 * s.lado, s.y, 14, 0.3 * escuro);
+          }
           else if (s.peca && s.peca.startsWith("chale-") && s !== p.casa) brilho(ctx, s.x, s.y - 18, 12, 0.35 * escuro);
           else if (s.peca === "banco-poste-1") brilho(ctx, s.x - 6, s.y - 22, 12, 0.45 * escuro);   // o lampião do banco
         }
@@ -202,6 +244,9 @@ const MundoCidade = (() => {
         for (const c of carros) { const a = giro(c); brilho(ctx, c.x + Math.cos(a) * 14, c.y + Math.sin(a) * 14, 9, 0.5 * escuro); }
         ctx.globalCompositeOperation = "source-over";
       }
+      enfeites.noite(ctx, escuro, brilho, vista);   // o pisca, a fogueira e as lanternas acesos por cima do escuro
+      enfeites.ar(ctx, dt, t, vista, escuro, brilho);   // fogos, confete, serpentina e morcegos
+      enfeites.terminar(escuro);
       if (!reduzido) {   // chuva, neve, neblina e raio do Clima, sobre a parte da cidade que está na tela
         const som = window.Som && Som.ligado ? Som : null;
         ctx.save(); ctx.translate(tela[0], tela[1]);
@@ -226,8 +271,9 @@ const MundoCidade = (() => {
           const ap = window.Avatar ? Avatar.padrao(a.semente) : null;
           return { ...a, ped: true, x: 0, y: 0, b: { x: 0, y: 0, ap, pose: reduzido ? "parado" : "andando", olha: "baixo", semente: i * 7 } };
         });
-        pecas = [p.centro, ...p.predios, p.praca, ...p.chales, ...p.arvores, ...p.mobiliario, p.onibus, p.casa, ...p.arredores,
-                 ...p.postes.map(([x, y]) => ({ x, y, poste: true }))];
+        // o lado do braço de cada poste: para a rua vertical do cruzamento dele
+        postes = p.postes.map(([x, y]) => ({ x, y, poste: true, lado: p.cruzamentos.some(([X]) => X > x && X - x < E) ? 1 : -1 }));
+        pecas = [p.centro, ...p.predios, p.praca, ...p.chales, ...p.arvores, ...p.mobiliario, p.casa, ...p.arredores, ...postes];
         camera.vx = camera.vy = 0; camera.voo = camera.ancora = null;
         if (params.nivel === "bairro" && ehCasa() && !reduzido) {   // voltando do bairro, a câmera sai de perto da casa
           camera.x = p.casa.x; camera.y = p.casa.y - 28; camera.z = 4; camera.zoomPara(1);
@@ -242,13 +288,21 @@ const MundoCidade = (() => {
       alvos() { return portaPronta() ? [alvoPorta()] : []; },
       mergulho() { return ehCasa() ? [p.casa.x, p.casa.y - 28] : [W / 2, H / 2]; },
       rotulo() {
-        const c = mapa.porId.get(id);
+        const c = mapa.porId.get(id), f = festa ? festa() : null;
         return `${c ? c.nome : "Cidade"} vista de cima em pixel art, com ${temMarco() ? "o marco da cidade" : "prédios"} no centro, ` +
           `quadras com chalés, prédios e uma praça, pedestres nas calçadas, carros nas ruas e o tempo de agora` +
-          (portaPronta() ? ", e o chalé do escritório com a placa" : "");
+          (portaPronta() ? ", e o chalé do escritório com a placa" : "") + (f ? `. Hoje é ${f.nome}: a cidade está enfeitada` : "");
       },
       get carros() { return carros.map(c => [c.x, c.y]); },
+      // cada veículo como [x, y, largura, altura] na tela do mundo (o desenho já girado)
+      get veiculos() {
+        return carros.map(c => {
+          const [, , w, h] = recorte(c.peca) || [0, 0, 26, 14];
+          return c.eixo === "h" ? [c.x, c.y, w, h] : [c.x, c.y, h, w];
+        });
+      },
       get pedestres() { return pedestres.map(a => [a.x, a.y]); },
+      get enfeites() { return enfeites.estado; },
     };
     return cidade;
   }

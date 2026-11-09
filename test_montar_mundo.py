@@ -29,8 +29,11 @@ MARCOS = {"rio-de-janeiro": "cristo", "belo-horizonte": "pampulha", "sao-paulo":
 # as peças que toda cidade pode usar; carros e mobiliário entram no atlas já na metade do desenho
 GENERICOS = ({f"predios-{i}" for i in range(1, 7)} | {f"chale-{i}" for i in range(1, 9)}
              | {f"arvore-{i}" for i in range(1, 4)} | {f"carro-{i}" for i in range(1, 5)} | {"aviao-1", "aviao-2"}
-             | {"praca-1", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1", "onibus-1"})
-METADE = {"carro-1", "carro-2", "carro-3", "carro-4", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1", "onibus-1"}
+             | {"praca-1", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1"})
+# peças de festa que podem faltar na arte: entram no atlas quando existem, na metade como o mobiliário
+OPCIONAIS = {"festa-arvore-natal", "festa-fogueira", "festa-barraca-junina", "festa-abobora", "festa-ovo-pascoa",
+             "festa-carro-alegorico", "festa-palco-anonovo"}
+METADE = {"carro-1", "carro-2", "carro-3", "carro-4", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1"} | OPCIONAIS
 
 
 class Cidades(unittest.TestCase):
@@ -151,7 +154,8 @@ class Montagem(unittest.TestCase):
         self.assertEqual(len(marcos), 28)
         self.assertEqual(set(atlas), {"versao", "quadros"})
         self.assertIsInstance(atlas["versao"], int)
-        self.assertEqual(set(atlas["quadros"]), marcos | GENERICOS)
+        presentes = {n for n in OPCIONAIS if os.path.exists(os.path.join(ARTE, n + ".png"))}
+        self.assertEqual(set(atlas["quadros"]), marcos | GENERICOS | presentes)
         with open(os.path.join(pasta, "atlas.png"), "rb") as f:
             cabeca = f.read(24)
         largura, altura = int.from_bytes(cabeca[16:20], "big"), int.from_bytes(cabeca[20:24], "big")
@@ -181,6 +185,25 @@ class Montagem(unittest.TestCase):
             self.atlas(arte, pasta)
         self.assertIn("predios-2", str(erro.exception))
 
+    def test_atlas_com_e_sem_pecas_opcionais(self):
+        """As peças de festa são opcionais: com a arte, entram no atlas (na metade, test_atlas_na_escala_final); sem
+        nenhuma, ou só com uma, a montagem segue sem erro e o resto do atlas não muda."""
+        with open(os.path.join(self.pastas[0], "atlas.json"), encoding="utf-8") as f:
+            completo = json.load(f)["quadros"]
+        self.assertTrue(OPCIONAIS <= set(completo), "a arte das festas está em arte/pixellab/mundo")
+        self.assertNotIn("onibus-1", completo)   # o ônibus saiu da cidade (fica só o ponto)
+        arte, pasta = tempfile.mkdtemp(), tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, arte, True)
+        self.addCleanup(shutil.rmtree, pasta, True)
+        for nome in os.listdir(ARTE):
+            if nome[:-4] not in OPCIONAIS or nome == "festa-fogueira.png":
+                shutil.copy(os.path.join(ARTE, nome), arte)
+        quadros = self.atlas(arte, pasta)["quadros"]
+        self.assertEqual(set(quadros) & OPCIONAIS, {"festa-fogueira"})
+        os.remove(os.path.join(arte, "festa-fogueira.png"))
+        quadros = self.atlas(arte, pasta)["quadros"]
+        self.assertEqual(set(quadros), set(completo) - OPCIONAIS)
+
     def test_atlas_na_escala_final(self):
         """Carros e mobiliário entram no atlas na metade da arte (o navegador desenha 1:1); o resto, inteiro. O alfa
         do atlas inteiro fica binário (pixel nítido, sem borda translúcida)."""
@@ -192,8 +215,9 @@ class Montagem(unittest.TestCase):
                  "    im = Image.open(os.path.join(sys.argv[2], nome + '.png')).convert('RGBA')\n"
                  "    x0, y0, x1, y1 = im.getchannel('A').getbbox()\n    tam[nome] = [x1 - x0, y1 - y0]\n"
                  "print(json.dumps([alfa, tam]))")
+        presentes = {n for n in OPCIONAIS if os.path.exists(os.path.join(ARTE, n + ".png"))}
         r = subprocess.run([sys.executable, "-c", medir, os.path.join(self.pastas[0], "atlas.png"), ARTE,
-                            json.dumps(sorted(GENERICOS))], capture_output=True, text=True, timeout=60)
+                            json.dumps(sorted(GENERICOS | presentes))], capture_output=True, text=True, timeout=60)
         if r.returncode:
             raise AssertionError(r.stderr)
         alfa, tam = json.loads(r.stdout)

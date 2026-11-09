@@ -80,6 +80,16 @@ const Mundo = (() => {
 
   let W = 0, H = 0, dpr = 1, mapa = null, nome = null, nivel = null, atualCidade = null, ultimaCidade = null, trans = null;
   let botoes = [], chaveAlvos = "", dicaAlvo = null, anterior = performance.now(), pedido_ = false, gesto = null, roda = 0;
+  // a festa do dia (festas.js): só depois da resposta do clima, que traz as festas desligadas (antes dela, nada de
+  // enfeite). Só o calendário embutido: as datas próprias da empresa nunca chegam à página pública
+  let festa = null, restoChuva = 0;
+  function definirFesta(resp) {
+    if (!window.Festas) return;
+    const d = resp && Array.isArray(resp.festas_desligadas) ? resp.festas_desligadas : [];
+    Festas.configurar({ desligadas: d.filter(k => typeof k === "string") });
+    festa = Festas.ativa();
+  }
+  const hojeE = () => (festa ? ` Hoje é ${festa.nome}.` : "");
   const niveis = { bairro: nivelBairro() }, toques = new Map();
 
   // o bairro de hoje, desenhado 1:1 num quadro de 320x180 e ampliado pela câmera (a 1x, na escala fracionária que enche
@@ -167,10 +177,11 @@ const Mundo = (() => {
     else if (nome === "globo") estado.textContent = `Terra, ${hora} em Brasília. Clique no Brasil ou aproxime para descer ao mapa.`;
     else if (nome === "brasil") {
       const casa = mapa.casa && mapa.porId.get(mapa.casa);
-      estado.textContent = `Brasil, ${hora}. Escolha uma cidade no mapa.${casa ? ` O escritório fica em ${casa.nome}.` : ""}`;
+      estado.textContent = `Brasil, ${hora}.${hojeE()} Escolha uma cidade no mapa.${casa ? ` O escritório fica em ${casa.nome}.` : ""}`;
     } else if (nome === "cidade") {
       const casa = mapa.casa && mapa.porId.get(mapa.casa);
-      estado.textContent = `${c.nome} (${c.uf}), ${mapa.texto(c)}. ` + (casa === c ? "O chalé com a placa é o escritório: clique nele para descer ao bairro."
+      estado.textContent = `${c.nome} (${c.uf}), ${mapa.texto(c)}.${hojeE()} ` +
+        (casa === c ? "O chalé com a placa é o escritório: clique nele para descer ao bairro."
         : casa ? `O escritório fica em ${casa.nome}; Esc volta ao mapa.` : "Esc volta ao mapa.");
     }
     else estado.textContent = `${hora} · ${Clima.texto()}${c ? " · " + c.nome : ""}`;
@@ -246,9 +257,11 @@ const Mundo = (() => {
       ctx.setTransform(cam.P, 0, 0, cam.P, ox, oy);
       const acao = nivel.quadro(ctx, dt, t);   // o globo devolve o mergulho quando termina de girar até o Brasil
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      // a chuva do som só vale na cidade e no bairro (o Clima a ajusta a cada quadro); no globo e no Brasil, vai a zero
-      // aos poucos (Som.chuva aproxima o volume a cada chamada)
-      if ((nome === "globo" || nome === "brasil") && window.Som && Som.ligado) Som.chuva(0);
+      // a chuva do som só vale na cidade e no bairro (o Clima a ajusta a cada quadro). Saindo deles para o globo ou o
+      // Brasil, vai a zero aos poucos (Som.chuva aproxima o volume 5% a cada chamada): uns 6 s de chamadas e mais
+      // nenhuma, para não criar o áudio sem nada tocando
+      if (nome === "cidade" || nome === "bairro") restoChuva = 360;
+      else if (restoChuva > 0) { restoChuva--; if (window.Som && Som.ligado) Som.chuva(0); }
       if (trans) cortina(trans.fase === 0 ? trans.k : 1 - trans.k);
       posicionar();
       if (acao && !trans) executar(acao);
@@ -351,6 +364,7 @@ const Mundo = (() => {
     fetch("/api/mundo/clima", { method: "POST", credentials: "omit", cache: "no-store", headers: { "Content-Type": "application/json" }, body: "{}" })
       .then(r => r.ok ? r.json() : null).catch(() => null)
       .then(d => {
+        definirFesta(d);   // sem resposta (a rota falhou), vale o calendário sem desligadas
         if (mapa) mapa.clima(d);
         if (nome === "bairro" && !atualCidade && mapa && mapa.casa) atualCidade = ultimaCidade = mapa.casa;   // #bairro direto: o da casa
         if (nome === "bairro" || nome === "cidade") climaDaCidade();
@@ -360,9 +374,9 @@ const Mundo = (() => {
   fetch("/mundo/mundo.json", { credentials: "omit", cache: "no-cache" })
     .then(r => r.ok ? r.json() : Promise.reject(new Error("mundo.json " + r.status)))
     .then(dados => {
-      mapa = MundoMapa.criar({ dados, Camera, reduzido });
+      mapa = MundoMapa.criar({ dados, Camera, reduzido, festa: () => festa });
       Object.assign(niveis, mapa.niveis, { globo: Globo.criar({ dados, Camera, reduzido }),
-        cidade: MundoCidade.criar({ dados, Camera, reduzido, mapa, clima: climaDaCidade,
+        cidade: MundoCidade.criar({ dados, Camera, reduzido, mapa, clima: climaDaCidade, festa: () => festa,
           avisar: () => { if (nome === "cidade") { rotular(); montarAlvos(); } } }) });   // o atlas chegou: placa, porta e marco
     })
     .catch(() => { mapa = null; })   // sem o mapa, a página segue com o bairro, como antes

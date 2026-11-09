@@ -23,16 +23,28 @@ function elemento() {
   return el;
 }
 
-async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false, tela = [640, 400, 1], atlas = ATLAS, som = null } = {}) {
-  const quadros = [], requisicoes = [], intervalos = [];
-  // putImageData conta as passadas pixel a pixel do globo; getImageData dá pixels zerados quando o teste faz uma imagem carregar
-  // drawImage guarda o recorte de origem [sx, sy, sw, sh] quando o teste liga contexto.gravar (um array)
-  const ctx = new Proxy({}, { get: (_, k) => ["createLinearGradient", "createRadialGradient"].includes(k) ? () => ({ addColorStop() {} })
-    : k === "getTransform" ? () => ({ a: 1 }) : k === "getImageData" ? (x, y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4) })
+// Opções: clima (a resposta da rota), climaFalha (a rota cai), climaPendente (a resposta nunca chega), reduzido, tela
+// [w, h, dpr], atlas, som, busca (location.search, como "?data=2026-12-25"), escuro (a noite do Ceu, de 0 a 1), opaco
+// (getImageData devolve pixels opacos: o contorno dos telhados), passo (ms de relógio por quadro; o dt vai até 0,1 s) e
+// globo: o globo de verdade (mundo_globo.js) só quando a página abre nele ou o teste pede; nos outros, um globo mínimo,
+// porque montar o campo de nuvens leva ~0,4 s e nenhum desses testes chega ao globo
+async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false, climaPendente = false, tela = [640, 400, 1],
+  atlas = ATLAS, som = null, busca = "", escuro = 0, opaco = false, passo = 16, globo = hash === "" || hash === "#globo" } = {}) {
+  const quadros = [], requisicoes = [], intervalos = [], tamanho = [...tela];
+  // putImageData conta as passadas pixel a pixel do globo; getImageData dá pixels zerados (ou opacos) quando o teste faz uma
+  // imagem carregar. drawImage guarda o recorte de origem [sx, sy, sw, sh] quando o teste liga contexto.gravar (um array);
+  // fillRect guarda a cor de cada retângulo quando o teste liga contexto.cores (um Set); os gradientes são contados
+  const pincel = {};
+  const ctx = new Proxy(pincel, { get: (o, k) => ["createLinearGradient", "createRadialGradient"].includes(k)
+    ? () => { contexto.gradientes = (contexto.gradientes || 0) + 1; return { addColorStop() {} }; }
+    : k === "getTransform" ? () => ({ a: 1 })
+    : k === "getImageData" ? (x, y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4).fill(opaco ? 255 : 0) })
     : k === "putImageData" ? () => { contexto.passadas = (contexto.passadas || 0) + 1; }
-    : k === "drawImage" ? (img, ...a) => { if (contexto.gravar) contexto.gravar.push(a.slice(0, 4)); } : () => {}, set: () => true });
+    : k === "fillRect" ? () => { if (contexto.cores) contexto.cores.add(String(o.fillStyle).toLowerCase()); }
+    : k === "drawImage" ? (img, ...a) => { if (contexto.gravar) contexto.gravar.push(a.slice(0, 4)); } : () => {},
+    set: (o, k, v) => { o[k] = v; return true; } });
   const canvas = elemento(); canvas.getContext = () => ctx;
-  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: tela[0], height: tela[1] });
+  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: tamanho[0], height: tamanho[1] });
   const ids = ["mundo", "entrar", "mundo-estado", "mundo-alvos", "mundo-dica", "mundo-voltar", "mundo-mais", "mundo-menos"];
   const elementos = Object.fromEntries(ids.map(id => [id, id === "mundo" ? canvas : elemento()]));
   const janela = elemento();
@@ -43,7 +55,7 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
   documento.getElementById = id => elementos[id];
   documento.createElement = () => { const e = elemento(); e.getContext = () => ctx; return e; };
   const contexto = {
-    window: janela, document: documento, location: { hash, pathname: "/mundo.html", search: "", href: "" },
+    window: janela, document: documento, location: { hash, pathname: "/mundo.html", search: busca, href: "" },
     history: {
       replaceState(_, __, url) { contexto.endereco = url; const i = url.indexOf("#"); contexto.location.hash = i < 0 ? "" : url.slice(i); },
       pushState(_, __, url) { this.replaceState(_, __, url); },
@@ -58,7 +70,7 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
       falhar() { for (const f of this.ouvintes.error || []) f(); }
     },
     Som: som,
-    Ceu: { agora: () => ({ h: 12, cima: "#3d95ee", baixo: "#a9d8ff", escuro: 0, hora: "12:00" }) },
+    Ceu: { agora: () => ({ h: escuro > 0.5 ? 22 : 12, cima: "#3d95ee", baixo: "#a9d8ff", escuro, hora: escuro > 0.5 ? "22:00" : "12:00" }) },
     // desenhar conta as chamadas: as partículas de chuva e neve e o clarão do raio só saem do Clima.desenhar
     Clima: { definir(c) { contexto.clima = c; }, tipo: () => (contexto.clima && contexto.clima.tipo) || "limpo", texto: () => "céu limpo",
              desenhar() { contexto.desenhos = (contexto.desenhos || 0) + 1; }, balanco: () => 0 },
@@ -67,17 +79,22 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
       if (url.startsWith("/mundo/mundo.json")) return { ok: true, json: async () => JSON.parse(JSON.stringify(MUNDO)) };
       if (url.startsWith("/mundo/atlas.json")) return { ok: true, json: async () => JSON.parse(JSON.stringify(atlas)) };
       if (climaFalha) throw new Error("rede");
+      if (climaPendente) return new Promise(() => {});
       return { ok: true, json: async () => clima };
     },
   };
+  if (!globo) contexto.Globo = { criar: ({ Camera }) => ({ nome: "globo", camera: Camera([0, 0, 360, 180]), entrar() {}, sair() {},
+    quadro() { return null; }, clique: () => null, zoom: () => null, mergulho: () => [180, 90], alvos: () => [] }) };
   vm.createContext(contexto);
   contexto.window.Som = som;
-  const scripts = ["static/avatar.js", "static/mundo_bairro.js", "static/mundo_mapa.js", "static/mundo_globo.js",
-    "static/mundo_cidade_planta.js", "static/mundo_cidade.js", "static/mundo.js"];
+  const scripts = ["static/festas.js", "static/avatar.js", "static/mundo_bairro.js", "static/mundo_mapa.js",
+    ...(globo ? ["static/mundo_globo.js"] : []),
+    "static/mundo_cidade_planta.js", "static/mundo_festa.js", "static/mundo_cidade.js", "static/mundo.js"];
   for (const f of scripts) vm.runInContext(fs.readFileSync(f, "utf8"), contexto, { filename: f });
   for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r));   // mundo.json e clima chegam
   let relogio = 0;
-  const rodar = (n = 1) => { for (let i = 0; i < n; i++) { const f = quadros.shift(); if (!f) return; relogio += 16; f(relogio); } };
+  const rodar = (n = 1) => { for (let i = 0; i < n; i++) { const f = quadros.shift(); if (!f) return; relogio += passo; f(relogio); } };
+  const redimensionar = (w, h) => { tamanho[0] = w; tamanho[1] = h; janela.disparar("resize"); };
   const M = contexto.window.Mundo;
   const ponteiro = (tipo, x, y) => canvas.disparar(tipo, { pointerId: 1, clientX: x, clientY: y, button: 0, isPrimary: true });
   const clicar = (x, y) => { ponteiro("pointerdown", x, y); ponteiro("pointerup", x, y); };
@@ -85,8 +102,11 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
   const tecla = key => janela.disparar("keydown", { key, target: documento });
   rodar(2);
   const toque = (tipo, id, x, y) => canvas.disparar(tipo, { pointerId: id, clientX: x, clientY: y, button: 0 });
-  return { contexto, M, canvas, elementos, documento, quadros, requisicoes, intervalos, rodar, clicar, arrastar, tecla, toque };
+  return { contexto, M, canvas, elementos, documento, quadros, requisicoes, intervalos, rodar, clicar, arrastar, tecla, toque,
+           redimensionar };
 }
+const espera = async () => { for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r)); };
+const carregar = async m => { await espera(); for (const img of m.contexto.imagens || []) img.carregar(); m.rodar(2); };
 
 const cidade = id => MUNDO.cidades.find(c => c.id === id);
 
@@ -117,7 +137,7 @@ async function principal() {
   assert.ok(c.intervalos.includes(15 * 60 * 1000));
 
   // Esc no bairro sobe para a cidade; Esc na cidade sobe para o Brasil. O bairro usa o tempo da cidade (a casa).
-  const e = await abrir("#cidade=recife", { clima: { ...CLIMA, casa: "recife" } });
+  const e = await abrir("#cidade=recife", { clima: { ...CLIMA, casa: "recife" }, globo: true });
   assert.equal(e.M.nivel, "cidade");
   e.M.ir("bairro"); e.rodar(40);
   assert.equal(e.contexto.location.hash, "#bairro");
@@ -144,13 +164,13 @@ async function principal() {
   g.tecla("Escape"); g.rodar(40);
   assert.equal(g.M.nivel, "globo", "Esc no Brasil volta ao globo"); assert.equal(g.contexto.location.hash, "#globo");
   // o + no globo com o Brasil escondido: o globo gira até ele e então desce
-  const gz = await abrir("");
+  const gz = await abrir("", { passo: 100 });
   for (let i = 0; i < 3; i++) { gz.arrastar(-150, 0); gz.rodar(); }
   const lon = gz.M.niveis.globo.rotacao.lon;
   assert.ok(Math.abs((((lon + 50) % 360) + 540) % 360 - 180) > 60, "o arraste levou o Brasil para longe: " + lon);
   gz.elementos["mundo-mais"].disparar("click"); gz.rodar(3);
   assert.equal(gz.M.nivel, "globo", "ainda girando até o Brasil");
-  gz.rodar(240);
+  gz.rodar(40);
   assert.equal(gz.M.nivel, "brasil", "o + leva ao Brasil");
 
   // um clique numa cidade leva a #cidade=<id>; no mar, nada
@@ -180,24 +200,24 @@ async function principal() {
     assert.equal(p.mobiliario.map(m => m.peca).sort().join(), "banca-1,banco-poste-1,carrinho-1,ponto-onibus-1", id);
     assert.ok(p.pedestres.length >= 8 && p.pedestres.length <= 14, `${id}: ${p.pedestres.length} pedestres`);
     assert.ok(p.carros.length > 0, id);
-    // vagas distintas: nada divide chão com outra peça, e o que não é o ônibus fica fora da rua e da calçada
+    // vagas distintas: nada divide chão com outra peça, e tudo fica fora da rua e da calçada (o ônibus saiu: fica o ponto)
     const itens = [p.centro, ...p.chales, ...p.predios, p.praca, ...p.arvores, ...p.mobiliario, p.casa, ...p.arredores];
     for (const s of itens) {
       assert.ok(s.r[0] <= s.x && s.x <= s.r[2] && s.r[1] <= s.y && s.y <= s.r[3], `${id}: o pé de ${s.peca} na vaga`);
       assert.ok(!p.ruas.v.some(v => s.r[0] < v + BORDA && v - BORDA < s.r[2]), `${id}: ${s.peca} na rua (x)`);
       assert.ok(!p.ruas.h.some(h => s.r[1] < h + BORDA && h - BORDA < s.r[3]), `${id}: ${s.peca} na rua (y)`);
     }
-    const todos = [...itens, p.onibus];
-    for (let i = 0; i < todos.length; i++) for (let j = i + 1; j < todos.length; j++) {
-      assert.ok(!cruza(todos[i].r, todos[j].r), `${id}: ${todos[i].peca} e ${todos[j].peca} na mesma vaga`);
+    for (let i = 0; i < itens.length; i++) for (let j = i + 1; j < itens.length; j++) {
+      assert.ok(!cruza(itens[i].r, itens[j].r), `${id}: ${itens[i].peca} e ${itens[j].peca} na mesma vaga`);
     }
-    // o ônibus fica parado na faixa da rua junto ao ponto, e nenhum carro passa por essa faixa
-    assert.equal(p.onibus.peca, "onibus-1");
-    assert.ok(p.onibus.y < p.onibus.rua && p.onibus.y > p.onibus.rua - CP.E / 2, `${id}: ônibus na faixa de cima`);
-    assert.ok(p.carros.every(c => c.eixo !== "h" || c.rua !== p.onibus.rua || c.dir > 0), `${id}: carro na faixa do ônibus`);
+    assert.ok(!("onibus" in p) && !itens.some(s => /^onibus-/.test(s.peca)), `${id}: sem ônibus na planta`);
+    // nenhum carro começa dentro de um cruzamento (onde outro poderia estar), e o par da mesma faixa não se encosta
+    for (const c of p.carros) {
+      const cruzes = c.eixo === "h" ? [...new Set(p.carros.filter(o => o.eixo === "v").map(o => o.rua))]
+        : [...new Set(p.carros.filter(o => o.eixo === "h").map(o => o.rua))];
+      assert.ok(cruzes.every(k => Math.abs(c.s - k) >= CP.E / 2 + 16), `${id}: carro começa no cruzamento ${c.s}`);
+    }
   }
-  const espera = async () => { for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r)); };
-  const carregar = async m => { await espera(); for (const img of m.contexto.imagens || []) img.carregar(); m.rodar(2); };
   // na casa, o chalé com placa tem a porta (só depois que o desenho do chalé chega): o clique nela leva a #bairro
   const ca = await abrir("#cidade=mateus-leme");
   ca.rodar(5);
@@ -265,13 +285,14 @@ async function principal() {
   }
   // pedestres: sempre na calçada ou na faixa de pedestre (nunca no meio da rua nem dentro das quadras), virando nas
   // esquinas e atravessando nas faixas
-  const pe = await abrir("#cidade=curitiba"), pp = Cid.planta("curitiba");
+  // (o passo de 100 ms por quadro cobre os mesmos 32 s de antes em 320 quadros)
+  const pe = await abrir("#cidade=curitiba", { passo: 100 }), pp = Cid.planta("curitiba");
   await carregar(pe);
   const banda = d => d >= CP.E / 2 - 1e-6 && d <= BORDA + 1e-6;
   const naCalcadaH = (x, y) => pp.ruas.h.some(h => banda(Math.abs(y - h))), naCalcadaV = (x, y) => pp.ruas.v.some(v => banda(Math.abs(x - v)));
   let faixas = 0, viradas = 0;
   const lado = pe.M.niveis.cidade.pedestres.map(([x, y]) => naCalcadaH(x, y));
-  for (let i = 0; i < 2000; i++) {
+  for (let i = 0; i < 320; i++) {
     pe.rodar();
     pe.M.niveis.cidade.pedestres.forEach(([x, y], j) => {
       const h = naCalcadaH(x, y), v = naCalcadaV(x, y);
@@ -282,12 +303,13 @@ async function principal() {
   }
   assert.ok(faixas > 0, "algum pedestre atravessou na faixa"); assert.ok(viradas > 0, "algum pedestre virou a esquina");
   // tela larga (a vista passa da caixa): o carro só dá a volta fora da vista, com o desenho todo para fora
-  const lg = await abrir("#cidade=recife", { tela: [1600, 400, 1] });
+  // (80 s de relógio, em quadros de 100 ms)
+  const lg = await abrir("#cidade=recife", { tela: [1600, 400, 1], passo: 100 });
   await carregar(lg);
   const lc = lg.M.camera, [vx0, vy0] = lc.mundo(0, 0), [vx1, vy1] = lc.mundo(lc.W, lc.H);
   assert.ok(vx0 < -100 && vx1 > CP.W + 100, `a vista passa da caixa: ${vx0} a ${vx1}`);
   let antesCarros = lg.M.niveis.cidade.carros, voltas = 0;
-  for (let i = 0; i < 5000; i++) {
+  for (let i = 0; i < 800; i++) {
     lg.rodar();
     const agora = lg.M.niveis.cidade.carros;
     agora.forEach(([x, y], j) => {
@@ -299,13 +321,62 @@ async function principal() {
     antesCarros = agora;
   }
   assert.ok(voltas > 0, "algum carro deu a volta");
-  // ao sair da cidade para o Brasil, a chuva do som vai a zero
+  // veículos nunca sobrepostos: o carro espera antes do cruzamento enquanto houver outro dentro dele, e o par da mesma
+  // faixa não se encosta, nem quando a vista encolhe de uma vez (o celular girado)
+  const caixas = cid => cid.veiculos.map(([x, y, w, h]) => [x - w / 2, y - h / 2, x + w / 2, y + h / 2]);
+  const semSobrepor = (cid, quando) => {
+    const l = caixas(cid);
+    for (let i = 0; i < l.length; i++) for (let j = i + 1; j < l.length; j++) {
+      assert.ok(!cruza(l[i], l[j]), `${quando}: veículos ${i} e ${j} sobrepostos: ${l[i]} / ${l[j]}`);
+    }
+  };
+  let esperas = 0;
+  for (const id of ["recife", "curitiba", "palmas"]) {
+    const vc = await abrir("#cidade=" + id, { tela: [1600, 400, 1], passo: 100 });
+    await carregar(vc);
+    const cid = vc.M.niveis.cidade;
+    assert.ok(cid.veiculos.length >= 4, id);
+    let antes = cid.carros;
+    for (let i = 0; i < 250; i++) {
+      vc.rodar(); semSobrepor(cid, `${id} (larga), quadro ${i}`);
+      const agora = cid.carros;
+      esperas += agora.filter(([x, y], j) => x === antes[j][0] && y === antes[j][1]).length;
+      antes = agora;
+    }
+    vc.redimensionar(390, 507); vc.rodar();
+    for (let i = 0; i < 150; i++) { vc.rodar(); semSobrepor(cid, `${id} (encolhida), quadro ${i}`); }
+  }
+  assert.ok(esperas > 0, "algum carro esperou num cruzamento");
+  // os brilhos da noite saem de sprites guardados: nada de gradiente novo a cada quadro (num dia sem festa)
+  const nt = await abrir("#cidade=sao-paulo", { escuro: 1, busca: "?data=2026-11-18" });
+  await carregar(nt);
+  nt.rodar(60);   // cada raio e cor de brilho que aparece pinta o seu sprite uma vez
+  const g0 = nt.contexto.gradientes || 0;
+  assert.ok(g0 > 0 && g0 < 10, "sprites de brilho: " + g0);
+  nt.rodar(60);
+  assert.equal((nt.contexto.gradientes || 0) - g0, 0, "brilhos em cache");
+  // pedestres em 1:1 (o boneco inteiro de 22 px): o desenho cai na escala do mundo, sem dobrar as coordenadas
+  nt.contexto.gravar = []; nt.rodar();
+  assert.ok(nt.contexto.gravar.some(r => r[2] === 22 && r[3] === 22), "boneco desenhado em 22x22");
+  assert.ok(!nt.contexto.gravar.some(r => r[2] === 11 && r[3] === 11), "nenhum boneco na metade");
+
+  // a chuva do som vai a zero ao sair da cidade para o Brasil, e só enquanto ainda pode estar tocando: no globo e no Brasil
+  // abertos direto (sem passar pela cidade), nenhuma chamada a Som.chuva (que criaria o áudio sem nada para tocar)
   const chamadas = [], somFalso = { ligado: true, chuva(v) { chamadas.push(v); } };
   const sc = await abrir("#cidade=recife", { som: somFalso });
   sc.rodar(10);
   sc.tecla("Escape"); sc.rodar(60);
   assert.equal(sc.M.nivel, "brasil");
   assert.ok(chamadas.length >= 30 && chamadas.slice(-30).every(v => v === 0), "no Brasil, Som.chuva(0) a cada quadro");
+  sc.rodar(400);
+  const feitas = chamadas.length;
+  sc.rodar(60);
+  assert.equal(chamadas.length, feitas, "depois de silenciar, Som.chuva não é mais chamado");
+  for (const hash of ["", "#brasil"]) {
+    const so = [], sg = await abrir(hash, { som: { ligado: true, chuva(v) { so.push(v); } } });
+    sg.rodar(40);
+    assert.equal(so.length, 0, `${hash || "globo"}: nenhuma chamada a Som.chuva`);
+  }
 
   // a câmera fica presa à caixa: 50 arrastes para o mesmo lado e zoom de 1x a 4x
   const a = await abrir("#brasil");
@@ -426,4 +497,5 @@ async function principal() {
     assert.equal(q.quadros.length, 1);
   }
 }
-principal().catch(e => { console.error(e); process.exitCode = 1; });
+module.exports = { abrir, espera, carregar, MUNDO, ATLAS, CLIMA };
+if (require.main === module) principal().catch(e => { console.error(e); process.exitCode = 1; });

@@ -2,7 +2,8 @@
 // chuva, garoa, neve, neblina e raio só sobre a cidade), a noite pelo horário com as luzes acesas e até 6 aviões com
 // sombra no chão, em curva leve pelas rotas. O mapa e as nuvens seguem a escala da câmera; ícones, aviões e partículas
 // têm tamanho fixo na tela (U pixels da tela por pixel do desenho), sempre em escala inteira e sem suavização.
-// ?clima= vale para todas as cidades; ?hora= vem do Ceu. Com movimento reduzido, nem aviões nem partículas (nem raio).
+// ?clima= vale para todas as cidades; ?hora= vem do Ceu. Na festa com fogos (festas.js), estouros discretos sobre as
+// capitais onde é noite. Com movimento reduzido, nem aviões nem partículas (nem raio, nem fogos).
 // O nível Cidade fica em mundo_cidade.js; daqui ele usa porId (com o tempo de cada cidade), casa e texto.
 "use strict";
 const MundoMapa = (() => {
@@ -10,7 +11,7 @@ const MundoMapa = (() => {
   const NOMES = { limpo: "céu limpo", nublado: "nublado", neblina: "neblina", garoa: "garoa", chuva: "chuva", tempestade: "tempestade", neve: "neve" };
   const CHUVA = { garoa: 5, chuva: 12, tempestade: 22, neve: 8 };   // partículas por segundo em cada cidade
   const NUVEM = { nublado: ["branca", 4.5], garoa: ["cinza", 4.5], chuva: ["cinza", 5.5], tempestade: ["escura", 6.5], neve: ["branca", 5] };
-  const MAX_AVIOES = 6, MAX_PARTICULAS = 360, VELOCIDADE = 12, MAR = "#1d3b5c";
+  const MAX_AVIOES = 6, MAX_PARTICULAS = 360, MAX_FOGOS = 12, VELOCIDADE = 12, MAR = "#1d3b5c";
   const GRANDES = new Set(["sao-paulo", "rio-de-janeiro", "brasilia", "belo-horizonte", "salvador", "fortaleza", "recife",
     "manaus", "curitiba", "porto-alegre", "belem", "goiania"]);
   const busca = new URLSearchParams(location.search);
@@ -84,7 +85,7 @@ const MundoMapa = (() => {
     return sprite(f.id + tipo + passo, f.linhas, { l, m, b }, 1);
   }
 
-  function criar({ dados, Camera, reduzido }) {
+  function criar({ dados, Camera, reduzido, festa = () => null }) {
     const nivel = dados.niveis && dados.niveis.brasil, W = (nivel && nivel.w) || 400, H = (nivel && nivel.h) || 400;
     const rnd = semente(7);
     const cidades = (Array.isArray(dados.cidades) ? dados.cidades : [])
@@ -100,7 +101,7 @@ const MundoMapa = (() => {
       });
     const longas = rotas.filter(r => r.d >= 20).length ? rotas.filter(r => r.d >= 20) : rotas;
     const ambiente = [0, 1, 2, 3, 4].map(i => ({ x: rnd() * W, y: 30 + rnd() * (H - 60), forma: formaNuvem(100 + i, 7 + i * 1.6) }));
-    const avioes = [], gotas = [], brilhos = [];
+    const avioes = [], gotas = [], brilhos = [], fogos = [];
     let casa = null, vento = 0, mascara = null, espera = 0, luzes = [], vinheta = null;
 
     const imagem = new Image();
@@ -183,6 +184,15 @@ const MundoMapa = (() => {
         if (g.y >= g.c.y + 2 + (g.f % 2)) g.resp = g.neve ? -1 : 0.14;
       }
       for (let i = gotas.length - 1; i >= 0; i--) if (gotas[i].resp < 0) gotas.splice(i, 1);
+      const f = festa();   // festa com fogos: estouros discretos sobre as capitais onde é noite
+      if (f && f.enfeites.includes("fogos")) for (const c of cidades) {
+        if (noiteEm(c) && fogos.length < MAX_FOGOS && Math.random() < dt * 0.12) {
+          const cor = f.cores[Math.floor(Math.random() * f.cores.length)];
+          fogos.push({ x: c.x - 5 + Math.random() * 10, y: c.y - 12 - Math.random() * 6, k: 0, cor });
+        }
+      }
+      for (const q of fogos) q.k += dt;
+      for (let i = fogos.length - 1; i >= 0; i--) if (fogos[i].k > 1.2) fogos.splice(i, 1);
       if (mascara) {
         while (brilhos.length < 26) {
           const x = Math.floor(Math.random() * (W + 160)) - 80, y = Math.floor(Math.random() * (H + 160)) - 80;   // o mar segue além da imagem
@@ -268,6 +278,18 @@ const MundoMapa = (() => {
         if (c.marco && c.id !== casa) ctx.drawImage(sprite("marco", MARCO, DIA, U), tx(c.x) - 2 * U, y0 - 6 * U);
         if (c.id === casa) bandeira(ctx, x0 + lin[0].length * U, ty(c.y), U, t, tx(c.x), y0);
         if (c.id === destaque) colchetes(ctx, x0 - 2 * U, y0 - 2 * U, (lin[0].length + 4) * U, (lin.length + 3) * U, U, t);
+      }
+      if (fogos.length) {   // fogos: oito faíscas que abrem e somem, em pixels da tela
+        ctx.globalCompositeOperation = "lighter";
+        for (const q of fogos) {
+          const r = Math.round(1 + q.k * 4), a = Math.max(0, 1 - q.k / 1.2);
+          ctx.fillStyle = q.cor; ctx.globalAlpha = a;
+          for (let i = 0; i < 8; i++) {
+            const ang = i * Math.PI / 4;
+            ctx.fillRect(tx(q.x) + Math.round(Math.cos(ang) * r) * U, ty(q.y) + Math.round(Math.sin(ang) * r + q.k * q.k) * U, U, U);
+          }
+        }
+        ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over";
       }
       for (const a of avioes) {   // aviões: o rastro, o corpo e, à noite, as luzes de navegação
         const [x, y, ang, alt] = ponto(a), i = ((Math.round(ang / (Math.PI / 8)) % 16) + 16) % 16, sx = tx(x), sy = ty(y) - Math.round(alt * 3) * U;
@@ -356,7 +378,7 @@ const MundoMapa = (() => {
       clique(x, y) { const c = perto(camBrasil, x, y); return c ? { ir: "cidade", cidade: c.id } : null; },
       sobre(x, y) { const c = perto(camBrasil, x, y); return c ? alvo(c, camBrasil) : null; },
       alvos() { return cidades.map(c => alvo(c, camBrasil)); },
-      get avioes() { return avioes; }, get particulas() { return gotas.length; },
+      get avioes() { return avioes; }, get particulas() { return gotas.length; }, get fogos() { return fogos.length; },
     };
     return { niveis: { brasil }, clima, texto, porId, get casa() { return casa; } };
   }

@@ -5,10 +5,10 @@
 // - Quadra: calçada de C em volta e o miolo em duas filas. Cada fila é inteira (um prédio ou a praça) ou dividida em
 //   dois lotes (chalé, árvore, ou uma peça de mobiliário ao lado de uma árvore). A quadra do meio é a do marco.
 // - As 8 quadras em volta do marco são a cidade: de 6 a 10 chalés, de 2 a 5 prédios, uma praça, o mobiliário (banca,
-//   carrinho, banco com poste e o ponto, com o ônibus parado na rua em frente) e a vaga do chalé da casa. As de fora são
-//   os arredores: chalés, árvores e alguns prédios.
+//   carrinho, banco com poste e o ponto de ônibus) e a vaga do chalé da casa. As de fora são os arredores: chalés,
+//   árvores e alguns prédios.
 // - Cada peça leva o pé (x, y), onde o desenho se apoia, e r = [x0, y0, x1, y1], a vaga que ocupa no chão: nenhuma
-//   vaga cruza outra, e só o ônibus fica na rua.
+//   vaga cruza outra, e nenhuma fica na rua.
 // - Os pedestres andam por uma rede: quatro cantos de calçada em volta de cada cruzamento, ligados pelas calçadas e
 //   pelas faixas de pedestre.
 "use strict";
@@ -94,9 +94,6 @@ const CidadePlanta = (() => {
       mobiliario.push({ ...noLote(a, pecasMob[mobiliario.length], 2, 2), fila: l });
       arvores.push(noLote(b, "arvore-" + entre(1, 3), 14, 0));
     }
-    const ponto = mobiliario.find(m => m.peca === "ponto-onibus-1"), ruaOnibus = ponto.fila.q.y1 + E / 2;
-    const xo = ponto.x + 2;
-    const onibus = { x: xo, y: ruaOnibus - 2, peca: "onibus-1", rua: ruaOnibus, r: [xo - 15, ruaOnibus - E / 2, xo + 15, ruaOnibus - 1] };
     for (const m of mobiliario) delete m.fila;
 
     const livres = embaralhar(cidade.filter(f => !inteiras.includes(f) && !filasMob.includes(f)).flatMap(lotes)
@@ -114,17 +111,20 @@ const CidadePlanta = (() => {
     const qc = quadras.find(q => q.centro);
     const centro = { x: meio, y: qc.y1 - C - 4, peca: "predios-" + entre(1, 6), r: [qc.x0 + C, qc.y0 + C, qc.x1 - C, qc.y1 - C] };
 
-    // carros nas quatro ruas do meio; na rua do ônibus, só pela faixa de baixo (a de cima é a dele). Dois carros na mesma
-    // faixa andam juntos, a meia volta um do outro, para um não atravessar o outro
+    // carros nas quatro ruas do meio. Dois carros na mesma faixa andam juntos, a meia volta um do outro. Nenhum começa
+    // dentro de um cruzamento: lá dentro só cabe um veículo por vez (mundo_cidade.js)
     const carros = [];
+    const livre = (s, cruzes) => cruzes.every(k => Math.abs(s - k) >= E / 2 + 16);
     for (let i = 0, q = entre(4, 6); i < q; i++) {
       const eixo = i % 2 ? "v" : "h", rua = (eixo === "h" ? [h0, h1] : [v0, v1])[(i >> 1) % 2], L = eixo === "h" ? W : H;
-      const dir = eixo === "h" && rua === ruaOnibus ? 1 : r() < 0.5 ? 1 : -1;
+      const dir = r() < 0.5 ? 1 : -1, cruzes = eixo === "h" ? [v0, v1] : [h0, h1];
       const par = carros.find(c => c.eixo === eixo && c.rua === rua && c.dir === dir);
-      const s = par ? (par.s + L / 2) % L : Math.round(r() * L), v = par ? par.v : 16 + Math.round(r() * 14);
+      let s = par ? (par.s + L / 2) % L : Math.round(r() * L);
+      const v = par ? par.v : 16 + Math.round(r() * 14);
+      while (!livre(s, cruzes)) s = (s + 4) % L;
       carros.push({ eixo, rua, dir, s, v, peca: "carro-" + entre(1, 4) });
     }
-    const postes = [];   // nas quinas dos quatro cruzamentos do meio
+    const postes = [];   // nas quinas dos quatro cruzamentos do meio (os cordões das festas vão de um a outro)
     for (const x of [v0, v1]) for (const y of [h0, h1]) for (const dx of [-1, 1]) for (const dy of [-1, 1]) {
       postes.push([x + dx * (E / 2 + 1), y + dy * (E / 2 + 1)]);
     }
@@ -152,7 +152,8 @@ const CidadePlanta = (() => {
       pedestres.push({ de, para, s: Math.round(r() * Math.hypot(x1 - x0, y1 - y0)), v: 8 + Math.round(r() * 5), semente: `${id}#${i}` });
     }
 
-    return { W, H, ruas, quadras, centro, casa, chales, predios, praca, arvores, mobiliario, onibus, arredores, carros, postes,
+    const cruzamentos = [[v0, h0], [v1, h0], [v0, h1], [v1, h1]];   // os quatro do meio, os únicos com carros nas duas ruas
+    return { W, H, ruas, quadras, centro, casa, chales, predios, praca, arvores, mobiliario, arredores, carros, postes, cruzamentos,
              rede: { nos, viz, peso }, pedestres };
   }
 

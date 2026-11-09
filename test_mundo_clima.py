@@ -6,6 +6,7 @@ import http.client
 import io
 import json
 import os
+import re
 import tempfile
 import threading
 import unittest
@@ -207,7 +208,7 @@ class Rota(unittest.TestCase):
             self.assertEqual(self.pedir({}, origem="https://outro.example")[0], 403)
         self.assertEqual((status, cab["Cache-Control"]), (200, "no-store"))
         self.assertNotIn("Set-Cookie", cab)
-        self.assertEqual(set(dados), {"cidades", "casa", "versao"})
+        self.assertEqual(set(dados), {"cidades", "casa", "versao", "festas_desligadas"})
         self.assertEqual((dados["casa"], dados["versao"], len(dados["cidades"])), ("recife", c.versao, 28))
         self.assertEqual(dados["cidades"]["recife"], {"tipo": "chuva", "vento": 0.5, "noite": True})
         for dado in ("Recife", "-8.05", "lat", "27.3"):
@@ -217,10 +218,51 @@ class Rota(unittest.TestCase):
 
     def test_rota_sem_mundo(self):
         self.servidor.clima_mundo = e.ClimaMundo(0, [])
-        with patch.object(e, "clima_vigente", lambda: (RECIFE, "arquivo")):
-            self.assertEqual(self.pedir({})[2], {"cidades": {}, "casa": None, "versao": 0})
-        del self.servidor.clima_mundo   # servidor sem a thread: mesma resposta
-        self.assertEqual(self.pedir({})[2], {"cidades": {}, "casa": None, "versao": 0})
+        vazio = {"cidades": {}, "casa": None, "versao": 0, "festas_desligadas": []}
+        with patch.object(e, "clima_vigente", lambda: (RECIFE, "arquivo")), self.festas(None):
+            self.assertEqual(self.pedir({})[2], vazio)
+            del self.servidor.clima_mundo   # servidor sem a thread: mesma resposta
+            self.assertEqual(self.pedir({})[2], vazio)
+
+    @contextlib.contextmanager
+    def festas(self, conteudo):
+        """dados/festas.json numa pasta temporária, com `conteudo` (None: sem o arquivo)."""
+        with tempfile.TemporaryDirectory() as pasta:
+            arq = os.path.join(pasta, "festas.json")
+            if conteudo is not None:
+                with open(arq, "w", encoding="utf-8") as f:
+                    f.write(conteudo if isinstance(conteudo, str) else json.dumps(conteudo))
+            with patch.object(e, "ARQ_FESTAS", arq), contextlib.redirect_stdout(io.StringIO()):
+                yield
+
+    def test_festas_desligadas_so_do_catalogo(self):
+        """Só as chaves do calendário embutido que a instalação desligou; nada das datas próprias (nome, data, falas)."""
+        c = mundo_falso()
+        c.ciclo()
+        self.servidor.clima_mundo = c
+        propria = {"nome": "Aniversario Sigiloso", "data": "2026-03-15", "dias": 2, "tema": "natal",
+                   "falas": ["Fala reservada"]}
+        salvo = {"v": 1, "rev": 3, "proprias": [propria], "desligadas": ["halloween", "naoexiste", "natal"]}
+        with patch.object(e, "clima_vigente", lambda: (RECIFE, "arquivo")), self.festas(salvo):
+            status, _, dados = self.pedir({})
+        self.assertEqual(status, 200)
+        self.assertEqual(dados["festas_desligadas"], ["halloween", "natal"])   # "naoexiste" fica de fora
+        corpo = json.dumps(dados, ensure_ascii=False)
+        for dado in ("Aniversario", "Sigiloso", "2026-03-15", "03-15", "Fala reservada", "proprias", "naoexiste"):
+            self.assertNotIn(dado, corpo)
+        # arquivo fora do formato (vale como ausente) e sem arquivo: lista vazia
+        for conteudo in ('{"v": 1, "rev": 0, "proprias": [], "desligadas": "natal"}', "{nem json", None):
+            with self.festas(conteudo):
+                self.assertEqual(self.pedir({})[2]["festas_desligadas"], [], conteudo)
+
+    def test_catalogo_de_festas_igual_ao_do_navegador(self):
+        """As chaves aceitas pela rota são as do FESTAS de static/festas.js, nem mais nem menos."""
+        with open(os.path.join(e.ESTATICO, "festas.js"), encoding="utf-8") as f:
+            js = f.read()
+        bloco = js[js.index("const FESTAS = {"):js.index("};", js.index("const FESTAS = {"))]
+        chaves = set(re.findall(r"^\s+(\w+):\s*\{ nome:", bloco, re.M))
+        self.assertEqual(len(chaves), 13)
+        self.assertEqual(set(e.FESTAS_CATALOGO), chaves)
 
     def test_log_sem_ip_nem_cidade(self):
         saida = io.StringIO()
@@ -237,7 +279,7 @@ class Rota(unittest.TestCase):
     def test_publicos_do_mundo(self):
         for nome in ("mundo/terra.png", "mundo/brasil.png", "mundo/mundo.json", "mundo/atlas.png", "mundo/atlas.json",
                      "mundo_globo.js", "mundo_mapa.js", "mundo_cidade.js", "mundo_cidade_planta.js", "mundo_bairro.js",
-                     "avatar.js"):
+                     "avatar.js", "festas.js", "mundo_festa.js"):
             self.assertIn(nome, e.PUBLICOS)
 
     def test_arquivos_do_mundo_sem_cookie(self):

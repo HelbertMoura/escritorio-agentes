@@ -247,9 +247,13 @@ ARTE = os.path.join(RAIZ, "arte", "pixellab", "mundo")   # a arte do PixelLab (m
 # as peças que toda cidade pode usar: prédios, chalés, árvores, carros, aviões, a praça e o mobiliário da rua
 GENERICOS = ([f"predios-{i}" for i in range(1, 7)] + [f"chale-{i}" for i in range(1, 9)] + ["arvore-1", "arvore-2", "arvore-3"]
              + ["carro-1", "carro-2", "carro-3", "carro-4", "aviao-1", "aviao-2"]
-             + ["praca-1", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1", "onibus-1"])
+             + ["praca-1", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1"])
+# as peças das festas, ao lado da fonte da praça: entram quando a arte existe (sem ela, a festa fica só nos enfeites)
+OPCIONAIS = ["festa-arvore-natal", "festa-fogueira", "festa-barraca-junina", "festa-abobora", "festa-ovo-pascoa",
+             "festa-carro-alegorico", "festa-palco-anonovo"]
 # desenhadas pelo PixelLab grandes demais para a cidade: entram no atlas na metade (o navegador desenha 1:1)
-METADE = {"carro-1", "carro-2", "carro-3", "carro-4", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1", "onibus-1"}
+METADE = {"carro-1", "carro-2", "carro-3", "carro-4", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1",
+          *OPCIONAIS}
 ATLAS_LARGURA = 512
 
 
@@ -268,8 +272,8 @@ def metade(im):
 def montar_atlas(arte, cidades, saida):
     """atlas.png e atlas.json em `saida` com a arte do PixelLab (`arte`): os marcos das cidades e as peças genéricas.
     Cada peça vai recortada pela caixa do alfa (o código ancora pelo pé do recorte), as de METADE já reduzidas, e é
-    empilhada em prateleiras, da mais alta para a mais baixa. Marco sem arte fica de fora (a cidade usa os prédios
-    genéricos); peça genérica sem arte é erro."""
+    empilhada em prateleiras, da mais alta para a mais baixa. Marco ou peça OPCIONAL sem arte fica de fora (a cidade
+    usa os prédios genéricos, a festa fica nos enfeites desenhados por código); peça genérica sem arte é erro."""
     from PIL import Image
     pecas = {}
 
@@ -281,6 +285,9 @@ def montar_atlas(arte, cidades, saida):
         if not os.path.exists(os.path.join(arte, nome + ".png")):
             raise FileNotFoundError(f"atlas: falta a arte {nome}.png em {arte}")
         pecas[nome] = abrir(nome)
+    for nome in OPCIONAIS:
+        if os.path.exists(os.path.join(arte, nome + ".png")):
+            pecas[nome] = abrir(nome)
     for c in cidades:
         nome = "marco-" + c["marco"] if c["marco"] else None
         if nome and os.path.exists(os.path.join(arte, nome + ".png")):
