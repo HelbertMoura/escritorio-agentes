@@ -1,0 +1,459 @@
+{
+ "versao": 2999259919,
+ "cidades": [
+  {
+   "id": "rio-branco",
+   "nome": "Rio Branco",
+   "uf": "AC",
+   "lat": -9.97,
+   "lon": -67.81,
+   "x": 61,
+   "y": 159,
+   "marco": null
+  },
+  {
+   "id": "maceio",
+   "nome": "Maceió",
+   "uf": "AL",
+   "lat": -9.67,
+   "lon": -35.74,
+   "x": 382,
+   "y": 156,
+   "marco": null
+  },
+  {
+   "id": "macapa",
+   "nome": "Macapá",
+   "uf": "AP",
+   "lat": 0.03,
+   "lon": -51.07,
+   "x": 229,
+   "y": 59,
+   "marco": null
+  },
+  {
+   "id": "manaus",
+   "nome": "Manaus",
+   "uf": "AM",
+   "lat": -3.12,
+   "lon": -60.02,
+   "x": 139,
+   "y": 91,
+   "marco": "teatro-amazonas"
+  },
+  {
+   "id": "salvador",
+   "nome": "Salvador",
+   "uf": "BA",
+   "lat": -12.97,
+   "lon": -38.5,
+   "x": 355,
+   "y": 189,
+   "marco": "pelourinho"
+  },
+  {
+   "id": "fortaleza",
+   "nome": "Fortaleza",
+   "uf": "CE",
+   "lat": -3.73,
+   "lon": -38.53,
+   "x": 354,
+   "y": 97,
+   "marco": null
+  },
+  {
+   "id": "brasilia",
+   "nome": "Brasília",
+   "uf": "DF",
+   "lat": -15.79,
+   "lon": -47.88,
+   "x": 261,
+   "y": 217,
+   "marco": "congresso"
+  },
+  {
+   "id": "vitoria",
+   "nome": "Vitória",
+   "uf": "ES",
+   "lat": -20.32,
+   "lon": -40.34,
+   "x": 336,
+   "y": 263,
+   "marco": null
+  },
+  {
+   "id": "goiania",
+   "nome": "Goiânia",
+   "uf": "GO",
+   "lat": -16.69,
+   "lon": -49.26,
+   "x": 247,
+   "y": 226,
+   "marco": null
+  },
+  {
+   "id": "sao-luis",
+   "nome": "São Luís",
+   "uf": "MA",
+   "lat": -2.53,
+   "lon": -44.3,
+   "x": 297,
+   "y": 85,
+   "marco": null
+  },
+  {
+   "id": "cuiaba",
+   "nome": "Cuiabá",
+   "uf": "MT",
+   "lat": -15.6,
+   "lon": -56.1,
+   "x": 178,
+   "y": 216,
+   "marco": null
+  },
+  {
+   "id": "campo-grande",
+   "nome": "Campo Grande",
+   "uf": "MS",
+   "lat": -20.47,
+   "lon": -54.62,
+   "x": 193,
+   "y": 264,
+   "marco": null
+  },
+  {
+   "id": "belo-horizonte",
+   "nome": "Belo Horizonte",
+   "uf": "MG",
+   "lat": -19.92,
+   "lon": -43.94,
+   "x": 300,
+   "y": 259,
+   "marco": "pampulha"
+  },
+  {
+   "id": "belem",
+   "nome": "Belém",
+   "uf": "PA",
+   "lat": -1.46,
+   "lon": -48.5,
+   "x": 254,
+   "y": 74,
+   "marco": "ver-o-peso"
+  },
+  {
+   "id": "joao-pessoa",
+   "nome": "João Pessoa",
+   "uf": "PB",
+   "lat": -7.12,
+   "lon": -34.86,
+   "x": 391,
+   "y": 131,
+   "marco": null
+  },
+  {
+   "id": "curitiba",
+   "nome": "Curitiba",
+   "uf": "PR",
+   "lat": -25.43,
+   "lon": -49.27,
+   "x": 247,
+   "y": 314,
+   "marco": null
+  },
+  {
+   "id": "recife",
+   "nome": "Recife",
+   "uf": "PE",
+   "lat": -8.05,
+   "lon": -34.88,
+   "x": 391,
+   "y": 140,
+   "marco": null
+  },
+  {
+   "id": "teresina",
+   "nome": "Teresina",
+   "uf": "PI",
+   "lat": -5.09,
+   "lon": -42.8,
+   "x": 312,
+   "y": 110,
+   "marco": null
+  },
+  {
+   "id": "rio-de-janeiro",
+   "nome": "Rio de Janeiro",
+   "uf": "RJ",
+   "lat": -22.91,
+   "lon": -43.17,
+   "x": 308,
+   "y": 289,
+   "marco": "cristo"
+  },
+  {
+   "id": "natal",
+   "nome": "Natal",
+   "uf": "RN",
+   "lat": -5.79,
+   "lon": -35.21,
+   "x": 387,
+   "y": 117,
+   "marco": null
+  },
+  {
+   "id": "porto-alegre",
+   "nome": "Porto Alegre",
+   "uf": "RS",
+   "lat": -30.03,
+   "lon": -51.23,
+   "x": 227,
+   "y": 360,
+   "marco": "mercado-publico"
+  },
+  {
+   "id": "porto-velho",
+   "nome": "Porto Velho",
+   "uf": "RO",
+   "lat": -8.76,
+   "lon": -63.9,
+   "x": 101,
+   "y": 147,
+   "marco": null
+  },
+  {
+   "id": "boa-vista",
+   "nome": "Boa Vista",
+   "uf": "RR",
+   "lat": 2.82,
+   "lon": -60.67,
+   "x": 133,
+   "y": 31,
+   "marco": null
+  },
+  {
+   "id": "florianopolis",
+   "nome": "Florianópolis",
+   "uf": "SC",
+   "lat": -27.59,
+   "lon": -48.55,
+   "x": 254,
+   "y": 335,
+   "marco": "hercilio-luz"
+  },
+  {
+   "id": "sao-paulo",
+   "nome": "São Paulo",
+   "uf": "SP",
+   "lat": -23.55,
+   "lon": -46.63,
+   "x": 273,
+   "y": 295,
+   "marco": "paulista"
+  },
+  {
+   "id": "aracaju",
+   "nome": "Aracaju",
+   "uf": "SE",
+   "lat": -10.91,
+   "lon": -37.07,
+   "x": 369,
+   "y": 169,
+   "marco": null
+  },
+  {
+   "id": "palmas",
+   "nome": "Palmas",
+   "uf": "TO",
+   "lat": -10.18,
+   "lon": -48.33,
+   "x": 256,
+   "y": 161,
+   "marco": null
+  },
+  {
+   "id": "mateus-leme",
+   "nome": "Mateus Leme",
+   "uf": "MG",
+   "lat": -19.98,
+   "lon": -44.43,
+   "x": 295,
+   "y": 259,
+   "marco": "matriz-mateus-leme"
+  }
+ ],
+ "rotas": [
+  [
+   "joao-pessoa",
+   "recife"
+  ],
+  [
+   "joao-pessoa",
+   "natal"
+  ],
+  [
+   "brasilia",
+   "goiania"
+  ],
+  [
+   "maceio",
+   "aracaju"
+  ],
+  [
+   "maceio",
+   "recife"
+  ],
+  [
+   "curitiba",
+   "florianopolis"
+  ],
+  [
+   "recife",
+   "natal"
+  ],
+  [
+   "salvador",
+   "aracaju"
+  ],
+  [
+   "maceio",
+   "joao-pessoa"
+  ],
+  [
+   "sao-luis",
+   "teresina"
+  ],
+  [
+   "macapa",
+   "belem"
+  ],
+  [
+   "curitiba",
+   "sao-paulo"
+  ],
+  [
+   "belo-horizonte",
+   "rio-de-janeiro"
+  ],
+  [
+   "rio-de-janeiro",
+   "sao-paulo"
+  ],
+  [
+   "porto-alegre",
+   "florianopolis"
+  ],
+  [
+   "vitoria",
+   "belo-horizonte"
+  ],
+  [
+   "recife",
+   "aracaju"
+  ],
+  [
+   "vitoria",
+   "rio-de-janeiro"
+  ],
+  [
+   "fortaleza",
+   "natal"
+  ],
+  [
+   "maceio",
+   "natal"
+  ],
+  [
+   "rio-branco",
+   "porto-velho"
+  ],
+  [
+   "maceio",
+   "salvador"
+  ],
+  [
+   "sao-luis",
+   "belem"
+  ],
+  [
+   "joao-pessoa",
+   "aracaju"
+  ],
+  [
+   "florianopolis",
+   "sao-paulo"
+  ],
+  [
+   "belo-horizonte",
+   "sao-paulo"
+  ],
+  [
+   "fortaleza",
+   "teresina"
+  ],
+  [
+   "curitiba",
+   "porto-alegre"
+  ],
+  [
+   "fortaleza",
+   "joao-pessoa"
+  ],
+  [
+   "cuiaba",
+   "campo-grande"
+  ],
+  [
+   "natal",
+   "aracaju"
+  ],
+  [
+   "brasilia",
+   "belo-horizonte"
+  ],
+  [
+   "brasilia",
+   "palmas"
+  ],
+  [
+   "fortaleza",
+   "recife"
+  ],
+  [
+   "fortaleza",
+   "sao-luis"
+  ],
+  [
+   "manaus",
+   "boa-vista"
+  ],
+  [
+   "goiania",
+   "belo-horizonte"
+  ],
+  [
+   "salvador",
+   "recife"
+  ],
+  [
+   "curitiba",
+   "rio-de-janeiro"
+  ],
+  [
+   "goiania",
+   "campo-grande"
+  ]
+ ],
+ "niveis": {
+  "brasil": {
+   "w": 400,
+   "h": 400,
+   "caixa": [
+    -74.0,
+    -34.0,
+    -34.0,
+    6.0
+   ]
+  }
+ }
+}

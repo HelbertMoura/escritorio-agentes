@@ -1,12 +1,18 @@
-"""Mundo vivo: dados de entrada da montagem (arte/mundo/cidades.json).
+"""Mundo vivo: dados de entrada (arte/mundo/cidades.json) e a montagem (ferramentas/montar_mundo.py).
 Uso: python -B -I -m unittest discover -p "test_montar_mundo.py"
 """
+import hashlib
 import json
 import os
+import shutil
+import subprocess
+import sys
+import tempfile
 import unittest
 
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 CIDADES = os.path.join(RAIZ, "arte", "mundo", "cidades.json")
+sys.path.insert(0, os.path.join(RAIZ, "ferramentas"))  # com -I a pasta não entra sozinha no sys.path
 
 UFS = {"AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA",
        "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"}
@@ -36,6 +42,94 @@ class Cidades(unittest.TestCase):
         self.assertEqual(por_id["mateus-leme"]["uf"], "MG")
         self.assertEqual({c["id"] for c in cidades if c["marco"] is not None}, COM_MARCO)
 
+
+class Preencher(unittest.TestCase):
+    def test_preencher_quadrado(self):
+        import montar_mundo
+        feitos = montar_mundo.preencher([(1, 1), (4, 1), (4, 4), (1, 4)], 6, 6)
+        self.assertEqual(feitos, {(x, y) for x in range(1, 4) for y in range(1, 4)})
+
+    def test_preencher_concavo(self):
+        import montar_mundo
+        # "U" aberto para cima: hastes em x 1..2 e 4..5, fundo em y 4..5
+        u = [(1, 1), (2, 1), (2, 4), (4, 4), (4, 1), (5, 1), (5, 5), (1, 5)]
+        feitos = montar_mundo.preencher(u, 6, 6)
+        self.assertNotIn((2, 2), feitos)
+        self.assertNotIn((3, 2), feitos)  # meio da abertura
+        self.assertIn((1, 2), feitos)
+        self.assertIn((4, 2), feitos)
+        self.assertIn((3, 4), feitos)  # fundo do U
+        self.assertEqual(len(feitos), 3 + 3 + 4)
+
+    def test_para_pixel(self):
+        import montar_mundo
+        self.assertEqual(montar_mundo.para_pixel(-19.92, -43.94, montar_mundo.CAIXA_BRASIL, 400, 400), (300, 259))
+
+
+class Montagem(unittest.TestCase):
+    """Roda ferramentas/montar_mundo.py como processo, igual ao uso real. Com -I o teste não vê o Pillow
+    do site-packages do usuário; o processo filho (sem -I) vê."""
+    SCRIPT = os.path.join(RAIZ, "ferramentas", "montar_mundo.py")
+    ENTRADA = os.path.join(RAIZ, "arte", "mundo")
+
+    @classmethod
+    def setUpClass(cls):
+        if subprocess.run([sys.executable, "-c", "import PIL"], capture_output=True).returncode:
+            raise unittest.SkipTest("Pillow ausente: a montagem do mundo precisa dele (pip install pillow)")
+        cls.pastas = [tempfile.mkdtemp(), tempfile.mkdtemp()]
+        cls.montar(cls.pastas[0])
+        with open(os.path.join(cls.pastas[0], "mundo.json"), encoding="utf-8") as f:
+            cls.mundo = json.load(f)
+
+    @classmethod
+    def tearDownClass(cls):
+        for p in cls.pastas:
+            shutil.rmtree(p, ignore_errors=True)
+
+    @classmethod
+    def montar(cls, pasta):
+        r = subprocess.run([sys.executable, "-B", cls.SCRIPT, cls.ENTRADA, pasta], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=120)
+        if r.returncode:
+            raise AssertionError(r.stderr)
+
+    def sha(self, pasta, nome):
+        with open(os.path.join(pasta, nome), "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+
+    def test_deterministico(self):
+        self.montar(self.pastas[1])
+        for nome in ("brasil.png", "terra.png", "mundo.json"):
+            self.assertEqual(self.sha(self.pastas[0], nome), self.sha(self.pastas[1], nome), nome)
+
+    def test_rotas(self):
+        rotas = self.mundo["rotas"]
+        ids = {c["id"] for c in self.mundo["cidades"]}
+        self.assertTrue(0 < len(rotas) <= 40)
+        for a, b in rotas:
+            self.assertNotEqual(a, b)
+            self.assertIn(a, ids)
+            self.assertIn(b, ids)
+        self.assertEqual(len({frozenset(r) for r in rotas}), len(rotas))  # sem rota repetida
+
+    def test_mundo_json(self):
+        self.assertIsInstance(self.mundo["versao"], int)
+        self.assertEqual(self.mundo["niveis"], {"brasil": {"w": 400, "h": 400, "caixa": [-74.0, -34.0, -34.0, 6.0]}})
+        self.assertEqual(len(self.mundo["cidades"]), 28)
+        bh = next(c for c in self.mundo["cidades"] if c["id"] == "belo-horizonte")
+        self.assertEqual((bh["x"], bh["y"]), (300, 259))
+        for c in self.mundo["cidades"]:
+            self.assertEqual(set(c), {"id", "nome", "uf", "lat", "lon", "x", "y", "marco"})
+        for nome, tamanho in (("brasil.png", (400, 400)), ("terra.png", (360, 180))):
+            with open(os.path.join(self.pastas[0], nome), "rb") as f:
+                cabeca = f.read(24)
+            self.assertEqual(cabeca[1:4], b"PNG", nome)
+            self.assertEqual((int.from_bytes(cabeca[16:20], "big"), int.from_bytes(cabeca[20:24], "big")), tamanho, nome)
+
+    def test_estaticos_em_dia(self):
+        """static/mundo/ versionado bate com o que a ferramenta gera hoje."""
+        for nome in ("brasil.png", "terra.png", "mundo.json"):
+            self.assertEqual(self.sha(os.path.join(RAIZ, "static", "mundo"), nome), self.sha(self.pastas[0], nome), nome)
 
 if __name__ == "__main__":
     unittest.main()
