@@ -72,6 +72,34 @@ async function principal() {
   assert.equal(pas.e.chave, "pascoa");
   assert.ok(pas.e.cordoes > 0 && pas.e.formas.includes("coelho") && pas.e.pecas.some(([n]) => n === "festa-ovo-pascoa"));
 
+  // nas 28 cidades, toda festa com peça de praça desenha a arte dela ao lado da fonte (a fonte abre espaço nas praças
+  // estreitas), sem cruzar a fonte, outra peça ou a fila da praça; a forma por código só sem a arte (teste abaixo)
+  const DA_PRACA = { natal: ["festa-arvore-natal"], junina: ["festa-fogueira", "festa-barraca-junina"], halloween: ["festa-abobora"],
+                     pascoa: ["festa-ovo-pascoa"], carnaval: ["festa-carro-alegorico"], anonovo: ["festa-palco-anonovo"] };
+  const DATAS = { natal: "2026-12-25", junina: "2026-06-24", halloween: "2026-10-31", pascoa: "2026-04-05", carnaval: "2027-02-07",
+                  anonovo: "2026-12-31" };
+  const faltas = [], vistas = [];
+  for (const [chave, pecas] of Object.entries(DA_PRACA)) {
+    const v = await abrir("#cidade=" + MUNDO.cidades[0].id, { busca: "?data=" + DATAS[chave], reduzido: true });
+    await carregar(v);
+    for (const cc of MUNDO.cidades) {
+      v.M.ir("cidade", { cidade: cc.id }); v.rodar(3);
+      const e = v.M.niveis.cidade.enfeites, desenhadas = e.pecas.map(([n]) => n);
+      assert.equal(e.chave, chave, cc.id);
+      for (const n of pecas) if (!desenhadas.includes(n)) faltas.push(`${cc.id}/${chave}: ${n}`);
+      vistas.push([`${cc.id}/${chave}`, v.contexto.window.CidadePlanta.planta(cc.id).praca.r, e.pecas, e.fonte]);
+    }
+  }
+  assert.equal(faltas.join(", "), "", "peças sem lugar");
+  for (const [onde, fila, pecas, fonte] of vistas) {
+    assert.ok(fonte[0] >= fila[0] && fonte[2] <= fila[2], `${onde}: a fonte fora da fila da praça`);
+    for (const [n, ...r] of pecas) {
+      assert.ok(!cruza(r, fonte), `${onde}: ${n} sobre a fonte`);
+      assert.ok(r[0] >= fila[0] && r[2] <= fila[2], `${onde}: ${n} fora da fila da praça`);
+      for (const [m, ...q] of pecas) if (m !== n) assert.ok(!cruza(r, q), `${onde}: ${n} sobre ${m}`);
+    }
+  }
+
   // a peça do PixelLab ausente no atlas não quebra: a festa segue com o enfeite por código no lugar dela
   const semArvore = { ...ATLAS, quadros: { ...ATLAS.quadros } };
   delete semArvore.quadros["festa-arvore-natal"];
@@ -79,6 +107,12 @@ async function principal() {
   assert.equal(sa.e.chave, "natal");
   assert.equal(sa.e.pecas.length, 0);
   assert.ok(sa.e.formas.includes("arvore_natal"), "a árvore por código: " + sa.e.formas.join());
+
+  // arte larga demais para qualquer praça (nem com a fonte afastada): em último caso, a forma por código no lugar
+  const enorme = { ...ATLAS, quadros: { ...ATLAS.quadros, "festa-arvore-natal": [0, 0, 160, 40] } };
+  const en = await cidade("2026-12-25", { atlas: enorme });
+  assert.equal(en.e.pecas.length, 0);
+  assert.ok(en.e.formas.includes("arvore_natal"), "a forma no lugar da arte que não cabe: " + en.e.formas.join());
 
   // festa desligada pela instalação: nada de enfeite (nem a festa no texto); sem resposta da rota ainda, também nada
   const vazio = e => e.chave === null && !e.luzes && !e.cordoes && !e.fogos && !e.confete && !e.formas.length && !e.pecas.length;

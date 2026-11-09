@@ -169,18 +169,21 @@ const MundoCidade = (() => {
         }
       }
     }
-    // o brilho de uma luz à noite: o degradê pintado uma vez por raio, cor e escala (com pixels de sobra para o zoom) e
-    // depois só copiado; a força vem do globalAlpha
+    // o brilho de uma luz à noite: o degradê pintado uma vez por cor, raio e escala (com pixels de sobra para o zoom) e
+    // depois só copiado; a força vem do globalAlpha. cor: [r, g, b], um array fixo, que é a chave do cache (sem montar
+    // texto a cada chamada)
     function brilho(ctx, x, y, r, a, cor = LUZ) {
-      const k = Math.max(1, Math.min(8, Math.ceil(camera.P))), chave = `${r}|${k}|${cor}`;
-      let tela = brilhos.get(chave);
+      const k = Math.max(1, Math.min(8, Math.ceil(camera.P))), chave = r * 16 + k;
+      let porCor = brilhos.get(cor);
+      if (!porCor) brilhos.set(cor, porCor = new Map());
+      let tela = porCor.get(chave);
       if (!tela) {
         const d = r * k * 2;
         tela = document.createElement("canvas"); tela.width = tela.height = d;
         const g = tela.getContext("2d"), gr = g.createRadialGradient(d / 2, d / 2, 0, d / 2, d / 2, d / 2);
         gr.addColorStop(0, `rgba(${cor},1)`); gr.addColorStop(1, `rgba(${cor},0)`);
         g.fillStyle = gr; g.fillRect(0, 0, d, d);
-        brilhos.set(chave, tela);
+        porCor.set(chave, tela);
       }
       ctx.globalAlpha = Math.min(1, a); ctx.drawImage(tela, x - r, y - r, r * 2, r * 2); ctx.globalAlpha = 1;
     }
@@ -198,7 +201,7 @@ const MundoCidade = (() => {
       let nome = s.peca;
       if (s === p.casa) nome = casa ? p.casa.peca : p.casa.arvore;   // fora da casa, a vaga dela tem uma árvore
       else if (s === p.centro && temMarco()) nome = "marco-" + marcos.get(id);
-      peca(ctx, nome, s.x, s.y);
+      peca(ctx, nome, s === p.praca ? s.x + enfeites.desvio : s.x, s.y);   // a fonte abre espaço para a peça da festa
       if (nome.startsWith("chale-")) enfeites.telhado(ctx, nome, s.x, s.y, escuro, t);
     }
 
