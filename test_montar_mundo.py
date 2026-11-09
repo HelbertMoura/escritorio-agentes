@@ -76,7 +76,7 @@ class Montagem(unittest.TestCase):
     def setUpClass(cls):
         if subprocess.run([sys.executable, "-c", "import PIL"], capture_output=True).returncode:
             raise unittest.SkipTest("Pillow ausente: a montagem do mundo precisa dele (pip install pillow)")
-        cls.pastas = [tempfile.mkdtemp(), tempfile.mkdtemp()]
+        cls.pastas = [tempfile.mkdtemp() for _ in range(3)]
         cls.montar(cls.pastas[0])
         with open(os.path.join(cls.pastas[0], "mundo.json"), encoding="utf-8") as f:
             cls.mundo = json.load(f)
@@ -156,6 +156,26 @@ class Montagem(unittest.TestCase):
         cor_py, cor_mt = self.cores([list(paraguai), list(mato_grosso)])
         self.assertEqual(cor_py, mm.PALETA["vizinho"])
         self.assertIn(cor_mt, {mm.PALETA[n] for n in ("terra", "terra_alta", "serra")})
+
+    def test_versao_muda_com_a_paleta(self):
+        """Só uma cor da PALETA muda: os índices dos pixels ficam iguais e a versão muda (cache do navegador)."""
+        trocar = "\n".join([
+            "import hashlib, json, os, sys",
+            "sys.path.insert(0, sys.argv[1])",
+            "import montar_mundo as mm",
+            "from PIL import Image",
+            "mm.PALETA['mar'] = '#010203'",
+            "mundo = mm.montar(sys.argv[2], sys.argv[4])",
+            "indices = lambda p: [hashlib.sha256(Image.open(os.path.join(p, n)).tobytes()).hexdigest()",
+            "                     for n in ('brasil.png', 'terra.png')]",
+            "print(json.dumps([mundo['versao'], indices(sys.argv[3]), indices(sys.argv[4])]))"])
+        r = subprocess.run([sys.executable, "-B", "-c", trocar, os.path.join(RAIZ, "ferramentas"), self.ENTRADA,
+                            self.pastas[0], self.pastas[2]], capture_output=True, text=True, timeout=120)
+        if r.returncode:
+            raise AssertionError(r.stderr)
+        versao, antes, depois = json.loads(r.stdout)
+        self.assertEqual(antes, depois)  # mesmos pixels
+        self.assertNotEqual(versao, self.mundo["versao"])
 
     def test_estaticos_em_dia(self):
         """static/mundo/ versionado bate com o que a ferramenta gera hoje."""

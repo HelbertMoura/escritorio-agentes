@@ -228,8 +228,10 @@ def montar(fontes, saida):
         "rotas": rotas(cidades),
         "niveis": {"brasil": {"w": W_BRASIL, "h": H_BRASIL, "caixa": list(CAIXA_BRASIL)}},
     }
-    # versão derivada do conteúdo (pixels e dados), para o navegador não guardar arquivo velho
-    h = hashlib.sha256(terra.tobytes() + brasil.tobytes() + json.dumps(mundo, sort_keys=True).encode())
+    # versão derivada do conteúdo (pixels, cores e dados), para o navegador não guardar arquivo velho;
+    # tobytes() de imagem em modo P só traz os índices, então a paleta entra à parte
+    h = hashlib.sha256(terra.tobytes() + brasil.tobytes()
+                       + json.dumps([PALETA, mundo], sort_keys=True).encode())
     mundo = {"versao": int(h.hexdigest()[:8], 16), **mundo}
 
     os.makedirs(saida, exist_ok=True)
