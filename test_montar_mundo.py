@@ -565,7 +565,7 @@ class Montagem(unittest.TestCase):
         import mundo_terreno as mt
         lum = lambda h: sum(k * int(h[i:i + 2], 16) for k, i in ((0.3, 1), (0.59, 3), (0.11, 5)))
         for nome, cor in mt.BASE.items():
-            if nome in mt.AGUA_BASE or nome == "am_divisa":
+            if nome in mt.AGUA_BASE or nome == "am_divisa" or nome in mt.SO_4X:   # as do 4x não levam divisa
                 continue
             divisa = mt.CORES[nome + "~"]
             if nome.startswith("am_"):
@@ -632,7 +632,9 @@ class Montagem(unittest.TestCase):
         self.assertEqual(antes, mm.versao(pixels, [dict(paleta), dict(mt.CORES), dados]))
         paleta["mar"] = "#010203"
         self.assertNotEqual(antes, mm.versao(pixels, [paleta, mt.CORES, dados]))
-        self.assertIsInstance(self.mundo["versao"], int)
+        # e a montagem passa à versão os arquivos que gravou (os PNG levam a paleta deles) e os dados do mundo.json
+        dados = {k: v for k, v in self.mundo.items() if k != "versao"}
+        self.assertEqual(self.mundo["versao"], mm.versao_dos_arquivos(self.pastas[0], dados))
 
     # --- a camada de perto (Tarefa 6g) -------------------------------------------------------------------------------
     def ufs(self):
@@ -801,33 +803,45 @@ class Montagem(unittest.TestCase):
 
     def test_terceiro_nivel_mesmas_formas(self):
         """A troca de 2x para 4x não pula: amostrando uma grade, o bloco 2x2 de 4x sobre cada pixel de 2x é água onde ele é
-        água, e na maior parte das vezes tem a própria cor dele (o detalhe novo só muda o tom dentro do mesmo desenho)."""
+        água e, na terra, é da mesma família de cores (o mesmo bioma, a mesma serra): as árvores, as serras e as rodovias
+        são redesenhadas na escala nova, nos mesmos lugares e na mesma paleta."""
         import mundo_terreno as mt
         agua = {mt.CORES[n] for n in mt.AGUA}
+        nome = {}
+        for n, h in mt.CORES.items():
+            nome.setdefault(h, n)
+        familia = lambda h: "agua" if h in agua else nome.get(h, "")[:3] if nome.get(h, "")[2:3] == "_" else "outra"
         pontos = [[x, y] for y in range(60, 760, 14) for x in range(60, 760, 14)]
         dois = self.cores_perto(pontos)
         quatro = self.cores_4x([[2 * x + a, 2 * y + b] for x, y in pontos for b in (0, 1) for a in (0, 1)])
         pares = [(c, quatro[k * 4:k * 4 + 4]) for k, c in enumerate(dois) if quatro[k * 4] is not None]
         self.assertGreater(len(pares), 1200)
         mesma_agua = sum((c in agua) == (sum(b in agua for b in bloco) >= 2) for c, bloco in pares)
-        mesma_cor = sum(c in bloco for c, bloco in pares)
+        terra = [(c, bloco) for c, bloco in pares if c not in agua]
+        mesma_familia = sum(familia(c) in {familia(b) for b in bloco} for c, bloco in terra)
         self.assertGreaterEqual(mesma_agua / len(pares), 0.97, f"água {mesma_agua}/{len(pares)}")
-        self.assertGreaterEqual(mesma_cor / len(pares), 0.7, f"cor {mesma_cor}/{len(pares)}")
+        self.assertGreaterEqual(mesma_familia / len(terra), 0.85, f"família {mesma_familia}/{len(terra)}")
 
     def test_terceiro_nivel_tem_detalhe_novo(self):
-        """A 4x há o que não há a 2x: lavoura e pasto em volta das cidades, pontes e bancos de areia nos rios largos."""
+        """A 4x há o que não há a 2x, sem virar padrão: lavoura e pasto só num anel junto das cidades do Centro-Sul (pouca área,
+        nada em volta de Manaus), pontes e o asfalto com a faixa das rodovias, o meio-tom das serras."""
         import mundo_terreno as mt
         lavoura = {mt.CORES[n] for n in mt.LAVOURAS}
         amostra = [[x, y] for y in range(0, 1600, 3) for x in range(0, 1600, 3)]
         quatro = [c for c in self.cores_4x(amostra) if c]
         dois = self.cores_perto([[x // 2, y // 2] for x, y in amostra[::4]])
-        self.assertGreater(sum(c in lavoura for c in quatro), 500)
+        terra = [c for c in quatro if c not in {mt.CORES[n] for n in mt.AGUA}]
+        campos = sum(c in lavoura for c in quatro)
+        self.assertGreater(campos, 100)
+        self.assertLess(campos / len(terra), 0.02, f"lavoura em {campos} de {len(terra)} pontos de terra")
         self.assertEqual(sum(c in lavoura for c in dois), 0)
-        self.assertGreater(sum(c == mt.CORES["ponte"] for c in quatro), 5)
+        for nome in ("ponte", "asfalto", "faixa", "mv_meio", "mr_meio"):
+            self.assertGreater(sum(c == mt.CORES[nome] for c in quatro), 5, nome)
+        perto = lambda cid, r: self.cores_4x([[cid["x"] * 4 + a, cid["y"] * 4 + b] for a in range(-r, r + 1, 2) for b in range(-r, r + 1, 2)])
         bh = next(c for c in self.mundo["cidades"] if c["id"] == "belo-horizonte")
-        perto_de_bh = self.cores_4x([[bh["x"] * 4 + a, bh["y"] * 4 + b] for a in range(-30, 31, 2) for b in range(-30, 31, 2)])
-        self.assertGreater(sum(c in lavoura for c in perto_de_bh), 20, "lavoura em volta de BH")
-
+        manaus = next(c for c in self.mundo["cidades"] if c["id"] == "manaus")
+        self.assertGreater(sum(c in lavoura for c in perto(bh, 40)), 10, "lavoura em volta de BH")
+        self.assertEqual(sum(c in lavoura for c in perto(manaus, 60)), 0, "nada de lavoura na Amazônia")
     def test_mapa_das_ufs_de_perto(self):
         """O mapa das UFs na grade de 2x (perto/ufs.json, para o contorno do realce seguir a divisa desenhada): 800 linhas
         de 800, e a UF de cada cidade em volta do pixel dela vezes 2 (a costa de 2x é a do contorno na resolução nova: a

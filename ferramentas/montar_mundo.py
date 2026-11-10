@@ -41,6 +41,7 @@ ESCALA_PERTO, AZULEJO = 2, 200
 # o terceiro nível (4x): o de 2x dobrado e refinado (mundo_terreno.refinar), em 8x8 azulejos de 200 px, só os que tocam o
 # Brasil (os outros, só mar aberto ou vizinho distante, ficam no de 2x ampliado)
 ESCALA_4X = 4
+CENTRO_SUL = {"DF", "GO", "MT", "MS", "MG", "ES", "RJ", "SP", "PR", "SC", "RS"}   # onde há lavoura a 4x
 RIOS_MENORES, ESTRADAS, LUGARES = ("ne_10m_rivers_lake_centerlines.geojson", "ne_10m_roads.geojson",
                                    "ne_10m_populated_places.geojson")
 # as cidades médias (3x): as maiores que não são capitais, longe de toda capital (o subúrbio ficaria sob a miniatura) e
@@ -268,10 +269,11 @@ def mapa_das_ufs(rotulo, w, h):
 
 
 def focos_de_lavoura(cidades, medias):
-    """Onde a lavoura e o pasto aparecem a 4x: em volta de cada cidade (x, y, raio em pixels do nível de 4x)."""
+    """Onde a lavoura aparece a 4x: um anel junto de cada capital e cidade média do Centro-Sul (x, y, raio de dentro e de
+    fora, em pixels do nível de 4x; o de dentro fica sob a miniatura). Nada no Norte e no Nordeste."""
     k = ESCALA_4X
-    return [(c["x"] * k + k / 2, c["y"] * k + k / 2, (13 if c["id"] not in NAO_CAPITAIS else 7) * k) for c in cidades] + \
-        [(m["x"] * k + k / 2, m["y"] * k + k / 2, 8 * k) for m in medias]
+    return [(c["x"] * k + k / 2, c["y"] * k + k / 2, 3 * k, (6 if c.get("id") not in NAO_CAPITAIS else 4.5) * k)
+            for c in list(cidades) + list(medias) if c["uf"] in CENTRO_SUL]
 
 
 def azulejos_do_brasil(rotulo, n):
@@ -356,9 +358,9 @@ def rios_menores(fontes):
     return menores
 
 
-def desenhar_brasil(rotulo, fontes, pais, w=W_BRASIL, h=H_BRASIL, escala=1):
+def desenhar_brasil(rotulo, fontes, pais, w=W_BRASIL, h=H_BRASIL, escala=1, registro=None):
     """O mapa ilustrado (mundo_terreno.desenhar) em w×h, com biomas, serras e rios passados para pixels; na escala de
-    perto, também as rodovias e os rios menores."""
+    perto, também as rodovias e os rios menores. registro: o dict que recebe os objetos do desenho (para o 4x)."""
     from PIL import Image
     px = lambda p: em_pixels(*p, w, h)
     poligono = lambda pontos: preencher([px(p) for p in pontos], w, h)
@@ -375,7 +377,7 @@ def desenhar_brasil(rotulo, fontes, pais, w=W_BRASIL, h=H_BRASIL, escala=1):
         afluentes = [(r["properties"]["name"] or "", linhas(r)) for r in rios_menores(fontes)]
         estradas = [linhas(r) for r in ler(os.path.join(fontes, "fontes", ESTRADAS))["features"]]
     indices = mundo_terreno.desenhar(rotulo, biomas, extras, serras, rios, w, h, escala=escala, estradas=estradas,
-                                     afluentes=afluentes, paises=pais)
+                                     afluentes=afluentes, paises=pais, registro=registro)
     im = Image.new("P", (w, h))
     im.putpalette([int(c[i:i + 2], 16) for c in mundo_terreno.CORES.values() for i in (1, 3, 5)])
     im.putdata(indices)
@@ -424,9 +426,21 @@ def rotas(cidades):
 
 
 def versao(pixels, dados):
-    """A versão derivada do conteúdo (os índices dos pixels, as paletas e os dados), para o navegador não guardar arquivo
-    velho; tobytes() de imagem em modo P só traz os índices, então as paletas entram nos dados."""
+    """A versão derivada do conteúdo (os bytes dos arquivos e os dados), para o navegador não guardar arquivo velho."""
     return int(hashlib.sha256(pixels + json.dumps(dados, sort_keys=True).encode()).hexdigest()[:8], 16)
+
+
+def versao_dos_arquivos(saida, dados):
+    """A versão do mundo: os bytes dos arquivos gravados em `saida` (os PNG levam a paleta deles, então trocar uma cor
+    muda a versão mesmo com os mesmos índices), em ordem fixa, e os dados do mundo.json (sem a versão)."""
+    nomes = ["terra.png", "brasil.png", os.path.join("perto", "ufs.json")]
+    for pasta in ("perto", "perto4x"):
+        nomes += sorted(os.path.join(pasta, n) for n in os.listdir(os.path.join(saida, pasta)) if n.endswith(".png"))
+    conteudo = b""
+    for n in nomes:
+        with open(os.path.join(saida, n), "rb") as f:
+            conteudo += f.read()
+    return versao(conteudo, dados)
 
 
 def montar(fontes, saida):
@@ -439,7 +453,8 @@ def montar(fontes, saida):
     terra, brasil = desenhar_terra(paises, fontes, celulas(rotulo)), desenhar_brasil(rotulo, fontes, pais)
     wp, hp = W_BRASIL * ESCALA_PERTO, H_BRASIL * ESCALA_PERTO   # a camada de perto, desenhada de novo na resolução dela
     rotulo_perto = rotular_brasil(paises, estados, wp, hp)
-    perto = desenhar_brasil(rotulo_perto, fontes, rotular_paises(paises, rotulo_perto, wp, hp), wp, hp, ESCALA_PERTO)
+    objetos = {}   # o que o 2x desenhou (chão, árvores, serras, rodovias), para o 4x redesenhar no mesmo lugar
+    perto = desenhar_brasil(rotulo_perto, fontes, rotular_paises(paises, rotulo_perto, wp, hp), wp, hp, ESCALA_PERTO, objetos)
 
     mundo = {
         "cidades": [{"id": c["id"], "nome": c["nome"], "uf": c["uf"], "lat": c["lat"], "lon": c["lon"],
@@ -453,7 +468,8 @@ def montar(fontes, saida):
     w4, h4 = W_BRASIL * ESCALA_4X, H_BRASIL * ESCALA_4X
     mais_perto = Image.new("P", (w4, h4))
     mais_perto.putpalette(perto.getpalette())
-    mais_perto.putdata(mundo_terreno.refinar(list(perto.tobytes()), wp, hp, focos_de_lavoura(mundo["cidades"], medias)))
+    mais_perto.putdata(mundo_terreno.refinar(list(perto.tobytes()), wp, hp, focos_de_lavoura(mundo["cidades"], medias),
+                                             objetos))
     n4 = w4 // AZULEJO
     no_brasil = azulejos_do_brasil(rotulo, n4)
     ufs_perto = {"w": wp, "h": hp, "mapa": mapa_das_ufs(rotulo_perto, wp, hp)}   # o realce de 2x em diante, na grade de 2x
@@ -463,11 +479,11 @@ def montar(fontes, saida):
         "perto4x": {"escala": ESCALA_4X, "azulejo": AZULEJO, "n": n4,
                     "azulejos": "".join("1" if (i, j) in no_brasil else "0" for j in range(n4) for i in range(n4))},
         "ufs": estados_do_mapa(rotulo, estados, cidades), "medias": medias, "paises": nomes_dos_paises(pais)}}
-    mundo = {"versao": versao(terra.tobytes() + brasil.tobytes() + perto.tobytes() + mais_perto.tobytes(),
-                              [PALETA, mundo_terreno.CORES, mundo, ufs_perto]), **mundo}
-
     os.makedirs(os.path.join(saida, "perto"), exist_ok=True)
     os.makedirs(os.path.join(saida, "perto4x"), exist_ok=True)
+    for n in os.listdir(os.path.join(saida, "perto4x")):   # o azulejo de 4x que a máscara não tem mais
+        if n.endswith(".png") and tuple(map(int, n[:-4].split("-"))) not in no_brasil:
+            os.remove(os.path.join(saida, "perto4x", n))
     terra.save(os.path.join(saida, "terra.png"), optimize=True)
     brasil.save(os.path.join(saida, "brasil.png"), optimize=True)
     for (i, j), azulejo in azulejos(perto).items():
@@ -478,6 +494,7 @@ def montar(fontes, saida):
     with open(os.path.join(saida, "perto", "ufs.json"), "w", encoding="utf-8", newline="\n") as f:
         json.dump(ufs_perto, f, separators=(",", ":"))
         f.write("\n")
+    mundo = {"versao": versao_dos_arquivos(saida, mundo), **mundo}
     with open(os.path.join(saida, "mundo.json"), "w", encoding="utf-8", newline="\n") as f:
         json.dump(mundo, f, ensure_ascii=False, indent=1)
         f.write("\n")

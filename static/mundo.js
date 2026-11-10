@@ -196,10 +196,10 @@ const Mundo = (() => {
   }
   // roda, botões, teclado, duplo clique e pinça: o globo decide o próprio zoom (desce ao Brasil); os outros níveis
   // aproximam, e o que mergulha (o Brasil) troca de nível no teto ou no mínimo do zoom
-  function aproximar(sinal, sx = W / 2, sy = H / 2) {
+  function aproximar(sinal, sx = W / 2, sy = H / 2, daRoda = false) {
     if (!nivel) return;
     if (nivel.zoom) { if (!trans) executar(nivel.zoom(sinal, sx, sy)); return; }
-    const mergulho = nivel.mergulhar && !trans ? nivel.mergulhar(sinal, sx, sy) : null;
+    const mergulho = nivel.mergulhar && !trans ? nivel.mergulhar(sinal, sx, sy, daRoda) : null;
     if (mergulho) executar(mergulho); else nivel.camera.passoZoom(sinal, sx, sy);
   }
   let anunciado = null;   // o estado sob o cursor na linha de status (o Brasil diz qual), até ele sair de baixo do cursor
@@ -279,6 +279,8 @@ const Mundo = (() => {
   }
   // o que os botões (Voltar, + e −) cobrem do canvas, em pixels dele, com 6 px de CSS de folga: o nível não põe nome nem
   // enfeite embaixo deles (camera.cobertos, uma lista de {x, y, w, h})
+  // (refeito quando a fonte carrega: o VOLTAR em Silkscreen alarga)
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { for (const n of Object.values(niveis)) cobrir(n.camera); });
   function cobrir(cam) {
     const r = canvas.getBoundingClientRect(), f = 6;
     cam.cobertos = [voltar, $("mundo-mais"), menos].map(b => b.getBoundingClientRect())
@@ -404,7 +406,7 @@ const Mundo = (() => {
     ev.preventDefault();
     roda += ev.deltaY * (ev.deltaMode === 1 ? 40 : 1);
     if (Math.abs(roda) < 50) return;
-    aproximar(roda < 0 ? 1 : -1, ...ponto(ev)); roda = 0;
+    aproximar(roda < 0 ? 1 : -1, ...ponto(ev), true); roda = 0;
   }, { passive: false });
   canvas.addEventListener("dblclick", ev => {   // (o duplo toque já aproximou: o dblclick que o navegador manda depois não conta)
     if (nivel && !trans && !(toque && toque.zoom && performance.now() - toque.t < 600)) aproximar(1, ...ponto(ev));

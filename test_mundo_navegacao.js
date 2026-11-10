@@ -627,10 +627,10 @@ async function principal() {
   for (let i = 0; i < 30; i++) a.canvas.disparar("wheel", { deltaY: -120, clientX: 100, clientY: 100 });
   a.rodar(10); dentro();
   for (let i = 0; i < 10 && cam().alvoZ > 1; i++) { a.elementos["mundo-menos"].disparar("click"); a.rodar(5); }
-  a.rodar(10);
+  for (let i = 0; i < 30 && cam().z !== cam().alvoZ; i++) a.rodar(1);
   assert.equal(cam().z, 1); dentro();
   assert.equal(a.M.nivel, "brasil");
-  // afastar mais uma vez no mínimo do mapa volta ao globo
+  // afastar mais uma vez no mínimo do mapa volta ao globo, logo que ele chega (a pausa é só da roda)
   a.elementos["mundo-menos"].disparar("click"); a.rodar(4);
   assert.equal(a.M.nivel, "globo", "o − no mínimo do Brasil sobe ao globo");
 
@@ -672,17 +672,19 @@ async function principal() {
   const cr = mgl.M.niveis.brasil.caixas.find(k => k.id === "recife");
   mgl.canvas.disparar("wheel", { deltaY: -120, clientX: cr.px, clientY: cr.py - cr.ih / 2 }); mgl.rodar(20);
   assert.equal(mgl.contexto.location.hash, "#cidade=recife", "a roda no teto, parado, sobre Recife entra nela");
-  // no teto, o + com Brasília no meio da tela entra nela (sem capital sob o ponto, o + só para no teto: a página da câmera)
+  // no teto, o + com Brasília no meio da tela entra nela logo que o teto chega (a pausa é só da roda; sem capital sob o
+  // ponto, o + só para no teto: a página da câmera)
   const mm = await abrir("#brasil", { passo: 50 });
   await carregar(mm);
-  mm.M.camera.zoomPara(99); mm.rodar(25);
-  const bsb = cidade("brasilia");
-  mm.M.camera.x = bsb.x; mm.M.camera.y = bsb.y; mm.rodar(3);
+  const bsb = cidade("brasilia"), cmm = mm.M.camera;
+  cmm.zoomPara(2); mm.rodar(20); cmm.x = bsb.x; cmm.y = bsb.y; mm.rodar(2);
+  mm.elementos["mundo-mais"].disparar("click");
+  for (let i = 0; i < 40 && (cmm.z !== cmm.alvoZ || cmm.z < 4); i++) mm.rodar(1);
   const cm = mm.M.niveis.brasil.caixas.find(k => k.id === "brasilia");
-  mm.M.camera.x += (cm.px - mm.M.camera.W / 2) / mm.M.camera.P; mm.M.camera.y += (cm.py - cm.ih / 2 - mm.M.camera.H / 2) / mm.M.camera.P;
-  mm.rodar(12);
+  cmm.x += (cm.px - cmm.W / 2) / cmm.P; cmm.y += (cm.py - cm.ih / 2 - cmm.H / 2) / cmm.P; mm.rodar(1);
   mm.elementos["mundo-mais"].disparar("click"); mm.rodar(20);
-  assert.equal(mm.contexto.location.hash, "#cidade=brasilia", "o + no teto sobre Brasília entra nela");  const solta = a.M.Camera([0, 0, 400, 400]);
+  assert.equal(mm.contexto.location.hash, "#cidade=brasilia", "o + logo que chega ao teto, sobre Brasília, entra nela");
+  const solta = a.M.Camera([0, 0, 400, 400]);
   solta.tamanho(640, 400, 1); solta.x = -999; solta.y = 9999; solta.z = 9; solta.limitar();
   assert.equal(solta.z, 4); assert.ok(solta.x - 320 / solta.P >= 0 && solta.y + 200 / solta.P <= 400);
   // a 1x o mapa inteiro cabe na maior escala possível (fracionária): celular (canvas de 1170 px, dpr 3) e desktop

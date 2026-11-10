@@ -158,6 +158,98 @@ async function principal() {
   await contornoNaDivisa();
   descruzarSintetico(m.contexto.window.MundoMapa);
   await azulejoQueFalhaVoltaSozinho();
+  // rodada 2
+  await quatroXEmTodaTela();
+  await camadaCobertaNaoDesenhada();
+  await iconesForaDosBotoes();
+  await nomesComMargem();
+  await ufNaGradeDoContorno();
+}
+
+// o nível de 4x aparece no zoom máximo em toda tela comum: o teto é o zoom em que o pixel dele (P/4) chega ao pixel do mapa
+// a 1x arredondado, e ali os azulejos de 4x são pedidos e o pixel cai inteiro (P múltiplo de 4)
+async function quatroXEmTodaTela() {
+  const telas = { "1366x768": [1026, 650, 1], "Android 360": [360, 520, 3], "Pixel 412": [412, 560, 2.625],
+    "iPhone 375": [375, 520, 3], "4K a 200%": [1500, 950, 2], "940x800": [940, 800, 1], "iPhone 390": [390, 507, 3] };
+  const bh = cidade("belo-horizonte");
+  for (const [nome, tela] of Object.entries(telas)) {
+    const p = await brasil({ tela });
+    const c = p.M.camera;
+    c.zoomPara(99, ...c.tela(bh.x, bh.y)); p.rodar(60);
+    const quatro = azulejosPedidos(p).filter(u => u.startsWith("/mundo/perto4x/"));
+    assert.ok(Math.abs(c.P - Math.round(c.P)) < 1e-9 && Math.round(c.P) % 4 === 0, `${nome}: P ${c.P} no teto`);
+    assert.ok(c.P / 4 >= Math.round(c.base), `${nome}: o pixel do 4x (${c.P / 4}) menor que o de 1x (${c.base})`);
+    assert.ok(quatro.length > 0, `${nome}: nenhum azulejo de 4x no teto (z ${c.z.toFixed(2)}, P ${c.P})`);
+  }
+}
+
+// a 4x, onde o azulejo de 4x já chegou e está inteiro (opaco), o de 2x e o brasil.png por baixo não são desenhados (a vista
+// no interior, em Goiás, onde todo azulejo de 4x existe)
+async function camadaCobertaNaoDesenhada() {
+  const p = await brasil({ tela: [940, 800, 1] });
+  const c = p.M.camera;
+  c.zoomPara(99, ...c.tela(230, 230)); p.rodar(60); centrar(p, 230, 230);
+  await carregar(p); p.rodar(30);   // a transição acaba
+  const n = p.M.niveis.brasil.perto.niveis;
+  assert.ok(n.perto4x.desenhados > 0, JSON.stringify(n));
+  assert.equal(n.perto.desenhados, 0, "a 4x coberto, o de 2x não é desenhado: " + JSON.stringify(n));
+  assert.equal(p.M.niveis.brasil.perto.longe, false, "nem o brasil.png");
+}
+
+// um ícone de cidade (com o ponto na tela) nunca fica sob os botões: sai de baixo deles, com linha guia
+async function iconesForaDosBotoes() {
+  const casos = [[[390, 507, 3], "recife", 2, null], [[390, 507, 3], "belo-horizonte", 2, [240, 40]],
+    [[390, 507, 3], "porto-alegre", 2, [150, 40]], [[940, 800, 1], "rio-de-janeiro", 3, [150, 40]]];
+  for (const [tela, id, z, canto] of casos) {
+    const v = await brasil({ tela, clima: { ...CLIMA, casa: "mateus-leme" } });
+    const c = v.M.camera, alvo = cidade(id);
+    c.zoomPara(z); v.rodar(40);
+    // a vista de Recife (a do r1-celular-2x) ou a cidade logo acima dos botões, no canto de baixo à direita da tela
+    if (canto) { c.x = alvo.x - (c.W / 2 - (tela[0] - canto[0]) * tela[2]) / c.P; c.y = alvo.y - (c.H / 2 - (tela[1] - canto[1]) * tela[2]) / c.P; }
+    else { c.x = alvo.x; c.y = alvo.y; }
+    c.limitar(); v.rodar(3);
+    const W = tela[0] * tela[2], H = tela[1] * tela[2];
+    for (const k of v.M.niveis.brasil.caixas.filter(k => k.ax >= 0 && k.ay >= 0 && k.ax < W && k.ay < H)) {
+      const icone = { x: k.px - k.iw / 2, y: k.py - k.ih, w: k.iw, h: k.ih };
+      for (const o of botoes(tela)) assert.ok(!cruza(icone, o), `${tela} ${id}: ${k.id} sob os botões`);
+    }
+  }
+}
+
+// os nomes de estados, vizinhos e cidades médias guardam a mesma margem da borda que os das capitais (2·T)
+async function nomesComMargem() {
+  for (const tela of [[940, 800, 1], [390, 507, 3]]) {
+    const v = await brasil({ tela }), T = T_DE(tela), W = tela[0] * tela[2], H = tela[1] * tela[2];
+    const centros = [[60, 60], [340, 60], [60, 340], [340, 340], [200, 200], [150, 300], [300, 260]];
+    const vistas = [2, 3, 4].flatMap(z => centros.map(([x, y]) => [z, x, y]));
+    for (const [z, x, y] of vistas) {
+      v.M.camera.zoomPara(z); v.rodar(40); centrar(v, x, y);
+      for (const r of v.M.niveis.brasil.rotulos) {
+        assert.ok(r.x >= 2 * T && r.y >= 2 * T && r.x + r.w <= W - 2 * T && r.y + r.h <= H - 2 * T, `${tela} ${z}x: ${r.id} colado na borda`);
+      }
+    }
+  }
+}
+
+// a UF sob o cursor sai da mesma grade do contorno desenhado: a 2x em diante, a de 2x (um ponto de beira de Minas que na
+// grade de 400 cai em Goiás e na de 800 cai em Minas é Minas)
+async function ufNaGradeDoContorno() {
+  const e = await brasil({ tela: [940, 800, 1] });
+  const bh = cidade("belo-horizonte"), cam = e.M.camera;
+  cam.zoomPara(4, ...cam.tela(bh.x, bh.y)); e.rodar(60); await carregar(e); e.rodar(3);
+  const MP = e.contexto.window.MapaPerto, lista = MUNDO.niveis.brasil.ufs.lista;
+  const m800 = MP.decodificar(UFS_PERTO.mapa, 800, 800, 27), m400 = MP.decodificar(MUNDO.niveis.brasil.ufs.mapa, 400, 400, 27);
+  let alvo = null;   // um ponto à vista, longe das cidades, onde as duas grades discordam
+  for (let y = 0; y < 800 && !alvo; y++) for (let x = 0; x < 800 && !alvo; x++) {
+    const a = m800[y * 800 + x], b = m400[(y >> 1) * 400 + (x >> 1)];
+    const [sx, sy] = cam.tela(x / 2 + 0.25, y / 2 + 0.25);
+    if (a && b && a !== b && sx > 50 && sy > 50 && sx < 890 && sy < 750 && e.M.niveis.brasil.sobre(x / 2 + 0.25, y / 2 + 0.25) === null) {
+      alvo = [x / 2 + 0.25, y / 2 + 0.25, a];
+    }
+  }
+  assert.ok(alvo, "um ponto em que as grades discordam");
+  e.M.niveis.brasil.sobre(alvo[0], alvo[1]);
+  assert.equal(e.M.niveis.brasil.uf, lista[alvo[2] - 1].uf, "a UF da grade de 2x");
 }
 
 // os botões (Voltar, + e −) no canto de baixo à direita, como o arnês os põe: a caixa deles no canvas, com a folga

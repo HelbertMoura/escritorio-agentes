@@ -19,9 +19,9 @@ const MundoMapa = (() => {
   const CHUVA = { garoa: 5, chuva: 12, tempestade: 22, neve: 8 };   // partículas por segundo em cada cidade
   const NUVEM = { nublado: ["branca", 4.5], garoa: ["cinza", 4.5], chuva: ["cinza", 5], tempestade: ["escura", 5.5], neve: ["branca", 5] };
   const MAX_AVIOES = 6, MAX_PARTICULAS = 360, MAX_FOGOS = 12, VELOCIDADE = 12, MAR = "#1a3452", VAO = 4;   // VAO: nuvem→ícone
-  // o teto do zoom do Brasil: 4x (no celular, 4,1x: a escala par em que o pixel do nível de 4x tem os 3 px da tela a 1x);
   // HALO: até onde o farol da casa passa do chalé (em S); PAUSA: segundos parada no teto ou no mínimo antes de mergulhar
-  const ZOOM_MAX = 4.2, HALO = 4, PAUSA = 0.45;
+  // pela roda (a inércia do trackpad); ZOOM_MAX: o limite da câmera, acima do teto de cada tela (tetoDoBrasil)
+  const HALO = 4, PAUSA = 0.45, ZOOM_MAX = 8;
   const PEQUENAS = new Set(["mateus-leme"]);   // as cidades que não são capital: um marcador menor, sem miniatura
   const GRANDES = new Set(["sao-paulo", "rio-de-janeiro", "brasilia", "belo-horizonte", "salvador", "fortaleza", "recife",
     "manaus", "curitiba", "porto-alegre", "belem", "goiania"]);
@@ -279,7 +279,8 @@ const MundoMapa = (() => {
     // ponto. Refeito só quando a vista ou o tempo mudam.
     function arranjar(cam) {
       const U = unidade(cam), D = degrau(cam), KN = 2 * escala(U) * D, [ox, oy] = cam.origem();
-      const chave = [ox, oy, cam.P, cam.W, cam.H, casa, !!atlas, cidades.map(c => c.tempo.tipo).join()].join();
+      const chave = [ox, oy, cam.P, cam.W, cam.H, casa, !!atlas, cidades.map(c => c.tempo.tipo).join(),
+        (cam.cobertos || []).map(o => [o.x, o.y, o.w, o.h].join(":")).join(";")].join();
       if (chave === arranjo.chave) return arranjo;
       const lista = cidades.map(c => {
         const ic = icone(c, U, D), f = formaDoTempo(c), ax = Math.round(ox + c.x * cam.P), ay = Math.round(oy + c.y * cam.P);
@@ -299,6 +300,11 @@ const MundoMapa = (() => {
           vis: ax + x1 > -40 && ax + x0 < cam.W + 40 && ay > -40 && ay + y0 < cam.H + 40 };
       });
       const vis = lista.filter(a => a.vis), M = 2, caixa = a => [a.px + a.x0 - 1, a.py + a.y0 - 1, a.px + a.x1 + 1, a.py + 1];
+      // os botões, para os ícones, numa caixa só (lado a lado, sair de um não pode cair no outro)
+      const cobertos = (cam.cobertos || []).length ? [cam.cobertos.reduce((u, o) => {
+        const x = Math.min(u.x, o.x), y = Math.min(u.y, o.y);
+        return { x, y, w: Math.max(u.x + u.w, o.x + o.w) - x, h: Math.max(u.y + u.h, o.y + o.h) - y };
+      })] : [];
       const separar = () => {
         for (let volta = 0; volta < 80; volta++) {
           let mexeu = false;
@@ -317,8 +323,17 @@ const MundoMapa = (() => {
             }
             else { const d = Math.ceil(sy / 2), s = a.py <= b.py ? 1 : -1; a.py -= s * d * ka; b.py += s * d * kb; }
           }
-          for (const a of vis) {   // dentro da tela, com a caixa inteira (só quem tem o ponto real nela)
+          for (const a of vis) {   // fora dos botões e dentro da tela, com a caixa inteira (só quem tem o ponto real nela)
             if (!a.dentro) continue;
+            for (const o of cobertos) {   // os botões são fixos: o ícone sai inteiro de baixo deles, pelo lado mais curto
+              const A = caixa(a), fim = A[3] + pe(a);   // que ainda caiba na tela
+              if (Math.min(A[2], o.x + o.w) <= Math.max(A[0], o.x) || Math.min(fim, o.y + o.h) <= Math.max(A[1], o.y)) continue;
+              const saidas = [[o.x - A[2], 0], [o.x + o.w - A[0], 0], [0, o.y - fim], [0, o.y + o.h - A[1]]]
+                .filter(([dx, dy]) => A[0] + dx >= M && A[2] + dx <= cam.W - M && A[1] + dy >= M && fim + dy <= cam.H - M);
+              if (!saidas.length) continue;
+              const [dx, dy] = saidas.reduce((m, s) => (Math.abs(s[0] + s[1]) < Math.abs(m[0] + m[1]) ? s : m));
+              a.px += dx; a.py += dy; mexeu = true;
+            }
             a.px = Math.min(cam.W - M - a.x1 - 1, Math.max(M - a.x0 + 1, a.px));
             a.py = Math.min(cam.H - M - 1 - pe(a), Math.max(M - a.y0 + 1, a.py));
           }
@@ -373,7 +388,8 @@ const MundoMapa = (() => {
       ctx.setTransform(P, 0, 0, P, ox, oy);
       mar = mar || ctx.createPattern(ladrilhoMar(), "repeat");   // o mar segue além da imagem, com as mesmas ondas
       if (mar) { ctx.fillStyle = mar; ctx.fillRect(Math.floor(-ox / P) - 1, Math.floor(-oy / P) - 1, Math.ceil(TW / P) + 2, Math.ceil(TH / P) + 2); }
-      if (pronta()) ctx.drawImage(imagem, 0, 0);   // a borda dela some nesse mar
+      // a borda dela some nesse mar; onde os níveis de perto já cobrem a vista inteira, ela nem é desenhada
+      if (!detalhe.cobre(cam) && pronta()) ctx.drawImage(imagem, 0, 0);
       detalhe.terreno(ctx, cam, dt, !partindo);   // a partir de 2x, os níveis de perto por cima, nos azulejos que já chegaram
       // a rosa dos ventos e o nome do oceano, no mar, na escala do mapa até 2x; acima, param nesse tamanho (de perto,
       // eles cobririam a costa). Nunca cortados nem sob os botões (lugarDoEnfeite). O nome espera a fonte
@@ -663,8 +679,11 @@ const MundoMapa = (() => {
       ctx.fillStyle = "#fff4dc"; ctx.fillRect(a.ax - K, a.ay - K, 2 * K, 2 * K);
     }
 
-    // a câmera vai de 1x a ZOOM_MAX em escalas pares (a camada de perto, no dobro da resolução, cai em pixel inteiro)
+    // a câmera vai de 1x ao teto em escalas pares (a camada de perto, no dobro da resolução, cai em pixel inteiro). O teto
+    // é por tela: o zoom em que o pixel do nível de 4x (P/4) chega ao pixel do mapa a 1x arredondado (2 px no desktop, 3 no
+    // celular), para o nível de 4x aparecer em toda tela, no tamanho de pixel da vista inteira
     const camBrasil = Camera([0, 0, W, H], { max: ZOOM_MAX, multiplo: 2 });
+    camBrasil.teto = () => 4 * Math.max(1, Math.round(camBrasil.base)) / camBrasil.base;
     const brasil = {
       nome: "brasil", camera: camBrasil, destaque: null,
       entrar(p) {   // voltando de uma cidade, a câmera sai de perto dela; o atlas e os azulejos que falharam são pedidos de novo
@@ -684,21 +703,21 @@ const MundoMapa = (() => {
       clique(x, y) {
         const c = perto(camBrasil, x, y);
         if (c) return { ir: "cidade", cidade: c.id };
-        ufFixa = detalhe.ufEm(x, y);
+        ufFixa = detalhe.ufEm(x, y, camBrasil);
         return ufFixa ? { anuncio: anuncioUf(ufFixa) } : null;
       },
       sobre(x, y) {
         const c = perto(camBrasil, x, y);
-        ufSobre = c ? null : detalhe.ufEm(x, y);
+        ufSobre = c ? null : detalhe.ufEm(x, y, camBrasil);
         return c ? alvo(c, camBrasil) : null;
       },
       fora() { ufSobre = null; },   // o cursor saiu do mapa
       anuncio() { return ufSobre ? anuncioUf(ufSobre) : null; },   // o estado sob o cursor, para a linha de status
       // no teto, aproximar sobre uma cidade entra nela; no mínimo, afastar sobe ao globo. Só com a câmera parada há PAUSA s:
       // a roda rápida (ou a inércia do trackpad) no caminho até o teto ou o mínimo só aproxima ou afasta
-      mergulhar(sinal, sx, sy) {
+      mergulhar(sinal, sx, sy, daRoda) {
         const c = camBrasil;
-        if (c.z !== c.alvoZ || c.ancora || c.voo || parada < PAUSA) return null;
+        if (c.z !== c.alvoZ || c.ancora || c.voo || (daRoda && parada < PAUSA)) return null;
         if (sinal < 0) return c.z <= 1 ? { ir: "globo" } : null;
         if (c.z < c.maximo() - 1e-9) return null;
         const cid = perto(c, ...c.mundo(sx, sy));

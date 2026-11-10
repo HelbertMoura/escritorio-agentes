@@ -99,11 +99,40 @@ const MapaPerto = (() => {
       const x = a ? a.wx - (a.sx - cam.W / 2) / P : v ? v.x : cam.x, y = a ? a.wy - (a.sy - cam.H / 2) / P : v ? v.y : cam.y;
       cada(c, x - mw, y - mh, x + mw, y + mh, quer);
     }
+    // o azulejo k da camada já chegou e está inteiro (sem transição): o que fica embaixo dele não precisa ser desenhado
+    const opaco = (c, k) => { const a = c.azulejos[k]; return !!(a && a.pronto && a.alfa >= 1); };
+    // a parte à vista do azulejo (i, j) da camada de índice n está coberta pelas camadas de cima, inteiras e opacas
+    // (vista: [x0, y0, x1, y1] do mundo; o pedaço do azulejo fora dela não conta)
+    function coberto(n, i, j, vista) {
+      const c = camadas[n], acima = camadas[n + 1];
+      if (!acima) return false;
+      const r = c.LADO / acima.LADO, L = acima.LADO;   // quantos azulejos de cima cabem no lado de um de baixo
+      for (let b = 0; b < r; b++) for (let a = 0; a < r; a++) {
+        const ia = i * r + a, jb = j * r + b, k = jb * acima.N + ia;
+        if ((ia + 1) * L <= vista[0] || ia * L >= vista[2] || (jb + 1) * L <= vista[1] || jb * L >= vista[3]) continue;
+        if (!acima.existe(k) || (!opaco(acima, k) && !coberto(n + 1, ia, jb, vista))) return false;
+      }
+      return true;
+    }
+    const vistaDe = cam => [...cam.mundo(0, 0), ...cam.mundo(cam.W, cam.H)];
+    // a vista inteira coberta pelos níveis de perto (então o brasil.png por baixo não é desenhado)
+    let cobertaAgora = false;
+    function cobre(cam) {
+      cobertaAgora = false;
+      const c = camadas[0];
+      if (!c) return false;
+      let tudo = true;
+      const vista = vistaDe(cam);
+      cada(c, ...vista, (k, i, j) => { if (!opaco(c, k) && !coberto(0, i, j, vista)) tudo = false; });
+      const [x0, y0] = cam.mundo(0, 0), [x1, y1] = cam.mundo(cam.W, cam.H);   // a vista toda dentro do mapa (fora dele, mar)
+      return (cobertaAgora = tudo && x0 >= 0 && y0 >= 0 && x1 <= W && y1 <= H);
+    }
     // os azulejos da vista, de baixo para cima, sobre a camada de longe (o ctx já está na escala do mundo), cada nível
-    // entrando e saindo numa transição de TROCA segundos
+    // entrando e saindo numa transição de TROCA segundos; o azulejo coberto pelos de cima (inteiros) não é desenhado
     function terreno(ctx, cam, dt, pode = true) {   // pode: pedir azulejos novos (não durante a saída do nível)
       relogio += dt;
-      for (const c of camadas) {
+      const vista = vistaDe(cam);
+      camadas.forEach((c, n) => {
         c.desenhados = 0;
         if (pode) pedirVista(c, cam);
         const alvo = vale(c, cam.P, cam) ? 1 : 0;
@@ -111,12 +140,12 @@ const MapaPerto = (() => {
           const a = c.azulejos[k];
           if (!a || !a.pronto) return;
           a.alfa = reduzido ? alvo : alvo > a.alfa ? Math.min(alvo, a.alfa + dt / TROCA) : Math.max(alvo, a.alfa - dt / TROCA);
-          if (a.alfa <= 0) return;
+          if (a.alfa <= 0 || coberto(n, i, j, vista)) return;
           ctx.globalAlpha = a.alfa;
           ctx.drawImage(a.img, i * c.LADO, j * c.LADO, c.LADO, c.LADO);
           c.desenhados++;
         });
-      }
+      });
       ctx.globalAlpha = 1;
     }
 
@@ -144,10 +173,11 @@ const MapaPerto = (() => {
         });
     }
     const porSigla = new Map(lista.map(u => [u.uf, u]));
-    // a UF no ponto (x, y) do mundo, ou null
-    function ufEm(x, y) {
+    // a UF no ponto (x, y) do mundo, ou null, na mesma grade do contorno desenhado nesta vista (gradeDa)
+    const gradeDa = cam => (grade2 && cam && cam.P / cam.base >= Z_PERTO ? grade2 : longe());
+    function ufEm(x, y, cam) {
       if (!(x >= 0 && y >= 0 && x < W && y < H)) return null;
-      const k = longe().mapa[Math.floor(y) * W + Math.floor(x)];
+      const g = gradeDa(cam), k = g.mapa[Math.floor(y / g.esc) * g.w + Math.floor(x / g.esc)];
       return k ? lista[k - 1] : null;
     }
     // o realce de uma UF numa grade: o preenchimento (um canvas da caixa da UF, copiado na escala do mundo) e as
@@ -177,7 +207,7 @@ const MapaPerto = (() => {
     // grade de 2x a partir de 2x (quando ela já chegou), senão na de longe
     function realce(ctx, cam, u, U) {
       if (!u) return;
-      const g = grade2 && cam.P / cam.base >= Z_PERTO ? grade2 : longe();
+      const g = gradeDa(cam);
       const r = realces.get(u.uf + "|" + g.w) || montarRealce(u, g), [ox, oy] = cam.origem(), P = cam.P * g.esc;
       ctx.setTransform(P, 0, 0, P, ox, oy);
       ctx.globalAlpha = 0.2; ctx.drawImage(r.preenchido, r.x0, r.y0); ctx.globalAlpha = 1;
@@ -231,9 +261,10 @@ const MapaPerto = (() => {
       const chave = ox + "," + oy + "," + cam.P + "," + cam.W + "," + cam.H + "," + T + "," + chaveOcupados;
       if (chave === arranjo.chave) return arranjo.lista;
       const ocupados = ocupar(), postos = [], tx = x => Math.round(ox + x * cam.P), ty = y => Math.round(oy + y * cam.P);
-      // livre: inteiro na tela e longe dos outros (FOLGA·T de respiro, para dois nomes vizinhos não se lerem como um)
+      // livre: inteiro na tela, a 2·T da borda (a margem dos nomes das capitais) e longe dos outros (FOLGA·T de respiro,
+      // para dois nomes vizinhos não se lerem como um)
       const fx = FOLGA * T, solto = r => ({ x: r.x - fx, y: r.y - T, w: r.w + 2 * fx, h: r.h + 2 * T });
-      const livre = r => r.x >= 0 && r.y >= 0 && r.x + r.w <= cam.W && r.y + r.h <= cam.H &&
+      const M = 2 * T, livre = r => r.x >= M && r.y >= M && r.x + r.w <= cam.W - M && r.y + r.h <= cam.H - M &&
         !ocupados.some(o => cruza(o, solto(r))) && !postos.some(o => cruza(o, solto(r)));
       const centrado = (tipo, id, c, x, y) => ({ tipo, id, c, x: tx(x) - (c.width >> 1), y: ty(y) - (c.height >> 1), w: c.width, h: c.height });
       if (z >= Z_PERTO) for (const u of lista) {   // no primeiro ponto livre da UF, o nome se couber na largura dela ali
@@ -276,10 +307,10 @@ const MapaPerto = (() => {
       return postos;
     }
 
-    return { terreno, tentarDeNovo, ufEm, realce, rotulos, porSigla, get estados() { return lista; },
+    return { terreno, cobre, tentarDeNovo, ufEm, realce, rotulos, porSigla, get estados() { return lista; },
       get info() {   // por nível: quantos azulejos pedidos e quantos desenhados no último quadro
         const soma = k => camadas.reduce((t, c) => t + c[k], 0);
-        return { pedidos: soma("pedidos"), desenhados: soma("desenhados"),
+        return { pedidos: soma("pedidos"), desenhados: soma("desenhados"), longe: !cobertaAgora,
           niveis: Object.fromEntries(camadas.map(c => [c.pasta, { pedidos: c.pedidos, desenhados: c.desenhados }])) };
       }, get grade() { return grade2 ? grade2.w : W; } };
 
