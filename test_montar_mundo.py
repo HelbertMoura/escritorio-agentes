@@ -459,6 +459,17 @@ class Montagem(unittest.TestCase):
         self.assertIn(mp.PALETA["raso_claro"], costa)
         self.assertIn(mp.PALETA["raso"], costa)
 
+    def test_neve_em_trechos(self):
+        """A neve dos Andes e das Rochosas fica em trechos: ao longo da serra há linhas de latitude com neve e linhas sem
+        (não uma linha branca contínua); o Himalaia segue nevado (test_planeta_com_biomas)."""
+        import mundo_planeta as mp
+        neve = mp.cores_da_classe("neve")
+        for nome, (y0, y1), (x0, x1) in (("andes", (204, 260), (208, 228)), ("rochosas", (60, 104), (104, 152))):
+            pontos = [[x, y] for y in range(y0, y1) for x in range(x0, x1)]
+            cores = self.cores(pontos, "terra.png")
+            linhas = [any(c in neve for c in cores[k * (x1 - x0):(k + 1) * (x1 - x0)]) for k in range(y1 - y0)]
+            self.assertTrue(0.15 <= sum(linhas) / len(linhas) <= 0.6, (nome, sum(linhas), len(linhas)))
+
     def test_versao_muda_com_a_paleta(self):
         """Só uma cor da PALETA muda: os índices dos pixels ficam iguais e a versão muda (cache do navegador)."""
         trocar = "\n".join([

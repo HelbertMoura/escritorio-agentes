@@ -1,7 +1,8 @@
 "use strict";
 // Globo de abertura: a projeção ortográfica (centro, lado oculto e o caminho de volta do clique), o ponto subsolar, que
 // decide onde é noite, e o nível desenhado numa VM sem navegador: o campo de nuvens montado uma vez só, as luzes das
-// cidades só do lado da noite e o movimento reduzido sem cintilação nem estrela cadente.
+// cidades só do lado da noite, o movimento reduzido sem cintilação nem estrela cadente, o Brasil marcado de dia e de
+// noite, a lua nova discreta, o brilho do sol pequeno e quente, as nuvens sem pixel solto e a passada que não trepida.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
@@ -9,21 +10,26 @@ const vm = require("node:vm");
 const MUNDO = JSON.parse(fs.readFileSync("static/mundo/mundo.json", "utf8"));
 const TERRA = [90, 138, 60];   // a textura de teste: terra verde no mundo todo (G > B: terra, não água)
 
-// a VM: canvas falsos (createImageData de verdade; putImageData guarda a última imagem do globo; getImageData devolve a
-// textura de teste), imagens que carregam quando o teste pede e o contexto principal, que grava o que se desenha
-function abrir(busca, reduzido) {
-  const ctx2d = () => new Proxy({}, { get: (o, k) => k === "createImageData"
+// a VM: canvas falsos (createImageData de verdade; putImageData guarda a última imagem do globo e conta as passadas;
+// getImageData devolve a textura de teste; fillRect grava o estilo em cada canvas), imagens que carregam quando o teste
+// pede, um relógio de performance que anda `passoPerf` ms a cada leitura e o contexto principal, que grava o que se desenha
+function abrir(busca, reduzido, terra = TERRA) {
+  const ctx2d = el => new Proxy({}, { get: (o, k) => k === "createImageData"
     ? (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) })
-    : k === "putImageData" ? img => { contexto.imagem = img; }
+    : k === "putImageData" ? img => { contexto.imagem = img; contexto.passadas = (contexto.passadas || 0) + 1; }
+    : k === "fillRect" ? () => el.estilos.push(String(o.fillStyle))
     : k === "getImageData" ? (x, y, w, h) => {
       const d = new Uint8ClampedArray(w * h * 4);
-      for (let i = 0; i < w * h; i++) d.set([...TERRA, 255], i * 4);
+      for (let i = 0; i < w * h; i++) d.set([...terra, 255], i * 4);
       return { data: d };
     }
     : k in o ? o[k] : () => {}, set: (o, k, v) => { o[k] = v; return true; } });
+  let agoraPerf = 0;
   const contexto = {
-    window: {}, location: { search: busca }, Math, Date, URLSearchParams, performance: { now: () => 0 },
-    document: { createElement: () => ({ getContext: ctx2d }), getElementById: () => null },
+    window: {}, location: { search: busca }, Math, Date, URLSearchParams, passoPerf: 0, canvas: [],
+    performance: { now: () => (agoraPerf += contexto.passoPerf) },
+    document: { createElement: () => { const el = { estilos: [] }; el.getContext = () => ctx2d(el); contexto.canvas.push(el); return el; },
+      getElementById: () => null },
     Image: class { constructor() { (contexto.imagens ||= []).push(this); this.ouvintes = {}; }
       addEventListener(t, f) { (this.ouvintes[t] ||= []).push(f); } carregar() { for (const f of this.ouvintes.load || []) f(); } },
   };
@@ -94,7 +100,8 @@ assert.ok(campo.A.length === 720 * 360 && campo.B.length === 720 * 360, "duas ca
 
 // as luzes das cidades: às 22h de Brasília, com a textura de terra carregada, várias acesas e todas do lado da noite;
 // ao meio-dia, com o Brasil de frente, nenhuma luz no lado do dia
-const quente = (d, q) => d[q] >= 235 && d[q + 1] >= 170 && d[q + 2] <= 150 && d[q + 3] === 255;   // o miolo da luz
+// o miolo da luz (não o ouro do contorno)
+const quente = (d, q) => d[q] >= 235 && d[q + 1] >= 195 && d[q + 2] >= 100 && d[q + 2] <= 150 && d[q + 3] === 255;
 function luzes(hora) {
   const m = abrir("?hora=" + hora, true), n = m.nivel();
   for (const img of m.contexto.imagens) img.carregar();
@@ -127,4 +134,110 @@ assert.ok(new Set(qs.slice(1).map(q => q.split(";").filter(o => o.startsWith("fi
 let cadente = qs.some(q => q.includes(Globo.CADENTE));
 for (let i = 200; i < 3600 && !cadente; i++) cadente = s.rodar(ns)[0].includes(Globo.CADENTE);
 assert.ok(cadente, "nenhuma estrela cadente em 58 s");
+// o Brasil se acha sem hover, de dia e de noite, sobre qualquer bioma: contorno de dois tons (ouro por dentro, escuro por
+// fora) e os vizinhos da América do Sul mais apagados que ele (a textura de teste é toda da cor do cerrado)
+const CERRADO = [205, 191, 107], RAD = Math.PI / 180;
+const celulas = MUNDO.niveis.brasil.celulas, doBrasil = (lat, lon) => {
+  const j = Math.floor((6 - lat) * 2), i = Math.floor((lon + 74) * 2);
+  return j >= 0 && j < 80 && i >= 0 && i < 80 && celulas[j][i] === "1";
+};
+function pintado(hora, terra) {
+  const m = abrir(`?hora=${hora}&data=2026-11-18`, true, terra), n = m.nivel();
+  for (const img of m.contexto.imagens) img.carregar();
+  m.rodar(n, 2);
+  return { m, n, d: m.contexto.imagem.data, B: m.Globo.B };
+}
+const eOuro = (d, q) => d[q] >= 232 && d[q + 1] >= 175 && d[q + 1] <= 215 && d[q + 2] <= 88;   // nem o cerrado nem o ouro a 50%
+for (const hora of [12, 22]) {
+  const { m, n, d, B } = pintado(hora, CERRADO), { lon, lat } = n.rotacao;
+  let ouro = 0, escuro = 0;
+  for (let y = 1; y < B - 1; y++) for (let x = 1; x < B - 1; x++) {
+    const q = (y * B + x) * 4, p = m.Globo.ponto(x + 0.5, y + 0.5, lon, lat, m.Globo.R);
+    if (!p || d[q + 3] !== 255) continue;
+    if (eOuro(d, q) && doBrasil(p.lat, p.lon)) ouro++;
+    if (d[q] + d[q + 1] + d[q + 2] < 150 && [1, -1, B, -B].some(o => eOuro(d, (y * B + x + o) * 4))) escuro++;
+  }
+  assert.ok(ouro >= 150, `${hora}h: contorno de ouro do Brasil: ${ouro} px`);
+  assert.ok(escuro >= 150, `${hora}h: contorno escuro por fora: ${escuro} px`);
+}
+{
+  const { m, n, d, B } = pintado(12, CERRADO), { lon, lat } = n.rotacao;
+  const cor = (la, lo) => {
+    const p = m.Globo.projetar(la, lo, lon, lat, m.Globo.R), q = (Math.floor(p.y) * B + Math.floor(p.x)) * 4;
+    return [d[q], d[q + 1], d[q + 2]];
+  };
+  const sat = c => Math.max(...c) - Math.min(...c), br = cor(-12, -50), py = cor(-22.5, -59), bo = cor(-17, -64);
+  assert.ok(sat(py) < sat(br) * 0.8 && sat(bo) < sat(br) * 0.8, `vizinhos apagados: Brasil ${br}, Paraguai ${py}, Bolívia ${bo}`);
+}
+
+// o brilho do sol no mar: pequeno e quente, sem xadrez frio (a textura de teste é toda mar)
+{
+  const { m, n, d, B } = pintado(12, [29, 59, 92]), { lon, lat } = n.rotacao;
+  const sol = m.Globo.terminador(new Date(Date.UTC(2026, 10, 18, 15))), N = m.Globo.nuvens();
+  const nublado = p => {   // nuvem, fiapo ou a sombra deles (até 4 células) no ponto, com as nuvens paradas
+    for (let b = -4; b <= 4; b++) for (let a = -4; a <= 4; a++) {
+      const k = (Math.floor((90 - p.lat) * 2) + b) * 720 + ((Math.floor((p.lon + 180) * 2) + a + 720) % 720);
+      if (N.A[k] > N.la || N.B[k] > N.lb) return true;
+    }
+    return false;
+  };
+  let quentes = 0;
+  for (let y = 0; y < B; y++) for (let x = 0; x < B; x++) {
+    const p = m.Globo.ponto(x + 0.5, y + 0.5, lon, lat, m.Globo.R), q = (y * B + x) * 4;
+    if (!p || p.lat > 12 || p.lat < -33 || p.lon < -74 || p.lon > -35) continue;   // no céu limpo da vista inicial
+    const f = p.lat * RAD, fs = sol.latSol * RAD;
+    if (Math.sin(f) * Math.sin(fs) + Math.cos(f) * Math.cos(fs) * Math.cos((p.lon - sol.lonSol) * RAD) < 0.5) continue;
+    if (d[q] >= 120 && d[q] >= d[q + 2] + 30) quentes++;
+    const mar = d[q] === 29 && d[q + 1] === 59 && d[q + 2] === 92;
+    assert.ok(mar || nublado(p) || d[q] >= d[q + 2], `brilho frio no mar em ${x},${y}: ${d[q]},${d[q + 1]},${d[q + 2]}`);
+  }
+  assert.ok(quentes <= 30, "o brilho do sol no mar é pequeno: " + quentes);
+}
+
+// a lua: na fase nova, só a luz cinérea quase transparente (nada opaco, sem mares); crescente e cheia acesas
+const lua = data => {
+  const m = abrir(`?hora=12&data=${data}`, true), n = m.nivel();
+  m.rodar(n, 1);
+  return m.contexto.canvas.find(c => c.width === 29).estilos;
+};
+const nova = lua("2026-11-09"), alfa = e => Number((/rgba\([^)]*,([\d.]+)\)/.exec(e) || [0, 1])[1]);
+assert.ok(nova.length > 0 && nova.every(e => e.startsWith("rgba") && alfa(e) <= 0.14), "lua nova discreta: " + [...new Set(nova)]);
+assert.ok(lua("2026-11-14").filter(e => e === "#e4dfd1").length > 20, "lua crescente acesa");
+assert.ok(lua("2026-11-24").filter(e => e === "#e4dfd1").length > 150, "lua cheia acesa");
+
+// as nuvens: massa limpa (nenhum pixel de nuvem sem vizinho de nuvem, nenhum buraco de um pixel), menos de um quarto do
+// céu e o Brasil (com o céu ao norte dele, onde fica a seta) livre na vista inicial
+{
+  const N = Globo.nuvens(), TW = 720, TH = 360, nuvem = (i, j) => N.A[j * TW + ((i + TW) % TW)] > N.la;
+  let soltos = 0, buracos = 0, total = 0;
+  for (let j = 1; j < TH - 1; j++) for (let i = 0; i < TW; i++) {
+    const viz = nuvem(i - 1, j) + nuvem(i + 1, j) + nuvem(i, j - 1) + nuvem(i, j + 1);
+    if (nuvem(i, j)) { total++; if (viz === 0) soltos++; } else if (viz === 4) buracos++;
+  }
+  assert.equal(soltos, 0, "pixels de nuvem soltos"); assert.equal(buracos, 0, "buracos de um pixel nas nuvens");
+  assert.ok(total / (TW * TH) > 0.12 && total / (TW * TH) < 0.22, "cobertura das nuvens: " + total / (TW * TH));
+  let sobre = 0, fios = 0, n = 0;
+  for (let lat = 12; lat > -33; lat -= 0.5) for (let lon = -74; lon < -35; lon += 0.5) {
+    const k = Math.floor((90 - lat) * 2) * TW + Math.floor((lon + 180) * 2);
+    n++; if (N.A[k] > N.la) sobre++; if (N.B[k] > N.lb) fios++;
+  }
+  assert.ok(sobre / n < 0.04 && fios / n < 0.04, `nuvens sobre o Brasil na vista inicial: ${sobre / n}, fios ${fios / n}`);
+}
+
+// a passada a 30 Hz cai para 15 Hz quando passa de 12 ms e só volta depois de várias passadas rápidas (sem trepidar)
+{
+  const p = abrir("", false), np = p.nivel();
+  const passadas = q => { const a = p.contexto.passadas || 0; p.rodar(np, q); return (p.contexto.passadas || 0) - a; };
+  p.rodar(np, 4);
+  p.contexto.passoPerf = 13;   // cada leitura do relógio anda 13 ms: a passada "leva" 13 ms
+  passadas(8);
+  const lenta = passadas(120);
+  assert.ok(lenta >= 20 && lenta <= 26, "a 15 Hz (uma passada a cada 5 quadros de 16 ms): " + lenta);
+  p.contexto.passoPerf = 10;   // entre os dois limites: fica em 15 Hz
+  assert.ok(passadas(120) <= 26, "10 ms não volta a 30 Hz");
+  p.contexto.passoPerf = 4;
+  passadas(60);
+  const rapida = passadas(120);
+  assert.ok(rapida >= 36, "de volta a 30 Hz (uma a cada 3 quadros): " + rapida);
+}
 console.log("test_mundo_globo: ok");

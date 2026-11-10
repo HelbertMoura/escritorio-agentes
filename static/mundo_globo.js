@@ -36,12 +36,17 @@ const Globo = (() => {
     [-12, -77, 1], [-33.45, -70.65, 1], [-34.6, -58.4, 2], [10.5, -66.9, 1], [-0.2, -78.5, 1], [-34.9, -56.2, 1],
     [-25.3, -57.6, 1], [-16.5, -68.15, 1]];
   // a seta que aponta o Brasil de cima, pelo norte (k contorno, a ouro, l luz, s sombra)
-  const SETA = ["..kkkkk..", "..klask..", "..klask..", "kkklaskkk", ".klaaask.", "..klask..", "...kak...", "....k...."];
+  const SETA = ["...kkkkk...", "...klask...", "...klask...", "...klask...", "kkkklaskkkk", ".klaaaaask.", "..klaaask..",
+    "...klask...", "....kak....", ".....k....."];
   const CORES_SETA = { k: "#2a2217", a: "#f5c84d", l: "#fff1b0", s: "#c9962e" };
   // o brilho em volta da luz de uma cidade: [dx, dy, força]
-  const HALO = [[1, 0, 0.42], [-1, 0, 0.42], [0, 1, 0.42], [0, -1, 0.42]];
-  const HALO_GRANDE = [...HALO.map(([x, y]) => [x, y, 0.62]), [1, 1, 0.34], [-1, 1, 0.34], [1, -1, 0.34], [-1, -1, 0.34],
-    [2, 0, 0.16], [-2, 0, 0.16], [0, 2, 0.16], [0, -2, 0.16]];
+  const HALO = [1, 0, 0.42, -1, 0, 0.42, 0, 1, 0.42, 0, -1, 0.42];
+  const HALO_GRANDE = [1, 0, 0.62, -1, 0, 0.62, 0, 1, 0.62, 0, -1, 0.62, 1, 1, 0.34, -1, 1, 0.34, 1, -1, 0.34, -1, -1, 0.34,
+    2, 0, 0.16, -2, 0, 0.16, 0, 2, 0.16, 0, -2, 0.16];
+  // soma a cor (cr, cg, cb) com força m no pixel q da imagem, se ele for do disco
+  function somar(d, q, m, cr, cg, cb) {
+    if (d[q + 3] === 255) { d[q] += (cr - d[q]) * m; d[q + 1] += (cg - d[q + 1]) * m; d[q + 2] += (cb - d[q + 2]) * m; }
+  }
 
   const norm = l => ((((l + 180) % 360) + 360) % 360) - 180;
   function semente(s) { return () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff); }
@@ -103,9 +108,19 @@ const Globo = (() => {
     for (let i = 0, soma = 0; i < 1024; i++) if ((soma += h[i]) >= d.length * p) return min + i / k;
     return max;
   }
+  // limpa um campo no limiar l: pixel acima de l com um vizinho acima ou nenhum desce; pixel abaixo com três ou quatro
+  // vizinhos acima sobe (nada de pixel solto nem de furo de um pixel na borda da nuvem)
+  function limpar(d, l) {
+    for (let vez = 0; vez < 3; vez++) for (let j = 1; j < TH - 1; j++) for (let i = 0; i < TW; i++) {
+      const k = j * TW + i, e = i ? k - 1 : k + TW - 1, dd = i === TW - 1 ? k - TW + 1 : k + 1;
+      const viz = (d[e] > l) + (d[dd] > l) + (d[k - TW] > l) + (d[k + TW] > l);
+      if (d[k] > l && viz <= 1) d[k] = l - 1e-4; else if (d[k] <= l && viz >= 3) d[k] = l + 1e-4;
+    }
+  }
   // as nuvens, em duas camadas de 720x360: A, cúmulos e frentes com redemoinhos nas latitudes médias e a faixa do
-  // equador mais cheia; B, fiapos esticados na longitude. O ruído sai numa grade de 1° e é ampliado para 0,5° com um
-  // grão de pixel na borda. Montadas uma vez só, na primeira vez que o globo desenha.
+  // equador mais cheia; B, fiapos esticados na longitude. O ruído sai numa grade de 1° e é ampliado para 0,5°; o céu do
+  // Brasil e o do norte dele (onde fica a seta) ficam quase limpos na vista inicial. A borda é limpa nos limiares (sem
+  // pixel solto). Montadas uma vez só, na primeira vez que o globo desenha.
   let campo = null, montagens = 0;
   function nuvens() {
     if (campo) return campo;
@@ -119,9 +134,11 @@ const Globo = (() => {
     const a1 = new Float32Array(W2 * (H2 + 1)), b1 = new Float32Array(W2 * (H2 + 1));
     for (let j = 0; j <= H2; j++) {
       const lat = 90 - j, al = lat < 0 ? -lat : lat;
-      const peso = 0.8 + 0.26 * exp(-(((lat - 5) / 7) ** 2)) - 0.2 * exp(-(((al - 24) / 7) ** 2))
-        + 0.12 * exp(-(((al - 52) / 11) ** 2)) - (al > 74 ? 0.12 : 0), pesoB = 0.85 + 0.3 * exp(-(((al - 45) / 15) ** 2));
+      const peso0 = 0.8 + 0.26 * exp(-(((lat - 5) / 7) ** 2)) - 0.2 * exp(-(((al - 24) / 7) ** 2))
+        + 0.12 * exp(-(((al - 52) / 11) ** 2)) - (al > 74 ? 0.12 : 0), pesoB0 = 0.85 + 0.3 * exp(-(((al - 45) / 15) ** 2));
       for (let i = 0; i < W2; i++) {
+        const q = ((i - 180 + 54.5) / 30) ** 2 + ((lat + 10.5) / 30) ** 2, limpo = 1 - 0.2 * exp(-q * q);   // o céu do Brasil
+        const peso = peso0 * limpo, pesoB = pesoB0 * limpo;
         let x = i * 2, y = j * 2;
         for (let m = 0; m < giros.length; m++) {
           const gr = giros[m], cx = gr[0], cy = gr[1], r = gr[2];
@@ -147,13 +164,13 @@ const Globo = (() => {
       const fy = j / 2, y0 = fy | 0, ay = fy - y0;
       for (let i = 0; i < TW; i++) {
         const fx = i / 2, x0 = fx | 0, ax = fx - x0, x1 = x0 + 1 === W2 ? 0 : x0 + 1, k0 = y0 * W2, k1 = k0 + W2;
-        const grao = ((((i * 73856093) ^ (j * 19349663)) >>> 0) % 1024 / 1024 - 0.5) * 0.012;
-        A[j * TW + i] = (a1[k0 + x0] * (1 - ax) + a1[k0 + x1] * ax) * (1 - ay) + (a1[k1 + x0] * (1 - ax) + a1[k1 + x1] * ax) * ay + grao;
-        Bf[j * TW + i] = (b1[k0 + x0] * (1 - ax) + b1[k0 + x1] * ax) * (1 - ay) + (b1[k1 + x0] * (1 - ax) + b1[k1 + x1] * ax) * ay + grao;
+        A[j * TW + i] = (a1[k0 + x0] * (1 - ax) + a1[k0 + x1] * ax) * (1 - ay) + (a1[k1 + x0] * (1 - ax) + a1[k1 + x1] * ax) * ay;
+        Bf[j * TW + i] = (b1[k0 + x0] * (1 - ax) + b1[k0 + x1] * ax) * (1 - ay) + (b1[k1 + x0] * (1 - ax) + b1[k1 + x1] * ax) * ay;
       }
     }
     montagens++;
-    campo = { A, B: Bf, la: quantil(A, 0.74), la2: quantil(A, 0.9), lb: quantil(Bf, 0.92), lb2: quantil(Bf, 0.965) };
+    campo = { A, B: Bf, la: quantil(A, 0.82), la2: quantil(A, 0.92), lb: quantil(Bf, 0.94), lb2: quantil(Bf, 0.975) };
+    for (const [d, l] of [[A, campo.la], [A, campo.la2], [Bf, campo.lb], [Bf, campo.lb2]]) limpar(d, l);
     return campo;
   }
 
@@ -161,14 +178,17 @@ const Globo = (() => {
   let disco = null;
   function geometria() {
     if (disco) return disco;
-    const sqrt = Math.sqrt, fora = (1 + 5 / R) ** 2, n = [], anel = [];
+    const sqrt = Math.sqrt, fora = (1 + 5 / R) ** 2, n = [], a = [];
     for (let py = 0; py < B; py++) for (let px = 0; px < B; px++) {
       const u = (px + 0.5 - C) / R, v = (C - py - 0.5) / R, r2 = u * u + v * v;
       if (r2 <= 1) n.push(py * B + px);
-      else if (r2 <= fora) {
-        const r = sqrt(r2);
-        anel.push([py * B + px, u / r, v / r, (r - 1) * R, (BAYER[(py & 3) * 4 + (px & 3)] + 0.5) / 16 - 0.5]);
-      }
+      else if (r2 <= fora) a.push(py * B + px);
+    }
+    const anel = { n: a.length, O: Int32Array.from(a), U: new Float32Array(a.length), V: new Float32Array(a.length),
+      D: new Float32Array(a.length), DZ: new Float32Array(a.length) };
+    for (let k = 0; k < anel.n; k++) {
+      const px = anel.O[k] % B, py = (anel.O[k] / B) | 0, u = (px + 0.5 - C) / R, v = (C - py - 0.5) / R, r = sqrt(u * u + v * v);
+      anel.U[k] = u / r; anel.V[k] = v / r; anel.D[k] = (r - 1) * R; anel.DZ[k] = (BAYER[(py & 3) * 4 + (px & 3)] + 0.5) / 16 - 0.5;
     }
     const nd = n.length, O = Int32Array.from(n), U = new Float32Array(nd), V = new Float32Array(nd), Z = new Float32Array(nd);
     const DZ = new Float32Array(nd);
@@ -181,15 +201,19 @@ const Globo = (() => {
   }
 
   function criar({ dados, Camera, reduzido }) {
+    // ?hora= é a hora de Brasília (UTC−3), parada, de hoje ou do dia de ?data=AAAA-MM-DD (o sol e a fase da lua)
     const busca = new URLSearchParams(location.search), simulada = parseFloat(busca.get("hora"));
-    const fixa = simulada >= 0 && simulada < 24 ? (() => {   // ?hora= é a hora de Brasília (UTC−3) de hoje, parada
-      const hoje = new Date(Date.now() - 3 * 3600000);
+    const dia = /^\d{4}-\d{2}-\d{2}$/.test(busca.get("data") || "") ? Date.parse(busca.get("data") + "T00:00:00Z") : NaN;
+    const fixa = simulada >= 0 && simulada < 24 ? (() => {
+      const hoje = Number.isFinite(dia) ? new Date(dia) : new Date(Date.now() - 3 * 3600000);
       return new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth(), hoje.getUTCDate()) + (simulada + 3) * 3600000);
     })() : null;
     const camera = Camera(CAIXA), versao = Number.isInteger(dados.versao) ? dados.versao : 0;
     let lon0 = LON0, lat0 = LAT0, vel = reduzido ? 0 : -GIRO, segurando = false, velArraste = 0, ultimo = 0, voo = null;
     let derivaA = 0, derivaB = 0, sol = null, solEm = -1e12, feito = { chave: "", t: -1e9, destaque: null }, telaFeita = "";
-    let intervalo = 33;   // ms entre passadas: 30 Hz, ou 15 Hz se a passada pesar (celular lento)
+    // ms entre passadas: 30 Hz; 15 Hz se a passada passar de 12 ms (celular lento), e de volta a 30 Hz só depois de 10
+    // passadas seguidas abaixo de 8 ms (sem alternar e trepidar perto do limite)
+    let intervalo = 33, rapidas = 0;
 
     // a textura: a cor do dia e a água (B > G) de cada pixel de 0,5°; antes dela chegar, o globo é de mar
     const tex = new Uint8Array(TW * TH * 3), agua = new Uint8Array(TW * TH).fill(1);
@@ -198,6 +222,15 @@ const Globo = (() => {
       for (let k = 0; k < TW * TH; k++) {
         tex[k * 3] = d[k * 4]; tex[k * 3 + 1] = d[k * 4 + 1]; tex[k * 3 + 2] = d[k * 4 + 2];
         agua[k] = d[k * 4 + 2] > d[k * 4 + 1] ? 1 : 0;
+      }
+      // os vizinhos da América do Sul um pouco apagados, como no mapa: o Brasil se destaca
+      for (let j = (90 - 13) * 2; j < (90 + 56) * 2; j++) for (let i = (180 - 82) * 2; i < (180 - 34) * 2; i++) {
+        const k = j * TW + i;
+        if (agua[k] || brasil[k]) continue;
+        const r = tex[k * 3], g = tex[k * 3 + 1], b = tex[k * 3 + 2], cinza = 0.3 * r + 0.59 * g + 0.11 * b;
+        tex[k * 3] = (r * 0.55 + cinza * 0.45) * 0.88;
+        tex[k * 3 + 1] = (g * 0.55 + cinza * 0.45) * 0.88;
+        tex[k * 3 + 2] = (b * 0.55 + cinza * 0.45) * 0.88;
       }
       feito.chave = "";   // a passada guardada era só de mar: refaz (com movimento reduzido, nada mais a refaria)
     });
@@ -246,7 +279,8 @@ const Globo = (() => {
     const estrelas = [], re = semente(5), CORES_ESTRELA = ["220,230,255", "255,244,224", "200,214,255"];
     for (let i = 0; i < 330; i++) {
       const p = re();
-      estrelas.push([re(), re(), p < 0.07 ? 2 : p < 0.3 ? 1 : 0, re() * 6, 0.6 + re() * 0.8, CORES_ESTRELA[Math.floor(re() * 3)]]);
+      const cor = CORES_ESTRELA[Math.floor(re() * 3)];
+      estrelas.push([re(), re(), p < 0.07 ? 2 : p < 0.3 ? 1 : 0, re() * 6, 0.6 + re() * 0.8, cor, "rgb(" + cor + ")"]);
     }
     for (let i = 0; i < 240; i++) {
       const a = re(), d = (re() + re() + re() - 1.5) * 0.09;
@@ -297,21 +331,20 @@ const Globo = (() => {
         const o = O[n], k = K[n], dz = DZ[n], u = U[n], v = V[n], z = Z[n], q = o * 4;
         let r = tex[k * 3], g = tex[k * 3 + 1], bl = tex[k * 3 + 2];
         const mar = agua[k], luz = u * sx + v * sy + z * sz;
-        if (mar) {   // o sol brilhando no mar, discreto
-          const e = u * hx + v * hy + z * hz + dz * 0.003;
-          if (luz > 0.1 && e > 0.9975) { const m = e > 0.999 ? 0.5 : 0.26; r += (205 - r) * m; g += (228 - g) * m; bl += (246 - bl) * m; }
+        if (mar) {   // o sol brilhando no mar: um ponto pequeno e quente, sem pontilhado
+          if (luz > 0.3 && u * hx + v * hy + z * hz > 0.99985) { r += (255 - r) * 0.6; g += (228 - g) * 0.6; bl += (170 - bl) * 0.6; }
         } else if (brasil[k]) {
           marca[o] = 1; contorno[nbr++] = n;
           if (realce) { r += (255 - r) * realce; g += (236 - g) * realce; bl += (170 - bl) * realce; }
         }
-        const a = na[o] + dz * 0.015;
-        if (a > N.la) {   // a nuvem: borda clara do lado do sol, borda azulada do outro, miolo branco
-          const [cr, cg, cb] = lado && na[o + lado] <= N.la ? [255, 255, 255] : lado && na[o - lado] <= N.la ? [158, 174, 198]
-            : a > N.la2 ? [238, 243, 250] : [202, 212, 228];
-          r = cr; g = cg; bl = cb;
+        const a = na[o];
+        if (a > N.la) {   // a nuvem: borda clara do lado do sol, borda azulada do outro, miolo branco, corpo cinza-azulado
+          if (lado && na[o + lado] <= N.la) { r = 255; g = 255; bl = 255; }
+          else if (lado && na[o - lado] <= N.la) { r = 158; g = 174; bl = 198; }
+          else if (a > N.la2) { r = 238; g = 243; bl = 250; } else { r = 202; g = 212; bl = 228; }
         } else if (lado && na[o + 3 * lado] > N.la) { r *= 0.66; g *= 0.68; bl *= 0.76; }   // a sombra dela no chão
-        const fb = NB[n] + dz * 0.025;
-        if (fb > N.lb) { const m = fb > N.lb2 ? 0.6 : 0.34; r += (236 - r) * m; g += (241 - g) * m; bl += (249 - bl) * m; }   // fiapos
+        const fb = NB[n];
+        if (fb > N.lb) { const m = fb > N.lb2 ? 0.55 : 0.38; r += (236 - r) * m; g += (241 - g) * m; bl += (249 - bl) * m; }   // fiapos
         if (z < 0.3) {   // a atmosfera na beira do disco, mais forte do lado do sol
           const sobe = luz * 3 + 0.5, m = (((0.3 - z) / 0.3 * 0.5 * (sobe > 1 ? 1 : sobe < 0.15 ? 0.15 : sobe) + dz * 0.12) / 0.14 | 0) * 0.14;
           if (m > 0) { r += (110 - r) * m; g += (172 - g) * m; bl += (248 - bl) * m; }
@@ -321,21 +354,28 @@ const Globo = (() => {
         for (let i = 0; tt < fx[0]; ) fx = FAIXAS[++i];
         d[q] = r * fx[1] + fx[4]; d[q + 1] = g * fx[2] + fx[5]; d[q + 2] = bl * fx[3] + fx[6]; d[q + 3] = 255;
       }
-      // o contorno do Brasil: a beira da terra brasileira, em ouro (mais forte no foco, mais leve à noite)
+      // o contorno do Brasil em dois tons, legível sobre qualquer bioma, de dia e de noite: ouro na beira da terra
+      // brasileira e escuro logo por fora (no foco, o ouro clareia e o país inteiro acende por dentro)
       for (let i = 0; i < nbr; i++) {
-        const n = contorno[i], o = O[n];
+        const o = O[contorno[i]];
         if (marca[o - 1] && marca[o + 1] && marca[o - B] && marca[o + B]) continue;
-        const q = o * 4, forte = destaque ? 1 : U[n] * sx + V[n] * sy + Z[n] * sz > 0 ? 0.5 : 0.36;
-        d[q] += (245 - d[q]) * forte; d[q + 1] += (200 - d[q + 1]) * forte; d[q + 2] += (77 - d[q + 2]) * forte;
+        for (let v = 0; v < 4; v++) {
+          const w = v === 0 ? o - 1 : v === 1 ? o + 1 : v === 2 ? o - B : o + B;
+          if (!marca[w] && d[w * 4 + 3] === 255) somar(d, w * 4, 0.82, 34, 26, 16);
+        }
+        marca[o] = 2;
       }
-      for (const [o, u, v, dist, dz] of anel) {   // o halo: azul do lado do dia, laranja no terminador, quase nada à noite
-        const luz = u * sx + v * sy + 0.35 * sz + dz * 0.06, q = o * 4;
+      for (let i = 0; i < nbr; i++) {
+        const o = O[contorno[i]], q = o * 4;
+        if (marca[o] === 2) { d[q] = 245; d[q + 1] = destaque ? 214 : 200; d[q + 2] = destaque ? 96 : 77; }
+      }
+      for (let m = 0; m < anel.n; m++) {   // o halo: azul do lado do dia, laranja no terminador, quase nada à noite
+        const dz = anel.DZ[m], dist = anel.D[m], luz = anel.U[m] * sx + anel.V[m] * sy + 0.35 * sz + dz * 0.06, q = anel.O[m] * 4;
         let alfa = dist < 1.6 ? 0.78 : dist < 3.2 ? 0.36 : dz < 0 ? 0.14 : 0;
-        let cor = [125, 190, 255];
-        if (luz > 0.1) alfa *= 0.5 + 0.5 * Math.min(1, luz * 1.6);
-        else if (luz > -0.12) { cor = [255, 168, 122]; alfa *= 0.75; }
-        else { cor = [70, 90, 170]; alfa *= 0.22; }
-        d[q] = cor[0]; d[q + 1] = cor[1]; d[q + 2] = cor[2]; d[q + 3] = alfa * 255;
+        if (luz > 0.1) { alfa *= 0.5 + 0.5 * Math.min(1, luz * 1.6); d[q] = 125; d[q + 1] = 190; d[q + 2] = 255; }
+        else if (luz > -0.12) { alfa *= 0.75; d[q] = 255; d[q + 1] = 168; d[q + 2] = 122; }
+        else { alfa *= 0.22; d[q] = 70; d[q + 1] = 90; d[q + 2] = 170; }
+        d[q + 3] = alfa * 255;
       }
       for (const [lat, lon, peso, fase, satelite] of luzes) {   // as luzes das cidades: só no escuro
         if (visao(lat, lon) < 0.06 || (satelite && agua[celula(lat, lon)])) continue;
@@ -345,11 +385,11 @@ const Globo = (() => {
         const escuro = Math.min(1, (0.03 - (u * sx + v * sy + z * sz)) / 0.12);
         if (escuro <= 0) continue;
         const a = escuro * (reduzido ? 1 : 0.86 + 0.14 * Math.sin(t / 900 + fase)) * (satelite ? 0.7 : 1);
-        const somar = (q, m, cr, cg, cb) => {
-          if (d[q + 3] === 255) { d[q] += (cr - d[q]) * m; d[q + 1] += (cg - d[q + 1]) * m; d[q + 2] += (cb - d[q + 2]) * m; }
-        };
-        if (!satelite) for (const [ax, ay, m] of peso > 1 ? HALO_GRANDE : HALO) somar(((y + ay) * B + x + ax) * 4, a * m, 240, 150, 70);
-        if (satelite) somar(o * 4, a, 240, 180, 90); else somar(o * 4, a, 255, peso > 1 ? 226 : 208, peso > 1 ? 140 : 112);
+        if (!satelite) {
+          const h = peso > 1 ? HALO_GRANDE : HALO;
+          for (let i = 0; i < h.length; i += 3) somar(d, ((y + h[i + 1]) * B + x + h[i]) * 4, a * h[i + 2], 240, 150, 70);
+        }
+        if (satelite) somar(d, o * 4, a, 240, 180, 90); else somar(d, o * 4, a, 255, peso > 1 ? 226 : 208, peso > 1 ? 140 : 112);
       }
       if (tctx && tctx.putImageData) tctx.putImageData(imagem, 0, 0);
     }
@@ -371,17 +411,19 @@ const Globo = (() => {
       }
       return fundo;
     }
-    function cintilar(ctx, cam, t) {   // as estrelas médias e fortes, devagar, cada uma no seu ritmo
+    function cintilar(ctx, cam, t) {   // as estrelas médias e fortes, devagar, cada uma no seu ritmo (alfa, sem texto novo)
       const S = lado(cam);
-      for (const [ex, ey, nv, fase, vel, cor] of estrelas) {
+      for (let i = 0; i < estrelas.length; i++) {
+        const e = estrelas[i], nv = e[2];
         if (nv < 1) continue;
-        const x = Math.floor(ex * cam.W / S) * S, y = Math.floor(ey * cam.H / S) * S, k = 0.62 + 0.38 * Math.sin(t / 1400 * vel + fase);
-        ctx.fillStyle = `rgba(${cor},${((nv === 2 ? 0.95 : 0.62) * k).toFixed(2)})`; ctx.fillRect(x, y, S, S);
+        const x = Math.floor(e[0] * cam.W / S) * S, y = Math.floor(e[1] * cam.H / S) * S, k = 0.62 + 0.38 * Math.sin(t / 1400 * e[4] + e[3]);
+        ctx.fillStyle = e[6]; ctx.globalAlpha = (nv === 2 ? 0.95 : 0.62) * k; ctx.fillRect(x, y, S, S);
         if (nv === 2 && k > 0.55) {
-          ctx.fillStyle = `rgba(${cor},${(0.45 * k).toFixed(2)})`;
+          ctx.globalAlpha = 0.45 * k;
           ctx.fillRect(x - S, y, S * 3, S); ctx.fillRect(x, y - S, S, S * 3); ctx.fillRect(x, y, S, S);
         }
       }
+      ctx.globalAlpha = 1;
     }
     function cadente(ctx, cam, t) {   // de vez em quando, um risco em diagonal de pixel (2 para o lado, 1 para baixo)
       if (!cad && t >= proxima) {
@@ -426,7 +468,7 @@ const Globo = (() => {
           cor = mare ? "#b6b2a6" : "#e4dfd1";
           if (cr) { const w = (nx - cr[0]) * lx; cor = w > cr[2] * 0.35 ? "#9e998c" : w < -cr[2] * 0.35 ? "#f7f4ec" : "#cdc7b8"; }
           if (r2 > 0.86 && !cr) cor = mare ? "#a5a196" : "#d2ccbd";
-        } else cor = r2 > 0.9 ? "#3a4260" : mare ? "#22283a" : "#2a3044";   // a luz da Terra, fraca
+        } else cor = r2 > 0.9 ? "rgba(170,185,225,0.13)" : "rgba(150,165,205,0.07)";   // a luz da Terra: quase transparente
         g.fillStyle = cor; g.fillRect(x, y, 1, 1);
       }
       return luaTela;
@@ -476,13 +518,14 @@ const Globo = (() => {
         if (vez || mudou || destaque !== feito.destaque) {
           const t0 = performance.now();
           renderizar(t, destaque); feito = { chave, t, destaque };
-          intervalo = performance.now() - t0 > 12 ? 66 : 33;
+          const custo = performance.now() - t0;
+          if (custo > 12) { intervalo = 66; rapidas = 0; } else if (custo < 8) { if (++rapidas >= 10) intervalo = 33; } else rapidas = 0;
         }
         ctx.drawImage(tela, 0, 0);
 
         if (!voo && visao(-11, -51) > 0.35) {   // a seta, ao norte do Brasil, apontando para ele (sem cobrir o país)
           const alvo = projetar(5.6, -59, lon0, lat0, R), pulo = reduzido ? 0 : Math.sin(t / 320) > 0 ? 1 : 0;
-          const x0 = Math.round(alvo.x) - 4, y0 = Math.round(alvo.y) - SETA.length - pulo;
+          const x0 = Math.round(alvo.x) - 5, y0 = Math.round(alvo.y) - SETA.length - pulo;
           SETA.forEach((linha, y) => {
             for (let x = 0; x < linha.length; x++) if (linha[x] !== ".") { ctx.fillStyle = CORES_SETA[linha[x]]; ctx.fillRect(x0 + x, y0 + y, 1, 1); }
           });

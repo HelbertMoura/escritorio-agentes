@@ -62,6 +62,7 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
       pushState(_, __, url) { this.replaceState(_, __, url); },
     },
     performance: { now: () => 0 }, requestAnimationFrame: f => quadros.push(f),
+    console: { error: (...a) => (contexto.erros ||= []).push(a.map(String).join(" ")), warn() {}, log() {} },
     setInterval(f, ms) { intervalos.push(ms); }, clearInterval() {}, setTimeout, Math, Promise, JSON, URLSearchParams,
     // as imagens só carregam (ou falham) quando o teste pede (carregar, falhar)
     Image: class {
@@ -175,6 +176,7 @@ async function principal() {
   const gf = await abrir("", { globoFalha: true });
   assert.equal(gf.M.nivel, "brasil"); assert.equal(gf.contexto.location.hash, "#brasil");
   assert.equal(gf.elementos["mundo-voltar"].disabled, true, "sem globo, nada acima do Brasil");
+  assert.ok((gf.contexto.erros || []).some(e => e.includes("globo quebrado")), "a falha do globo fica no console");
   gf.tecla("Escape"); gf.rodar(40);
   assert.equal(gf.M.nivel, "brasil", "Esc no Brasil sem globo fica");
   const mg = cidade("manaus");

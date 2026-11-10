@@ -381,7 +381,8 @@ const Mundo = (() => {
       Object.assign(niveis, mapa.niveis, {
         cidade: MundoCidade.criar({ dados, Camera, reduzido, mapa, clima: climaDaCidade, festa: () => festa,
           avisar: () => { if (nome === "cidade") { rotular(); montarAlvos(); } } }) });   // o atlas chegou: placa, porta e marco
-      try { niveis.globo = Globo.criar({ dados, Camera, reduzido }); } catch (e) { /* sem o globo, a página abre no Brasil */ }
+      // sem o globo, a página abre no Brasil; a falha fica no console
+      try { niveis.globo = Globo.criar({ dados, Camera, reduzido }); } catch (e) { console.error("Globo não abriu:", e); }
     })
     .catch(() => { mapa = null; })   // sem o mapa, a página segue com o bairro, como antes
     .then(() => {

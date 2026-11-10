@@ -80,7 +80,7 @@ def _padrao(lat):
 
 def _classes(terra, brasil, biomas, w, h):
     """A classe de cada pixel de terra: gelo nos polos, o Brasil, os polígonos e a faixa; a borda deformada por ruído
-    (até 3 px) e passada em pontilhado de Bayer."""
+    (até uns 7 px: 4,5 da escala grande, 1,5 da pequena e 1 do Bayer) e passada em pontilhado de Bayer."""
     N, base = w * h, [None] * (w * h)
     for nome, pixels in brasil + biomas:
         for x, y in pixels:
@@ -114,8 +114,9 @@ def _crista(x, y):
 
 
 def _perfis(terra, classe, serras, w, h):
-    """O perfil (0 a 1) das serras: 1 no eixo da linha e 0 na largura; e o tipo da serra no pixel."""
-    perfil, tipo = [0.0] * (w * h), [None] * (w * h)
+    """O perfil (0 a 1) das serras: 1 no eixo da linha e 0 na largura; o tipo da serra no pixel; e se ela é um maciço
+    (largura de 5 px ou mais, como o Himalaia), nevado de ponta a ponta."""
+    perfil, tipo, macico = [0.0] * (w * h), [None] * (w * h), [False] * (w * h)
     for s in serras:
         larg = s["largura"] * 1.3
         for (x0, y0), (x1, y1) in zip(s["linha"], s["linha"][1:]):
@@ -133,15 +134,15 @@ def _perfis(terra, classe, serras, w, h):
                     if d >= 1:
                         continue
                     if 1 - d > perfil[i]:
-                        perfil[i], tipo[i] = 1 - d, s["tipo"]
-    return perfil, tipo
+                        perfil[i], tipo[i], macico[i] = 1 - d, s["tipo"], s["largura"] >= 5
+    return perfil, tipo, macico
 
 
 def desenhar(terra, brasil, biomas, serras, w, h):
     """O terra.png em nomes da PALETA (um por pixel, linha a linha). terra: lista de bool; brasil e biomas: listas
     (classe, pixels) na ordem de precedência; serras: {tipo, largura, linha} em pixels."""
     classe = _classes(terra, brasil, biomas, w, h)
-    perfil, tipo = _perfis(terra, classe, serras, w, h)
+    perfil, tipo, macico = _perfis(terra, classe, serras, w, h)
     da_terra = _distancia(terra, w, h, 3)
     do_mar = _distancia([not t for t in terra], w, h, 20)
     cor = ["mar"] * (w * h)
@@ -175,7 +176,8 @@ def desenhar(terra, brasil, biomas, serras, w, h):
             s = _crista(x + 1, y + 1) - _crista(x - 1, y - 1)
             alto = min(1.0, forca) * (0.55 + 0.45 * _crista(x, y))
             pico = perfil[i] * (0.6 + 0.4 * _crista(x, y)) + (_h(x, y, 6) - 0.5) * 0.08   # neve no eixo, com vales
-            neve = tipo[i] == "neve" and pico > (0.6 if abs(lat) > 45 else 0.66)
+            trecho = macico[i] or (_ruido(x, y, 5, 48) > 0.6 and pico > 0.74)   # nas serras estreitas, só nos picos altos
+            neve = tipo[i] == "neve" and trecho and pico > (0.6 if abs(lat) > 45 else 0.66)
             tons = NEVE if neve else ROCHA_QUENTE if c in ("deserto", "estepe") and tipo[i] != "verde" else SERRAS[tipo[i]]
             if s > 0.09:
                 nome = tons[0]
