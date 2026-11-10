@@ -20,7 +20,7 @@
 
 [Recursos](#recursos) · [Capturas](#capturas) · [Instalar](#instalar) · [Personalizar](#personalizar-white-label) · [Vida social](#vida-social) · [Modo construção](#modo-construção) · [Modo TV](#modo-tv) · [App instalável](#app-instalável-pwa) · [Visitantes](#visitantes) · [Visitas por convite](#visitas-por-convite) · [Jornal](#jornal) · [Time-lapse](#time-lapse) · [Avisar no celular](#avisar-no-celular) · [Segurança](#segurança) · [Arquitetura](#arquitetura) · [Desenvolvimento](#desenvolvimento) · [Histórico de mudanças](./CHANGELOG.pt-BR.md) · [Contribuir](./CONTRIBUTING.md) · [Código de conduta](./CODE_OF_CONDUCT.md)
 
-🎬 **[Vídeo de lançamento](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2026.11.06)** (narração em português do Brasil, com legenda), anexado à release.
+🎬 **[Vídeo de lançamento](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2026.11.06)** (narração em português do Brasil, com legenda), anexado à release. 🌎 **[Vídeo do mundo e das visitas](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.3.0)** (1.3.0), também narrado e com legenda.
 
 <picture>
   <source media="(prefers-reduced-motion: reduce)" srcset="./docs/screenshots/13-greve-plaquinhas.png">

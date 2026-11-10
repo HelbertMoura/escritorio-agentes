@@ -20,7 +20,7 @@
 
 [Features](#features) · [Screenshots](#screenshots) · [Install](#install) · [Customize](#customize-white-label) · [Social life](#social-life) · [Construction mode](#construction-mode) · [TV mode](#tv-mode) · [Installable app](#installable-app-pwa) · [Visitors](#visitors) · [Visits by invitation](#visits-by-invitation) · [Newspaper](#newspaper) · [Time-lapse](#time-lapse) · [Phone alerts](#phone-alerts) · [Security](#security) · [Architecture](#architecture) · [Development](#development) · [Changelog](./CHANGELOG.md) · [Contributing](./CONTRIBUTING.md) · [Code of Conduct](./CODE_OF_CONDUCT.md)
 
-🎬 **[Launch video](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2026.11.06)** (narrated in Brazilian Portuguese, with subtitles), attached to the release.
+🎬 **[Launch video](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2026.11.06)** (narrated in Brazilian Portuguese, with subtitles), attached to the release. 🌎 **[Video of the world and the visits](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.3.0)** (1.3.0), also narrated in Portuguese, with subtitles.
 
 <picture>
   <source media="(prefers-reduced-motion: reduce)" srcset="./docs/screenshots/13-greve-plaquinhas.png">
