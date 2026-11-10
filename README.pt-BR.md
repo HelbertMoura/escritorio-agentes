@@ -18,13 +18,18 @@
   <img src="./docs/demo.gif" alt="Demonstração animada do escritório no modo demonstração, com agentes fictícios: o mapa em pixel art de dia, com agentes andando e trabalhando; a câmera aproxima de um agente com um balão de pergunta '?'; depois o cursor vai até um pedido da lista Esperando você (um clique leva até esse agente). Legendas curtas explicam cada passo." width="900">
 </picture>
 
-[Recursos](#recursos) · [Capturas](#capturas) · [Instalar](#instalar) · [Personalizar](#personalizar-white-label) · [Vida social](#vida-social) · [Modo construção](#modo-construção) · [Modo TV](#modo-tv) · [App instalável](#app-instalável-pwa) · [Visitantes](#visitantes) · [Jornal](#jornal) · [Time-lapse](#time-lapse) · [Avisar no celular](#avisar-no-celular) · [Segurança](#segurança) · [Arquitetura](#arquitetura) · [Desenvolvimento](#desenvolvimento) · [Histórico de mudanças](./CHANGELOG.pt-BR.md) · [Contribuir](./CONTRIBUTING.md) · [Código de conduta](./CODE_OF_CONDUCT.md)
+[Recursos](#recursos) · [Capturas](#capturas) · [Instalar](#instalar) · [Personalizar](#personalizar-white-label) · [Vida social](#vida-social) · [Modo construção](#modo-construção) · [Modo TV](#modo-tv) · [App instalável](#app-instalável-pwa) · [Visitantes](#visitantes) · [Visitas por convite](#visitas-por-convite) · [Jornal](#jornal) · [Time-lapse](#time-lapse) · [Avisar no celular](#avisar-no-celular) · [Segurança](#segurança) · [Arquitetura](#arquitetura) · [Desenvolvimento](#desenvolvimento) · [Histórico de mudanças](./CHANGELOG.pt-BR.md) · [Contribuir](./CONTRIBUTING.md) · [Código de conduta](./CODE_OF_CONDUCT.md)
 
 🎬 **[Vídeo de lançamento](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2026.11.06)** (narração em português do Brasil, com legenda), anexado à release.
 
 <picture>
   <source media="(prefers-reduced-motion: reduce)" srcset="./docs/screenshots/13-greve-plaquinhas.png">
   <img src="./docs/novidades.gif" alt="Trecho animado das novidades, no modo demonstração com agentes fictícios: uma greve na sala comunal, com todo mundo sentado no chão segurando plaquinhas de papelão; uma briga no Ringue que termina com a faixa 'VENCEU' e a plateia em volta; o pedido entregue (o motoboy da pizza na rua e a turma comendo na frente do ringue); e o editor do modo construção, onde se pintam as salas e se arrastam e espelham os móveis. As legendas em português ficam gravadas na imagem." width="600">
+</picture>
+
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="./docs/screenshots/19-mundo-brasil.png">
+  <img src="./docs/mundo.gif" alt="Trecho animado do mundo e das visitas, com dados fictícios: o globo em pixel art girando à noite; o mapa do Brasil com as miniaturas das capitais; o zoom no mapa; o Rio de Janeiro visto de cima, com o Cristo e a orla; São Paulo na noite de Natal; e a página da visita por convite, com a sala de reunião e a conversa" width="100%">
 </picture>
 
 </div>
@@ -46,7 +51,7 @@ Ele **não chama nenhum modelo de IA** e não gasta tokens. Aprovar é sempre no
 - ✋ **Aprovações num relance:** um "!" ou "?" sobre quem espera a sua aprovação ou resposta, e a lista **"Esperando você"**, com há quanto tempo cada pedido espera. Cada um abre o pedido certo no agentes.chat (aprovar é sempre lá).
 - 🎵 **Vida e sons:** 21 poses, jogos em dupla até 3 pontos com torcida, roda de café, "toca aqui", robô aspirador à noite e mais. 45 efeitos de som opcionais, sintetizados no navegador (teclado, conversas em "simlês" com voz própria por agente, jogos, avisos, o ringue e a greve, chuva e trovão), com volume e liga/desliga por categoria. O áudio só começa depois que você interage com a página.
 - 🖱️ **Objetos clicáveis** (mouse, toque, ou Tab e Enter): a TV (5 canais), os fliperamas, a jukebox, a cafeteira, o aquário, as luminárias, o quadro de avisos, as plantas, a placa do expediente, o gato, o relógio de parede, a lousa de código, o kanban e o moodboard, o sino das vendas, o placar do ringue e as plaquinhas da greve. A maioria também chama um agente livre. Os jogos (sinuca, pebolim, pingue-pongue, xadrez, dardos, basquete) não são clicáveis: os agentes jogam sozinhos.
-- 🌦️ **Hora e clima reais:** dia e noite pelo relógio de verdade, luzes que apagam nas salas vazias e janelas com o céu da hora. Clima real da sua cidade ([Open-Meteo](https://open-meteo.com), sem chave): chuva, garoa, tempestade, neve, neblina, nublado.
+- 🌦️ **Hora e clima reais:** dia e noite pelo relógio de verdade, luzes que apagam nas salas vazias e janelas com o céu da hora. Clima real da sua cidade ([Open-Meteo](https://open-meteo.com), sem chave): chuva, garoa, tempestade, neve, neblina, nublado, com vento em rajadas, raio na tempestade e árvores balançando.
 - 🎉 **Datas comemorativas:** Natal, Ano Novo (fogos), Carnaval e Páscoa (calculados), Ano Novo Chinês, Halloween, Festa Junina, Independência, Dia do Programador, Diwali e mais, com enfeites, chapéus e falas.
 - 🎨 **Personalização:** nome da empresa, cor de destaque e logo pela tela **Personalizar**; times, salas, pisos, paredes, ícones e avatares no `times.json`.
 - 🕹️ **Simulação:** um painel para ver o escritório em outra data, hora ou clima (Natal à noite na neve, por exemplo). Nada é salvo: muda só o endereço daquela aba, e a faixa "Simulação" fica à vista, com "Voltar ao real".
@@ -55,6 +60,7 @@ Ele **não chama nenhum modelo de IA** e não gasta tokens. Aprovar é sempre no
 - 📺 **Modo TV:** tela cheia, tela sempre acesa e um diretor de câmera que corre para os pedidos, as brigas e as greves, com uma faixa de notícias (veja [Modo TV](#modo-tv)).
 - 📲 **App e aviso no celular:** instale o escritório na tela de início e receba um aviso quando um agente pedir a sua aprovação ou fizer uma pergunta (veja [App instalável](#app-instalável-pwa) e [Avisar no celular](#avisar-no-celular)).
 - 👀 **Visitantes:** quem mais está com o escritório aberto aparece no mapa, de crachá (veja [Visitantes](#visitantes)).
+- 🚪 **Visitas por convite:** um link de 1 hora traz alguém de fora para a sala de reunião, sem senha (veja [Visitas por convite](#visitas-por-convite)).
 - 🌎 **Mundo:** uma página pública que desce do globo ao Brasil, à cidade e à porta da recepção, com o tempo real de 28 cidades (veja [Mundo](#mundo)).
 - 📰 **Jornal da semana:** manchete, notas e os números de cada agente nesta semana e na passada (veja [Jornal](#jornal)).
 - 🎞️ **Time-lapse do dia:** o dia do escritório num vídeo de uns 30 s, gravado só no seu navegador (veja [Time-lapse](#time-lapse)).
@@ -283,6 +289,31 @@ Quem mais está com o escritório aberto (outro aparelho, outro navegador ou out
 - **`?invisivel=1`:** com a caixa desligada, ou na TV, a tela pede o `/api/estado?invisivel=1`, que não marca presença. Um cliente próprio pode usar o mesmo parâmetro.
 - **Na TV, ninguém aparece:** a TV não conta como visitante e não desenha os visitantes, então o mapa da parede mostra só os agentes.
 - No modo demonstração, a linha não aparece. O que o servidor guarda e manda está em [Segurança](#segurança).
+
+## Visitas por convite
+
+Dá para trazer alguém de fora para dentro do escritório, sem criar usuário nem passar a senha.
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/22-visita-recepcao.png"><img src="./docs/screenshots/22-visita-recepcao.png" alt="A página Visita ao escritório sem convite: o mapa do prédio com só a recepção acesa, as outras salas escurecidas com o aviso Com convite, e a conversa travada" width="100%"></a>
+      <p><em>Sem convite: só a recepção, com as outras salas apagadas.</em></p>
+    </td>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/23-visita-convite.png"><img src="./docs/screenshots/23-visita-convite.png" alt="A página Visita ao escritório com convite: a sala de reunião em pixel art e, ao lado, a conversa com duas mensagens e o campo Sua mensagem" width="100%"></a>
+      <p><em>Com convite: a sala de reunião e a conversa na hora.</em></p>
+    </td>
+  </tr>
+</table>
+
+- **Convidar:** no menu, **Convidar para uma visita** cria um link. Ele vale 1 hora e serve para quem o receber, então mande só para quem deve entrar. Para a equipe aparecer na conversa, ela também entra na sala pelo botão da mesma tela.
+- **O que a visita vê:** a sala de reunião e uma planta simplificada do escritório, sem nomes de agentes, nomes de equipes, conversas nem tarefas. Não há campo de nome: a sala só tem o texto da mensagem.
+- **Conversa:** as mensagens chegam a quem está na sala naquele momento. Quem entra depois não recebe o que veio antes.
+- **Encerrar:** encerrar o convite derruba todas as sessões da sala. Cada sessão também cai depois de 1 minuto sem consulta. Reiniciar o escritório apaga todas as salas.
+- **Recepção pública:** `/visita.html` sem convite mostra só a recepção, com as outras salas apagadas e a conversa travada. É para lá que leva o chalé do [Mundo](#mundo).
+- **Recepcionista (opcional):** a equipe pode pôr um agente do agentes.chat para responder na sala. Nesse caso o texto da visita vai ao canal de visitas do agentes.chat e **fica guardado lá**.
+- **Privacidade:** sem recepcionista, nada da visita vai para o disco nem para o log do escritório; convite, sessão e mensagens ficam só na memória. O escritório não controla o que o proxy, a CDN e o navegador guardam. Antes de abrir as visitas na internet, leia [`docs/visitas-privadas-plano.md`](./docs/visitas-privadas-plano.md), que diz para onde vai cada dado e o que conferir.
 
 ## Mundo
 

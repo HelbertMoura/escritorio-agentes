@@ -18,13 +18,18 @@
   <img src="./docs/demo.gif" alt="Animated demo of the office in demo mode, with fictional agents: the pixel-art map by day with agents walking and working, the camera zooming in on an agent with a '?' question bubble, then the pointer moves to a request in the Waiting for you list (one click takes you to that agent). Short captions in Portuguese explain each step." width="900">
 </picture>
 
-[Features](#features) · [Screenshots](#screenshots) · [Install](#install) · [Customize](#customize-white-label) · [Social life](#social-life) · [Construction mode](#construction-mode) · [TV mode](#tv-mode) · [Installable app](#installable-app-pwa) · [Visitors](#visitors) · [Newspaper](#newspaper) · [Time-lapse](#time-lapse) · [Phone alerts](#phone-alerts) · [Security](#security) · [Architecture](#architecture) · [Development](#development) · [Changelog](./CHANGELOG.md) · [Contributing](./CONTRIBUTING.md) · [Code of Conduct](./CODE_OF_CONDUCT.md)
+[Features](#features) · [Screenshots](#screenshots) · [Install](#install) · [Customize](#customize-white-label) · [Social life](#social-life) · [Construction mode](#construction-mode) · [TV mode](#tv-mode) · [Installable app](#installable-app-pwa) · [Visitors](#visitors) · [Visits by invitation](#visits-by-invitation) · [Newspaper](#newspaper) · [Time-lapse](#time-lapse) · [Phone alerts](#phone-alerts) · [Security](#security) · [Architecture](#architecture) · [Development](#development) · [Changelog](./CHANGELOG.md) · [Contributing](./CONTRIBUTING.md) · [Code of Conduct](./CODE_OF_CONDUCT.md)
 
 🎬 **[Launch video](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2026.11.06)** (narrated in Brazilian Portuguese, with subtitles), attached to the release.
 
 <picture>
   <source media="(prefers-reduced-motion: reduce)" srcset="./docs/screenshots/13-greve-plaquinhas.png">
   <img src="./docs/novidades.gif" alt="Animated clip of what is new, in demo mode with fictional agents: a strike in the lounge with everyone sitting on the floor holding cardboard signs, a fight in the Ring ending with the 'VENCEU' winner's banner and the crowd around, the demand delivered (the pizza rider on the street and the crew eating in front of the ring) and the construction mode editor, where you paint the rooms and drag and mirror the furniture. Captions in Portuguese are burned into the image." width="600">
+</picture>
+
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="./docs/screenshots/19-mundo-brasil.png">
+  <img src="./docs/mundo.gif" alt="Animated clip of the world and the visits, with fictional data: the pixel-art globe spinning at night; the map of Brazil with the miniatures of the capitals; zooming into the map; Rio de Janeiro seen from above, with the Christ statue and the waterfront; São Paulo on Christmas night; and the visit-by-invitation page, with the meeting room and the chat" width="100%">
 </picture>
 
 </div>
@@ -46,7 +51,7 @@ It **does not call any AI model** and does not spend tokens. Approving always ha
 - ✋ **Approvals at a glance:** a "!" or "?" over anyone waiting for your approval or answer, and a **"Waiting for you"** list with how long each request has been waiting. Each one opens the right request in agentes.chat (approving is always done there).
 - 🎵 **Life and sounds:** 21 poses, games in pairs up to 3 points with a cheering crowd, a coffee circle, high-fives, a robot vacuum at night and more. 45 optional sound effects synthesized in the browser (keyboard, "simlish" chatter with a voice per agent, games, alerts, the ring and the strike, rain and thunder), with a volume control and on/off per category. Audio only starts after you interact with the page.
 - 🖱️ **Clickable objects** (mouse, touch, or Tab and Enter): the TV (5 channels), arcade machines, jukebox, coffee maker, aquarium, lamps, notice board, plants, the opening-hours sign, the cat, the wall clock, the code board, kanban and moodboard, the sales bell, the ring scoreboard and the strike signs. Most of them also bring a free agent over. The games (pool, foosball, ping-pong, chess, darts, basketball) are not clickable: the agents play them on their own.
-- 🌦️ **Real time and weather:** day and night follow the real clock, empty rooms turn their lights off and windows show the sky of the hour. Real weather for your city ([Open-Meteo](https://open-meteo.com), no key): rain, drizzle, thunderstorm, snow, fog, overcast.
+- 🌦️ **Real time and weather:** day and night follow the real clock, empty rooms turn their lights off and windows show the sky of the hour. Real weather for your city ([Open-Meteo](https://open-meteo.com), no key): rain, drizzle, thunderstorm, snow, fog, overcast, with gusty wind, lightning in the thunderstorm and swaying trees.
 - 🎉 **Holidays:** Christmas, New Year (fireworks), Carnival and Easter (calculated), Lunar New Year, Halloween, Festa Junina, Brazilian Independence Day, Programmers' Day, Diwali and more, with decorations, hats and lines.
 - 🎨 **Customization:** company name, accent color and logo from the **Customize** screen; teams, rooms, floors, walls, icons and avatars in `times.json`.
 - 🕹️ **Simulation:** a panel to preview the office on another date, time or weather (Christmas at night in the snow, for example). Nothing is saved: it only changes the URL of that tab, and a "Simulation" banner stays visible with "Back to real".
@@ -55,6 +60,7 @@ It **does not call any AI model** and does not spend tokens. Approving always ha
 - 📺 **TV mode:** full screen, the screen kept on and a camera director that rushes to requests, fights and strikes, with a news ticker (see [TV mode](#tv-mode)).
 - 📲 **App and phone alerts:** install the office on your home screen and get an alert when an agent asks for your approval or asks a question (see [Installable app](#installable-app-pwa) and [Phone alerts](#phone-alerts)).
 - 👀 **Visitors:** whoever else has the office open shows up on the map, wearing a badge (see [Visitors](#visitors)).
+- 🚪 **Visits by invitation:** a 1-hour link brings someone from outside into the meeting room, with no password (see [Visits by invitation](#visits-by-invitation)).
 - 🌎 **World:** a public page that goes from the globe down to Brazil, the city and the reception door, with the real weather of 28 cities (see [World](#world)).
 - 📰 **Weekly newspaper:** a headline, notes and each agent's numbers for this week and last week (see [Newspaper](#newspaper)).
 - 🎞️ **Daily time-lapse:** the office's day in a ~30 s video, recorded only in your browser (see [Time-lapse](#time-lapse)).
@@ -283,6 +289,31 @@ Whoever else has the office open (another device, another browser or another per
 - **`?invisivel=1`:** with the box off, or on the TV, the page asks for `/api/estado?invisivel=1`, which does not mark presence. A client of your own can use the same parameter.
 - **On the TV, nobody shows up:** the TV does not count as a visitor and does not draw visitors, so the wall map shows only the agents.
 - In demo mode, the line does not show. What the server keeps and sends is in [Security](#security).
+
+## Visits by invitation
+
+You can bring someone from outside into the office without creating a user or sharing the password.
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/22-visita-recepcao.png"><img src="./docs/screenshots/22-visita-recepcao.png" alt="The Visita ao escritório page without an invitation: the building map with only the reception lit, the other rooms dark and labeled Com convite, and the chat locked" width="100%"></a>
+      <p><em>No invitation: only the reception, with the other rooms dark.</em></p>
+    </td>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/23-visita-convite.png"><img src="./docs/screenshots/23-visita-convite.png" alt="The Visita ao escritório page with an invitation: the pixel-art meeting room and, next to it, the chat with two messages and the Sua mensagem field" width="100%"></a>
+      <p><em>With an invitation: the meeting room and a live chat.</em></p>
+    </td>
+  </tr>
+</table>
+
+- **Inviting:** in the menu, **Convidar para uma visita** (invite for a visit) creates a link. It is valid for 1 hour and works for whoever gets it, so send it only to the people who should come in. For the team to show up in the chat, it also joins the room with the button on the same screen.
+- **What the visitor sees:** the meeting room and a simplified floor plan of the office, with no agent names, team names, conversations or tasks. There is no name field: the room only has the message text.
+- **Chat:** messages reach whoever is in the room at that moment. Whoever comes in later does not get what came before.
+- **Ending:** ending the invitation drops every session in the room. Each session also drops after 1 minute without polling. Restarting the office clears all rooms.
+- **Public reception:** `/visita.html` without an invitation shows only the reception, with the other rooms dark and the chat locked. That is where the chalet in the [World](#world) leads.
+- **Receptionist (optional):** the team can put an agentes.chat agent to answer in the room. In that case the visitor's text goes to the visits channel on agentes.chat and **is kept there**.
+- **Privacy:** without a receptionist, nothing from the visit goes to disk or to the office log; the invitation, the session and the messages live only in memory. The office does not control what the proxy, the CDN and the browser keep. Before opening visits to the internet, read [`docs/visitas-privadas-plano.md`](./docs/visitas-privadas-plano.md) (in Portuguese), which says where each piece of data goes and what to check.
 
 ## World
 

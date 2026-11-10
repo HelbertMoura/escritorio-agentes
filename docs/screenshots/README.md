@@ -6,6 +6,8 @@ Images 11 to 17 (social life and construction mode) were added on 2026-11-06. ·
 
 Images 18 to 21 (the world page) were added on 2026-11-10, reduced to 256 colors. · As imagens 18 a 21 (a página do mundo) entraram em 10/11/2026, reduzidas a 256 cores.
 
+Images 22 and 23 (visits by invitation) and `docs/mundo.gif` (a clip of the narrated video, 600 px wide, 10 frames per second) were added on 2026-11-10. · As imagens 22 e 23 (visitas por convite) e o `docs/mundo.gif` (um trecho do vídeo narrado, com 600 px de largura e 10 quadros por segundo) entraram em 10/11/2026.
+
 `docs/social-preview.png` (1280×640) is the repository's social preview. · É a prévia social do repositório.
 
 `docs/demo.gif` (800 px, 12 fps, 12 s, captions in Portuguese) is the animated demo at the top of the READMEs, cut from the demo-mode video; with "reduce motion" on, the READMEs show `01-escritorio-dia.png` instead. To redo it, run `gif.sh` next to the video (two ffmpeg passes: `palettegen=max_colors=192:stats_mode=diff`, then `paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle`, both with `fps=12,scale=800:-1:flags=lanczos`, from 3.2 s for 12 s) and copy the result here. · É a demonstração animada do topo dos READMEs, cortada do vídeo do modo demonstração; com "reduzir movimento" ligado, os READMEs mostram a `01-escritorio-dia.png`. Para refazer, rode o `gif.sh` ao lado do vídeo (duas passadas do ffmpeg, com os filtros acima) e copie o resultado para cá.
@@ -41,3 +43,5 @@ PNG, 1440×900 for desktop and 390×844 for phone. · PNG, 1440×900 no computad
 | `19-mundo-brasil.png` | The world page: the map of Brazil · A página do mundo: o mapa do Brasil | fictional preview · prévia fictícia (`ESCRITORIO_TIMES=times.exemplo.json`), `/mundo.html?data=2026-11-18&clima=limpo&hora=12#brasil` |
 | `20-mundo-zoom.png` | The map at maximum zoom over Minas Gerais · O mapa com zoom máximo sobre Minas Gerais | fictional preview · prévia fictícia (`ESCRITORIO_TIMES=times.exemplo.json`), `/mundo.html?data=2026-11-18&clima=limpo&hora=12#brasil`, then the wheel four times over Minas · depois a roda quatro vezes sobre Minas |
 | `21-mundo-cidade.png` | The world page: the office's city · A página do mundo: a cidade do escritório | fictional preview · prévia fictícia (`ESCRITORIO_TIMES=times.exemplo.json`), `/mundo.html?data=2026-11-18&clima=limpo&hora=12#cidade=sao-paulo` |
+| `22-visita-recepcao.png` | The visit page without an invitation · A página da visita sem convite | fictional preview · prévia fictícia (fictional agents · agentes fictícios), `/visita.html` |
+| `23-visita-convite.png` | The visit page with an invitation and a chat · A página da visita com convite e conversa | fictional preview · prévia fictícia (fictional agents · agentes fictícios), `/visita.html#<convite>` with an invitation created for the capture, two tabs in the room · com um convite criado para a captura, duas abas na sala |
