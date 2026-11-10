@@ -581,21 +581,30 @@ const MundoMapa = (() => {
       const cobertos = cam.cobertos || [], fx = MapaPerto.FOLGA * T, M = 2 * T;
       const lista = cidades.filter(c => todos || c.id === casa || c.id === destaque)
         .sort((a, b) => (b.id === casa) - (a.id === casa) || (b.id === destaque) - (a.id === destaque) || b.grande - a.grande || a.n - b.n);
+      // o ícone desenhado de cada cidade à vista (com 1 px de folga): nenhum nome cobre o de outra
+      const icones = arr.lista.filter(a => a.vis).map(a => ({ id: a.c.id, x: a.px - (a.ic.w >> 1) - 1, y: a.py - a.ic.h - 1,
+        w: a.ic.w + 2, h: a.ic.h + 2 }));
       for (const c of lista) {
         const cv = rotuloNome(c, T, c.id === casa), w = cv.width, h = cv.height, a = arr.porId.get(c.id);
         if (!a.vis) continue;
         // junto do ícone (onde ele estiver, também deslocado): embaixo, em cima, à direita ou à esquerda, o primeiro lugar
-        // inteiro na tela, fora dos botões e com respiro dos outros nomes; o da casa, se nenhum servir, vai embaixo ou em
-        // cima, empurrado para dentro da tela
+        // inteiro na tela, fora dos botões, fora do ícone de outra cidade e com respiro dos outros nomes; o da casa, se
+        // nenhum servir, vai ao lugar livre mais perto deles (empurrado para dentro da tela, subindo ou descendo de linha em
+        // linha) e, sem nenhum livre, embaixo ou em cima, fora dos botões
         const meio = a.py - (a.ic.h >> 1) - (h >> 1), lados = [[a.px - (w >> 1), a.py + 2 * K], [a.px - (w >> 1), a.py + a.y0 - h - K],
           [a.px + a.x1 + K, meio], [a.px + a.x0 - w - K, meio]];
+        const livre = k => !cobertos.some(o => cruza(o, k)) && !icones.some(o => o.id !== c.id && cruza(o, k))
+          && !nomes.some(o => cruza(o, { x: k.x - fx, y: k.y - T, w: k.w + 2 * fx, h: k.h + 2 * T }));
         const posto = ([x0, y0]) => {
           const x = Math.min(cam.W - M - w, Math.max(M, x0)), caixa = { id: c.id, x, y: y0, w, h };
-          if (Math.abs(x - x0) > w || y0 < M || y0 + h > cam.H - M || cobertos.some(o => cruza(o, caixa))) return null;
-          return nomes.some(o => cruza(o, { x: x - fx, y: y0 - T, w: w + 2 * fx, h: h + 2 * T })) ? null : caixa;
+          return Math.abs(x - x0) > w || y0 < M || y0 + h > cam.H - M || !livre(caixa) ? null : caixa;
         };
         let caixa = null;
         for (const l of lados) if ((caixa = posto(l))) break;
+        for (let d = 1; !caixa && c.id === casa && d <= 8; d++) for (const [x0, y0] of lados) for (const s of [1, -1]) {
+          const k = { id: c.id, x: Math.min(cam.W - M - w, Math.max(M, x0)), y: Math.min(cam.H - M - h, Math.max(M, y0 + s * d * (h + T))), w, h };
+          if (!caixa && livre(k)) caixa = k;
+        }
         if (!caixa && c.id === casa) {
           const y = Math.min(cam.H - M - h, Math.max(M, a.py + 2 * K));
           caixa = { id: c.id, x: Math.min(cam.W - M - w, Math.max(M, a.px - (w >> 1))), y, w, h };

@@ -185,6 +185,29 @@ class Preencher(unittest.TestCase):
         self.assertEqual(montar_mundo.para_pixel(-19.92, -43.94, montar_mundo.CAIXA_BRASIL, 400, 400), (300, 259))
 
 
+class Rodovia(unittest.TestCase):
+    def test_rodovia_discreta_e_igual_nos_dois_niveis(self):
+        """A rodovia: a linha de 2x e a pista de 4x no mesmo cinza médio de asfalto (a troca 4x -> 3x não pula), mais
+        discreto que o rio (cinza, sem a cor dele); a 4x, a pista tem 3 px, com a faixa clara no meio e sem acostamento."""
+        import mundo_terreno as mt
+        lum = lambda h: sum(k * int(h[i:i + 2], 16) for k, i in ((0.3, 1), (0.59, 3), (0.11, 5)))
+        rgb = lambda h: [int(h[i:i + 2], 16) for i in (1, 3, 5)]
+        self.assertEqual(mt.CORES["estrada"], mt.CORES["asfalto"])
+        self.assertTrue(100 <= lum(mt.CORES["asfalto"]) <= 160, lum(mt.CORES["asfalto"]))
+        self.assertLess(max(rgb(mt.CORES["asfalto"])) - min(rgb(mt.CORES["asfalto"])), 24, "cinza")
+        self.assertGreater(lum(mt.CORES["faixa"]), lum(mt.CORES["asfalto"]) + 40)
+        w = h = 24
+        ind = {n: k for k, n in enumerate(mt.CORES)}
+        objetos = {"chao": ["ce_chao"] * (w * h), "carimbos": [], "estradas": [[[(2, 12.2), (22, 12.2)]]]}
+        cor = mt.refinar([ind["ce_chao"]] * (w * h), w, h, (), objetos)
+        nomes = list(mt.CORES)
+        for x in range(10, 38):
+            coluna = [nomes[cor[y * 2 * w + x]] for y in range(2 * h)]
+            self.assertEqual(sum(n in ("asfalto", "faixa") for n in coluna), 3, coluna)
+            self.assertNotIn("estrada", coluna, "sem acostamento")
+        self.assertIn("faixa", [nomes[c] for c in cor])
+
+
 class Montagem(unittest.TestCase):
     """Roda ferramentas/montar_mundo.py como processo, igual ao uso real. Com -I o teste não vê o Pillow
     do site-packages do usuário; o processo filho (sem -I) vê."""
@@ -755,6 +778,20 @@ class Montagem(unittest.TestCase):
         self.assertGreaterEqual(sum(c in dele for c in cores) / len(cores), 0.5)
         self.assertGreaterEqual(len(set(cores)), 5)
 
+    def test_misiones_sem_beira_reta(self):
+        """O planalto das araucárias (chão claro do pampa) fica só no Brasil: em Misiones (Argentina), dos dois lados da
+        lon -54 (a beira do polígono), a terra é a mesma, sem uma faixa clara de beira reta (achado da rodada 4)."""
+        import montar_mundo as mm
+        import mundo_terreno as mt
+        pampa = {mt.CORES[n] for n in mt.CORES if n.startswith("pp_") and "_ap" in n}
+        apagadas = mt.cores_apagadas()
+        for lado in ((-54.35, -54.02), (-53.98, -53.6)):
+            pontos = [list(map(int, mm.em_pixels(lon / 10, lat / 10, 800, 800))) for lat in range(-276, -255)
+                      for lon in range(int(lado[0] * 100) // 10, int(lado[1] * 100) // 10 + 1)]
+            cores = [c for c in self.cores_perto(pontos) if c in apagadas]
+            self.assertGreater(len(cores), 10, lado)
+            self.assertLess(sum(c in pampa for c in cores) / len(cores), 0.1, f"Misiones, lon {lado}: chão do planalto")
+
     def test_borda_some_em_nevoa(self):
         """A borda da caixa esmaece em névoa: nenhum pixel de terra encosta no mar de fora (FORA), sempre há névoa ou
         mar entre os dois, e a névoa aparece nas bordas com terra (oeste, sul e norte)."""
@@ -836,39 +873,80 @@ class Montagem(unittest.TestCase):
         self.assertGreater(campos, 100)
         self.assertLess(campos / len(terra), 0.02, f"lavoura em {campos} de {len(terra)} pontos de terra")
         self.assertEqual(sum(c in lavoura for c in dois), 0)
-        for nome in ("ponte", "asfalto", "faixa", "mv_meio", "mr_meio"):
+        for nome in ("ponte", "asfalto", "faixa"):
             self.assertGreater(sum(c == mt.CORES[nome] for c in quatro), 5, nome)
         perto = lambda cid, r: self.cores_4x([[cid["x"] * 4 + a, cid["y"] * 4 + b] for a in range(-r, r + 1, 2) for b in range(-r, r + 1, 2)])
         bh = next(c for c in self.mundo["cidades"] if c["id"] == "belo-horizonte")
         manaus = next(c for c in self.mundo["cidades"] if c["id"] == "manaus")
         self.assertGreater(sum(c in lavoura for c in perto(bh, 40)), 10, "lavoura em volta de BH")
         self.assertEqual(sum(c in lavoura for c in perto(manaus, 60)), 0, "nada de lavoura na Amazônia")
-    def test_serras_a_4x_sao_cordilheiras(self):
-        """A 4x uma serra é uma cordilheira contínua ao longo da linha do serras.json (não uma fila de cones): quase todo ponto
-        da linha cai no relevo, e em volta dela há luz e sombra bem distintas (o tom claro e os dois escuros, cada um com
-        uma boa parte do relevo)."""
-        import mundo_terreno as mt
-        nome = {h: n for n, h in reversed(list(mt.CORES.items()))}
+    def cores_do_relevo(self):
+        """As cores de cada família de peças de relevo (mundo_terreno.RELEVO), cheias e apagadas, como a montagem as usa
+        (montar_mundo.pecas_do_relevo, com o Pillow, no processo filho)."""
+        ler = ("import json, sys\nsys.path.insert(0, sys.argv[1])\nimport montar_mundo as mm, mundo_terreno as mt\n"
+               "pecas = mm.pecas_do_relevo()\nsaida = {}\n"
+               "for fam, filas in mt.RELEVO.items():\n"
+               "    cores = {c for fila in filas for n in fila for c in pecas[n.split('/')[0]][2] if c}\n"
+               "    saida[fam] = sorted(cores | {mt.apagada(c) for c in cores})\n"
+               "print(json.dumps(saida))")
+        r = subprocess.run([sys.executable, "-B", "-c", ler, os.path.join(RAIZ, "ferramentas")], capture_output=True, text=True,
+                           timeout=60)
+        if r.returncode:
+            raise AssertionError(r.stderr)
+        return {f: set(c) for f, c in json.loads(r.stdout).items()}
+
+    def test_serras_com_pecas_de_relevo(self):
+        """As serras são peças pintadas (PixelLab) carimbadas ao longo das linhas do serras.json, da família certa (mata na
+        Serra do Mar, na Mantiqueira, na Serra Geral e nas Guianas; rocha no Espinhaço; chapada na Chapada Diamantina; neve
+        nos Andes): acima de quase todo ponto da linha (longe da névoa da borda) há peça da família, a 4x onde o azulejo
+        existe e a 2x em todo lugar, e quase nenhuma de outra família (só onde duas serras se emendam, como o Espinhaço e a
+        Mantiqueira no Quadrilátero). E nos mesmos lugares nos dois níveis: o bloco 2x2 de
+        4x sobre cada pixel de 2x tem peça quando ele tem (e não tem quando ele não tem) quase sempre."""
+        familias = self.cores_do_relevo()
+        todas = set().union(*familias.values())
+        so_dela = {f: c - set().union(*(o for g, o in familias.items() if g != f)) for f, c in familias.items()}
         with open(os.path.join(RAIZ, "arte", "mundo", "serras.json"), encoding="utf-8") as f:
             serras = {s["id"]: s for s in json.load(f)}
-        px = lambda lon, lat: ((lon + 74) * 40, (6 - lat) * 40)
-        for sid in ("mantiqueira", "espinhaco", "serra-do-mar"):
-            linha = serras[sid]["linhas"][0]
+        esperado = {"mantiqueira": "verde", "serra-do-mar": "verde", "serra-geral": "verde", "guianas": "verde",
+                    "espinhaco": "rocha", "chapada-diamantina": "mesa", "andes": "neve"}
+        px = lambda lon, lat: ((lon + 74) * 40, (6 - lat) * 40)   # pixels de 4x
+        margem = 130   # a névoa da borda (até ~1,6·VINHETA px de longe)
+        for sid, fam in esperado.items():
             pontos = []
-            for (a, b), (c, d) in zip(linha, linha[1:]):
-                for k in range(12):
-                    x, y = px(a + (c - a) * k / 12, b + (d - b) * k / 12)
-                    pontos.append([round(x), round(y)])
-            por_cima = ("estrada", "asfalto", "faixa", "ponte", "rio", "raso", "areia")   # a rodovia e o rio passam por cima
-            cores = [n for n in (nome.get(c, "") for c in self.cores_4x(pontos) if c) if not n.startswith(por_cima)]
-            relevo = [c for c in cores if c[:3] in ("mv_", "mr_")]
-            self.assertGreaterEqual(len(relevo) / len(cores), 0.8, f"{sid}: {len(relevo)} de {len(cores)} pontos da linha no relevo")
-            janela = [[x + a, y + b] for x, y in pontos[::3] for a in range(-24, 25, 4) for b in range(-24, 25, 4)]
-            em_volta = [nome.get(c, "") for c in self.cores_4x(janela) if c]
-            tons = Counter(c.split("_")[1] for c in em_volta if c[:3] in ("mv_", "mr_"))
-            total = sum(tons.values())
-            self.assertGreaterEqual(tons["luz"] / total, 0.15, f"{sid}: {tons}")
-            self.assertGreaterEqual((tons["sombra"] + tons["contorno"]) / total, 0.2, f"{sid}: {tons}")
+            for linha in serras[sid]["linhas"]:
+                for (a, b), (c, d) in zip(linha, linha[1:]):
+                    passos = max(1, round(((c - a) ** 2 + (b - d) ** 2) ** 0.5 * 40 / 8))
+                    for k in range(passos):
+                        x, y = px(a + (c - a) * k / passos, b + (d - b) * k / passos)
+                        if margem <= x < 1600 - margem and margem <= y < 1600 - margem:
+                            pontos.append((round(x), round(y)))
+            self.assertGreater(len(pontos), 8, sid)
+            for nivel in (4, 2):
+                janelas = [[(x + a) * nivel // 4, (y + b) * nivel // 4] for x, y in pontos for a in range(-12, 13, 4)
+                           for b in range(-28, 5, 4)]
+                cores = self.cores_4x(janelas) if nivel == 4 else self.cores_perto(janelas)
+                n = len(janelas) // len(pontos)
+                blocos = [cores[k * n:k * n + n] for k in range(len(pontos))]
+                # a 4x só existem os azulejos que tocam o Brasil: vale a janela com pelo menos metade dos pontos num deles
+                blocos = [[c for c in b if c is not None] for b in blocos]
+                blocos = [b for b in blocos if len(b) >= n // 2]
+                if nivel == 4 and sid == "andes" and not blocos:
+                    continue   # os Andes ficam fora do Brasil: a 4x, só onde um azulejo da fronteira os alcança
+                self.assertTrue(blocos, f"{sid} a {nivel}x: nenhum ponto da linha num azulejo")
+                com = sum(any(c in familias[fam] for c in b) for b in blocos)
+                self.assertGreaterEqual(com / len(blocos), 0.85, f"{sid} a {nivel}x: peça em {com} de {len(blocos)} pontos da linha")
+                pecas = [c for b in blocos for c in b if c in todas]
+                outras = [c for c in pecas if c not in familias[fam] and any(c in so_dela[g] for g in so_dela if g != fam)]
+                self.assertLess(len(outras), 0.1 * len(pecas), f"{sid} a {nivel}x: peça de outra família (só na emenda de duas serras)")
+        # os mesmos lugares a 2x e a 4x: Minas, Rio e São Paulo (Mantiqueira, Serra do Mar e o Espinhaço)
+        pontos = [[x, y] for y in range(500, 660, 3) for x in range(560, 700, 3)]
+        dois = self.cores_perto(pontos)
+        quatro = self.cores_4x([[2 * x + a, 2 * y + b] for x, y in pontos for b in (0, 1) for a in (0, 1)])
+        pares = [(c in todas, any(q in todas for q in quatro[k * 4:k * 4 + 4])) for k, c in enumerate(dois)]
+        com_peca = [p for p in pares if p[0] or p[1]]
+        self.assertGreater(len(com_peca), 300)
+        iguais = sum(a == b for a, b in com_peca)
+        self.assertGreaterEqual(iguais / len(com_peca), 0.8, f"mesmos lugares: {iguais} de {len(com_peca)}")
 
     def test_glifos_de_4x(self):
         """Os glifos de 4x: o mandacaru sem pixel solto (tudo ligado ao tronco), a araucária nunca mais larga que a copa da
@@ -889,9 +967,7 @@ class Montagem(unittest.TestCase):
         arau = [mt.tamanho4("araucaria", len(mt.ARAUCARIA[0]) * 2, len(mt.ARAUCARIA) * 2, s) for s in range(200)]
         self.assertLessEqual(max(w for w, h in arau), mata)
         self.assertGreaterEqual(len({(w, h) for w, h in arau}), 6, "tamanhos variados")
-        lum = lambda h: sum(k * int(h[i:i + 2], 16) for k, i in ((0.3, 1), (0.59, 3), (0.11, 5)))
-        self.assertLess(lum(mt.CORES["asfalto"]), 90)
-        self.assertGreater(lum(mt.CORES["faixa"]), 200)
+
     def test_mapa_das_ufs_de_perto(self):
         """O mapa das UFs na grade de 2x (perto/ufs.json, para o contorno do realce seguir a divisa desenhada): 800 linhas
         de 800, e a UF de cada cidade em volta do pixel dela vezes 2 (a costa de 2x é a do contorno na resolução nova: a

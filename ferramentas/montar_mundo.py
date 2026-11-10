@@ -384,10 +384,25 @@ def desenhar_brasil(rotulo, fontes, pais, w=W_BRASIL, h=H_BRASIL, escala=1, regi
     return im
 
 
-def azulejos(im):
-    """A camada de perto cortada em azulejos AZULEJO×AZULEJO: {(coluna, linha): imagem}."""
-    n = im.width // AZULEJO
-    return {(i, j): im.crop((i * AZULEJO, j * AZULEJO, (i + 1) * AZULEJO, (j + 1) * AZULEJO)) for j in range(n) for i in range(n)}
+def paletizar(indices, w, h, paleta, indice):
+    """Os índices da paleta estendida (mundo_terreno.paleta_com_relevo) numa imagem P só com as cores que ela usa, na ordem
+    da paleta (cada azulejo cabe em 256 cores: o mapa usa menos de 90 por azulejo e as peças, até RELEVO_CORES por família)."""
+    from PIL import Image
+    cores = sorted({paleta[k] for k in set(indices)}, key=indice.get)
+    if len(cores) > 256:
+        raise ValueError(f"{len(cores)} cores numa imagem de {w}x{h}: o PNG paletizado tem no máximo 256")
+    local = {c: n for n, c in enumerate(cores)}
+    im = Image.new("P", (w, h))
+    im.putpalette([int(c[i:i + 2], 16) for c in cores for i in (1, 3, 5)])
+    im.putdata([local[paleta[k]] for k in indices])
+    return im
+
+
+def azulejos(indices, w, paleta, indice):
+    """O mapa (índices, w x w) cortado em azulejos AZULEJO×AZULEJO, cada um com a paleta dele: {(coluna, linha): imagem}."""
+    n, A = w // AZULEJO, AZULEJO
+    return {(i, j): paletizar([indices[(j * A + y) * w + i * A + x] for y in range(A) for x in range(A)], A, A, paleta, indice)
+            for j in range(n) for i in range(n)}
 
 
 def celulas(rotulo):
@@ -464,12 +479,19 @@ def montar(fontes, saida):
         "rotas": rotas(cidades),
     }
     medias = cidades_medias(fontes, mundo["cidades"], rotulo)
-    from PIL import Image
     w4, h4 = W_BRASIL * ESCALA_4X, H_BRASIL * ESCALA_4X
-    mais_perto = Image.new("P", (w4, h4))
-    mais_perto.putpalette(perto.getpalette())
-    mais_perto.putdata(mundo_terreno.refinar(list(perto.tobytes()), wp, hp, focos_de_lavoura(mundo["cidades"], medias),
-                                             objetos))
+    dois = list(perto.tobytes())
+    quatro = mundo_terreno.refinar(dois, wp, hp, focos_de_lavoura(mundo["cidades"], medias), objetos)
+    # as serras de perto: as peças de relevo, as mesmas nos mesmos lugares a 2x (na metade) e a 4x; quem decide se a peça
+    # cabe é o 2x, e o 4x carimba as mesmas
+    pecas = pecas_do_relevo()
+    paleta, indice = mundo_terreno.paleta_com_relevo(pecas)
+    carimbos = mundo_terreno.carimbos_do_relevo(objetos["serras"], pecas)
+    chao = objetos["chao"]
+    no_chao = lambda x, y: chao[min(hp - 1, max(0, y // 2)) * wp + min(wp - 1, max(0, x // 2))]   # (x, y) de 4x
+    fora, mar = (lambda x, y: "_ap" in no_chao(x, y)), (lambda x, y: no_chao(x, y) == "mar")
+    postos = mundo_terreno.carimbar_relevo(dois, wp, hp, carimbos, pecas, 2, indice, fora, mar)
+    mundo_terreno.carimbar_relevo(quatro, w4, h4, postos, pecas, 4, indice, fora, mar, so=set(postos))
     n4 = w4 // AZULEJO
     no_brasil = azulejos_do_brasil(rotulo, n4)
     ufs_perto = {"w": wp, "h": hp, "mapa": mapa_das_ufs(rotulo_perto, wp, hp)}   # o realce de 2x em diante, na grade de 2x
@@ -486,9 +508,9 @@ def montar(fontes, saida):
             os.remove(os.path.join(saida, "perto4x", n))
     terra.save(os.path.join(saida, "terra.png"), optimize=True)
     brasil.save(os.path.join(saida, "brasil.png"), optimize=True)
-    for (i, j), azulejo in azulejos(perto).items():
+    for (i, j), azulejo in azulejos(dois, wp, paleta, indice).items():
         azulejo.save(os.path.join(saida, "perto", f"{i}-{j}.png"), optimize=True)
-    for (i, j), azulejo in azulejos(mais_perto).items():
+    for (i, j), azulejo in azulejos(quatro, w4, paleta, indice).items():
         if (i, j) in no_brasil:
             azulejo.save(os.path.join(saida, "perto4x", f"{i}-{j}.png"), optimize=True)
     with open(os.path.join(saida, "perto", "ufs.json"), "w", encoding="utf-8", newline="\n") as f:
@@ -501,7 +523,33 @@ def montar(fontes, saida):
     return mundo
 
 
-ARTE = os.path.join(RAIZ, "arte", "pixellab", "mundo")   # a arte do PixelLab (marcos e peças genéricas)
+ARTE = os.path.join(RAIZ, "arte", "pixellab", "mundo")   # a arte do PixelLab (marcos, peças genéricas e o relevo)
+# as peças de relevo do PixelLab (lote 5, relevo-*.png: mata, rocha, neve e chapada), carimbadas nas serras a 2x e a 4x
+# (mundo_terreno.RELEVO); as cores de cada família são reduzidas a RELEVO_CORES, para cada azulejo caber em 256
+RELEVO_CORES = 32
+
+
+def pecas_do_relevo(arte=ARTE):
+    """As peças de relevo: nome -> (w, h, pixels '#rrggbb' ou None no vazio), com alfa binário e as cores de cada família
+    reduzidas juntas a RELEVO_CORES (corte mediano, sem pontilhado: o mesmo dado dá sempre as mesmas cores)."""
+    from PIL import Image
+    pecas = {}
+    for filas in mundo_terreno.RELEVO.values():
+        nomes = sorted({n.split("/")[0] for fila in filas for n in fila})
+        dados = {}
+        for n in nomes:
+            im = Image.open(os.path.join(arte, f"relevo-{n}.png")).convert("RGBA")
+            b = im.tobytes()
+            dados[n] = (im.width, im.height, [tuple(b[i:i + 3]) if b[i + 3] >= 128 else None for i in range(0, len(b), 4)])
+        todas = [c for _, _, px in dados.values() for c in px if c]
+        tira = Image.new("RGB", (len(todas), 1))
+        tira.putdata(todas)
+        q = tira.quantize(colors=RELEVO_CORES, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+        pal = q.getpalette()
+        mapa = {c: "#%02x%02x%02x" % tuple(pal[3 * k:3 * k + 3]) for c, k in zip(todas, q.tobytes())}
+        for n, (w, h, px) in dados.items():
+            pecas[n] = (w, h, [mapa[c] if c else None for c in px])
+    return pecas
 # as peças que toda cidade pode usar: prédios, casas, chalés, árvores e canteiros, carros, aviões, a praça, o lazer (campo,
 # parquinho, lago, coreto, feira e quadra), a praia e o mobiliário da rua
 GENERICOS = ([f"predios-{i}" for i in range(1, 15)] + [f"chale-{i}" for i in range(1, 9)] + [f"casa-{i}" for i in range(1, 7)]

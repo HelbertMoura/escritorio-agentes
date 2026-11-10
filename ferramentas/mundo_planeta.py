@@ -11,9 +11,12 @@ from collections import deque
 
 from mundo_terreno import CORES, _bayer, _h, _ruido
 
-# as cores do frio (tundra, gelo) e das dunas, que o mapa do Brasil não tem
+# as cores do frio (tundra, gelo) e das dunas, que o mapa do Brasil não tem, e os tons das serras do globo (os montes do
+# mapa do Brasil seguem as peças de relevo; o globo fica com os dele)
 NOVAS = {"gelo": "#eef3f1", "gelo2": "#dce7e5", "gelo_sombra": "#c2d0ce", "tu_chao": "#7d8862", "tu_chao2": "#8e9672",
-         "duna": "#cfb27a", "es_chao": "#a49a62", "mn_meio": "#978f81", "mr_meio": "#bba077", "mv_meio": "#8f9e74"}
+         "duna": "#cfb27a", "es_chao": "#a49a62", "mn_meio": "#978f81", "mr_meio": "#bba077", "mv_meio": "#8f9e74",
+         "mv_luz": "#b4c08e", "mv_sombra": "#6d7d5a", "mr_luz": "#dcc596", "mr_sombra": "#9a7c58", "mn_luz": "#bdb5a6",
+         "mn_sombra": "#746c62"}
 # cada classe: dois tons em manchas e o tom dos pontos, com a chance do ponto
 ESTILOS = {
     "floresta": ("am_copa", "am_sombra", "am_luz", 0.12), "mata": ("ma_chao", "ma_chao2", "ma_sombra", 0.10),

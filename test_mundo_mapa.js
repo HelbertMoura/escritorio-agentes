@@ -169,6 +169,35 @@ async function principal() {
   // rodada 3
   await trocaSemBuraco();
   await nomesAcompanhamOsIcones();
+  // rodada 4
+  await nomeNaoCobreIcone();
+}
+
+// nenhum nome de cidade cobre o ícone de outra, em nenhum degrau (2x, 3x e o teto), nas telas dos achados, com a casa em São
+// Paulo e em Mateus Leme: Mateus Leme junto de BH, Brasília e Goiânia, Salvador e Aracaju, Curitiba e Florianópolis
+async function nomeNaoCobreIcone() {
+  const telas = [[940, 800, 1], [940, 596, 1], [1026, 650, 1], [940, 580, 1], [360, 520, 3], [390, 507, 3]];
+  const alvos = ["belo-horizonte", "brasilia", "salvador", "curitiba", "rio-de-janeiro", "recife"];
+  for (const casa of ["sao-paulo", "mateus-leme"]) for (const tela of telas) {
+    const v = await brasil({ tela, clima: { ...CLIMA, casa } });
+    const c = v.M.camera, W = tela[0] * tela[2], H = tela[1] * tela[2];
+    for (const z of [1, 2, 3, 99]) for (const id of alvos) {
+      const alvo = cidade(id);
+      c.zoomPara(z); v.rodar(40); centrar(v, alvo.x, alvo.y);
+      const b = v.M.niveis.brasil, caixas = b.caixas.filter(k => k.ax >= -40 && k.ay >= -40 && k.ax < W + 40 && k.ay < H + 40);
+      for (const n of b.nomes) for (const k of caixas) {
+        if (k.id === n.id) continue;
+        const icone = { x: k.px - k.iw / 2, y: k.py - k.ih, w: k.iw, h: k.ih };
+        assert.ok(!cruza(n, icone), `casa ${casa}, ${tela}, ${z}x em ${id}: o nome de ${n.id} cobre o ícone de ${k.id}`);
+      }
+      if (casa === "mateus-leme") {
+        const ml = caixas.find(k => k.id === "mateus-leme");
+        if (ml && ml.ax >= 0 && ml.ay >= 0 && ml.ax < W && ml.ay < H) {
+          assert.ok(b.nomes.some(n => n.id === "mateus-leme"), `${tela}, ${z}x em ${id}: o nome da casa sumiu`);
+        }
+      }
+    }
+  }
 }
 
 // ao sair do 4x (para 3x), nenhum quadro fica sem chão: em cada quadro, ou o brasil.png é desenhado, ou todo azulejo de 2x

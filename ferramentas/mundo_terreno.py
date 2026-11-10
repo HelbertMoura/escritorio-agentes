@@ -18,20 +18,19 @@ NEVOA = ("nevoa", "nevoa_2")   # a névoa em que a terra esmaece na borda, antes
 NEVOA_ESCURA, NEVOA_FORA = 0.22, 0.42   # na borda: acima de 0 a névoa clara, depois a escura, depois o mar
 ESTRADA = {"estrada", "estrada_sombra"}   # as rodovias (só na camada de perto)
 LARGOS = {"Amazonas", "Paraná", "São Francisco"}   # rios de 2 px
-# a camada de perto: os glifos miúdos entre os grandes saem com MIUDO da chance da camada; entre duas montanhas de uma
-# serra, um morro de SOPE linhas (mais relevo, de perto)
-MIUDO, SOPE = 0.4, (3, 5)
+# a camada de perto: os glifos miúdos entre os grandes saem com MIUDO da chance da camada
+MIUDO = 0.4
 
 # as cores cheias (Brasil); cada uma ganha a versão apagada (vizinhos) e a da divisa de UF (mais escura; na Amazônia, o
 # verde claro am_divisa, que lê sobre as copas escuras)
 BASE = {
     "mar": "#1d3b5c", "mar_fundo": "#1a3452", "onda": "#26496d", "raso": "#2a5a7c", "raso_claro": "#3a7a99",
     "rio": "#56a2d2", "areia": "#dcc890", "fronteira": "#2a2217",
-    "estrada": "#e2d2a4", "estrada_sombra": "#6e5f45", "nevoa": "#7c8c98", "nevoa_2": "#4a6680",
-    # só a 4x (refinar): a ponte, o asfalto e a faixa da rodovia, a lavoura e o pasto perto das cidades e o meio-tom das serras
+    "estrada": "#8b877d", "estrada_sombra": "#6a6558", "nevoa": "#7c8c98", "nevoa_2": "#4a6680",
+    # só a 4x (refinar): a ponte, o asfalto (o mesmo cinza da linha de 2x) e a faixa da rodovia, a lavoura e o pasto perto
+    # das cidades
     "ponte": "#c4bcaa", "lavoura": "#cdb65c", "lavoura_verde": "#9cb24f", "pasto": "#b4cc72",
-    "terra_arada": "#9a7048", "asfalto": "#4f4c48", "faixa": "#f2e7c2",
-    "mv_meio": "#909e74", "mr_meio": "#bba077", "mn_meio": "#989084",
+    "terra_arada": "#9a7048", "asfalto": "#8b877d", "faixa": "#d9d3c1",
     # Amazônia: copas densas e escuras
     "am_chao": "#173d22", "am_chao2": "#1c4626", "am_sombra": "#22532b", "am_copa": "#2c6a32", "am_luz": "#41843a",
     "am_brilho": "#5f9e43", "am_divisa": "#93bd66",
@@ -55,10 +54,12 @@ BASE = {
     # chaco (só nos vizinhos): mato seco oliva com quebrachos, palmeiras carandá e esteros
     "ch_chao": "#9a9152", "ch_chao2": "#a79d5c", "ch_seco": "#c2b26c", "ch_copa": "#5d6f33", "ch_luz": "#7f8f42",
     "ch_sombra": "#424f25", "ch_tronco": "#5e4429", "ch_palma": "#6f8a3c", "ch_estero": "#4e8790", "ch_estero_luz": "#8cc0c8",
-    # serras: verdes, de rocha e com neve
-    "mv_luz": "#b4c08e", "mv_sombra": "#6d7d5a", "mv_contorno": "#26331f",
-    "mr_luz": "#dcc596", "mr_sombra": "#9a7c58", "mr_contorno": "#3f3022",
-    "mn_luz": "#bdb5a6", "mn_sombra": "#746c62", "mn_contorno": "#332f2a", "mn_neve": "#f3f4ef", "mn_neve_sombra": "#c9d0ce",
+    # as serras do mapa de longe (os montes de 1x), nos tons das peças de relevo de perto (a troca 1x -> 2x não muda a cor
+    # da serra): de mata com o cume de pedra, de rocha clara, com neve (sempre G >= B: a terra continua terra) e a chapada
+    "mv_luz": "#4f8a3f", "mv_sombra": "#2c5a33", "mv_contorno": "#14261a", "mv_pico": "#a2a69e", "mv_pico_sombra": "#5c615c",
+    "mr_luz": "#e2dec4", "mr_sombra": "#8a8474", "mr_contorno": "#2e2a24",
+    "mn_luz": "#8aa6a6", "mn_sombra": "#566c6c", "mn_contorno": "#1e2626", "mn_neve": "#f3f4ef", "mn_neve_sombra": "#c9d0ce",
+    "mc_luz": "#d86a3c", "mc_sombra": "#953c38", "mc_contorno": "#2e2826",
 }
 AGUA_BASE = {"mar", "mar_fundo", "onda", "raso", "raso_claro", "rio", "pa_poca", "pa_poca_luz", "ch_estero", "ch_estero_luz",
              *NEVOA}
@@ -76,7 +77,7 @@ def _hex(c):
 
 # as cores que só o refino de 4x usa não ganham a versão da divisa (as divisas já vêm prontas do 2x); a lavoura e a ponte,
 # só no Brasil, nem a apagada. A paleta do PNG tem no máximo 256 cores
-SO_4X = {"ponte", "lavoura", "lavoura_verde", "pasto", "terra_arada", "asfalto", "faixa", "mv_meio", "mr_meio", "mn_meio"}
+SO_4X = {"ponte", "lavoura", "lavoura_verde", "pasto", "terra_arada", "asfalto", "faixa"}
 SO_BRASIL = {"ponte", "lavoura", "lavoura_verde", "pasto", "terra_arada"}
 
 
@@ -185,9 +186,10 @@ ESTILOS = {
 }
 ARAUCARIAS = ((7, 6), 0.75, [ARAUCARIA])
 ONDA = [".ww..", "w..ww"]
-SERRA_CORES = {"verde": ("mv_luz", "mv_sombra", "mv_contorno", "mv_luz", "mv_sombra"),
+SERRA_CORES = {"verde": ("mv_luz", "mv_sombra", "mv_contorno", "mv_pico", "mv_pico_sombra"),
                "rocha": ("mr_luz", "mr_sombra", "mr_contorno", "mr_luz", "mr_sombra"),
-               "neve": ("mn_luz", "mn_sombra", "mn_contorno", "mn_neve", "mn_neve_sombra")}
+               "neve": ("mn_luz", "mn_sombra", "mn_contorno", "mn_neve", "mn_neve_sombra"),
+               "mesa": ("mc_luz", "mc_sombra", "mc_contorno", "mc_luz", "mc_sombra")}
 
 
 def montanha(alto, mesa=False):
@@ -332,8 +334,8 @@ def desenhar(rotulo, biomas, extras, serras, rios, w, h, escala=1, estradas=(), 
     grandes (biomas, chão, mar fundo, borda) seguem o ruído do mapa de longe, e o detalhe (glifos, rios, serras,
     costa, divisas) sai na resolução nova, mais denso. Só ela leva as rodovias e os rios menores (afluentes).
     registro: um dict que, se vier, recebe os objetos do desenho para o refino de 4x (refinar): o chão (nomes por pixel,
-    antes dos glifos), os carimbos (pé, centro, desenho, papéis, glifo original, escala), os montes (x, y, glifo, tipo,
-    altura, mesa) e as rodovias."""
+    antes dos glifos), os carimbos (pé, centro, desenho, papéis, glifo original, escala), as serras (para as peças de
+    relevo) e as rodovias."""
     f = escala
     N = w * h
     estado = [0] * N   # 0 mar, 1 Brasil, 2 vizinho
@@ -346,8 +348,8 @@ def desenhar(rotulo, biomas, extras, serras, rios, w, h, escala=1, estradas=(), 
     fora_do_brasil = lambda nome: {p for p in extras.get(nome, ()) if rotulo.get(p) == ESTRANGEIRO}
     bioma = _biomas(terra, [("andes", fora_do_brasil("andes")), ("chaco", fora_do_brasil("chaco"))] + biomas, w, h, f)
     arau = [False] * N
-    for x, y in extras.get("araucarias", ()):
-        if 0 <= x < w and 0 <= y < h:
+    for x, y in extras.get("araucarias", ()):   # só no Brasil: na Argentina, a beira reta do polígono (lon -54) apareceria
+        if 0 <= x < w and 0 <= y < h and estado[y * w + x] == 1:
             arau[y * w + x] = True
     cor = ["mar"] * N
 
@@ -439,14 +441,16 @@ def desenhar(rotulo, biomas, extras, serras, rios, w, h, escala=1, estradas=(), 
             if i + w < N and terra[i + w] and not via[i + w] and cor[i + w].split("_ap")[0] != "rio":
                 por(i + w, "estrada_sombra")
 
-    # 5. as serras: fileiras de montanhas, de cima para baixo. De perto, as mesmas montanhas nos mesmos lugares, na
-    # altura vezes f (o glifo sai de novo na resolução nova, com a encosta mais fina), e um morro baixo entre duas delas
+    # 5. as serras: no mapa de longe, fileiras de montanhas, de cima para baixo; de perto (2x e 4x), as peças de relevo
+    # pintadas, carimbadas por cima do mapa pronto (carimbar_relevo), nos mesmos lugares nos dois níveis
+    if registro is not None:
+        registro["serras"] = serras
     montes = []
-    for serra in serras:
+    for serra in serras if f == 1 else ():
         mesa = serra.get("forma") == "mesa"
         for k, fileira in enumerate(serra["linhas"]):
             grande = serra["tipo"] == "neve"
-            for j, (x, y, ux, uy) in enumerate(_ao_longo(fileira, (4.0 if grande else 5.0) * f)):
+            for j, (x, y, ux, uy) in enumerate(_ao_longo(fileira, 4.0 if grande else 5.0)):
                 if grande:   # os Andes: picos de 4 a 8 linhas, uns fora da fila e outros faltando (nada de zíper)
                     if _h(j, k, 60) < 0.15:
                         continue
@@ -454,18 +458,10 @@ def desenhar(rotulo, biomas, extras, serras, rios, w, h, escala=1, estradas=(), 
                     lado, ao_longo = (_h(j, k, 63) - 0.5) * 7, (_h(j, k, 64) - 0.5) * 2.5
                 else:
                     alto, lado, ao_longo = (6 if _h(j, k, 62) < 0.4 else 5), (1 if j % 2 else -1) * 1.5, 0
-                lado, ao_longo = lado * f, ao_longo * f
-                montes.append((x - uy * lado + ux * ao_longo, y + ux * lado + uy * ao_longo, montanha(alto * f, mesa), serra["tipo"],
-                               alto * f, mesa))
-                if f > 1 and not mesa and _h(j, k, 65) < 0.7:   # o morro do sopé, do outro lado da fila, meio passo adiante
-                    meio, m = (2.0 if grande else 2.5) * f, -lado * 0.6
-                    alto = SOPE[0] + int(_h(j, k, 66) * (SOPE[1] - SOPE[0] + 1))
-                    montes.append((x - uy * m + ux * meio, y + ux * m + uy * meio, montanha(alto), serra["tipo"], alto, False))
+                montes.append((x - uy * lado + ux * ao_longo, y + ux * lado + uy * ao_longo, montanha(alto, mesa), familia(serra)))
         for x, y in serra.get("picos", ()):
-            montes.append((x, y, montanha(9 * f), serra["tipo"], 9 * f, False))
-    if registro is not None:
-        registro["montes"], registro["serras"] = montes, serras
-    for x, y, g, tipo, _, _ in sorted(montes, key=lambda m: (round(m[1]), round(m[0]))):
+            montes.append((x, y, montanha(9), serra["tipo"]))
+    for x, y, g, tipo in sorted(montes, key=lambda m: (round(m[1]), round(m[0]))):
         luz, sombra, contorno, neve, neve_sombra = SERRA_CORES[tipo]
         papel = {"L": luz, "S": sombra, "o": contorno, "N": neve, "M": neve_sombra}
         x0, y0 = round(x) - len(g[0]) // 2, round(y) - len(g) + 1
@@ -569,7 +565,6 @@ def desenhar(rotulo, biomas, extras, serras, rios, w, h, escala=1, estradas=(), 
 # asfalto e faixa, pontes, margens e bancos de areia nos rios, o grão do chão e a lavoura em talhões perto das cidades
 # do Centro-Sul.
 LAVOURAS = ("lavoura", "lavoura_verde", "pasto", "terra_arada")
-MEIO = {"verde": "mv_meio", "rocha": "mr_meio", "neve": "mn_meio"}
 # os glifos de 2x redesenhados a 4x (os miúdos, cactos, tufos, poças e pedras seguem dobrados)
 REDESENHO = {**dict.fromkeys(map(tuple, (COPA_G, COPA_M, COPA_GG, COPA_MATA, COPA_MATA_P)), "copa"),
              tuple(ARVORE_CERRADO): "cerrado", tuple(ARVORE_CERRADO_2): "cerrado", tuple(QUEBRACHO): "quebracho",
@@ -724,98 +719,6 @@ def araucaria4(larg, alto, s):
     return ["".join(f) for f in grade]
 
 
-# a cordilheira a 4x: a altura de base (pixels de 4x) por tipo de serra e o quanto a montanha "sobe" na tela (o relevo é
-# visto meio de cima, meio de lado: o pixel de altura h é desenhado h·ERGUE acima do chão)
-ALTURA = {"verde": 12, "rocha": 11, "neve": 20}
-ERGUE = 0.55
-
-
-def altura_da_serra(serra, k=2):
-    """O mapa de altura (pixel de 4x -> altura em pixels) de uma serra do serras.json, com as linhas em pixels do 2x
-    (vezes k). Ao longo de cada linha, uma crista contínua de morros que se fundem: a altura varia pela semente (picos de
-    tamanhos diferentes), a crista ondula de lado e saem esporões para os dois lados, que descem até o sopé; um ruído
-    miúdo quebra as encostas em ravinas e facetas. Os picos nomeados são mais altos; a chapada (mesa) tem o topo cortado
-    num planalto."""
-    tipo, mesa = serra["tipo"], serra.get("forma") == "mesa"
-    H0, alt, pontos = ALTURA[tipo], {}, []
-    for n, fileira in enumerate(serra["linhas"]):
-        pts = [(x * k, y * k) for x, y in fileira]
-        s, t = len(pts) * 31 + n * 7 + round(pts[0][0]), 0
-        for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
-            seg = ((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5 or 1
-            ux, uy = (x1 - x0) / seg, (y1 - y0) / seg
-            for q in range(0, int(seg), 2):
-                t += 2
-                h = H0 * (0.4 + 0.5 * _ruido(t, 0, 18, s) + 0.45 * _ruido(t, 0, 7, s + 1))
-                lado = (_ruido(t, 0, 34, s + 2) - 0.5) * 7
-                cx, cy = x0 + ux * q - uy * lado, y0 + uy * q + ux * lado
-                pontos.append((cx, cy, h))
-                if t % 10 == 0 and _h(t, s, 3) < 0.85:   # o esporão, de um lado e de outro, descendo até o sopé
-                    sinal = 1 if _h(t, s, 4) < 0.5 else -1
-                    ang = (0.8 + 0.7 * _h(t, s, 5)) * sinal
-                    ex, ey = ux * math.cos(ang) - uy * math.sin(ang), ux * math.sin(ang) + uy * math.cos(ang)
-                    comp = h * (1.6 + 1.2 * _h(t, s, 6))
-                    for e in range(2, int(comp), 2):
-                        pontos.append((cx + ex * e, cy + ey * e, h * 0.8 * (1 - e / comp) ** 0.6))
-    pontos += [(px * k, py * k, H0 * 1.7) for px, py in serra.get("picos", ())]
-    for cx, cy, h in pontos:   # cada ponto, um morro de encosta côncava (a crista fina, o pé largo)
-        if h < 3:   # a ponta do esporão some no sopé (morro de 1 ou 2 pixels vira pontilhado solto)
-            continue
-        r = h * 1.5
-        for y in range(int(cy - r), int(cy + r) + 2):
-            for x in range(int(cx - r), int(cx + r) + 2):
-                d = ((x - cx) ** 2 + (y - cy) ** 2) ** 0.5
-                if d < r:
-                    v = h * (1 - d / r) ** 1.8
-                    if v > alt.get((x, y), 0):
-                        alt[(x, y)] = v
-    s = len(pontos)
-    for (x, y), v in alt.items():   # as ravinas: o ruído miúdo, proporcional à altura
-        alt[(x, y)] = v * (0.62 + 0.5 * _ruido(x, y, 6, s) + 0.2 * _ruido(x, y, 3, s + 1))
-    if mesa:   # a chapada: o topo cortado num planalto, com as escarpas em volta
-        alt = {p: min(H0 * 0.6, v * 1.7) for p, v in alt.items()}
-    return alt
-
-
-def desenhar_serra(cor, W, H, alt, papeis, pode):
-    """A cordilheira na tela, como coluna de terra: cada pixel do mapa de altura vira um pilar do chão (y) até o topo
-    (y - h·ERGUE), de trás para a frente (o da frente cobre o de trás), e a parte do pilar que fica à vista é a encosta
-    que cai para o sul, em sombra. O tom do topo sai da encosta com a luz da esquerda: luz L, meio-tom m, sombra S e
-    contorno o na sombra funda; a neve fica no alto (N, M) e o sopé, em pontilhado, se funde no chão. Por fim, o
-    contorno escuro na silhueta de cima e na crista da frente que corta a encosta de trás, como nos montes de 2x.
-    papeis(i): as letras -> índices no pixel i (o lado de fora do Brasil, apagado)."""
-    neve = papeis(0)["N"] != papeis(0)["L"]
-    dono = {}   # pixel da tela -> (linha do mapa de altura que o pintou, altura)
-    for (x, y), v in sorted(alt.items(), key=lambda p: (p[0][1], p[0][0])):
-        if v < 1 or not 0 <= x < W:
-            continue
-        if v < 2 and (x * 7 + y * 3) % 3:   # o sopé em pontilhado, que se funde no chão
-            continue
-        gx = alt.get((x + 1, y), 0) - alt.get((x - 1, y), 0)
-        gy = alt.get((x, y + 1), 0) - alt.get((x, y - 1), 0)
-        luz = gx + 0.6 * gy   # a encosta virada para a esquerda (e para o norte) acende
-        if neve and v > ALTURA["neve"] * (0.5 + 0.25 * _h(x // 3, y // 3, 9)):   # a linha da neve, recortada
-            letra = "N" if luz > -0.3 else "M" if luz > -1.8 else "S"
-        elif luz > 0.5:
-            letra = "L"
-        elif luz > -0.6:
-            letra = "m"
-        elif luz > -2.4 or v < 2.5:   # o contorno só na sombra funda (no sopé, nunca)
-            letra = "S"
-        else:
-            letra = "o"
-        face = {"N": "M", "M": "M", "L": "m", "m": "S", "S": "S", "o": "o"}[letra]
-        ty = y - round(v * ERGUE)
-        for yy in range(max(0, ty), min(H, y + 1)):
-            if pode(yy * W + x):
-                cor[yy * W + x] = papeis(yy * W + x)[letra if yy == ty else face]
-                dono[yy * W + x] = (y, v)
-    for i, (y, v) in dono.items():
-        cima = dono.get(i - W)
-        if v >= 3 and (cima is None or cima[0] < y - 4 and cima[1] < v) and not (neve and v > ALTURA["neve"] * 0.5):
-            cor[i] = papeis(i)["o"]
-
-
 def _carimbar(cor, W, H, glifo, x0, y0, papel, pode):
     """Pinta o glifo com o canto em (x0, y0): cada letra vira o índice papel[letra], onde pode(i) deixar."""
     for dy, fila in enumerate(glifo):
@@ -830,15 +733,15 @@ def _carimbar(cor, W, H, glifo, x0, y0, papel, pode):
 
 def refinar(indices, w, h, focos=(), objetos=None):
     """O nível de 4x (2w x 2h) a partir do de 2x (indices, w x h) e dos objetos dele (o registro de desenhar: chao,
-    carimbos, montes, estradas). Scale2x e então, de baixo para cima:
-    1. as árvores grandes e as serras de 2x voltam ao chão (o chão de 2x dobrado) e as rodovias também;
+    carimbos, estradas). Scale2x e então, de baixo para cima:
+    1. as árvores grandes de 2x voltam ao chão (o chão de 2x dobrado) e as rodovias também;
     2. as árvores redesenhadas a 4x nos mesmos lugares (copas de forma, tamanho e tom próprios; clareiras na floresta;
        árvore torta do cerrado, quebracho, carandá e araucária reconhecíveis);
-    3. as serras redesenhadas a 4x como cordilheiras contínuas ao longo das linhas delas (altura_da_serra, desenhar_serra);
-    4. as rodovias com acostamento claro, asfalto e a faixa tracejada no meio; ponte sobre o rio;
-    5. os rios com margem escura, o canal mais fundo no meio e bancos de areia nos largos; o grão do chão;
-    6. a lavoura em talhões perto de cada foco (x, y, raio interno, raio externo, em pixels de 4x);
-    7. as divisas, a areia da costa e os rios de 2x por cima de tudo, como no 2x."""
+    3. as rodovias em 3 px de asfalto (o cinza da linha de 2x) com a faixa tracejada no meio; ponte sobre o rio;
+    4. os rios com margem escura, o canal mais fundo no meio e bancos de areia nos largos; o grão do chão;
+    5. a lavoura em talhões perto de cada foco (x, y, raio interno, raio externo, em pixels de 4x);
+    6. as divisas, a areia da costa e os rios de 2x por cima de tudo, como no 2x.
+    As serras não saem aqui: são as peças de relevo, carimbadas depois nos dois níveis (carimbar_relevo)."""
     W, H, N = 2 * w, 2 * h, 4 * w * h
     base = dobrar(indices, w, h)
     cor = base[:]
@@ -850,7 +753,6 @@ def refinar(indices, w, h, focos=(), objetos=None):
     if not obj:
         return cor
     chao = dobrar([ind[n] for n in obj["chao"]], w, h)
-    serra = {ind[n] for n in CORES if n[:3] in ("mv_", "mr_", "mn_")}
     estrada = {ind[n] for n in ("estrada", "estrada_ap", "estrada_sombra", "estrada_sombra_ap")}
     por_cima = {k for k, n in enumerate(nomes) if n.endswith("~") or n.startswith(("fronteira", "areia", "rio"))}
     terra = lambda i: base[i] not in agua
@@ -860,7 +762,7 @@ def refinar(indices, w, h, focos=(), objetos=None):
             o = 2 * y * W + 2 * x
             yield from (o, o + 1, o + W, o + W + 1)
 
-    # 1. apagar: o desenho de 2x das árvores grandes, das serras (menos a chapada) e das rodovias volta ao chão
+    # 1. apagar: o desenho de 2x das árvores grandes e das rodovias volta ao chão
     for ay, ax, desenho, papeis, original, m in obj.get("carimbos", ()):
         if m == 1 or tuple(original) not in REDESENHO:
             continue
@@ -872,8 +774,8 @@ def refinar(indices, w, h, focos=(), objetos=None):
                 for i in bloco(ax + dx - len(desenho[0]) // 2, ay + dy):
                     if base[i] in (deles if dentro else usadas):
                         cor[i] = chao[i]
-    for i in range(N):   # as serras e as rodovias só saem desses tons (e o dobro suaviza o contorno para fora do glifo)
-        if base[i] in serra or base[i] in estrada:
+    for i in range(N):   # as rodovias só saem desses tons (e o dobro suaviza o contorno para fora do glifo)
+        if base[i] in estrada:
             cor[i] = chao[i]
 
     # 2. as árvores a 4x, de cima para baixo (a de baixo cobre a de cima), no lugar e no tamanho do desenho de 2x
@@ -908,34 +810,24 @@ def refinar(indices, w, h, focos=(), objetos=None):
             g = araucaria4(larg, alto, s)
         _carimbar(cor, W, H, g, cx - len(g[0]) // 2, pe - len(g), papel, terra)
 
-    # 3. as serras a 4x: cada uma é uma cordilheira contínua ao longo da linha dela (altura_da_serra, desenhar_serra)
-    for serra in obj.get("serras", ()):
-        tipo, cheia = serra["tipo"], serra["tipo"] == "neve"   # os Andes em tons cheios, como no 2x
-        alt = altura_da_serra(serra)
-        if not alt:
-            continue
-        luz, sombra, contorno, neve, neve_sombra = SERRA_CORES[tipo]
-        papel = [{"L": ind[luz + sf], "m": ind[MEIO[tipo] + sf], "S": ind[sombra + sf], "o": ind[contorno + sf],
-                  "N": ind[neve + sf], "M": ind[neve_sombra + sf]} for sf in ("", "_ap")]
-        desenhar_serra(cor, W, H, alt, lambda i: papel[not cheia and ap(chao[i])], terra)   # fora do Brasil, apagada
-
-    # 4. as rodovias: a pista de asfalto escuro (3 px) com a faixa clara tracejada no meio e o acostamento claro dos dois
-    # lados; sobre o rio, a ponte
-    via = [0] * N   # 1 acostamento, 2 asfalto, 3 faixa, 4 ponte
+    # 3. as rodovias: a pista de 3 px no cinza da linha de 2x (asfalto), com a faixa clara tracejada no meio onde ela cabe (no
+    # trecho reto, longe das emendas); sobre o rio, a ponte
+    via = [0] * N   # 2 asfalto, 3 faixa, 4 ponte
     for linhas in obj.get("estradas", ()):
         for traco in linhas:
             passo = 0
             for (x0, y0), (x1, y1) in zip(traco, traco[1:]):
                 a, b = (round(2 * x0), round(2 * y0)), (round(2 * x1), round(2 * y1))
                 deitado = abs(b[0] - a[0]) >= abs(b[1] - a[1])
-                for x, y in linha(*a, *b):
+                pontos = linha(*a, *b)
+                for q, (x, y) in enumerate(pontos):
                     passo += 1
-                    for k in (-2, -1, 0, 1, 2):
+                    cabe = 2 <= q < len(pontos) - 2
+                    for k in (-1, 0, 1):
                         px, py = (x, y + k) if deitado else (x + k, y)
                         if 0 <= px < W and 0 <= py < H:
                             i = py * W + px
-                            papel = (3 if passo % 6 < 3 else 2) if k == 0 else 2 if abs(k) == 1 else 1
-                            via[i] = max(via[i], papel)
+                            via[i] = max(via[i], 3 if k == 0 and cabe and passo % 6 < 3 else 2)
     for i in range(N):
         if via[i] and terra(i) is False and nomes[base[i]].startswith("rio"):
             via[i] = 4
@@ -945,16 +837,10 @@ def refinar(indices, w, h, focos=(), objetos=None):
             continue
         if v == 4:
             cor[i] = ind["ponte"]
-            continue
-        if base[i] in agua:
-            continue
-        sufixo = "_ap" if ap(chao[i]) else ""
-        cor[i] = ind[("estrada", "asfalto", "faixa")[v - 1] + sufixo]
-        abaixo = i + W
-        if abaixo < N and not via[abaixo] and terra(abaixo) and cor[abaixo] not in serra:
-            cor[abaixo] = ind["estrada_sombra" + sufixo]
+        elif base[i] not in agua:
+            cor[i] = ind[("asfalto", "faixa")[v - 2] + ("_ap" if ap(chao[i]) else "")]
 
-    # 5. os rios: margem escura, o canal mais fundo no meio e, nos largos, bancos de areia; e o grão do chão
+    # 4. os rios: margem escura, o canal mais fundo no meio e, nos largos, bancos de areia; e o grão do chão
     escuro = [ind.get(n + "~", k) for k, n in enumerate(nomes)]
     rio, raso, areia = ind["rio"], ind["raso_claro"], ind["areia"]
     graos = {}
@@ -977,7 +863,7 @@ def refinar(indices, w, h, focos=(), objetos=None):
             elif _h(x, y, 209) < 0.05:
                 cor[i] = graos[cor[i]]
 
-    # 6. a lavoura: talhões de tamanhos, formas e culturas variados num anel em volta de cada foco, com a cerca (o tom
+    # 5. a lavoura: talhões de tamanhos, formas e culturas variados num anel em volta de cada foco, com a cerca (o tom
     # escuro do chão) e, dentro, as fileiras do plantio; só no chão liso do Brasil, nunca uma colcha
     culturas = {"lavoura": ("lavoura", "lavoura_verde"), "lavoura_verde": ("lavoura_verde", "pa_capim"),
                 "pasto": ("pasto", "pasto"), "terra_arada": ("terra_arada", "ca_sombra")}   # o sulco, terra mais viva
@@ -1010,8 +896,157 @@ def refinar(indices, w, h, focos=(), objetos=None):
                     if cultura == "pasto" and _h(x, y, 356) < 0.12:
                         cor[i] = ind["lavoura_verde"]
 
-    # 7. por cima de tudo, como no 2x: as divisas, a areia da costa e os rios (a ponte fica)
+    # 6. por cima de tudo, como no 2x: as divisas, a areia da costa e os rios (a ponte fica)
     for i in range(N):
         if base[i] in por_cima and via[i] != 4 and not (base[i] == rio and cor[i] in (areia, raso)):
             cor[i] = base[i]
     return cor
+
+
+# --- o relevo de perto: as peças pintadas (PixelLab, arte/pixellab/mundo/relevo-*.png) carimbadas ao longo das serras ----
+# Cada serra vira fileiras deslocadas de peças da família dela, as de trás primeiro e as da frente por cima (pelo pé),
+# as maiores atrás e as menores na frente, com escolha, espelho e pequeno deslocamento fixos pela posição e sem a mesma
+# peça duas vezes seguidas na fileira. As mesmas peças, nos mesmos lugares, a 4x (no tamanho delas) e a 2x (na metade):
+# a troca de nível não pula. A montagem lê as peças (com o Pillow) e reduz as cores de cada família.
+# família -> (as peças da fileira de trás, as da frente); "nome/2" é a peça na metade já a 4x
+RELEVO = {"verde": (("serra-verde-4", "serra-verde-1"), ("pico-1", "serra-verde-1/2", "pico-1/2")),
+          "rocha": (("serra-rocha-3", "serra-rocha-1"), ("serra-rocha-1", "serra-rocha-3/2")),
+          "neve": (("serra-neve-1", "serra-neve-2"), ("serra-neve-2", "serra-neve-3")),
+          "mesa": (("chapada-1",), ("chapada-1/2",))}
+PICO = "pico-1"   # o pico isolado (Pico da Neblina)
+# família -> (o passo ao longo da linha, as fileiras: o desvio para trás (+) ou para a frente (-), a fase no passo e qual
+# grupo de peças), em pixels de 4x
+FILEIRAS = {"verde": (34, ((7, 0.0, 0), (-7, 0.5, 1))),
+            "rocha": (30, ((6, 0.0, 0), (-8, 0.5, 1))),
+            "neve": (28, ((14, 0.0, 0), (2, 0.5, 1), (-10, 0.25, 1))),
+            "mesa": (48, ((12, 0.0, 0), (-16, 0.5, 1)))}
+ZIGUE = {"mesa": 10}   # as chapadas saem em ziguezague (uma de cada lado da linha), não numa coluna
+LADO = {"neve": 10}    # o quanto a peça sai da fileira para os lados (os Andes, largos, sem cara de grade); o resto, 4
+FALTA = {"neve": 0.2, "rocha": 0.15}   # a chance de faltar uma peça nas fileiras da frente (sem fila contínua)
+FUNDO = 4        # pixels de 4x: o pé da peça se desfaz no chão nessa altura (2 a 2x)
+CORTE = 0.12     # a peça que perderia mais que isso (fora da imagem, na água ou na névoa) não é carimbada
+
+
+def familia(serra):
+    """A família de peças da serra: mesa (chapada) ou o tipo dela (verde, rocha, neve)."""
+    return "mesa" if serra.get("forma") == "mesa" else serra["tipo"]
+
+
+def apagada(h):
+    """A cor '#rrggbb' apagada (a dos vizinhos), como a paleta faz."""
+    return _hex([v * (1 - APAGA) + g * APAGA for v, g in zip(_rgb(h), CINZA)])
+
+
+def paleta_com_relevo(pecas):
+    """A paleta estendida: as cores de CORES (os mesmos índices) e, depois delas, as das peças e as apagadas delas, em
+    ordem fixa. Devolve (lista de '#rrggbb', cor -> índice)."""
+    lista = list(CORES.values())
+    cores = {c for _, _, px in pecas.values() for c in px if c}
+    lista += sorted((cores | {apagada(c) for c in cores}) - set(lista))
+    indice = {}
+    for k, c in enumerate(lista):
+        indice.setdefault(c, k)
+    return lista, indice
+
+
+def metade(peca):
+    """A peça na metade (o nível de 2x): cada bloco 2x2 vira um pixel, cheio quando 2 ou mais dos 4 são. Por dentro, a cor
+    mais clara do bloco (as peças têm muito traço escuro por dentro, e a média vira um borrão); na beira (bloco com vazio),
+    a mais escura dele (o contorno não some). Pixel nítido, alfa binário."""
+    w, h, px = peca
+    lum = lambda c: (sum(k * v for k, v in zip((0.3, 0.59, 0.11), _rgb(c))), c)
+    saida = []
+    for y in range(0, h, 2):
+        for x in range(0, w, 2):
+            bloco = [px[yy * w + xx] if xx < w and yy < h else None for yy in (y, y + 1) for xx in (x, x + 1)]
+            cheias = [c for c in bloco if c]
+            saida.append(None if len(cheias) < 2 else min(cheias, key=lum) if len(cheias) < 4 else max(cheias, key=lum))
+    return (w + 1) // 2, (h + 1) // 2, saida
+
+
+def espelho(peca):
+    w, h, px = peca
+    return w, h, [px[y * w + w - 1 - x] for y in range(h) for x in range(w)]
+
+
+def carimbos_do_relevo(serras, pecas, k=2):
+    """Onde vai cada peça de relevo, em pixels de 4x (as linhas das serras vêm em pixels de 2x, vezes k): (x, y do pé,
+    família, nome, espelhada), da de trás para a da frente (pelo pé, depois por x). pecas: nome -> (w, h, pixels)."""
+    lista = []
+    for n_s, serra in enumerate(serras):
+        fam = familia(serra)
+        passo, fileiras = FILEIRAS[fam]
+        for n_l, fileira in enumerate(serra["linhas"]):
+            pts = [(x * k, y * k) for x, y in fileira]
+            for r, (desvio, fase, grupo) in enumerate(fileiras):
+                grupo, antes = RELEVO[fam][grupo], None
+                for j, (x, y, ux, uy) in enumerate(_ao_longo(pts, passo)):
+                    s = n_s * 1009 + n_l * 101 + r * 13
+                    if r and _h(j, s, 405) < FALTA.get(fam, 0):   # só nas fileiras da frente
+                        continue
+                    a, b = (uy, -ux), (-uy, ux)   # para trás: o norte (na serra norte-sul, o oeste)
+                    tras = (a if a[0] < 0 else b) if abs(ux) < 0.3 else (a if a[1] < 0 else b)
+                    ao_longo = (fase + (_h(j, s, 401) - 0.5) * 0.3) * passo
+                    lado = desvio + (_h(j, s, 402) - 0.5) * LADO.get(fam, 4) + ZIGUE.get(fam, 0) * (1 if j % 2 else -1)
+                    nome = grupo[int(_h(j, s, 403) * len(grupo))]
+                    if nome == antes and len(grupo) > 1:
+                        nome = grupo[(grupo.index(nome) + 1) % len(grupo)]
+                    antes = nome
+                    lista.append((x + ux * ao_longo + tras[0] * lado, y + uy * ao_longo + tras[1] * lado, fam, nome,
+                                   _h(j, s, 404) < 0.5))
+        for x, y in serra.get("picos", ()):
+            lista.append((x * k, y * k, fam, PICO, False))
+    return sorted(lista, key=lambda c: (round(c[1]), round(c[0])))
+
+
+def carimbar_relevo(indices, W, H, carimbos, pecas, nivel, indice, apagado, mar, so=None):
+    """Carimba as peças de relevo no mapa (indices, W x H, na paleta estendida de paleta_com_relevo), no nível 4 (as
+    peças no tamanho delas) ou 2 (na metade), por cima de tudo (a rodovia e o rio passam por baixo). O canto de cada peça
+    cai em pixel par de 4x, então a de 2x cobre exatamente os mesmos blocos. O pé se desfaz no chão em FUNDO px (sem
+    contorno reto nem halo). Fora do Brasil (apagado(x, y) em pixels de 4x), a peça sai apagada, menos a neve dos Andes.
+    O pixel no mar (mar(x, y), em pixels de 4x) ou na névoa da borda fica de fora (o rio, não: ele passa por baixo); a
+    peça que perderia mais de CORTE dos pixels assim (ou fora da imagem) não sai; so: as que podem sair (as que saíram no
+    outro nível). Devolve as que saíram."""
+    nevoa = {indice[CORES[n]] for n in CORES if n.split("_ap")[0] in NEVOA + (FORA,)}
+    q = 4 // nivel
+    meia, fundo, postos = nivel == 2, FUNDO // (4 // nivel), []
+    cache = {}
+
+    def peca(nome, meia, esp):   # "nome/2": a peça na metade já a 4x (a menor, da frente)
+        if (nome, meia, esp) not in cache:
+            p = pecas[nome.split("/")[0]]
+            for _ in range(nome.endswith("/2") + meia):
+                p = metade(p)
+            cache[(nome, meia, esp)] = espelho(p) if esp else p
+        return cache[(nome, meia, esp)]
+    for c in carimbos:
+        x, y, fam, nome, esp = c
+        if so is not None and c not in so:
+            continue
+        p = peca(nome, False, False)
+        x0, y0 = (round(x) - p[0] // 2) & ~1, (round(y) - p[1] + 1) & ~1
+        w, h, px = peca(nome, meia, esp)
+        if meia:
+            x0, y0 = x0 // 2, y0 // 2
+        ap = fam != "neve" and apagado(round(x), round(y))
+        baixo = [max((yy for yy in range(h) if px[yy * w + xx]), default=-1) for xx in range(w)]
+        pontos, perdidos = [], 0
+        for yy in range(h):
+            for xx in range(w):
+                cor = px[yy * w + xx]
+                if not cor:
+                    continue
+                gx, gy = x0 + xx, y0 + yy
+                d = baixo[xx] - yy
+                if d < fundo and _h(gx * q // 2, gy * q // 2, 77) >= (d + 0.5) / fundo:
+                    continue
+                if not (0 <= gx < W and 0 <= gy < H) or indices[gy * W + gx] in nevoa or mar(gx * q, gy * q):
+                    perdidos += 1
+                    continue
+                pontos.append((gy * W + gx, indice[apagada(cor) if ap else cor]))
+        if so is None and perdidos > CORTE * (len(pontos) + perdidos):
+            continue
+        for i, k in pontos:
+            indices[i] = k
+        postos.append(c)
+    return postos
