@@ -280,13 +280,22 @@ class Rota(unittest.TestCase):
         for nome in ("mundo/terra.png", "mundo/brasil.png", "mundo/mundo.json", "mundo/atlas.png", "mundo/atlas.json",
                      "mundo_globo.js", "mundo_mapa.js", "mundo_mapa_arte.js", "mundo_cidade.js", "mundo_cidade_planta.js", "mundo_bairro.js",
                      "avatar.js", "festas.js", "mundo_festa.js", "mundo_cidade_chao.js", "mundo_cidade_letreiro.js",
-                     "mundo_mapa_perto.js") + tuple(f"mundo/perto/{i}-{j}.png" for i in range(4) for j in range(4)):
+                     "mundo_mapa_perto.js", "mundo/perto/ufs.json") + tuple(f"mundo/perto/{i}-{j}.png" for i in range(4) for j in range(4)):
             self.assertIn(nome, e.PUBLICOS)
             self.assertIn(nome, e.ARQUIVOS)
             self.assertTrue(os.path.isfile(os.path.join(e.ESTATICO, nome)), nome)
+        # o nível de 4x: os 64 nomes liberados; os que a máscara do mundo.json diz que existem, no disco
+        with open(os.path.join(e.ESTATICO, "mundo", "mundo.json"), encoding="utf-8") as f:
+            mascara = json.load(f)["niveis"]["brasil"]["perto4x"]["azulejos"]
+        for k, c in enumerate(mascara):
+            nome = f"mundo/perto4x/{k % 8}-{k // 8}.png"
+            self.assertIn(nome, e.PUBLICOS)
+            self.assertEqual(os.path.isfile(os.path.join(e.ESTATICO, nome)), c == "1", nome)
 
     def test_arquivos_do_mundo_sem_cookie(self):
-        for nome, tipo in (("mundo/brasil.png", "image/png"), ("mundo/mundo.json", "application/json")):
+        for nome, tipo in (("mundo/brasil.png", "image/png"), ("mundo/mundo.json", "application/json"),
+                           ("mundo/perto/2-2.png", "image/png"), ("mundo/perto4x/6-5.png", "image/png"),
+                           ("mundo/perto/ufs.json", "application/json"), ("mundo_mapa_perto.js", "text/javascript; charset=utf-8")):
             conexao = http.client.HTTPConnection(*self.servidor.server_address, timeout=3)
             try:
                 conexao.request("GET", "/" + nome)

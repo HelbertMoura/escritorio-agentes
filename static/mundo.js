@@ -160,6 +160,7 @@ const Mundo = (() => {
       else if (nivel.mergulho) cam.zoomPara(4, ...cam.tela(...nivel.mergulho()));   // do globo, no Brasil; da cidade, na casa
       else if (c) cam.zoomPara(4, ...cam.tela(c.x, c.y));
     } else cam.zoomPara(1, cam.W / 2, cam.H / 2);
+    if (nivel.partindo) nivel.partindo();   // o nível que sai não pede mais nada (o mapa: os azulejos da vista do mergulho)
     trans = { fase: 0, k: 0, a, opcoes };
   }
   function trocar(a, opcoes = {}) {
@@ -167,7 +168,7 @@ const Mundo = (() => {
     if (nivel) nivel.sair();
     nome = a.ir; nivel = niveis[nome]; atualCidade = a.cidade || null;
     if (atualCidade) ultimaCidade = atualCidade;
-    nivel.camera.tamanho(W, H, dpr);
+    cobrir(nivel.camera.tamanho(W, H, dpr));
     nivel.entrar({ cidade: atualCidade, de: deCidade, nivel: deNivel });
     endereco(a, opcoes.substituir);
     voltar.disabled = !niveis[ACIMA[nome]];   // sem o nível de cima (o globo que não abriu), nada a subir
@@ -274,7 +275,17 @@ const Mundo = (() => {
     const w = Math.max(1, Math.round(r.width * d)), h = Math.max(1, Math.round(r.height * d));
     if (w === W && h === H && d === dpr) return;
     W = w; H = h; dpr = d; canvas.width = W; canvas.height = H; chaveAlvos = "";
-    for (const n of Object.values(niveis)) n.camera.tamanho(W, H, dpr);
+    for (const n of Object.values(niveis)) cobrir(n.camera.tamanho(W, H, dpr));
+  }
+  // o que os botões (Voltar, + e −) cobrem do canvas, em pixels dele, com 6 px de CSS de folga: o nível não põe nome nem
+  // enfeite embaixo deles (camera.cobertos, uma lista de {x, y, w, h})
+  function cobrir(cam) {
+    const r = canvas.getBoundingClientRect(), f = 6;
+    cam.cobertos = [voltar, $("mundo-mais"), menos].map(b => b.getBoundingClientRect())
+      .filter(b => b.width > 0 && b.height > 0 && b.left < r.left + r.width && b.top < r.top + r.height)
+      .map(b => ({ x: Math.round((b.left - r.left - f) * dpr), y: Math.round((b.top - r.top - f) * dpr),
+        w: Math.round((b.width + 2 * f) * dpr), h: Math.round((b.height + 2 * f) * dpr) }));
+    return cam;
   }
   function cortina(k) {   // transição em pontilhado (Bayer 4x4) de blocos inteiros: fecha e abre sem borrão
     if (k <= 0) return;

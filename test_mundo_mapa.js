@@ -4,7 +4,7 @@
 // aviões do atlas parados com movimento reduzido, o brilho da noite sem gradiente novo a cada quadro e o clique que desce
 // à cidade. Usa o arnês do test_mundo_navegacao.js (a página inteira numa VM, sem navegador).
 const assert = require("node:assert/strict");
-const { abrir, carregar, ATLAS, CLIMA, MUNDO } = require("./test_mundo_navegacao.js");
+const { abrir, carregar, ATLAS, CLIMA, MUNDO, UFS_PERTO } = require("./test_mundo_navegacao.js");
 
 const cruza = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 const cidade = id => MUNDO.cidades.find(c => c.id === id);
@@ -152,9 +152,124 @@ async function principal() {
   await casaEmMateusLeme();
   await estados();
   await arranjoSemPuxarNemCruzar();
+  // rodada 1
+  await nadaSobOsBotoesNemCortado();
+  await terceiroNivel();
+  await contornoNaDivisa();
+  descruzarSintetico(m.contexto.window.MundoMapa);
+  await azulejoQueFalhaVoltaSozinho();
 }
 
-const azulejosPedidos = m => (m.contexto.imagens || []).map(i => String(i.src || "")).filter(s => s.includes("/mundo/perto/"));
+// os botões (Voltar, + e −) no canto de baixo à direita, como o arnês os põe: a caixa deles no canvas, com a folga
+const botoes = ([w, h, d]) => [[236, 98], [130, 48], [72, 48]].map(([dx, bw]) => ({ x: (w - dx - 6) * d, y: (h - 52 - 6) * d,
+  w: (bw + 12) * d, h: 52 * d }));
+const T_DE = tela => Math.max(1, Math.round(tela[2]));
+// dois nomes nunca se leem como um: entre eles, ao menos FOLGA·T de lado e T em cima e embaixo
+function comFolga(a, b, T, F) { return !cruza({ x: a.x - F * T, y: a.y - T, w: a.w + 2 * F * T, h: a.h + 2 * T }, b); }
+
+// o nome do oceano, a rosa e os nomes (capitais, estados, médias, vizinhos) nunca saem cortados nem caem sob os botões,
+// em nenhum degrau, com a vista encostada no canto de baixo à direita (o mar, onde ficam os dois enfeites)
+async function nadaSobOsBotoesNemCortado() {
+  for (const tela of [[940, 800, 1], [390, 507, 3], [640, 400, 1]]) {
+    const v = await brasil({ tela });
+    const W = tela[0] * tela[2], H = tela[1] * tela[2], cobertos = botoes(tela), T = T_DE(tela), F = v.contexto.window.MapaPerto.FOLGA;
+    for (const z of [1, 2, 3, 4]) for (const [x, y] of [[400, 400], [330, 300], [360, 250]]) {
+      v.M.camera.zoomPara(z); v.rodar(40); centrar(v, x, y);
+      const b = v.M.niveis.brasil, rotulo = `${tela} ${z}x (${x}, ${y})`;
+      const caixas = [...Object.entries(b.enfeitesNaTela).filter(([, c]) => c).map(([id, c]) => ({ ...c, id })),
+        ...b.nomes, ...b.rotulos.filter(r => r.tipo !== "marca")];
+      for (const c of caixas) {
+        assert.ok(c.x >= 0 && c.y >= 0 && c.x + c.w <= W && c.y + c.h <= H, `${rotulo}: ${c.id} cortado`);
+        for (const o of cobertos) assert.ok(!cruza(c, o), `${rotulo}: ${c.id} sob os botões`);
+      }
+      const nomes = [...b.nomes, ...b.rotulos.filter(r => r.tipo !== "marca")];
+      for (let i = 0; i < nomes.length; i++) for (let j = i + 1; j < nomes.length; j++) {
+        assert.ok(comFolga(nomes[i], nomes[j], T, F), `${rotulo}: ${nomes[i].id} e ${nomes[j].id} sem respiro`);
+      }
+    }
+  }
+}
+
+// o terceiro nível: nenhum azulejo de 4x antes do teto; no teto, só os da vista que existem (a máscara do mundo.json),
+// desenhados por cima do de 2x quando chegam
+async function terceiroNivel() {
+  const p = await brasil({ tela: [940, 800, 1] });
+  const quatro = () => azulejosPedidos(p).filter(u => u.startsWith("/mundo/perto4x/"));
+  const bh = cidade("belo-horizonte"), mascara = MUNDO.niveis.brasil.perto4x.azulejos;
+  for (const z of [1, 2, 3]) { p.M.camera.zoomPara(z, ...p.M.camera.tela(bh.x, bh.y)); p.rodar(60); }
+  assert.deepEqual(quatro(), [], "até 3x, nenhum azulejo de 4x");
+  p.M.camera.zoomPara(4, ...p.M.camera.tela(bh.x, bh.y)); p.rodar(2);
+  const pedidos = quatro();
+  assert.ok(pedidos.length > 0 && pedidos.length <= 12, "no caminho até 4x, só os da vista de chegada: " + pedidos.length);
+  p.rodar(60); centrar(p, 395, 30);   // o canto de mar aberto: azulejos que não existem não são pedidos
+  for (const u of quatro()) {
+    const [i, j] = /(\d)-(\d)\.png/.exec(u).slice(1).map(Number);
+    assert.equal(mascara[j * 8 + i], "1", u + " não existe e foi pedido");
+  }
+  centrar(p, bh.x, bh.y); await carregar(p); p.rodar(20);
+  assert.ok(p.M.niveis.brasil.perto.niveis.perto4x.desenhados > 0, JSON.stringify(p.M.niveis.brasil.perto));
+}
+
+// o contorno do estado realçado segue a divisa do nível em uso: a 4x (grade de 2x, perto/ufs.json), cada traço claro fica
+// dentro de Minas e cada traço escuro, fora; e toda beirada calculada separa um pixel da UF de um de fora
+async function contornoNaDivisa() {
+  const e = await brasil({ tela: [940, 800, 1] });
+  const bh = cidade("belo-horizonte"), cam = e.M.camera;
+  cam.zoomPara(4, ...cam.tela(bh.x, bh.y)); e.rodar(60); centrar(e, bh.x - 6, bh.y - 6);
+  await carregar(e); e.rodar(5);
+  assert.equal(e.M.niveis.brasil.grade, 800, "a grade de 2x chegou");
+  const MP = e.contexto.window.MapaPerto, mg = MUNDO.niveis.brasil.ufs.lista.findIndex(u => u.uf === "MG") + 1;
+  const mapa = MP.decodificar(UFS_PERTO.mapa, 800, 800, 27);
+  for (const [vertical, x, y, n, lado] of MP.bordas(mapa, 800, 800, mg)) {   // a beirada separa dentro de fora
+    for (let q = 0; q < n; q++) {
+      const [ix, iy] = vertical ? [x, y + q] : [x + q, y], [fx, fy] = vertical ? [x - 1, y + q] : [x + q, y - 1];
+      const den = (a, b) => a >= 0 && b >= 0 && a < 800 && b < 800 && mapa[b * 800 + a] === mg;
+      assert.ok(den(ix, iy) !== den(fx, fy) && den(...(lado > 0 ? [ix, iy] : [fx, fy])), `beirada ${vertical} ${x},${y}`);
+    }
+  }
+  // o realce desenhado: o cursor sobre Minas, um quadro gravando os retângulos
+  const [sx, sy] = cam.tela(bh.x - 14, bh.y - 10);
+  e.canvas.disparar("pointermove", { pointerId: 9, clientX: sx, clientY: sy, button: 0 });
+  e.contexto.retangulos = []; e.rodar(1);
+  assert.equal(e.M.niveis.brasil.uf, "MG");
+  const den = (px, py) => { const [mx, my] = cam.mundo(px, py), a = Math.floor(mx * 2), b = Math.floor(my * 2);
+    return a >= 0 && b >= 0 && a < 800 && b < 800 && mapa[b * 800 + a] === mg; };
+  const claros = e.contexto.retangulos.filter(r => r[4] === "#fff4dc" && Math.min(r[2], r[3]) === 2 && Math.max(r[2], r[3]) >= 4);
+  const escuros = e.contexto.retangulos.filter(r => r[4] === "rgba(18,14,22,.8)");
+  assert.ok(claros.length > 20 && escuros.length > 20, `${claros.length} claros, ${escuros.length} escuros`);
+  for (const [x, y, w, h] of claros) assert.ok(den(x + w / 2, y + h / 2), `traço claro fora de Minas em ${x},${y}`);
+  for (const [x, y, w, h] of escuros) assert.ok(!den(x + w / 2, y + h / 2), `traço escuro dentro de Minas em ${x},${y}`);
+}
+
+// duas linhas guia que se cruzam (o ícone de A do lado do ponto de B, e o de B do lado do de A): descruzar troca os dois
+// de lugar e elas deixam de se cruzar
+function descruzarSintetico(MundoMapa) {
+  const a = { id: "a", ax: 0, ay: 0, px: 40, py: 30, dentro: true }, b = { id: "b", ax: 40, ay: 0, px: 0, py: 30, dentro: true };
+  assert.ok(MundoMapa.cortam(a, b), "o caso se cruza");
+  MundoMapa.descruzar([a, b]);
+  assert.ok(!MundoMapa.cortam(a, b), "depois da troca, não");
+  assert.deepEqual([a.px, a.py, b.px, b.py], [0, 30, 40, 30]);
+  const c = { ...a, dentro: false, px: 40, py: 30 }, d = { ...b, px: 0, py: 30 };   // quem tem o ponto fora da tela não troca
+  MundoMapa.descruzar([c, d]);
+  assert.deepEqual([c.px, d.px], [40, 0]);
+}
+
+// o azulejo que falha volta a ser pedido sozinho, depois da espera, sem sair do mapa
+async function azulejoQueFalhaVoltaSozinho() {
+  const f = await abrir("#brasil", { passo: 250, tela: [940, 800, 1] });
+  await carregar(f);
+  const bh = cidade("belo-horizonte");
+  f.M.camera.zoomPara(2, ...f.M.camera.tela(bh.x, bh.y)); f.rodar(12);
+  const antes = azulejosPedidos(f).length;
+  assert.ok(antes > 0);
+  for (const img of f.contexto.imagens) if (String(img.src).includes("/mundo/perto/")) img.falhar();
+  f.rodar(20);
+  assert.equal(azulejosPedidos(f).length, antes, "não pede de novo na hora");
+  f.rodar(40);   // 10 s de relógio
+  assert.ok(azulejosPedidos(f).length >= 2 * antes, "depois da espera, pede de novo: " + azulejosPedidos(f).length);
+}
+
+const azulejosPedidos = m => (m.contexto.imagens || []).map(i => String(i.src || "")).filter(s => /^\/mundo\/perto(4x)?\//.test(s));
 const centrar = (m, x, y) => { m.M.camera.x = x; m.M.camera.y = y; m.M.camera.limitar(); m.rodar(3); };
 
 // a camada de perto: nenhum azulejo a 1x; a partir de 2x, só os da vista (com versão), e desenhados quando chegam. Os
@@ -166,7 +281,7 @@ async function niveisDeDetalhe() {
   assert.ok(!p.M.niveis.brasil.rotulos.some(r => r.tipo === "estado" || r.tipo === "media"), "a 1x, sem estados nem médias");
   const bh = cidade("belo-horizonte");
   p.M.camera.zoomPara(4, ...p.M.camera.tela(bh.x, bh.y)); p.rodar(2);   // o pedido sai assim que o zoom pedido passa de 2x,
-  const pedidos = azulejosPedidos(p);                                    // só com os azulejos da vista de chegada
+  const pedidos = azulejosPedidos(p).filter(u => u.startsWith("/mundo/perto/"));   // só os da vista de chegada
   assert.ok(pedidos.length > 0 && pedidos.length <= 9, "azulejos pedidos: " + pedidos.length);
   assert.ok(pedidos.every(u => /^\/mundo\/perto\/[0-3]-[0-3]\.png\?v=\d+$/.test(u)), pedidos.join());
   p.M.camera.zoomPara(2); p.rodar(80); centrar(p, bh.x, bh.y);

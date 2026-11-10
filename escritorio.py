@@ -157,9 +157,11 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "manifest.webmanifest": "application/manifest+json", "icone-180.png": "image/png", "icone-192.png": "image/png",
     "icone-512.png": "image/png", "icone-mascara-512.png": "image/png",
 }
-# a camada de perto do mapa do Brasil (a partir de 2x): 4x4 azulejos, pedidos conforme a vista
-AZULEJOS_PERTO = {f"mundo/perto/{i}-{j}.png" for i in range(4) for j in range(4)}
-ARQUIVOS.update(dict.fromkeys(sorted(AZULEJOS_PERTO), "image/png"))
+# os níveis de perto do mapa do Brasil, pedidos conforme a vista: 4x4 azulejos a 2x (e o mapa das UFs nessa grade) e 8x8 a 4x
+# (só existem os que tocam o Brasil; os outros dão 404, e o mapa nem os pede)
+AZULEJOS_PERTO = ({f"mundo/perto/{i}-{j}.png" for i in range(4) for j in range(4)}
+                  | {f"mundo/perto4x/{i}-{j}.png" for i in range(8) for j in range(8)})
+ARQUIVOS.update(dict.fromkeys(sorted(AZULEJOS_PERTO), "image/png"), **{"mundo/perto/ufs.json": "application/json"})
 TIMEOUT = 20
 
 
@@ -2301,7 +2303,7 @@ PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "fontes/figtree.ttf", "fonte
             # mapa do mundo: imagens, cidades e código de desenho, sem dados do escritório
             "mundo/terra.png", "mundo/brasil.png", "mundo/mundo.json", "mundo/atlas.png", "mundo/atlas.json",
             "mundo_globo.js", "mundo_mapa.js", "mundo_mapa_arte.js", "mundo_cidade.js", "mundo_cidade_planta.js", "mundo_bairro.js",
-            "mundo_festa.js", "mundo_cidade_chao.js", "mundo_cidade_letreiro.js", "mundo_mapa_perto.js", *AZULEJOS_PERTO,
+            "mundo_festa.js", "mundo_cidade_chao.js", "mundo_cidade_letreiro.js", "mundo_mapa_perto.js", *AZULEJOS_PERTO, "mundo/perto/ufs.json",
             "festas.js",  # o calendário embutido; as datas próprias só chegam pelo /api/config
             "fontes/doto.woff2", "logo.png",  # liberados na tela de login
             # PWA: o navegador busca o manifesto sem cookie; nenhum deles tem segredo. O sw.js fica na raiz (escopo /)

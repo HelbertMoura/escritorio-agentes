@@ -38,6 +38,9 @@ RIOS = "ne_50m_rivers_lake_centerlines.geojson"
 # a camada de perto (a partir de 2x): o mesmo mapa no dobro da resolução, em 4x4 azulejos de 200 px pedidos conforme a
 # vista, com as rodovias principais e os rios menores do 1:10m
 ESCALA_PERTO, AZULEJO = 2, 200
+# o terceiro nível (4x): o de 2x dobrado e refinado (mundo_terreno.refinar), em 8x8 azulejos de 200 px, só os que tocam o
+# Brasil (os outros, só mar aberto ou vizinho distante, ficam no de 2x ampliado)
+ESCALA_4X = 4
 RIOS_MENORES, ESTRADAS, LUGARES = ("ne_10m_rivers_lake_centerlines.geojson", "ne_10m_roads.geojson",
                                    "ne_10m_populated_places.geojson")
 # as cidades médias (3x): as maiores que não são capitais, longe de toda capital (o subúrbio ficaria sob a miniatura) e
@@ -244,17 +247,38 @@ def estados_do_mapa(rotulo, estados, cidades):
     for uf in sorted(nomes):
         (x, y), r, outros = mais_fundo(dist, ufs, uf, outros=3)
         lista.append({"uf": uf, "nome": nomes[uf], "capital": capitais[uf], "x": x, "y": y, "r": r, "outros": outros})
-    letra = {u["uf"]: string.ascii_letters[k] for k, u in enumerate(lista)}
+    return {"lista": lista, "mapa": mapa_das_ufs(rotulo, W_BRASIL, H_BRASIL)}
+
+
+def mapa_das_ufs(rotulo, w, h):
+    """A UF de cada pixel do mapa w×h em linhas de texto: a letra da UF (a-z e A-Z, na ordem alfabética das siglas; '.'
+    fora do Brasil) e quantos pixels seguidos."""
+    ufs = {p: r for p, r in rotulo.items() if r != ESTRANGEIRO}
+    letra = {uf: string.ascii_letters[k] for k, uf in enumerate(sorted(set(ufs.values())))}
     mapa = []
-    for y in range(H_BRASIL):
+    for y in range(h):
         linha, x = "", 0
-        while x < W_BRASIL:
+        while x < w:
             atual, n = ufs.get((x, y)), 0
-            while x < W_BRASIL and ufs.get((x, y)) == atual:
+            while x < w and ufs.get((x, y)) == atual:
                 x, n = x + 1, n + 1
             linha += (letra[atual] if atual else ".") + str(n)
         mapa.append(linha)
-    return {"lista": lista, "mapa": mapa}
+    return mapa
+
+
+def focos_de_lavoura(cidades, medias):
+    """Onde a lavoura e o pasto aparecem a 4x: em volta de cada cidade (x, y, raio em pixels do nível de 4x)."""
+    k = ESCALA_4X
+    return [(c["x"] * k + k / 2, c["y"] * k + k / 2, (13 if c["id"] not in NAO_CAPITAIS else 7) * k) for c in cidades] + \
+        [(m["x"] * k + k / 2, m["y"] * k + k / 2, 8 * k) for m in medias]
+
+
+def azulejos_do_brasil(rotulo, n):
+    """Os azulejos do nível de 4x (n x n) que tocam o Brasil (com 2 px de folga, em pixels de longe): só eles são gerados."""
+    lado = W_BRASIL // n
+    return {(i, j) for (x, y), r in rotulo.items() if r != ESTRANGEIRO
+            for i in {max(0, (x - 2) // lado), min(n - 1, (x + 2) // lado)} for j in {max(0, (y - 2) // lado), min(n - 1, (y + 2) // lado)}}
 
 
 def nomes_dos_paises(pais):
@@ -322,7 +346,7 @@ def rios_menores(fontes):
     for r in ler(os.path.join(fontes, "fontes", RIOS))["features"]:
         for l in r["geometry"]["coordinates"]:
             for (x0, y0), (x1, y1) in zip(l, l[1:]):
-                for x, y in mundo_terreno._linha(*map(int, em_pixels(x0, y0)), *map(int, em_pixels(x1, y1))):
+                for x, y in mundo_terreno.linha(*map(int, em_pixels(x0, y0)), *map(int, em_pixels(x1, y1))):
                     grandes.update((x + a, y + b) for a in (-1, 0, 1) for b in (-1, 0, 1))
     menores = []
     for r in ler(os.path.join(fontes, "fontes", RIOS_MENORES))["features"]:
@@ -399,6 +423,12 @@ def rotas(cidades):
     return [[a, b] for d, a, b in pares if d < ROTA_MAX_KM][:ROTAS_MAX]
 
 
+def versao(pixels, dados):
+    """A versão derivada do conteúdo (os índices dos pixels, as paletas e os dados), para o navegador não guardar arquivo
+    velho; tobytes() de imagem em modo P só traz os índices, então as paletas entram nos dados."""
+    return int(hashlib.sha256(pixels + json.dumps(dados, sort_keys=True).encode()).hexdigest()[:8], 16)
+
+
 def montar(fontes, saida):
     """Desenha terra.png e brasil.png em `saida` a partir de `fontes` (arte/mundo) e devolve o mundo.json."""
     cidades = ler(os.path.join(fontes, "cidades.json"))
@@ -418,22 +448,36 @@ def montar(fontes, saida):
                     for c in cidades for x, y in [na_terra(c, rotulo)]],
         "rotas": rotas(cidades),
     }
+    medias = cidades_medias(fontes, mundo["cidades"], rotulo)
+    from PIL import Image
+    w4, h4 = W_BRASIL * ESCALA_4X, H_BRASIL * ESCALA_4X
+    mais_perto = Image.new("P", (w4, h4))
+    mais_perto.putpalette(perto.getpalette())
+    mais_perto.putdata(mundo_terreno.refinar(list(perto.tobytes()), wp, hp, focos_de_lavoura(mundo["cidades"], medias)))
+    n4 = w4 // AZULEJO
+    no_brasil = azulejos_do_brasil(rotulo, n4)
+    ufs_perto = {"w": wp, "h": hp, "mapa": mapa_das_ufs(rotulo_perto, wp, hp)}   # o realce de 2x em diante, na grade de 2x
     mundo["niveis"] = {"brasil": {
         "w": W_BRASIL, "h": H_BRASIL, "caixa": list(CAIXA_BRASIL), "celulas": celulas(rotulo),
         "perto": {"escala": ESCALA_PERTO, "azulejo": AZULEJO, "n": wp // AZULEJO},
-        "ufs": estados_do_mapa(rotulo, estados, cidades), "medias": cidades_medias(fontes, mundo["cidades"], rotulo),
-        "paises": nomes_dos_paises(pais)}}
-    # versão derivada do conteúdo (pixels, cores e dados), para o navegador não guardar arquivo velho;
-    # tobytes() de imagem em modo P só traz os índices, então a paleta entra à parte
-    h = hashlib.sha256(terra.tobytes() + brasil.tobytes() + perto.tobytes()
-                       + json.dumps([PALETA, mundo_terreno.CORES, mundo], sort_keys=True).encode())
-    mundo = {"versao": int(h.hexdigest()[:8], 16), **mundo}
+        "perto4x": {"escala": ESCALA_4X, "azulejo": AZULEJO, "n": n4,
+                    "azulejos": "".join("1" if (i, j) in no_brasil else "0" for j in range(n4) for i in range(n4))},
+        "ufs": estados_do_mapa(rotulo, estados, cidades), "medias": medias, "paises": nomes_dos_paises(pais)}}
+    mundo = {"versao": versao(terra.tobytes() + brasil.tobytes() + perto.tobytes() + mais_perto.tobytes(),
+                              [PALETA, mundo_terreno.CORES, mundo, ufs_perto]), **mundo}
 
     os.makedirs(os.path.join(saida, "perto"), exist_ok=True)
+    os.makedirs(os.path.join(saida, "perto4x"), exist_ok=True)
     terra.save(os.path.join(saida, "terra.png"), optimize=True)
     brasil.save(os.path.join(saida, "brasil.png"), optimize=True)
     for (i, j), azulejo in azulejos(perto).items():
         azulejo.save(os.path.join(saida, "perto", f"{i}-{j}.png"), optimize=True)
+    for (i, j), azulejo in azulejos(mais_perto).items():
+        if (i, j) in no_brasil:
+            azulejo.save(os.path.join(saida, "perto4x", f"{i}-{j}.png"), optimize=True)
+    with open(os.path.join(saida, "perto", "ufs.json"), "w", encoding="utf-8", newline="\n") as f:
+        json.dump(ufs_perto, f, separators=(",", ":"))
+        f.write("\n")
     with open(os.path.join(saida, "mundo.json"), "w", encoding="utf-8", newline="\n") as f:
         json.dump(mundo, f, ensure_ascii=False, indent=1)
         f.write("\n")

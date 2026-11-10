@@ -1,74 +1,126 @@
-// Os níveis de detalhe do mapa do Brasil (mundo_mapa.js). A camada de perto: o mesmo mapa no dobro da resolução, com
-// rodovias e rios menores, em azulejos pedidos conforme a vista a partir de 2x; enquanto um azulejo não chega vale a
-// camada de longe ampliada, e ele entra numa transição curta (sem transição com movimento reduzido). As UFs: o mapa
-// delas (do mundo.json), o realce sob o cursor (contorno claro e escuro e um leve clareamento) e, a partir de 2x, o nome
-// no meio de cada uma. As cidades médias (marcador e nome a partir de 3x) e os nomes dos vizinhos. Nenhum nome cobre
-// outro, um ícone ou um nome de capital: quem não cabe, some. Textos, realces e o arranjo dos nomes são feitos uma vez
-// (por vista) e guardados; por quadro, só cópias.
+// Os níveis de detalhe do mapa do Brasil (mundo_mapa.js). Dois níveis por cima do brasil.png, cada um o mesmo mapa numa
+// resolução maior, em azulejos pedidos conforme a vista: o de 2x (rodovias e rios menores) e o de 4x (o de 2x dobrado e
+// refinado: copas, serras, margens, lavoura, pontes; só os azulejos que tocam o Brasil existem). Um nível vale quando o
+// pixel dele fica do tamanho do pixel do mapa a 1x; enquanto um azulejo não chega vale o nível de baixo ampliado, e ele
+// entra numa transição curta (sem transição com movimento reduzido); o que falha é pedido de novo depois de ESPERA s.
+// As UFs: o mapa delas (o de longe no mundo.json; o de 2x, perto/ufs.json, pedido com o primeiro azulejo), o realce sob
+// o cursor (contorno claro e escuro, que segue a divisa do nível em uso, e um leve clareamento) e, a partir de 2x, o
+// nome no meio de cada uma. As cidades médias (marcador e nome a partir de 3x) e os nomes dos vizinhos. Nenhum nome
+// cobre outro (com folga), um ícone, um nome de capital ou os botões, nem sai cortado da tela: quem não cabe, some.
+// Textos, realces e o arranjo dos nomes são feitos uma vez (por vista) e guardados; por quadro, só cópias.
 "use strict";
 const MapaPerto = (() => {
-  const Z_PERTO = 2 - 1e-6, Z_MEDIAS = 2.7, TROCA = 0.25;   // degraus do zoom; TROCA: segundos da transição de camada
+  const Z_PERTO = 2 - 1e-6, Z_MEDIAS = 2.7, TROCA = 0.25, ESPERA = 8;   // degraus do zoom; TROCA e ESPERA em segundos
+  const FOLGA = 4;   // o respiro entre dois nomes, de lado (em unidades de T; em cima e embaixo, 1)
   const LETRAS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
   const cruza = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
   const numero = v => Number.isFinite(v);
+  // o mapa das UFs em texto corrido (a letra da UF na ordem da lista e quantos pixels) num Uint8Array de índice + 1
+  function decodificar(linhas, w, h, total) {
+    const mapa = new Uint8Array(w * h);
+    (Array.isArray(linhas) ? linhas : []).slice(0, h).forEach((linha, y) => {
+      let x = 0;
+      for (const [, letra, n] of String(linha).matchAll(/([.a-zA-Z])(\d+)/g)) {
+        const k = letra === "." ? 0 : LETRAS.indexOf(letra) + 1, fim = Math.min(w, x + +n);
+        if (k && k <= total) mapa.fill(k, y * w + x, y * w + fim);
+        x = fim;
+      }
+    });
+    return mapa;
+  }
+  // as beiradas da região k num mapa w×h, em trechos [vertical, x, y, comprimento, lado]: horizontais (entre a linha y−1
+  // e y) e verticais (entre a coluna x−1 e x); lado 1 se a região fica depois da beirada (embaixo, à direita), −1 se antes
+  function bordas(mapa, w, h, k) {
+    const dentro = (x, y) => x >= 0 && y >= 0 && x < w && y < h && mapa[y * w + x] === k, saida = [];
+    for (let y = 0; y <= h; y++) {
+      let ini = -1, lado = 0;
+      for (let x = 0; x <= w; x++) {
+        const l = x < w ? (dentro(x, y) && !dentro(x, y - 1) ? 1 : !dentro(x, y) && dentro(x, y - 1) ? -1 : 0) : 0;
+        if (l !== lado) { if (lado) saida.push([false, ini, y, x - ini, lado]); ini = x; lado = l; }
+      }
+    }
+    for (let x = 0; x <= w; x++) {
+      let ini = -1, lado = 0;
+      for (let y = 0; y <= h; y++) {
+        const l = y < h ? (dentro(x, y) && !dentro(x - 1, y) ? 1 : !dentro(x, y) && dentro(x - 1, y) ? -1 : 0) : 0;
+        if (l !== lado) { if (lado) saida.push([true, x, ini, y - ini, lado]); ini = y; lado = l; }
+      }
+    }
+    return saida;
+  }
 
   function criar({ dados, reduzido }) {
     const { tela, nitido } = MapaArte;
     const nivel = (dados.niveis && dados.niveis.brasil) || {}, W = nivel.w || 400, H = nivel.h || 400;
-    const cfg = nivel.perto || {}, F = cfg.escala || 2, A = cfg.azulejo || 200, N = Number.isInteger(cfg.n) ? cfg.n : 0;
-    const LADO = A / F, versao = Number.isInteger(dados.versao) ? dados.versao : 0;
+    const versao = Number.isInteger(dados.versao) ? dados.versao : 0;
 
-    // --- a camada de perto, em azulejos -------------------------------------------------------------------------------
-    const azulejos = new Array(N * N).fill(null);
-    let desenhados = 0, pedidos = 0;
-    function pedir(k) {
-      const img = new Image(), a = { img, pronto: false, alfa: 0 };
+    // --- os níveis de perto, em azulejos ------------------------------------------------------------------------------
+    function camada(c, pasta) {   // escala sobre o mapa de longe, n×n azulejos e a máscara dos que existem
+      if (!c || !Number.isInteger(c.n) || !numero(c.escala) || !numero(c.azulejo)) return null;
+      const mascara = typeof c.azulejos === "string" && c.azulejos.length === c.n * c.n ? c.azulejos : null;
+      return { pasta, F: c.escala, N: c.n, LADO: c.azulejo / c.escala, existe: k => !mascara || mascara[k] === "1",
+        azulejos: new Array(c.n * c.n).fill(null), pedidos: 0, desenhados: 0 };
+    }
+    const camadas = [camada(nivel.perto, "perto"), camada(nivel.perto4x, "perto4x")].filter(Boolean);
+    let relogio = 0;
+    // o nível vale na escala P quando o pixel dele (P/F) chega ao do mapa a 1x arredondado (2 px no desktop, 3 no celular)
+    const vale = (c, P, cam) => P / c.F >= Math.max(1, Math.round(cam.base)) - 1e-6;
+    function pedir(c, k) {
+      const img = new Image(), a = { img, pronto: false, alfa: 0, erro: 0 };
       img.addEventListener("load", () => { a.pronto = true; });
-      img.addEventListener("error", () => { a.erro = true; });
-      img.src = `/mundo/perto/${k % N}-${Math.floor(k / N)}.png?v=${versao}`;
-      pedidos++;
-      return (azulejos[k] = a);
+      img.addEventListener("error", () => { a.erro = relogio || 1e-6; });
+      img.src = `/mundo/${c.pasta}/${k % c.N}-${Math.floor(k / c.N)}.png?v=${versao}`;
+      c.pedidos++;
+      if (c.pasta === "perto") pedirUfs();
+      return (c.azulejos[k] = a);
     }
-    // de novo ao voltar ao mapa, o azulejo que falhou
-    function tentarDeNovo() { azulejos.forEach((a, k) => { if (a && a.erro) azulejos[k] = null; }); }
-    // os azulejos de um retângulo do mundo (com um quarto de azulejo de folga), chamando f(i, j)
-    function cada(x0, y0, x1, y1, f) {
-      const M = 0.25, i0 = Math.max(0, Math.floor(x0 / LADO - M)), i1 = Math.min(N - 1, Math.floor(x1 / LADO + M));
-      const j0 = Math.max(0, Math.floor(y0 / LADO - M)), j1 = Math.min(N - 1, Math.floor(y1 / LADO + M));
-      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) f(i, j);
+    // de novo ao voltar ao mapa, o azulejo que falhou (na mesma visita, ele já volta depois de ESPERA s)
+    function tentarDeNovo() { for (const c of camadas) c.azulejos.forEach((a, k) => { if (a && a.erro) c.azulejos[k] = null; }); }
+    // os azulejos da camada num retângulo do mundo (com um quarto de azulejo de folga), chamando f(k, i, j)
+    function cada(c, x0, y0, x1, y1, f) {
+      const M = 0.25, L = c.LADO, i0 = Math.max(0, Math.floor(x0 / L - M)), i1 = Math.min(c.N - 1, Math.floor(x1 / L + M));
+      const j0 = Math.max(0, Math.floor(y0 / L - M)), j1 = Math.min(c.N - 1, Math.floor(y1 / L + M));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (c.existe(j * c.N + i)) f(j * c.N + i, i, j);
     }
-    // os azulejos pedidos: os da vista parada a 2x ou mais e, enquanto o zoom anda, só os da vista de chegada (se ela
-    // for de 2x ou mais; o centro dela sai da âncora do zoom, ou do voo); a 1x, nenhum
-    function pedirVista(cam) {
-      if (cam.alvoZ === cam.z) {
-        if (cam.P / cam.base >= Z_PERTO) cada(...cam.mundo(0, 0), ...cam.mundo(cam.W, cam.H), (i, j) => azulejos[j * N + i] || pedir(j * N + i));
+    // os azulejos pedidos: os da vista parada em que o nível vale e, enquanto o zoom anda, só os da vista de chegada (se o
+    // nível valer nela; o centro dela sai da âncora do zoom, ou do voo). A 1x, nenhum
+    function pedirVista(c, cam) {
+      const quer = k => {
+        const a = c.azulejos[k];
+        if (!a || (a.erro && relogio - a.erro > ESPERA)) pedir(c, k);
+      };
+      if (cam.alvoZ === cam.z && !cam.voo) {   // (no voo, como no zoom, só a vista de chegada)
+        if (vale(c, cam.P, cam)) cada(c, ...cam.mundo(0, 0), ...cam.mundo(cam.W, cam.H), quer);
         return;
       }
-      if (cam.alvoZ < Z_PERTO) return;
-      const P = cam.base * cam.alvoZ, a = cam.ancora, v = cam.voo, mw = cam.W / 2 / P, mh = cam.H / 2 / P;
+      const P = cam.base * cam.alvoZ;
+      if (!vale(c, P, cam)) return;
+      const a = cam.ancora, v = cam.voo, mw = cam.W / 2 / P, mh = cam.H / 2 / P;
       const x = a ? a.wx - (a.sx - cam.W / 2) / P : v ? v.x : cam.x, y = a ? a.wy - (a.sy - cam.H / 2) / P : v ? v.y : cam.y;
-      cada(x - mw, y - mh, x + mw, y + mh, (i, j) => azulejos[j * N + i] || pedir(j * N + i));
+      cada(c, x - mw, y - mh, x + mw, y + mh, quer);
     }
-    // os azulejos da vista, desenhados sobre a camada de longe (o ctx já está na escala do mundo) a partir de 2x,
+    // os azulejos da vista, de baixo para cima, sobre a camada de longe (o ctx já está na escala do mundo), cada nível
     // entrando e saindo numa transição de TROCA segundos
-    function terreno(ctx, cam, dt) {
-      desenhados = 0;
-      if (!N) return;
-      pedirVista(cam);
-      const alvo = cam.P / cam.base >= Z_PERTO ? 1 : 0;
-      cada(...cam.mundo(0, 0), ...cam.mundo(cam.W, cam.H), (i, j) => {
-        const a = azulejos[j * N + i];
-        if (!a || !a.pronto) return;
-        a.alfa = reduzido ? alvo : alvo > a.alfa ? Math.min(alvo, a.alfa + dt / TROCA) : Math.max(alvo, a.alfa - dt / TROCA);
-        if (a.alfa <= 0) return;
-        ctx.globalAlpha = a.alfa;
-        ctx.drawImage(a.img, i * LADO, j * LADO, LADO, LADO);
-        desenhados++;
-      });
+    function terreno(ctx, cam, dt, pode = true) {   // pode: pedir azulejos novos (não durante a saída do nível)
+      relogio += dt;
+      for (const c of camadas) {
+        c.desenhados = 0;
+        if (pode) pedirVista(c, cam);
+        const alvo = vale(c, cam.P, cam) ? 1 : 0;
+        cada(c, ...cam.mundo(0, 0), ...cam.mundo(cam.W, cam.H), (k, i, j) => {
+          const a = c.azulejos[k];
+          if (!a || !a.pronto) return;
+          a.alfa = reduzido ? alvo : alvo > a.alfa ? Math.min(alvo, a.alfa + dt / TROCA) : Math.max(alvo, a.alfa - dt / TROCA);
+          if (a.alfa <= 0) return;
+          ctx.globalAlpha = a.alfa;
+          ctx.drawImage(a.img, i * c.LADO, j * c.LADO, c.LADO, c.LADO);
+          c.desenhados++;
+        });
+      }
       ctx.globalAlpha = 1;
     }
 
-    // --- as UFs: lista, mapa (índice + 1 por pixel) e realce -------------------------------------------------------------
+    // --- as UFs: lista, mapas (índice + 1 por pixel) e realce -------------------------------------------------------------
     const dadosUfs = nivel.ufs && typeof nivel.ufs === "object" ? nivel.ufs : {};
     const lista = (Array.isArray(dadosUfs.lista) ? dadosUfs.lista : [])
       .filter(u => u && typeof u.uf === "string" && numero(u.x) && numero(u.y))
@@ -76,65 +128,63 @@ const MapaPerto = (() => {
         // onde o nome pode ir: o ponto mais fundo da UF e os de reserva, cada um com a profundidade (x, y, r)
         pontos: [[u.x, u.y, u.r || 1], ...(Array.isArray(u.outros) ? u.outros : [])]
           .filter(p => Array.isArray(p) && p.length === 3 && p.every(numero)).map(([x, y, r]) => [x + 0.5, y + 0.5, r]) }));
-    const mapa = new Uint8Array(W * H);
-    if (Array.isArray(dadosUfs.mapa)) dadosUfs.mapa.slice(0, H).forEach((linha, y) => {
-      let x = 0;
-      for (const [, letra, n] of String(linha).matchAll(/([.a-zA-Z])(\d+)/g)) {
-        const k = letra === "." ? 0 : LETRAS.indexOf(letra) + 1;
-        for (let q = 0; q < +n && x < W; q++, x++) mapa[y * W + x] = k <= lista.length ? k : 0;
-      }
-    });
+    // a grade de longe (400) e, quando chegar, a de 2x (800): o realce usa a do nível em uso, que é a da divisa desenhada
+    // (decodificada no primeiro uso: o cursor, o toque ou o foco num estado)
+    let longe_ = null;
+    const longe = () => longe_ || (longe_ = { w: W, h: H, esc: 1, mapa: decodificar(dadosUfs.mapa, W, H, lista.length) });
+    let grade2 = null, pediuUfs = false;
+    function pedirUfs() {
+      if (pediuUfs) return;
+      pediuUfs = true;
+      fetch(`/mundo/perto/ufs.json?v=${versao}`, { credentials: "omit", cache: "no-cache" })
+        .then(r => (r.ok ? r.json() : null)).catch(() => null)
+        .then(d => {
+          if (!d || !Number.isInteger(d.w) || !Number.isInteger(d.h) || !Array.isArray(d.mapa)) { pediuUfs = false; return; }
+          grade2 = { w: d.w, h: d.h, esc: W / d.w, mapa: decodificar(d.mapa, d.w, d.h, lista.length) };
+        });
+    }
     const porSigla = new Map(lista.map(u => [u.uf, u]));
     // a UF no ponto (x, y) do mundo, ou null
     function ufEm(x, y) {
       if (!(x >= 0 && y >= 0 && x < W && y < H)) return null;
-      const k = mapa[Math.floor(y) * W + Math.floor(x)];
+      const k = longe().mapa[Math.floor(y) * W + Math.floor(x)];
       return k ? lista[k - 1] : null;
     }
-    // o realce de uma UF: o preenchimento (um canvas do tamanho do mapa, copiado na escala do mundo) e as beiradas em
-    // trechos, para o contorno ter a mesma espessura em qualquer zoom; feito uma vez por UF
+    // o realce de uma UF numa grade: o preenchimento (um canvas da caixa da UF, copiado na escala do mundo) e as
+    // beiradas em trechos, para o contorno ter a mesma espessura em qualquer zoom; feito uma vez por UF e grade
     const realces = new Map();
-    function montarRealce(u) {
-      const k = lista.indexOf(u) + 1, dentro = (x, y) => x >= 0 && y >= 0 && x < W && y < H && mapa[y * W + x] === k;
-      const c = tela(W, H), g = c.getContext("2d"), bordas = [];
-      g.fillStyle = "#fff8e6";
-      for (let y = 0; y < H; y++) {
+    function montarRealce(u, g) {
+      const k = lista.indexOf(u) + 1;
+      let x0 = g.w, y0 = g.h, x1 = -1, y1 = -1;
+      for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) if (g.mapa[y * g.w + x] === k) {
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+      const c = tela(Math.max(1, x1 - x0 + 1), Math.max(1, y1 - y0 + 1)), ctx = c.getContext("2d");
+      ctx.fillStyle = "#fff8e6";
+      for (let y = y0; y <= y1; y++) {
         let ini = -1;
-        for (let x = 0; x <= W; x++) {
-          const d = x < W && dentro(x, y);
+        for (let x = x0; x <= x1 + 1; x++) {
+          const d = x <= x1 && g.mapa[y * g.w + x] === k;
           if (d && ini < 0) ini = x;
-          if (!d && ini >= 0) { g.fillRect(ini, y, x - ini, 1); ini = -1; }
+          if (!d && ini >= 0) { ctx.fillRect(ini - x0, y - y0, x - ini, 1); ini = -1; }
         }
       }
-      // os trechos da beirada: horizontais (entre a linha y−1 e y) e verticais (entre a coluna x−1 e x), com o lado de dentro
-      for (let y = 0; y <= H; y++) {
-        let ini = -1, lado = 0;
-        for (let x = 0; x <= W; x++) {
-          const l = x < W ? (dentro(x, y) && !dentro(x, y - 1) ? 1 : !dentro(x, y) && dentro(x, y - 1) ? -1 : 0) : 0;
-          if (l !== lado) { if (lado) bordas.push([false, ini, y, x - ini, lado]); ini = x; lado = l; }
-        }
-      }
-      for (let x = 0; x <= W; x++) {
-        let ini = -1, lado = 0;
-        for (let y = 0; y <= H; y++) {
-          const l = y < H ? (dentro(x, y) && !dentro(x - 1, y) ? 1 : !dentro(x, y) && dentro(x - 1, y) ? -1 : 0) : 0;
-          if (l !== lado) { if (lado) bordas.push([true, x, ini, y - ini, lado]); ini = y; lado = l; }
-        }
-      }
-      const r = { preenchido: c, bordas };
-      realces.set(u.uf, r);
+      const r = { preenchido: c, x0, y0, bordas: bordas(g.mapa, g.w, g.h, k) };
+      realces.set(u.uf + "|" + g.w, r);
       return r;
     }
-    // o realce na tela (o ctx em pixels da tela): o leve clareamento e o contorno, claro por dentro e escuro por fora
+    // o realce na tela (o ctx em pixels da tela): o leve clareamento e o contorno, claro por dentro e escuro por fora, na
+    // grade de 2x a partir de 2x (quando ela já chegou), senão na de longe
     function realce(ctx, cam, u, U) {
       if (!u) return;
-      const r = realces.get(u.uf) || montarRealce(u), [ox, oy] = cam.origem(), P = cam.P;
+      const g = grade2 && cam.P / cam.base >= Z_PERTO ? grade2 : longe();
+      const r = realces.get(u.uf + "|" + g.w) || montarRealce(u, g), [ox, oy] = cam.origem(), P = cam.P * g.esc;
       ctx.setTransform(P, 0, 0, P, ox, oy);
-      ctx.globalAlpha = 0.2; ctx.drawImage(r.preenchido, 0, 0); ctx.globalAlpha = 1;
+      ctx.globalAlpha = 0.2; ctx.drawImage(r.preenchido, r.x0, r.y0); ctx.globalAlpha = 1;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       for (const passo of [0, 1]) {   // o escuro por fora, depois o claro por dentro
         ctx.fillStyle = passo ? "#fff4dc" : "rgba(18,14,22,.8)";
-        for (const [vertical, x, y, n, lado] of r.bordas) {   // (x, y): onde o trecho começa, em pixels do mapa
+        for (const [vertical, x, y, n, lado] of r.bordas) {   // (x, y): onde o trecho começa, em pixels da grade
           const s = passo ? (lado > 0 ? 0 : -U) : (lado > 0 ? -U : 0);
           if (vertical) ctx.fillRect(Math.round(ox + x * P) + s, Math.round(oy + y * P), U, Math.round(n * P));
           else ctx.fillRect(Math.round(ox + x * P), Math.round(oy + y * P) + s, Math.round(n * P), U);
@@ -181,8 +231,10 @@ const MapaPerto = (() => {
       const chave = ox + "," + oy + "," + cam.P + "," + cam.W + "," + cam.H + "," + T + "," + chaveOcupados;
       if (chave === arranjo.chave) return arranjo.lista;
       const ocupados = ocupar(), postos = [], tx = x => Math.round(ox + x * cam.P), ty = y => Math.round(oy + y * cam.P);
+      // livre: inteiro na tela e longe dos outros (FOLGA·T de respiro, para dois nomes vizinhos não se lerem como um)
+      const fx = FOLGA * T, solto = r => ({ x: r.x - fx, y: r.y - T, w: r.w + 2 * fx, h: r.h + 2 * T });
       const livre = r => r.x >= 0 && r.y >= 0 && r.x + r.w <= cam.W && r.y + r.h <= cam.H &&
-        !ocupados.some(o => cruza(o, r)) && !postos.some(o => cruza(o, r));
+        !ocupados.some(o => cruza(o, solto(r))) && !postos.some(o => cruza(o, solto(r)));
       const centrado = (tipo, id, c, x, y) => ({ tipo, id, c, x: tx(x) - (c.width >> 1), y: ty(y) - (c.height >> 1), w: c.width, h: c.height });
       if (z >= Z_PERTO) for (const u of lista) {   // no primeiro ponto livre da UF, o nome se couber na largura dela ali
         const inteiro = texto(u.nome.toUpperCase(), T, "#fff1d6", 2), sigla = texto(u.uf, T, "#fff1d6", 2);
@@ -225,8 +277,13 @@ const MapaPerto = (() => {
     }
 
     return { terreno, tentarDeNovo, ufEm, realce, rotulos, porSigla, get estados() { return lista; },
-      get info() { return { pedidos, desenhados }; } };
+      get info() {   // por nível: quantos azulejos pedidos e quantos desenhados no último quadro
+        const soma = k => camadas.reduce((t, c) => t + c[k], 0);
+        return { pedidos: soma("pedidos"), desenhados: soma("desenhados"),
+          niveis: Object.fromEntries(camadas.map(c => [c.pasta, { pedidos: c.pedidos, desenhados: c.desenhados }])) };
+      }, get grade() { return grade2 ? grade2.w : W; } };
+
   }
-  return { criar, Z_PERTO, Z_MEDIAS };
+  return { criar, Z_PERTO, Z_MEDIAS, FOLGA, bordas, decodificar };
 })();
 window.MapaPerto = MapaPerto;

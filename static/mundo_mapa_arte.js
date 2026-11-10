@@ -86,9 +86,15 @@ const MapaArte = (() => {
     }
     return { linhas, ox: x0, oy: y0, id: "n" + n + "_" + r };
   }
+  const coresNuvem = new Map();   // as três cores da nuvem por tipo e degrau da noite, misturadas uma vez
   function telaNuvem(f, tipo, escuro) {
-    const passo = Math.round(escuro * 4), [l, m, b] = CORES_NUVEM[tipo].map(c => mistura(c, "#141a34", passo / 4 * 0.72));
-    return sprite(f.id + tipo + passo, f.linhas, { l, m, b }, 1);
+    const passo = Math.round(escuro * 4), chave = tipo + passo;
+    let cores = coresNuvem.get(chave);
+    if (!cores) {
+      const [l, m, b] = CORES_NUVEM[tipo].map(c => mistura(c, "#141a34", passo / 4 * 0.72));
+      coresNuvem.set(chave, (cores = { l, m, b }));
+    }
+    return sprite(f.id + chave, f.linhas, cores, 1);
   }
   // o brilho quente da noite: um degradê por raio, pintado uma vez e depois só copiado
   const brilhos = new Map();

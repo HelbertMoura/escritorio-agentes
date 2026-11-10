@@ -54,6 +54,7 @@ PERTO = {"escala": 2, "azulejo": 200, "n": 4}
 RECORTES_PERTO = ("ne_10m_rivers_lake_centerlines.geojson", "ne_10m_roads.geojson", "ne_10m_populated_places.geojson")
 # o teto de peso do que a camada de perto acrescenta: cada recorte do Natural Earth e os 16 azulejos juntos
 TETO_RECORTE, TETO_AZULEJOS = 150_000, 900_000
+TETO_4X = 700_000   # o terceiro nível (4x), todos os azulejos gerados juntos
 AZULEJOS = tuple(f"perto/{i}-{j}.png" for j in range(PERTO["n"]) for i in range(PERTO["n"]))
 
 
@@ -241,10 +242,21 @@ class Montagem(unittest.TestCase):
         with open(os.path.join(pasta, nome), "rb") as f:
             return hashlib.sha256(f.read()).hexdigest()
 
+    def gerados(self):
+        """Todos os arquivos que a montagem escreve (os três níveis, o mapa das UFs de 2x e o atlas)."""
+        mascara = self.mundo["niveis"]["brasil"]["perto4x"]["azulejos"]
+        return ("brasil.png", "terra.png", "mundo.json", "atlas.png", "atlas.json", "perto/ufs.json") + AZULEJOS + tuple(
+            f"perto4x/{k % 8}-{k // 8}.png" for k, c in enumerate(mascara) if c == "1")
+
     def test_deterministico(self):
-        self.montar(self.pastas[1])
-        for nome in ("brasil.png", "terra.png", "mundo.json", "atlas.png", "atlas.json") + AZULEJOS:
-            self.assertEqual(self.sha(self.pastas[0], nome), self.sha(self.pastas[1], nome), nome)
+        """A montagem desta execução sai igual, byte a byte, à que foi versionada em static/mundo/ (outra execução, em
+        outro momento): o mesmo dado dá sempre os mesmos arquivos. Uma montagem só por execução do teste (os três níveis
+        levam ~1 min); os arquivos que sobram em static/mundo/perto4x/ (de uma máscara antiga) também contam."""
+        for nome in self.gerados():
+            self.assertEqual(self.sha(os.path.join(RAIZ, "static", "mundo"), nome), self.sha(self.pastas[0], nome), nome)
+        quatro = {n[8:] for n in self.gerados() if n.startswith("perto4x/")}
+        sobra = set(os.listdir(os.path.join(RAIZ, "static", "mundo", "perto4x"))) - quatro
+        self.assertEqual(sobra, set(), "azulejos de 4x que a montagem não gera mais")
 
     def atlas(self, arte, pasta):
         """Roda só montar_atlas() com a arte de `arte`, grava em `pasta` e devolve o atlas.json."""
@@ -439,7 +451,7 @@ class Montagem(unittest.TestCase):
         self.assertEqual({k: brasil[k] for k in ("w", "h", "caixa")}, {"w": 400, "h": 400, "caixa": [-74.0, -34.0, -34.0, 6.0]})
         # as células de 0,5° do Brasil, para o globo (80 linhas de 80, de lat 6 para baixo e de lon −74 para a direita)
         celulas = brasil["celulas"]
-        self.assertEqual(set(brasil), {"w", "h", "caixa", "celulas", "perto", "ufs", "medias", "paises"})
+        self.assertEqual(set(brasil), {"w", "h", "caixa", "celulas", "perto", "perto4x", "ufs", "medias", "paises"})
         self.assertEqual(brasil["perto"], PERTO)
         self.assertEqual(len(celulas), 80)
         self.assertTrue(all(len(l) == 80 and set(l) <= {"0", "1"} for l in celulas))
@@ -610,24 +622,17 @@ class Montagem(unittest.TestCase):
             self.assertTrue(0.15 <= sum(linhas) / len(linhas) <= 0.6, (nome, sum(linhas), len(linhas)))
 
     def test_versao_muda_com_a_paleta(self):
-        """Só uma cor da PALETA muda: os índices dos pixels ficam iguais e a versão muda (cache do navegador)."""
-        trocar = "\n".join([
-            "import hashlib, json, os, sys",
-            "sys.path.insert(0, sys.argv[1])",
-            "import montar_mundo as mm",
-            "from PIL import Image",
-            "mm.PALETA['mar'] = '#010203'",
-            "mundo = mm.montar(sys.argv[2], sys.argv[4])",
-            "indices = lambda p: [hashlib.sha256(Image.open(os.path.join(p, n)).tobytes()).hexdigest()",
-            "                     for n in ('brasil.png', 'terra.png')]",
-            "print(json.dumps([mundo['versao'], indices(sys.argv[3]), indices(sys.argv[4])]))"])
-        r = subprocess.run([sys.executable, "-B", "-c", trocar, os.path.join(RAIZ, "ferramentas"), self.ENTRADA,
-                            self.pastas[0], self.pastas[2]], capture_output=True, text=True, timeout=120)
-        if r.returncode:
-            raise AssertionError(r.stderr)
-        versao, antes, depois = json.loads(r.stdout)
-        self.assertEqual(antes, depois)  # mesmos pixels
-        self.assertNotEqual(versao, self.mundo["versao"])
+        """Os mesmos índices de pixel com uma cor da paleta trocada dão outra versão (cache do navegador); os mesmos
+        índices e dados, a mesma. É a função que a montagem usa (sem montar de novo)."""
+        import montar_mundo as mm
+        import mundo_terreno as mt
+        pixels, dados = bytes(range(256)) * 4, {"cidades": [1, 2]}
+        paleta = dict(mm.PALETA)
+        antes = mm.versao(pixels, [paleta, mt.CORES, dados])
+        self.assertEqual(antes, mm.versao(pixels, [dict(paleta), dict(mt.CORES), dados]))
+        paleta["mar"] = "#010203"
+        self.assertNotEqual(antes, mm.versao(pixels, [paleta, mt.CORES, dados]))
+        self.assertIsInstance(self.mundo["versao"], int)
 
     # --- a camada de perto (Tarefa 6g) -------------------------------------------------------------------------------
     def ufs(self):
@@ -761,10 +766,88 @@ class Montagem(unittest.TestCase):
         self.assertEqual(colados, [])
         self.assertGreater(sum(c in nevoa for c in cor.values()), 1500)
 
-    def test_estaticos_em_dia(self):
-        """static/mundo/ versionado bate com o que a ferramenta gera hoje."""
-        for nome in ("brasil.png", "terra.png", "mundo.json", "atlas.png", "atlas.json") + AZULEJOS:
-            self.assertEqual(self.sha(os.path.join(RAIZ, "static", "mundo"), nome), self.sha(self.pastas[0], nome), nome)
+    # --- o terceiro nível (4x) e o mapa das UFs de 2x (rodada 1 da 6g) -----------------------------------------------------
+    def cores_4x(self, pontos):
+        """Cor '#rrggbb' de cada (x, y) do nível de 4x (pixels de 1600x1600); fora dos azulejos gerados, None."""
+        ler = ("import json, os, sys\nfrom PIL import Image\nabertos = {}\nsaida = []\n"
+               "for x, y in json.loads(sys.stdin.read()):\n"
+               "    k = (x // 200, y // 200)\n    p = os.path.join(sys.argv[1], 'perto4x', '%d-%d.png' % k)\n"
+               "    if k not in abertos:\n        abertos[k] = Image.open(p).convert('RGB') if os.path.exists(p) else None\n"
+               "    saida.append(abertos[k] and '#%02x%02x%02x' % abertos[k].getpixel((x % 200, y % 200)))\n"
+               "print(json.dumps(saida))")
+        r = subprocess.run([sys.executable, "-c", ler, self.pastas[0]], input=json.dumps(pontos), capture_output=True,
+                           text=True, timeout=120)
+        if r.returncode:
+            raise AssertionError(r.stderr)
+        return json.loads(r.stdout)
+
+    def test_terceiro_nivel(self):
+        """O nível de 4x: 8x8 azulejos de 200 px, só os que tocam o Brasil (a máscara do mundo.json diz quais), dentro do
+        teto de peso declarado; todo azulejo com uma cidade existe, e o canto de mar aberto não."""
+        cfg = self.mundo["niveis"]["brasil"]["perto4x"]
+        self.assertEqual({k: cfg[k] for k in ("escala", "azulejo", "n")}, {"escala": 4, "azulejo": 200, "n": 8})
+        self.assertRegex(cfg["azulejos"], r"^[01]{64}$")
+        total, gerados = 0, [f"perto4x/{k % 8}-{k // 8}.png" for k, c in enumerate(cfg["azulejos"]) if c == "1"]
+        for nome in gerados:
+            with open(os.path.join(self.pastas[0], nome), "rb") as f:
+                cabeca = f.read(24)
+            self.assertEqual((int.from_bytes(cabeca[16:20], "big"), int.from_bytes(cabeca[20:24], "big")), (200, 200), nome)
+            total += os.path.getsize(os.path.join(self.pastas[0], nome))
+        self.assertLessEqual(total, TETO_4X, f"nível de 4x: {total} bytes")
+        self.assertTrue(20 <= len(gerados) < 64, len(gerados))
+        for c in self.mundo["cidades"] + self.mundo["niveis"]["brasil"]["medias"]:
+            self.assertEqual(cfg["azulejos"][(c["y"] // 50) * 8 + c["x"] // 50], "1", c.get("id", c.get("nome")))
+        self.assertEqual(cfg["azulejos"][0 * 8 + 7], "0", "o canto nordeste é mar aberto")
+
+    def test_terceiro_nivel_mesmas_formas(self):
+        """A troca de 2x para 4x não pula: amostrando uma grade, o bloco 2x2 de 4x sobre cada pixel de 2x é água onde ele é
+        água, e na maior parte das vezes tem a própria cor dele (o detalhe novo só muda o tom dentro do mesmo desenho)."""
+        import mundo_terreno as mt
+        agua = {mt.CORES[n] for n in mt.AGUA}
+        pontos = [[x, y] for y in range(60, 760, 14) for x in range(60, 760, 14)]
+        dois = self.cores_perto(pontos)
+        quatro = self.cores_4x([[2 * x + a, 2 * y + b] for x, y in pontos for b in (0, 1) for a in (0, 1)])
+        pares = [(c, quatro[k * 4:k * 4 + 4]) for k, c in enumerate(dois) if quatro[k * 4] is not None]
+        self.assertGreater(len(pares), 1200)
+        mesma_agua = sum((c in agua) == (sum(b in agua for b in bloco) >= 2) for c, bloco in pares)
+        mesma_cor = sum(c in bloco for c, bloco in pares)
+        self.assertGreaterEqual(mesma_agua / len(pares), 0.97, f"água {mesma_agua}/{len(pares)}")
+        self.assertGreaterEqual(mesma_cor / len(pares), 0.7, f"cor {mesma_cor}/{len(pares)}")
+
+    def test_terceiro_nivel_tem_detalhe_novo(self):
+        """A 4x há o que não há a 2x: lavoura e pasto em volta das cidades, pontes e bancos de areia nos rios largos."""
+        import mundo_terreno as mt
+        lavoura = {mt.CORES[n] for n in mt.LAVOURAS}
+        amostra = [[x, y] for y in range(0, 1600, 3) for x in range(0, 1600, 3)]
+        quatro = [c for c in self.cores_4x(amostra) if c]
+        dois = self.cores_perto([[x // 2, y // 2] for x, y in amostra[::4]])
+        self.assertGreater(sum(c in lavoura for c in quatro), 500)
+        self.assertEqual(sum(c in lavoura for c in dois), 0)
+        self.assertGreater(sum(c == mt.CORES["ponte"] for c in quatro), 5)
+        bh = next(c for c in self.mundo["cidades"] if c["id"] == "belo-horizonte")
+        perto_de_bh = self.cores_4x([[bh["x"] * 4 + a, bh["y"] * 4 + b] for a in range(-30, 31, 2) for b in range(-30, 31, 2)])
+        self.assertGreater(sum(c in lavoura for c in perto_de_bh), 20, "lavoura em volta de BH")
+
+    def test_mapa_das_ufs_de_perto(self):
+        """O mapa das UFs na grade de 2x (perto/ufs.json, para o contorno do realce seguir a divisa desenhada): 800 linhas
+        de 800, e a UF de cada cidade em volta do pixel dela vezes 2 (a costa de 2x é a do contorno na resolução nova: a
+        cidade do litoral pode cair a 1 ou 2 px do mar)."""
+        import re
+        import string
+        with open(os.path.join(self.pastas[0], "perto", "ufs.json"), encoding="utf-8") as f:
+            dados = json.load(f)
+        self.assertEqual((dados["w"], dados["h"], len(dados["mapa"])), (800, 800, 800))
+        siglas = sorted(UFS)
+
+        def linha(y):
+            saida = []
+            for letra, n in re.findall(r"([.a-zA-Z])(\d+)", dados["mapa"][y]):
+                saida += [None if letra == "." else siglas[string.ascii_letters.index(letra)]] * int(n)
+            return saida
+        self.assertTrue(all(len(linha(y)) == 800 for y in range(0, 800, 37)))
+        for c in self.mundo["cidades"]:
+            perto = {linha(2 * c["y"] + b)[2 * c["x"] + a] for a in range(-2, 4) for b in range(-2, 4)}
+            self.assertIn(c["uf"], perto, c["id"])
 
 if __name__ == "__main__":
     unittest.main()
