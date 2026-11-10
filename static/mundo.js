@@ -185,7 +185,14 @@ const Mundo = (() => {
   function rotular() { if (nivel) canvas.setAttribute("aria-label", nivel.rotulo ? nivel.rotulo() : ROTULOS[nome]); }
   function subir() { if (nivel && ACIMA[nome]) ir(ACIMA[nome], { cidade: atualCidade }); }
   // a ação de um clique: ir a um nível ou, numa construção da cidade, anunciar no status o nome que a etiqueta mostra
-  function executar(a) { if (a && a.ir) ir(a.ir, a); else if (a && a.anuncio) estado.textContent = a.anuncio; }
+  function executar(a) { if (a && a.ir) ir(a.ir, a); else if (a && a.anuncio) etiquetar(a.anuncio); }
+  // o nome da etiqueta no status por 5 s (o tempo dela), e depois o texto do nível de volta. O mesmo nome de novo (o Enter
+  // repetido) troca o espaço final, para o leitor de tela anunciar outra vez
+  let etiquetaAte = 0, ultimoT = 0;
+  function etiquetar(texto) {
+    estado.textContent = estado.textContent === texto ? texto + "\u00a0" : texto;
+    etiquetaAte = ultimoT + 5000;
+  }
   // roda, botões, teclado, duplo clique e pinça: o globo decide o próprio zoom (desce ao Brasil); os outros níveis
   // aproximam, e o que mergulha (o Brasil) troca de nível no teto ou no mínimo do zoom
   function aproximar(sinal, sx = W / 2, sy = H / 2) {
@@ -280,7 +287,8 @@ const Mundo = (() => {
     pedido_ = false;
     if (document.hidden) return;   // aba escondida: nada de quadro; o visibilitychange retoma
     const dt = Math.min(0.25, Math.max(0, (t - anterior) / 1000));   // um quadro atrasado anda até 0,25 s, não mais
-    anterior = t;
+    anterior = ultimoT = t;
+    if (etiquetaAte && t > etiquetaAte) { etiquetaAte = 0; mostrar(); }   // acabou o tempo da etiqueta: o status do nível
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = FUNDO; ctx.fillRect(0, 0, W, H);
     if (nivel) {

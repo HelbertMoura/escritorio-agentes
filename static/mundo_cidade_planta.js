@@ -38,7 +38,9 @@ const CidadePlanta = (() => {
   const CHALES = { N: 0.2, NE: 0.15, CO: 0.3, SE: 0.35, S: 0.65 };   // a parte de chalés entre as casas
   const CASAS = { metropole: [5, 3, 5, 6, 3], grande: [1, 2, 3, 5, 6], media: [1, 2, 3, 4, 6], pequena: [1, 2, 3, 4, 6, 1, 2] };
   // os marcos que já são igreja (a cidade não ganha a predios-9 além deles)
-  const IGREJAS = new Set(["matriz-mateus-leme", "catedral-fortaleza", "igreja-rosario", "pampulha", "convento-penha"]);
+  const IGREJAS = new Set(["matriz-mateus-leme", "catedral-fortaleza", "igreja-rosario", "pampulha", "convento-penha", "pelourinho"]);
+  // a altura do desenho da praça no atlas (a fonte e o lago), para o coreto atrás dela ficar a FOLGA_PRACA px
+  const ALTURA_PRACA = { "praca-1": 68, "lazer-3": 80 }, FOLGA_PRACA = 4;
   const MOBILIA = ["banca-1", "ponto-onibus-1", "banco-poste-1", "carrinho-1", "rua-1", "rua-2", "rua-3"];
   // as construções que mostram o nome (clique, toque ou Tab); o marco usa o nome do ponto turístico
   const NOMES = { "predios-9": "Igreja", "predios-10": "Hospital", "predios-14": "Mercado Municipal", "predios-13": "Bombeiros",
@@ -158,15 +160,14 @@ const CidadePlanta = (() => {
     const qEsporte = porte === "metropole" || r() < 0.45 ? um(livres) : livres[0];
     qParque.zona = "parque"; qEsporte.zona = "esporte";
 
-    // o parque: a praça (a fonte, ou o lago numa fila larga) numa fila e o coreto (ou a feira) com os cantos na outra; em
-    // cima do marco, a praça fica na fila de baixo, a que aparece
-    const praFrente = emCima || r() < 0.55, frente = de(qParque, praFrente ? 1 : 0), fundo = de(qParque, praFrente ? 0 : 1);
-    const largo = frente.x1 - frente.x0 >= 176;
+    // o parque: na fila da frente a praça (a fonte, ou o lago numa fila larga); na de trás o coreto (ou a feira) com os
+    // cantos, o pé recuado o bastante para o desenho da praça não encostar nele (FOLGA_PRACA px entre os dois)
+    const frente = de(qParque, 1), fundo = de(qParque, 0), largo = frente.x1 - frente.x0 >= 176;
     pisos.push({ r: [qParque.x0 + C, qParque.y0 + C, qParque.x1 - C, qParque.y1 - C], piso: "parque" });
     const praca = por(noLote(frente, largo && r() < 0.4 ? "lazer-3" : "praca-1", 2, 0), "parque");
     const feiraNoParque = porte !== "pequena" && r() < 0.35;
-    const ladoP = ladoDe(fundo);
-    por(noLote(parte(fundo, fundo.x0 + ladoP, fundo.x1 - ladoP), feiraNoParque ? "lazer-5" : "lazer-4", 6, 2), "parque");
+    const ladoP = ladoDe(fundo), recuoP = Math.max(6, fundo.y1 - (praca.y - ALTURA_PRACA[praca.peca] - FOLGA_PRACA));
+    por(noLote(parte(fundo, fundo.x0 + ladoP, fundo.x1 - ladoP), feiraNoParque ? "lazer-5" : "lazer-4", recuoP, 2), "parque");
     const cantoP = parte(fundo, fundo.x0, fundo.x0 + ladoP), vePraca = cantoP.x0 > 0 && cantoP.x1 < W;   // um banco ou banca na praça
     por(vePraca && mobilia.length ? noLote(cantoP, mobilia.pop(), 3, 1) : noLote(cantoP, arvore(), 12, 2), "parque");
     const sorvete = por(noLote(parte(fundo, fundo.x1 - ladoP, fundo.x1), "rua-4", 3, 0), "parque");   // parado junto ao parque

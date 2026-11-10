@@ -223,9 +223,9 @@ async function principal() {
   const BORDA = CP.E / 2 + CP.C;   // do eixo da rua ao fim da calçada
   const cruza = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
   const naCaixa = s => s.x > -20 && s.x < CP.W + 20 && s.y > -20 && s.y < CP.H + 70;   // o que aparece a 1x (o pé até 70 abaixo)
-  const predios = {}, frota = new Set(), arranjos = new Set(), parques = new Set(), esportes = new Set(), centros = new Set();
+  const predios = {}, totais = {}, frota = new Set(), arranjos = new Set(), parques = new Set(), esportes = new Set(), centros = new Set();
   // as cidades cujo marco já é uma igreja não ganham outra igreja (a predios-9)
-  const IGREJAS = new Set(["matriz-mateus-leme", "catedral-fortaleza", "igreja-rosario", "pampulha", "convento-penha"]);
+  const IGREJAS = new Set(["matriz-mateus-leme", "catedral-fortaleza", "igreja-rosario", "pampulha", "convento-penha", "pelourinho"]);
   for (const cc of MUNDO.cidades) {
     const p = plantaDe(cc.id), id = cc.id, itens = [p.centro, p.casa, ...p.pecas], de = re => itens.filter(s => re.test(s.peca));
     assert.equal(planta(id), JSON.stringify(p), `${id}: determinística`);
@@ -248,7 +248,7 @@ async function principal() {
     const CONHECIDA = /^(predios-([1-9]|1[0-4])|casa-[1-6]|chale-[1-8]|arvore-[1-7]|canteiro-[12]|lazer-[1-6]|praia-[1-4]|praca-1|rua-4)$/;
     assert.ok(itens.every(s => CONHECIDA.test(s.peca) || MOBILIA.test(s.peca)), `${id}: peça desconhecida`);
     assert.ok(de(MOBILIA).filter(naCaixa).length >= (cc.litoral ? 1 : 2), `${id}: mobiliário à vista`);
-    predios[id] = de(/^predios-/).filter(naCaixa).length;
+    predios[id] = de(/^predios-/).filter(naCaixa).length; totais[id] = de(/^predios-/).length;
     // litoral: a orla depois da avenida da praia, com as peças da praia e coqueiros na areia, nenhuma quadra nem rua no
     // mar e carros só nas ruas verticais; sem litoral, nada disso
     const praia = de(/^praia-/);
@@ -268,6 +268,12 @@ async function principal() {
     const arv = new Set(de(/^arvore-/).map(s => s.peca));
     const regiao = { PR: "S", RS: "S", SC: "S", DF: "CO", GO: "CO", MT: "CO", MS: "CO", ES: "SE", MG: "SE", RJ: "SE", SP: "SE" }[cc.uf] || "NNE";
     if (IGREJAS.has(cc.marco)) assert.equal(de(/^predios-9$/).length, 0, `${id}: o marco já é a igreja`);
+    // no parque, o desenho do coreto (ou da feira) e o da praça (fonte ou lago) não se encostam: folga de 3 px ou mais
+    const caixa = s => { const [, , w, h] = ATLAS.quadros[s.peca]; return [s.x - w / 2, s.y - h, s.x + w / 2, s.y]; };
+    const folga = (a, b) => Math.max(a[0] - b[2], b[0] - a[2], a[1] - b[3], b[1] - a[3]);
+    for (const s of itens.filter(s => s.zona === "parque" && /^lazer-[45]$/.test(s.peca))) {
+      assert.ok(folga(caixa(s), caixa(p.praca)) >= 3, `${id}: ${s.peca} encosta em ${p.praca.peca}: ${folga(caixa(s), caixa(p.praca))}`);
+    }
     // o arranjo em volta do marco varia pela semente: onde ficam o parque e o esporte, a ordem das filas do parque e a
     // praça do marco
     const { parque: qp, esporte: qe } = p.zonas, filaPraca = p.praca.y > (qp.y0 + qp.y1) / 2 ? 1 : 0;
@@ -299,8 +305,10 @@ async function principal() {
       assert.ok(cruzes.every(k => Math.abs(c.s - k) >= CP.E / 2 + 16), `${id}: carro começa no cruzamento ${c.s}`);
     }
   }
-  // o porte: a cidade pequena tem menos prédios à vista que a metrópole; Mateus Leme é do interior, com a igreja e a praça
-  assert.ok(predios["mateus-leme"] < predios["sao-paulo"] && predios["mateus-leme"] < predios["rio-de-janeiro"], JSON.stringify(predios));
+  // o porte: a cidade pequena tem menos prédios (à vista e no todo) que as metrópoles; Mateus Leme é do interior, com a
+  // Matriz e a praça (o Rio, com a praia num lado, mostra menos quadras a 1x: lá vale o todo)
+  assert.ok(predios["mateus-leme"] < predios["sao-paulo"], JSON.stringify(predios));
+  assert.ok(totais["mateus-leme"] * 3 < totais["sao-paulo"] && totais["mateus-leme"] * 2 < totais["rio-de-janeiro"], JSON.stringify(totais));
   assert.ok(predios["mateus-leme"] <= 3 && predios["sao-paulo"] >= 7, JSON.stringify(predios));
   const ml = plantaDe("mateus-leme");
   assert.ok(!ml.pecas.some(s => s.peca === "predios-9"), "Mateus Leme tem uma igreja só, a Matriz");
@@ -526,7 +534,13 @@ async function principal() {
   assert.equal(cml.vida.etiqueta, null);
   bCoreto.disparar("click"); zm.rodar();
   assert.equal(cml.vida.etiqueta, "Coreto", "Enter mostra o nome");
-  assert.match(zm.elementos["mundo-estado"].textContent, /^Coreto, em Mateus Leme\.$/, "o status anuncia o nome mostrado");
+  const anuncio1 = zm.elementos["mundo-estado"].textContent;
+  assert.match(anuncio1, /^Coreto, em Mateus Leme\.\s?$/, "o status anuncia o nome mostrado");
+  bCoreto.disparar("click"); zm.rodar();   // o Enter de novo na mesma construção: o texto muda, para o leitor repetir
+  const anuncio2 = zm.elementos["mundo-estado"].textContent;
+  assert.ok(/^Coreto, em Mateus Leme\.\s?$/.test(anuncio2) && anuncio2 !== anuncio1, JSON.stringify([anuncio1, anuncio2]));
+  zm.rodar(110);   // passados os 5 s da etiqueta, o status volta ao texto da cidade
+  assert.match(zm.elementos["mundo-estado"].textContent, /^Mateus Leme \(MG\)/, "o texto da cidade de volta");
   zm.clicar(...cz.tela(marcoML.x, marcoML.y)); zm.rodar();
   assert.equal(cml.vida.etiqueta, "Igreja Matriz", "o clique no marco mostra o nome do ponto turístico");
   assert.match(zm.elementos["mundo-estado"].textContent, /Igreja Matriz/);

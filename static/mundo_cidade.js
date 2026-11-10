@@ -23,6 +23,7 @@ const MundoCidade = (() => {
   const { W, H, E, C } = CidadePlanta, FAIXA = 8, B = E / 2 + C, MEIO_CARRO = 16, PLACA_H = 12, POSTE = 28, FOLGA = 4;
   const QUADRA = [192, 160];   // o zoom máximo ainda mostra uma quadra inteira
   const PERTO = 1.8;           // a partir daqui (z), os detalhes de perto
+  const ALTO_MAX = 130;        // a altura do maior desenho do atlas (os marcos chegam a 125)
   const LUZ = [255, 214, 130];   // a cor dos postes, janelas e faróis à noite
   const FECHADO = { nublado: 0.18, neblina: 0.25, garoa: 0.3, chuva: 0.4, tempestade: 0.6, neve: 0.15 };
   // a boca da chaminé de cada chalé, no recorte do atlas (o chalé 6 já tem a fumaça desenhada)
@@ -221,7 +222,9 @@ const MundoCidade = (() => {
         if (sx > x + r || sx + q[2] < x - r || sy > y + r || sy + q[3] < y - r) continue;
         if (!g) {
           const d = r * k * 2;
-          if (!rascunho) { rascunho = document.createElement("canvas"); rascunho.width = rascunho.height = 256; }
+          if (!rascunho || rascunho.width < d) {   // do tamanho do maior brilho pedido até agora
+            rascunho = document.createElement("canvas"); rascunho.width = rascunho.height = Math.max(64, d);
+          }
           g = rascunho.getContext("2d");
           g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = "source-over"; g.imageSmoothingEnabled = false;
           g.clearRect(0, 0, d, d); g.drawImage(tela, 0, 0, d, d);
@@ -234,9 +237,11 @@ const MundoCidade = (() => {
       vida.recortes++;
       return rascunho;
     }
-    // a janela (o pixel do meio dela) está coberta por uma peça da frente?
+    // a janela (o pixel do meio dela) está coberta por uma peça da frente? A lista vai pela profundidade: depois da peça
+    // cujo pé passa ALTO_MAX abaixo da janela, nenhum desenho chega até ela
     function coberta(i0, jx, jy) {
       for (let i = i0 + 1; i < lista.length; i++) {
+        if (lista[i].y - ALTO_MAX > jy) break;
         const s = lista[i], nome = !s.ped && !s.poste && !s.enfeite && !s.placa ? nomeDe(s) : null, q = nome && recorte(nome);
         if (!q || s.y <= lista[i0].y) continue;
         const lx = jx - Math.round(s.x - q[2] / 2), ly = jy - Math.round(s.y - q[3]);
