@@ -240,4 +240,42 @@ assert.ok(lua("2026-11-24").filter(e => e === "#e4dfd1").length > 150, "lua chei
   const rapida = passadas(120);
   assert.ok(rapida >= 36, "de volta a 30 Hz (uma a cada 3 quadros): " + rapida);
 }
+// a primeira passada monta as nuvens (e a tabela da projeção) e leva centenas de ms: ela não conta para a taxa. Um
+// aparelho com passadas estáveis de 10 ms segue a 30 Hz depois dela
+{
+  const p = abrir("", false), np = p.nivel();
+  const passadas = q => { const a = p.contexto.passadas || 0; p.rodar(np, q); return (p.contexto.passadas || 0) - a; };
+  p.contexto.passoPerf = 300;   // a passada da montagem "leva" 300 ms
+  p.rodar(np, 1);
+  assert.equal(p.Globo.montagens, 1, "a primeira passada montou as nuvens");
+  p.contexto.passoPerf = 10;
+  passadas(8);
+  const n = passadas(120);
+  assert.ok(n >= 36, "depois da montagem, passadas de 10 ms ficam a 30 Hz: " + n);
+}
+
+// as nuvens na imagem: nenhum pixel claro de nuvem (ou de fiapo) sem vizinho claro, nem na beira do disco, onde a
+// projeção achata o campo (terra preta, meio-dia, lado do dia; o ouro do contorno do Brasil fica de fora)
+{
+  const { m, n, d, B } = pintado(12, [0, 8, 0]), { lon, lat } = n.rotacao;
+  const sol = m.Globo.terminador(new Date(Date.UTC(2026, 10, 18, 15)));
+  const claro = q => d[q + 3] === 255 && d[q] + d[q + 1] + d[q + 2] > 330 && !(d[q] > 200 && d[q + 2] < 100);
+  const soltos = [];
+  for (let y = 1; y < B - 1; y++) for (let x = 1; x < B - 1; x++) {
+    const q = (y * B + x) * 4, p = m.Globo.ponto(x + 0.5, y + 0.5, lon, lat, m.Globo.R);
+    if (!p || !claro(q)) continue;
+    const f = p.lat * RAD, fs = sol.latSol * RAD;
+    if (Math.sin(f) * Math.sin(fs) + Math.cos(f) * Math.cos(fs) * Math.cos((p.lon - sol.lonSol) * RAD) < 0.2) continue;
+    if (![4, -4, 4 * B, -4 * B].some(o => claro(q + o))) soltos.push(`${x},${y}`);
+  }
+  assert.equal(soltos.length, 0, "pixels de nuvem soltos na imagem: " + soltos.join(" "));
+}
+
+// ?data= sozinho (sem ?hora=) também vale para o sol e a lua, com a hora de agora
+const luaSo = data => {
+  const m = abrir(`?data=${data}`, true), n = m.nivel();
+  m.rodar(n, 1);
+  return m.contexto.canvas.find(c => c.width === 29).estilos;
+};
+assert.ok(luaSo("2026-11-24").filter(e => e === "#e4dfd1").length > 150, "?data= sozinho: lua cheia (hoje não é)");
 console.log("test_mundo_globo: ok");

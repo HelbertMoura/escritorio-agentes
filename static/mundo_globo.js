@@ -201,7 +201,8 @@ const Globo = (() => {
   }
 
   function criar({ dados, Camera, reduzido }) {
-    // ?hora= é a hora de Brasília (UTC−3), parada, de hoje ou do dia de ?data=AAAA-MM-DD (o sol e a fase da lua)
+    // ?hora= é a hora de Brasília (UTC−3), parada, de hoje ou do dia de ?data=AAAA-MM-DD (o sol e a fase da lua); com
+    // ?data= sozinho, vale esse dia com a hora de agora, andando
     const busca = new URLSearchParams(location.search), simulada = parseFloat(busca.get("hora"));
     const dia = /^\d{4}-\d{2}-\d{2}$/.test(busca.get("data") || "") ? Date.parse(busca.get("data") + "T00:00:00Z") : NaN;
     const fixa = simulada >= 0 && simulada < 24 ? (() => {
@@ -212,7 +213,8 @@ const Globo = (() => {
     let lon0 = LON0, lat0 = LAT0, vel = reduzido ? 0 : -GIRO, segurando = false, velArraste = 0, ultimo = 0, voo = null;
     let derivaA = 0, derivaB = 0, sol = null, solEm = -1e12, feito = { chave: "", t: -1e9, destaque: null }, telaFeita = "";
     // ms entre passadas: 30 Hz; 15 Hz se a passada passar de 12 ms (celular lento), e de volta a 30 Hz só depois de 10
-    // passadas seguidas abaixo de 8 ms (sem alternar e trepidar perto do limite)
+    // passadas seguidas abaixo de 8 ms (sem alternar e trepidar perto do limite). A passada que monta as nuvens ou refaz
+    // a tabela da projeção (a primeira, e as do arraste na vertical) não conta: ela faz um trabalho que não se repete
     let intervalo = 33, rapidas = 0;
 
     // a textura: a cor do dia e a água (B > G) de cada pixel de 0,5°; antes dela chegar, o globo é de mar
@@ -257,7 +259,7 @@ const Globo = (() => {
 
     // a volta a (lat, lon) de cada pixel do disco depende só de lat0 e é refeita quando ele muda (o giro só soma lon0)
     const { nd, O, U, V, Z, DZ, anel } = geometria();
-    const LIN = new Int32Array(nd), DL = new Float32Array(nd), K = new Int32Array(nd), NB = new Float32Array(nd);
+    const LIN = new Int32Array(nd), DL = new Float32Array(nd), K = new Int32Array(nd);
     let tabelaLat = NaN;
     function tabela() {
       if (tabelaLat === lat0) return;
@@ -271,7 +273,7 @@ const Globo = (() => {
         DL[n] = atan2(U[n], Z[n] * c0 - V[n] * s0) / RAD * 2;
       }
     }
-    const na = new Float32Array(B * B), marca = new Uint8Array(B * B), contorno = new Int32Array(nd);
+    const na = new Float32Array(B * B), nb = new Float32Array(B * B), marca = new Uint8Array(B * B), contorno = new Int32Array(nd);
     const tela = document.createElement("canvas"); tela.width = tela.height = B;
     const tctx = tela.getContext("2d");
     const imagem = (tctx && tctx.createImageData && tctx.createImageData(B, B)) || { data: new Uint8ClampedArray(B * B * 4) };
@@ -295,7 +297,8 @@ const Globo = (() => {
     const celula = (lat, lon) => Math.min(TH - 1, Math.max(0, Math.floor((90 - lat) * 2))) * TW + ((Math.floor((lon + 180) * 2) % TW) + TW) % TW;
     const acerta = p => alvoBrasil ? alvoBrasil[celula(p.lat, p.lon)] === 1
       : p.lon >= BRASIL[0] && p.lon <= BRASIL[2] && p.lat >= BRASIL[1] && p.lat <= BRASIL[3];   // sem as células, a caixa
-    const agora = () => fixa || new Date();
+    const agora = () => fixa || (Number.isFinite(dia)
+      ? new Date(dia + ((((Date.now() - 3 * 3600000) % 86400000) + 86400000) % 86400000) + 3 * 3600000) : new Date());
 
     // a escala do globo na tela: inteira (pixel nítido), a maior em que a caixa cabe; se a inteira encolher demais o
     // globo (tela pequena), a fracionária. A caixa cresce para a câmera chegar a ela.
@@ -323,7 +326,7 @@ const Globo = (() => {
         const c = roda(col0 + DL[n]);
         K[n] = LIN[n] + c;
         na[O[n]] = A[LIN[n] + roda(c - offA)];
-        NB[n] = NBf[LIN[n] + roda(c - offB)];
+        nb[O[n]] = NBf[LIN[n] + roda(c - offB)];
       }
       d.fill(0); marca.fill(0);
       let nbr = 0;
@@ -337,14 +340,19 @@ const Globo = (() => {
           marca[o] = 1; contorno[nbr++] = n;
           if (realce) { r += (255 - r) * realce; g += (236 - g) * realce; bl += (170 - bl) * realce; }
         }
-        const a = na[o];
-        if (a > N.la) {   // a nuvem: borda clara do lado do sol, borda azulada do outro, miolo branco, corpo cinza-azulado
+        // pixel de nuvem sem vizinho de nuvem (a beira do disco achata o campo) não é nuvem
+        const a = na[o], la = N.la, lb = N.lb;
+        // a nuvem: borda clara do lado do sol, borda azulada do outro, miolo branco, corpo cinza-azulado
+        if (a > la && (na[o - 1] > la || na[o + 1] > la || na[o - B] > la || na[o + B] > la)) {
           if (lado && na[o + lado] <= N.la) { r = 255; g = 255; bl = 255; }
           else if (lado && na[o - lado] <= N.la) { r = 158; g = 174; bl = 198; }
           else if (a > N.la2) { r = 238; g = 243; bl = 250; } else { r = 202; g = 212; bl = 228; }
         } else if (lado && na[o + 3 * lado] > N.la) { r *= 0.66; g *= 0.68; bl *= 0.76; }   // a sombra dela no chão
-        const fb = NB[n];
-        if (fb > N.lb) { const m = fb > N.lb2 ? 0.55 : 0.38; r += (236 - r) * m; g += (241 - g) * m; bl += (249 - bl) * m; }   // fiapos
+        const fb = nb[o];
+        if (fb > lb && (nb[o - 1] > lb || nb[o + 1] > lb || nb[o - B] > lb || nb[o + B] > lb)) {   // os fiapos
+          const m = fb > N.lb2 ? 0.55 : 0.38;
+          r += (236 - r) * m; g += (241 - g) * m; bl += (249 - bl) * m;
+        }
         if (z < 0.3) {   // a atmosfera na beira do disco, mais forte do lado do sol
           const sobe = luz * 3 + 0.5, m = (((0.3 - z) / 0.3 * 0.5 * (sobe > 1 ? 1 : sobe < 0.15 ? 0.15 : sobe) + dz * 0.12) / 0.14 | 0) * 0.14;
           if (m > 0) { r += (110 - r) * m; g += (172 - g) * m; bl += (248 - bl) * m; }
@@ -516,10 +524,11 @@ const Globo = (() => {
         const chave = [lon0, lat0, solEm, Math.floor(derivaA * 2), Math.floor(derivaB * 2)].join(), destaque = nivel.destaque === "brasil";
         const vez = !reduzido && t - feito.t >= intervalo, mudou = chave !== feito.chave && (segurando || voo || reduzido);
         if (vez || mudou || destaque !== feito.destaque) {
-          const t0 = performance.now();
+          const t0 = performance.now(), m0 = montagens, l0 = tabelaLat;
           renderizar(t, destaque); feito = { chave, t, destaque };
           const custo = performance.now() - t0;
-          if (custo > 12) { intervalo = 66; rapidas = 0; } else if (custo < 8) { if (++rapidas >= 10) intervalo = 33; } else rapidas = 0;
+          if (montagens !== m0 || tabelaLat !== l0) { /* montou o campo ou a tabela: não mede */ }
+          else if (custo > 12) { intervalo = 66; rapidas = 0; } else if (custo < 8) { if (++rapidas >= 10) intervalo = 33; } else rapidas = 0;
         }
         ctx.drawImage(tela, 0, 0);
 
