@@ -11,7 +11,10 @@
 // cima: tampas de bueiro, as linhas do estacionamento e flores nos lotes.
 "use strict";
 const CidadeChao = (() => {
-  const T = 128, { E, C } = CidadePlanta, B = E / 2 + C, REFAZER = 3;   // ladrilhos velhos refeitos por quadro
+  // T: o lado do ladrilho; por quadro, até REFAZER ladrilhos velhos refeitos e NOVOS ladrilhos pintados pela primeira vez (o
+  // resto fica no esboço liso até a vez dele); GUARDAR: quantos ladrilhos ficam guardados (os longe da vista saem antes)
+  const T = 128, { E, C } = CidadePlanta, B = E / 2 + C, REFAZER = 3, NOVOS = 8, GUARDAR = 180;
+  const FLORES = ["#f4d35e", "#ee6c8a", "#f5f1e6", "#b58cf0"];
   // as funções do Math em nomes locais: os laços por pixel não procuram o Math global a cada chamada
   const { imul, floor, round, abs, sin, max, min, ceil } = Math;
   const DIA = {
@@ -92,10 +95,14 @@ const CidadeChao = (() => {
 
   function criar({ recorte, atlas }) {
     let p = null, pecas = [], nome = s => s.peca, telas = new Map(), alfa = null, alfaW = 0, sombras = new Map(), onda = null;
-    const estado = { sombras: 0, ladrilhos: 0, refeitos: 0, detalhes: 0, chave: "" };
+    const estado = { sombras: 0, ladrilhos: 0, refeitos: 0, novos: 0, faltam: 0, detalhes: 0, chave: "" };
+    const prontos = [];   // os ladrilhos da vista neste quadro (reaproveitado)
+    let xDe = s => s.x;   // o x em que a peça é desenhada (a fonte anda para o lado numa festa em praça estreita)
 
     // o planta nova (outra cidade): os ladrilhos velhos saem
-    function preparar(planta, lista, nomeDe) { p = planta; pecas = lista; nome = nomeDe; telas.clear(); }
+    function preparar(planta, lista, nomeDe, xDaPeca) {
+      p = planta; pecas = lista; nome = nomeDe; xDe = xDaPeca || xDe; telas.clear();
+    }
 
     // o sol de agora em faixas (para não refazer o chão a cada minuto): direção x da sombra por altura e a força
     function sol(ceu, tipo) {
@@ -314,7 +321,7 @@ const CidadeChao = (() => {
       for (const s of pecas) {
         const nm = nome(s), r = nm && recorte(nm);
         if (!r) continue;
-        const w = r[2], h = r[3], x0 = round(s.x - w / 2), y0 = round(s.y - h);
+        const w = r[2], h = r[3], x0 = round(xDe(s) - w / 2), y0 = round(s.y - h);
         const ex = abs(s0.sx) * h + 2;
         if (x0 - ex > X0 + T || x0 + w + ex < X0 || y0 > Y0 + T || s.y + s0.sy * h + 2 < Y0) continue;
         const sm = sombra(nm, s0.sx, s0.sy);
@@ -323,14 +330,16 @@ const CidadeChao = (() => {
       g.globalAlpha = 1;
       return n;
     }
+    // o ladrilho (tx, ty) pintado com a chave de agora, ou null se ainda não deu a vez dele (NOVOS por quadro)
     function ladrilho(tx, ty, chave, cor, s0) {
       let l = telas.get(tx * 100003 + ty);
       if (!l) {
-        if (telas.size > 180) telas.clear();
+        if (estado.novos >= NOVOS) return null;
         const c = document.createElement("canvas"); c.width = c.height = T;
-        l = { c, chave: null };
+        l = { c, chave: null, tx, ty };
         telas.set(tx * 100003 + ty, l);
       }
+      if (l.chave === null && estado.novos++ >= NOVOS) return null;
       if (l.chave !== chave && (l.chave === null || estado.refeitos < REFAZER)) {
         const g = l.c.getContext("2d"), X0 = tx * T, Y0 = ty * T;
         g.setTransform(1, 0, 0, 1, 0, 0);
@@ -367,6 +376,10 @@ const CidadeChao = (() => {
       for (let y = y0; y < y1; y++) if (hash(y, floor(t / 700), 31) < 0.05) ctx.fillRect(beira(o, y) + 30 + floor(hash(y, 3, 32) * 160), y, 2, 1);
     }
 
+    function tampa(ctx, tx, ty) {   // a tampa de bueiro, redonda, com dois furos claros
+      ctx.fillStyle = "#26262c"; ctx.fillRect(tx - 1, ty, 3, 1); ctx.fillRect(tx - 2, ty + 1, 5, 2); ctx.fillRect(tx - 1, ty + 3, 3, 1);
+      ctx.fillStyle = "#4a4a54"; ctx.fillRect(tx - 1, ty + 1, 1, 1); ctx.fillRect(tx + 1, ty + 2, 1, 1);
+    }
     // a partir de 2x: tampas de bueiro no asfalto, as linhas do estacionamento junto ao meio-fio e flores nos lotes
     function detalhes(ctx, vista) {
       const { v, h } = p.ruas, [vx0, vy0, vx1, vy1] = vista;
@@ -374,24 +387,18 @@ const CidadeChao = (() => {
       for (const x of v) for (const y of h) {
         if (x < vx0 - 120 || x > vx1 + 120 || y < vy0 - 120 || y > vy1 + 120) continue;
         const praia = p.orla && x >= p.orla.x - E;
-        ctx.fillStyle = "#26262c";   // as tampas, redondas, no meio da pista
-        for (const [tx, ty] of [[x - 60, y - 4], [x + 5, y - 64]]) {
-          if (praia && tx > x) continue;
-          ctx.fillRect(tx - 1, ty, 3, 1); ctx.fillRect(tx - 2, ty + 1, 5, 2); ctx.fillRect(tx - 1, ty + 3, 3, 1);
-          ctx.fillStyle = "#4a4a54"; ctx.fillRect(tx - 1, ty + 1, 1, 1); ctx.fillRect(tx + 1, ty + 2, 1, 1); ctx.fillStyle = "#26262c";
-          n++;
-        }
+        tampa(ctx, x - 60, y - 4); n++;   // as tampas, redondas, no meio da pista
+        if (!praia) { tampa(ctx, x + 5, y - 64); n++; }
         ctx.fillStyle = "#d8d2bc";   // vagas de estacionamento: tracinhos junto ao meio-fio, na mão de baixo
         if (!praia) for (let u = x + B + 22; u < x + B + 110; u += 13) { ctx.fillRect(u, y + E / 2 - 6, 1, 5); n++; }
         for (let u = y + B + 20; u < y + B + 90; u += 13) { ctx.fillRect(x - E / 2 + 1, u, 5, 1); n++; }
       }
-      const flores = ["#f4d35e", "#ee6c8a", "#f5f1e6", "#b58cf0"];
       for (const { r } of p.cercas) {   // canteirinhos de flor nos cantos de dentro de cada lote
         if (r[2] < vx0 || r[0] > vx1 || r[3] < vy0 || r[1] > vy1) continue;
         for (let i = 0; i < 4; i++) {
           const fx = r[0] + 4 + floor(hash(r[0], r[1], 40 + i) * (r[2] - r[0] - 8)), fy = r[3] - 5 - (i % 2) * floor((r[3] - r[1]) * 0.6);
           ctx.fillStyle = "#3c7031"; ctx.fillRect(fx - 1, fy + 1, 4, 1);
-          ctx.fillStyle = flores[floor(hash(fx, fy, 41) * flores.length)]; ctx.fillRect(fx, fy, 1, 1); ctx.fillRect(fx + 2, fy, 1, 1);
+          ctx.fillStyle = FLORES[floor(hash(fx, fy, 41) * FLORES.length)]; ctx.fillRect(fx, fy, 1, 1); ctx.fillRect(fx + 2, fy, 1, 1);
           n++;
         }
       }
@@ -416,11 +423,11 @@ const CidadeChao = (() => {
     }
     // o sol de agora e a chave dos ladrilhos, refeitos só quando algo muda (nada montado por quadro)
     let s0 = null, chave = { texto: "", tipo: null }, antes = -1;
-    function chaveDe(neve, ceu, tipo, casa) {
+    function chaveDe(neve, ceu, tipo, casa, desvio) {
       const h = Number.isFinite(ceu.h) ? floor(ceu.h * 4) : 48, e = round((ceu.escuro || 0) * 20), a = !!lerAlfa();
-      const k = (neve ? 1 : 0) + (casa ? 2 : 0) + (a ? 4 : 0) + h * 8 + e * 1000;
+      const k = (neve ? 1 : 0) + (casa ? 2 : 0) + (a ? 4 : 0) + h * 8 + e * 1000 + desvio * 100000;
       if (k !== antes || tipo !== chave.tipo) {
-        const novo = sol(ceu, tipo), c = `${neve ? 1 : 0}|${casa ? 1 : 0}|${novo.sx}|${novo.sy}|${novo.forca}|${a}`;
+        const novo = sol(ceu, tipo), c = `${neve ? 1 : 0}|${casa ? 1 : 0}|${novo.sx}|${novo.sy}|${novo.forca}|${a}|${desvio}`;
         antes = k;
         if (!s0 || c !== chave.texto) { s0 = novo; chave = { texto: c, tipo }; } else chave.tipo = tipo;
       }
@@ -429,20 +436,38 @@ const CidadeChao = (() => {
     function desenhar(ctx, vista, op) {
       if (!p) return;
       const cor = op.neve ? NEVE : DIA;
-      if (!atlas()) { esboco(ctx, vista, cor); estado.forca = 0; estado.detalhes = 0; return; }
-      const k = chaveDe(op.neve, op.ceu, op.tipo, op.casa);
+      if (!atlas()) { esboco(ctx, vista, cor); estado.forca = estado.detalhes = estado.novos = 0; estado.faltam = 1; return; }
+      const k = chaveDe(op.neve, op.ceu, op.tipo, op.casa, op.desvio || 0);
       if (k !== estado.chave) { estado.chave = k; estado.sombras = 0; }
-      estado.refeitos = 0;
+      estado.refeitos = estado.novos = 0;
       const tx0 = floor(vista[0] / T), tx1 = floor(vista[2] / T), ty0 = floor(vista[1] / T), ty1 = floor(vista[3] / T);
-      let n = 0;
-      for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) { ctx.drawImage(ladrilho(tx, ty, k, cor, s0), tx * T, ty * T); n++; }
-      estado.ladrilhos = n;
+      if (telas.size > GUARDAR) for (const [chaveT, l] of telas) {   // os ladrilhos longe da vista saem
+        if (l.tx < tx0 - 2 || l.tx > tx1 + 2 || l.ty < ty0 - 2 || l.ty > ty1 + 2) telas.delete(chaveT);
+      }
+      let n = 0, faltam = 0;
+      prontos.length = 0;   // primeiro os ladrilhos (os que ainda não têm a vez ficam null), depois o desenho
+      for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+        const c = ladrilho(tx, ty, k, cor, s0);
+        prontos.push(c);
+        if (!c) faltam++;
+      }
+      if (faltam) esboco(ctx, vista, cor);   // por baixo dos que faltam, o esboço liso
+      let i = 0;
+      for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++, i++) if (prontos[i]) { ctx.drawImage(prontos[i], tx * T, ty * T); n++; }
+      estado.ladrilhos = n; estado.faltam = faltam;
       mar(ctx, vista, op.t);
       estado.detalhes = op.perto ? detalhes(ctx, vista) : 0;
       estado.forca = s0.forca;
     }
 
-    return { preparar, desenhar, estado, sol };
+    // o pixel (lx, ly) do recorte da peça é opaco? (sem o alfa do atlas, não)
+    function opaco(peca, lx, ly) {
+      const r = recorte(peca), a = lerAlfa();
+      if (!r || !a || lx < 0 || ly < 0 || lx >= r[2] || ly >= r[3]) return false;
+      return a[((r[1] + ly) * alfaW + r[0] + lx) * 4 + 3] > 0;
+    }
+
+    return { preparar, desenhar, estado, sol, opaco };
   }
   return { criar, T, hash };
 })();

@@ -262,6 +262,37 @@ class Montagem(unittest.TestCase):
         self.assertEqual(int(r.stdout), 0, "nenhum #404040 na borda do desenho (a mancha do canto)")
         self.assertLessEqual(w, 104, "sem a sombra, o recorte fica mais estreito")
 
+    def pixels_do_atlas(self, nome):
+        """Os pixels opacos (r, g, b) da peça `nome` no atlas.png montado, lidos pelo Pillow no processo filho."""
+        with open(os.path.join(self.pastas[0], "atlas.json"), encoding="utf-8") as f:
+            x, y, w, h = json.load(f)["quadros"][nome]
+        ler = ("import json, sys\nfrom PIL import Image\nim = Image.open(sys.argv[1]).convert('RGBA')\n"
+               "x, y, w, h = json.loads(sys.argv[2])\npx = im.load()\n"
+               "print(json.dumps([px[i, j][:3] for j in range(y, y + h) for i in range(x, x + w) if px[i, j][3]]))")
+        r = subprocess.run([sys.executable, "-c", ler, os.path.join(self.pastas[0], "atlas.png"), json.dumps([x, y, w, h])],
+                           capture_output=True, text=True, timeout=60)
+        if r.returncode:
+            raise AssertionError(r.stderr)
+        return [tuple(c) for c in json.loads(r.stdout)]
+
+    def test_pier_sem_a_propria_agua(self):
+        """O píer (praia-4) entra no atlas sem o bloco de água e a borda de terra do desenho: só o deque, os postes e o
+        barco, para pousar no mar da cidade e se fundir a ele."""
+        agua = [c for c in self.pixels_do_atlas("praia-4") if c[2] > c[0] + 12 and c[2] >= c[1] - 30]
+        self.assertEqual(agua, [])
+        madeira = [c for c in self.pixels_do_atlas("praia-4") if c[0] > c[2] + 30]
+        self.assertGreater(len(madeira), 300, "o deque e os postes ficam")
+
+    def test_coreto_em_tres_quartos(self):
+        """O coreto em 3/4, com pixel nítido: só cores que já existem no desenho original (nenhuma mistura nova)."""
+        ler = ("import json, sys\nfrom PIL import Image\nim = Image.open(sys.argv[1]).convert('RGBA')\n"
+               "print(json.dumps(sorted({p[:3] for p in im.getdata() if p[3] == 255})))")   # no filho: com -I o teste não vê o Pillow
+        r = subprocess.run([sys.executable, "-c", ler, os.path.join(ARTE, "lazer-4.png")], capture_output=True, text=True, timeout=60)
+        if r.returncode:
+            raise AssertionError(r.stderr)
+        originais = {tuple(c) for c in json.loads(r.stdout)}
+        self.assertLessEqual(set(self.pixels_do_atlas("lazer-4")), originais)
+
     def test_atlas_sem_marco_usa_generico(self):
         """Marco sem arte não derruba a montagem: ele fica fora do atlas, e a cidade usa os prédios genéricos."""
         arte, pasta = tempfile.mkdtemp(), tempfile.mkdtemp()
@@ -331,7 +362,9 @@ class Montagem(unittest.TestCase):
             if nome in METADE:   # metade arredondada para cima; o recorte do alfa pode tirar uma linha da borda
                 self.assertTrue((w + 1) // 2 - 1 <= qw <= (w + 1) // 2 and (h + 1) // 2 - 1 <= qh <= (h + 1) // 2,
                                 (nome, w, h, qw, qh))
-            elif nome == "predios-11":   # sem a mancha solta, mais estreito (test_predio_11_sem_sombra_solta)
+            elif nome == "lazer-4":   # o coreto em 3/4 (menor que o marco, maior que uma casa)
+                self.assertTrue(abs(qw - round(w * 3 / 4)) <= 1 and abs(qh - round(h * 3 / 4)) <= 1, (nome, w, h, qw, qh))
+            elif nome in ("predios-11", "praia-4"):   # sem a mancha solta / sem a água do píer: mais estreitos
                 self.assertTrue(qw < w and qh <= h, (nome, w, h, qw, qh))
             else:
                 self.assertEqual([qw, qh], [w, h], nome)

@@ -42,10 +42,12 @@ const MundoCidade = (() => {
     const cidades = new Map(todas.filter(c => c && typeof c.id === "string").map(c => [c.id, c]));
     const info = id => cidades.get(id) || {};
     let id = null, p = CidadePlanta.planta(""), carros = [], pedestres = [], pecas = [], postes = [], rua = Math.random;
-    let atlas = null, quadros = {}, janelas = {}, pedido = false, escolhido = null, notaveis = [];
+    let atlas = null, quadros = {}, janelas = {}, pedido = false, escolhido = null, notaveis = [], rascunho = null, placaCasa = null;
+    let placas = [];   // as plaquinhas de cada cruzamento (com os letreiros guardados), entram na ordem de profundidade
     const lista = [], vista = [0, 0, W, H], brilhos = new Map();
-    const vida = { fumaca: 0, passaros: 0, balanco: 0, janelas: 0, pombos: 0, placas: 0, etiqueta: null, perto: false };
-    const opChao = { neve: false, ceu: null, tipo: "limpo", casa: false, t: 0, perto: false };
+    const vida = { fumaca: 0, passaros: 0, balanco: 0, janelas: 0, janelasCobertas: 0, recortes: 0, pombos: 0, placas: 0,
+                   depoisDaPlaca: 0, etiqueta: null, perto: false };
+    const opChao = { neve: false, ceu: null, tipo: "limpo", casa: false, t: 0, perto: false, desvio: 0 };
     const opClima = { W: 0, H: 0, predioRet: { x: -10, y: -10, w: 0, h: 0 }, ceu: false };
     const enfeites = MundoFesta.criar({ reduzido, alto: POSTE, recorte: nome => recorte(nome), atlas: () => atlas });
     const chao = CidadeChao.criar({ recorte: nome => recorte(nome), atlas: () => atlas });
@@ -105,7 +107,7 @@ const MundoCidade = (() => {
       const l = [];
       if (temMarco()) l.push({ s: p.centro, nome: info(id).marco_nome || "Marco da cidade" });
       for (const s of p.notaveis) if (s.x > -20 && s.x < W + 20 && s.y > -20 && s.y < H + 70) l.push({ s, nome: CidadePlanta.NOMES[s.peca] });
-      notaveis = l.filter(n => recorte(nomeDe(n.s))).map((n, i) => ({ ...n, id: "notavel-" + i }));
+      notaveis = l.filter(n => recorte(nomeDe(n.s))).map((n, i) => ({ ...n, id: "notavel-" + i, maiusculo: n.nome.toUpperCase(), e: null, k: 0 }));
     }
     function alvoNotavel(n) {
       const [, , , h] = recorte(nomeDe(n.s)) || [0, 0, 0, 40];
@@ -122,8 +124,13 @@ const MundoCidade = (() => {
       return achado;
     }
     function preparar() {   // o atlas chegou ou a cidade mudou: o chão e as notáveis
-      chao.preparar(p, pecas, s => (s.poste ? null : nomeDe(s)));
+      chao.preparar(p, pecas, s => (s.poste ? null : nomeDe(s)), s => (s === p.praca ? s.x + enfeites.desvio : s.x));
       montarNotaveis();
+    }
+    function escolher(n) {   // mostra a etiqueta da notável por 5 s e devolve o anúncio para o status
+      escolhido = { id: n.id, ate: performance.now() + 5000 };
+      const c = mapa.porId.get(id);
+      return { anuncio: `${n.nome}${c ? ", em " + c.nome : ""}.` };
     }
 
     function medirVista() {   // a parte do mundo na tela, [x0, y0, x1, y1] (as contas de camera.mundo, sem array novo)
@@ -185,7 +192,10 @@ const MundoCidade = (() => {
     // o brilho de uma luz à noite: o degradê pintado uma vez por cor, raio e escala (com pixels de sobra para o zoom) e
     // depois só copiado; a força vem do globalAlpha. A chave é o número da cor (RGB), não o array: a mesma cor de outra
     // festa ou cidade reaproveita o sprite, e o guardado não cresce a cada troca
-    function brilho(ctx, x, y, r, a, cor = LUZ) {
+    // base: o y do pé de quem acende (o poste, o carro): as peças com o pé mais abaixo ficam na frente e apagam o brilho
+    // onde o desenho delas cobre (o sprite do brilho é copiado para uma tela de rascunho e recortado lá). Sem base (as
+    // luzes das festas), o brilho vai inteiro
+    function brilho(ctx, x, y, r, a, cor = LUZ, base = null) {
       const k = Math.max(1, Math.min(8, Math.ceil(camera.P))), chave = ((cor[0] << 16 | cor[1] << 8 | cor[2]) * 64 + r) * 16 + k;
       let tela = brilhos.get(chave);
       if (!tela) {
@@ -196,7 +206,43 @@ const MundoCidade = (() => {
         g.fillStyle = gr; g.fillRect(0, 0, d, d);
         brilhos.set(chave, tela);
       }
-      ctx.globalAlpha = Math.min(1, a); ctx.drawImage(tela, x - r, y - r, r * 2, r * 2); ctx.globalAlpha = 1;
+      const d = r * k * 2, frente = base === null ? null : recortar(tela, x, y, r, k, base);
+      ctx.globalAlpha = Math.min(1, a);
+      if (frente) ctx.drawImage(frente, 0, 0, d, d, x - r, y - r, r * 2, r * 2); else ctx.drawImage(tela, x - r, y - r, r * 2, r * 2);
+      ctx.globalAlpha = 1;
+    }
+    // o brilho na tela de rascunho, sem os pixels das peças da frente que o cobrem; null se nenhuma cobre
+    function recortar(tela, x, y, r, k, base) {
+      let g = null;
+      for (let i = lista.length - 1; i >= 0 && lista[i].y > base; i--) {
+        const s = lista[i], nome = !s.ped && !s.poste && !s.enfeite && !s.placa ? nomeDe(s) : null, q = nome && recorte(nome);
+        if (!q) continue;
+        const sx = Math.round(s.x - q[2] / 2), sy = Math.round(s.y - q[3]);
+        if (sx > x + r || sx + q[2] < x - r || sy > y + r || sy + q[3] < y - r) continue;
+        if (!g) {
+          const d = r * k * 2;
+          if (!rascunho) { rascunho = document.createElement("canvas"); rascunho.width = rascunho.height = 256; }
+          g = rascunho.getContext("2d");
+          g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = "source-over"; g.imageSmoothingEnabled = false;
+          g.clearRect(0, 0, d, d); g.drawImage(tela, 0, 0, d, d);
+          g.globalCompositeOperation = "destination-out";
+        }
+        g.drawImage(atlas, q[0], q[1], q[2], q[3], (sx - x + r) * k, (sy - y + r) * k, q[2] * k, q[3] * k);
+      }
+      if (!g) return null;
+      g.globalCompositeOperation = "source-over";
+      vida.recortes++;
+      return rascunho;
+    }
+    // a janela (o pixel do meio dela) está coberta por uma peça da frente?
+    function coberta(i0, jx, jy) {
+      for (let i = i0 + 1; i < lista.length; i++) {
+        const s = lista[i], nome = !s.ped && !s.poste && !s.enfeite && !s.placa ? nomeDe(s) : null, q = nome && recorte(nome);
+        if (!q || s.y <= lista[i0].y) continue;
+        const lx = jx - Math.round(s.x - q[2] / 2), ly = jy - Math.round(s.y - q[3]);
+        if (lx >= 0 && ly >= 0 && lx < q[2] && ly < q[3] && chao.opaco(nome, lx, ly)) return true;
+      }
+      return false;
     }
     // a árvore: o tronco parado e a copa (os 60% de cima) deslocada pelo vento do Clima
     function arvore(ctx, nome, s, x, y) {
@@ -232,6 +278,7 @@ const MundoCidade = (() => {
         return;
       }
       if (s.enfeite) return enfeites.desenhar(ctx, s);
+      if (s.placa) return placa(ctx, s);
       if (s.poste) {   // o poste: base, haste com um filete de luz e o braço com a luminária sobre a rua
         const x = s.x, y = s.y, l = s.lado;
         ctx.fillStyle = "#24242b"; ctx.fillRect(x - 1, y - 2, 3, 2); ctx.fillRect(x, y - POSTE, 1, POSTE);
@@ -240,6 +287,7 @@ const MundoCidade = (() => {
         ctx.fillStyle = "#f2e2b0"; ctx.fillRect(x + 3 * l - (l < 0 ? 1 : 0), y - POSTE + 1, 2, 1);
         return enfeites.poste(ctx, s);
       }
+      if (vida.placas) vida.depoisDaPlaca++;
       const nome = nomeDe(s), x = s === p.praca ? s.x + enfeites.desvio : s.x;   // a fonte abre espaço para a peça da festa
       if (nome.startsWith("arvore-")) arvore(ctx, nome, s, x, s.y); else peca(ctx, nome, x, s.y);
       if (s === p.praca && vida.perto && nome === "praca-1") pombos(ctx, t);
@@ -285,12 +333,14 @@ const MundoCidade = (() => {
       ctx.globalAlpha = Math.min(1, (escuro - 0.25) * 2);
       for (let i = 0; i < lista.length; i++) {
         const s = lista[i];
-        if (!s.peca && s !== p.centro) continue;
+        if ((!s.peca && s !== p.centro) || s.placa || s.enfeite) continue;
         const nome = nomeDe(s), js = nome && janelas[nome], r = js && recorte(nome);
         if (!r || !Array.isArray(js)) continue;
         const x0 = Math.round(s.x - r[2] / 2), y0 = Math.round(s.y - r[3]);
         for (let j = 0; j + 3 < js.length; j += 4) {
           if (hash(s.x + j, s.y, hr * 7 + 3) >= parte) continue;
+          // a janela que uma peça da frente cobre não acende por cima dela
+          if (coberta(i, x0 + js[j] + (js[j + 2] >> 1), y0 + js[j + 1] + (js[j + 3] >> 1))) { vida.janelasCobertas++; continue; }
           ctx.fillStyle = (j / 4) % 3 ? "#ffd98a" : "#ffe9b5";
           ctx.fillRect(x0 + js[j], y0 + js[j + 1], js[j + 2], js[j + 3]);
           vida.janelas++;
@@ -298,30 +348,35 @@ const MundoCidade = (() => {
       }
       ctx.globalAlpha = 1;
     }
-    // as placas das esquinas (de perto): o poste na quina e as duas plaquinhas azuis na escala da tela
-    function placas(ctx) {
+    // a placa de uma esquina (de perto, na ordem de profundidade: o que fica na frente a cobre): o poste na quina e as duas
+    // plaquinhas azuis na escala da tela; os letreiros ficam guardados na placa (refeitos só se a escala mudar)
+    function placa(ctx, s) {
       const P = camera.P, ox = Math.round(camera.W / 2 - camera.x * P), oy = Math.round(camera.H / 2 - camera.y * P);
-      const k = Math.max(1, Math.round(camera.dpr * (P / camera.dpr >= 4 ? 2 : 1))), { v, h } = p.ruas;   // bem de perto, o dobro
-      for (const x of v) for (const y of h) {
-        const px = x + E / 2 + 2, py = y - E / 2 - 2;
-        if (!naVista(px - 2, py - 60, px + 60, py + 2)) continue;
-        ctx.fillStyle = "#3a3d46"; ctx.fillRect(px, py - 10, 1, 10);
-        const a = letreiros.letreiro(p.nomeRua.v[x] || "", "rua", k), b = letreiros.letreiro(p.nomeRua.h[y] || "", "rua", k);
-        if (!a || !b) continue;
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        const sx = Math.round(ox + (px + 1) * P), sy = Math.round(oy + (py - 10) * P);
-        ctx.drawImage(a, sx, sy - a.height * 2 - k); ctx.drawImage(b, sx, sy - b.height);
-        ctx.setTransform(P, 0, 0, P, ox, oy);
-        vida.placas++;
+      const k = Math.max(1, Math.round(camera.dpr * (P / camera.dpr >= 4 ? 2 : 1)));   // bem de perto, o dobro
+      ctx.fillStyle = "#3a3d46"; ctx.fillRect(s.x, s.y - 10, 1, 10);
+      if (s.k !== k || !s.a || !s.b) {
+        s.a = letreiros.letreiro(p.nomeRua.v[s.rv] || "", "rua", k); s.b = letreiros.letreiro(p.nomeRua.h[s.rh] || "", "rua", k);
+        s.k = s.a && s.b ? k : 0;
       }
+      if (!s.a || !s.b) return;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      const sx = Math.round(ox + (s.x + 1) * P), sy = Math.round(oy + (s.y - 10) * P);   // as plaquinhas à direita do poste
+      ctx.drawImage(s.a, sx, sy - s.a.height * 2 - k); ctx.drawImage(s.b, sx, sy - s.b.height);
+      ctx.setTransform(P, 0, 0, P, ox, oy);
+      vida.placas++;
     }
     // a etiqueta do nome sobre a construção escolhida (clique ou toque) ou em destaque (foco ou mouse)
     function etiqueta(ctx, t) {
-      const alvo = cidade.destaque && cidade.destaque.startsWith("notavel-") ? cidade.destaque : escolhido && t < escolhido.ate ? escolhido.id : null;
+      const alvo = cidade.destaque && cidade.destaque.startsWith("notavel-") ? cidade.destaque
+        : escolhido && performance.now() < escolhido.ate ? escolhido.id : null;
       vida.etiqueta = null;
-      const n = alvo && notaveis.find(m => m.id === alvo), r = n && recorte(nomeDe(n.s));
+      let n = null;
+      if (alvo) for (let i = 0; i < notaveis.length; i++) if (notaveis[i].id === alvo) n = notaveis[i];
+      const r = n && recorte(nomeDe(n.s));
       if (!r) return;
-      const k = Math.max(2, Math.round(camera.dpr * 2)), e = letreiros.letreiro(n.nome.toUpperCase(), "etiqueta", k);   // 16 px de CSS
+      const k = Math.max(2, Math.round(camera.dpr * 2));   // 16 px de CSS
+      if (n.k !== k || !n.e) { n.e = letreiros.letreiro(n.maiusculo, "etiqueta", k); n.k = n.e ? k : 0; }
+      const e = n.e;
       vida.etiqueta = n.nome;
       if (!e) return;
       const P = camera.P, ox = Math.round(camera.W / 2 - camera.x * P), oy = Math.round(camera.H / 2 - camera.y * P);
@@ -338,10 +393,12 @@ const MundoCidade = (() => {
       const tt = reduzido ? 0 : t;   // com movimento reduzido, o tempo das animações para
       medirVista();
       mover(dt);
-      vida.fumaca = vida.passaros = vida.balanco = vida.janelas = vida.pombos = vida.placas = 0;
+      vida.fumaca = vida.passaros = vida.balanco = vida.janelas = vida.janelasCobertas = vida.recortes = vida.pombos = 0;
+      vida.placas = vida.depoisDaPlaca = 0;
       vida.perto = camera.z >= PERTO;
       enfeites.comecar(atlas && festa ? festa() : null, p, id, postes);
       opChao.neve = tipo === "neve"; opChao.ceu = ceu; opChao.tipo = tipo; opChao.casa = casa; opChao.t = tt; opChao.perto = vida.perto && !!atlas;
+      opChao.desvio = enfeites.desvio;
       chao.desenhar(ctx, vista, opChao);
       enfeites.chao(ctx, escuro, t);
       if (atlas) {
@@ -365,6 +422,10 @@ const MundoCidade = (() => {
       for (let i = 0; i < pecas.length; i++) { const s = pecas[i]; if (naVista(s.x - 70, s.y - 130, s.x + 70, s.y + 4)) lista.push(s); }
       const itens = enfeites.itens;
       for (let i = 0; i < itens.length; i++) { const s = itens[i]; if (naVista(s.x - 120, s.y - 80, s.x + 120, s.y + 4)) lista.push(s); }
+      if (atlas && vida.perto) for (let i = 0; i < placas.length; i++) {
+        const s = placas[i];
+        if (naVista(s.x - 2, s.y - 60, s.x + 60, s.y + 2)) lista.push(s);
+      }
       if (atlas) for (let i = 0; i < pedestres.length; i++) {
         const a = pedestres[i];
         if (naVista(a.x - 12, a.y - 24, a.x + 12, a.y + 3)) lista.push(a);
@@ -373,7 +434,6 @@ const MundoCidade = (() => {
       if (atlas) {
         for (let i = 0; i < lista.length; i++) desenhar(ctx, lista[i], t, casa, escuro);
         if (!reduzido) { fumaca(ctx, t); if (escuro < 0.4) passaros(ctx, t); }   // passarinhos só de dia
-        if (vida.perto) placas(ctx);
       }
       const x0 = Math.floor(vista[0]), y0 = Math.floor(vista[1]), w = Math.ceil(vista[2] - vista[0]) + 1, h = Math.ceil(vista[3] - vista[1]) + 1;
       if (FECHADO[tipo]) { ctx.globalAlpha = FECHADO[tipo] * 0.6; ctx.fillStyle = "#3e4456"; ctx.fillRect(x0, y0, w, h); }
@@ -382,8 +442,8 @@ const MundoCidade = (() => {
       ctx.globalAlpha = 1;
       const cx = p.casa.x, cy = p.casa.y - (recorte(p.casa.peca) || [0, 0, 60, 57])[3] - PLACA_H - 1;
       if (casa) {   // a placa do escritório, por cima da noite (acesa)
-        const placa = letreiros.letreiro("RECEPÇÃO", "placa", 1);
-        if (placa) ctx.drawImage(placa, Math.round(cx - placa.width / 2), Math.round(cy));
+        if (!placaCasa) placaCasa = letreiros.letreiro("RECEPÇÃO", "placa", 1);
+        if (placaCasa) ctx.drawImage(placaCasa, Math.round(cx - placaCasa.width / 2), Math.round(cy));
       }
       if (escuro > 0.05 && atlas) {   // à noite: janelas, postes, faróis e a casa acesos
         if (escuro > 0.3) acender(ctx, escuro, Number.isFinite(ceu.h) ? ceu.h : 22);
@@ -391,17 +451,18 @@ const MundoCidade = (() => {
         for (let i = 0; i < lista.length; i++) {
           const s = lista[i];
           if (s.poste) {   // a luminária e a luz no chão embaixo dela
-            brilho(ctx, s.x + 3 * s.lado + 0.5, s.y - POSTE + 1.5, 16, 0.5 * escuro); brilho(ctx, s.x + 3 * s.lado, s.y, 14, 0.3 * escuro);
+            brilho(ctx, s.x + 3 * s.lado + 0.5, s.y - POSTE + 1.5, 16, 0.5 * escuro, LUZ, s.y);
+            brilho(ctx, s.x + 3 * s.lado, s.y, 14, 0.3 * escuro, LUZ, s.y);
           }
           else if (s.peca && (s.peca.startsWith("chale-") || s.peca.startsWith("casa-")) && s !== p.casa) {
-            brilho(ctx, s.x, s.y - 18, 12, 0.3 * escuro);
+            brilho(ctx, s.x, s.y - 18, 12, 0.3 * escuro, LUZ, s.y);
           }
-          else if (s.peca === "banco-poste-1") brilho(ctx, s.x - 6, s.y - 22, 12, 0.45 * escuro);   // o lampião do banco
+          else if (s.peca === "banco-poste-1") brilho(ctx, s.x - 6, s.y - 22, 12, 0.45 * escuro, LUZ, s.y);   // o lampião do banco
         }
-        if (casa) brilho(ctx, p.casa.x, p.casa.y - 18, 22, 0.55 * escuro);
+        if (casa) brilho(ctx, p.casa.x, p.casa.y - 18, 22, 0.55 * escuro, LUZ, p.casa.y);
         for (let i = 0; i < carros.length; i++) {   // os faróis
           const c = carros[i], a = giro(c);
-          brilho(ctx, c.x + Math.cos(a) * 14, c.y + Math.sin(a) * 14, 9, 0.5 * escuro);
+          brilho(ctx, c.x + Math.cos(a) * 14, c.y + Math.sin(a) * 14, 9, 0.5 * escuro, LUZ, c.y);
         }
         ctx.globalCompositeOperation = "source-over";
       }
@@ -457,6 +518,10 @@ const MundoCidade = (() => {
         // o lado do braço de cada poste: para a rua vertical do cruzamento dele
         postes = p.postes.map(([x, y]) => ({ x, y, poste: true, lado: p.cruzamentos.some(([X]) => X > x && X - x < E) ? 1 : -1 }));
         pecas = [p.centro, p.casa, ...p.pecas, ...postes].sort((a, b) => a.y - b.y || a.x - b.x);   // já na profundidade
+        placas = [];   // na quina de cima à direita de cada cruzamento, na frente da quadra de cima
+        for (const x of p.ruas.v) for (const y of p.ruas.h) {
+          placas.push({ placa: true, x: x + E / 2 + 2, y: y - E / 2 - 2, rv: x, rh: y, a: null, b: null, k: 0 });
+        }
         escolhido = null;
         preparar();
         camera.vx = camera.vy = 0; camera.voo = camera.ancora = null;
@@ -471,9 +536,12 @@ const MundoCidade = (() => {
       clique(x, y) {
         if (naCasa(x, y)) return alvoPorta().acao;
         const n = notavelEm(x, y);
-        escolhido = n ? { id: n.id, ate: performance.now() + 5000 } : null;
+        if (n) return escolher(n);
+        escolhido = null;
         return null;
       },
+      // o Enter no botão de uma notável: a etiqueta dela, sem procurar pelo ponto
+      escolher(alvo) { const n = notaveis.find(m => m.id === alvo); return n ? escolher(n) : null; },
       sobre(x, y) {
         if (naCasa(x, y)) return alvoPorta();
         const n = notavelEm(x, y);
@@ -499,7 +567,10 @@ const MundoCidade = (() => {
       },
       get pedestres() { return pedestres.map(a => [a.x, a.y]); },
       get enfeites() { return enfeites.estado; },
-      get vida() { return { ...vida, sombras: chao.estado.sombras, forca: chao.estado.forca, detalhes: chao.estado.detalhes }; },
+      get vida() {
+        const e = chao.estado;
+        return { ...vida, sombras: e.sombras, forca: e.forca, detalhes: e.detalhes, novos: e.novos, faltam: e.faltam };
+      },
     };
     return cidade;
   }

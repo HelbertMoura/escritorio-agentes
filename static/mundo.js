@@ -170,7 +170,8 @@ const Mundo = (() => {
   };
   function rotular() { if (nivel) canvas.setAttribute("aria-label", nivel.rotulo ? nivel.rotulo() : ROTULOS[nome]); }
   function subir() { if (nivel && ACIMA[nome]) ir(ACIMA[nome], { cidade: atualCidade }); }
-  function executar(a) { if (a && a.ir) ir(a.ir, a); }
+  // a ação de um clique: ir a um nível ou, numa construção da cidade, anunciar no status o nome que a etiqueta mostra
+  function executar(a) { if (a && a.ir) ir(a.ir, a); else if (a && a.anuncio) estado.textContent = a.anuncio; }
   // roda, botões, teclado, duplo clique e pinça: o globo decide o próprio zoom (desce ao Brasil); os outros níveis aproximam
   function aproximar(sinal, sx, sy) {
     if (!nivel) return;
@@ -203,7 +204,11 @@ const Mundo = (() => {
       botoes = lista.map(a => {
         const b = document.createElement("button"), par = [b, a];
         b.type = "button"; b.className = "mundo-alvo"; b.setAttribute("aria-label", a.rotulo);
-        b.addEventListener("click", () => { if (!trans) par[1].acao ? executar(par[1].acao) : executar(nivel.clique(par[1].x, par[1].y)); });
+        b.addEventListener("click", () => {   // Enter: a ação do alvo, a etiqueta dele ou, por último, o clique no ponto
+          if (trans) return;
+          const a = par[1];
+          executar(a.acao ? a.acao : a.etiqueta && nivel.escolher ? nivel.escolher(a.id) : nivel.clique(a.x, a.y));
+        });
         b.addEventListener("focus", () => { destacar(par[1]); verAlvo(par[1]); });
         b.addEventListener("blur", () => destacar(null));
         caixaAlvos.appendChild(b);

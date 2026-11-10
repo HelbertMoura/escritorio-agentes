@@ -300,6 +300,10 @@ METADE = {"carro-1", "carro-2", "carro-3", "carro-4", "carro-5", "banca-1", "pon
           "rua-1", "rua-2", "rua-3", "rua-4", "canteiro-1", "canteiro-2", "praia-1", "praia-2", *OPCIONAIS}
 # manchas soltas que a arte trouxe: a cor que sai quando ligada ao fundo (a sombra cinza do canto do predios-11)
 MANCHAS = {"predios-11": (64, 64, 64)}
+# o píer sai sem o bloco de água e a borda de terra do desenho, para pousar no mar da cidade (sem_agua)
+SEM_AGUA = {"praia-4"}
+# em 3/4 (pixel nítido, ver tres_quartos): o coreto, menor que os marcos e maior que uma casa
+TRES_QUARTOS = {"lazer-4"}
 # as construções com janelas (acesas à noite): até JANELAS_MAX por peça, só as pequenas e fora da base do desenho
 COM_JANELAS = ("chale-", "casa-", "predios-", "marco-")
 JANELAS_MAX, JANELA_AREA = 48, 30
@@ -363,6 +367,59 @@ def sem_mancha(im, cor):
     return im.crop(im.getchannel("A").getbbox())
 
 
+def sem_agua(im):
+    """A peça sem a água: some todo pixel azul (mais azul que vermelho) e, do que sobra, o pedaço que é quase todo a
+    borda de baixo do desenho (a terra do bloco, até 4 px acima do pé de cada coluna) ou miúdo demais."""
+    w, h = im.size
+    px = im.load()
+    pe = [max([y for y in range(h) if px[x, y][3]] or [-1]) for x in range(w)]
+    for y in range(h):
+        for x in range(w):
+            c = px[x, y]
+            if c[3] and c[2] > c[0] + 12 and c[2] >= c[1] - 30:
+                px[x, y] = (0, 0, 0, 0)
+    visto = set()
+    for y in range(h):
+        for x in range(w):
+            if not px[x, y][3] or (x, y) in visto:
+                continue
+            pedaco, fila = [], deque([(x, y)])
+            visto.add((x, y))
+            while fila:
+                p = fila.popleft()
+                pedaco.append(p)
+                for v in vizinhos8(*p):
+                    if 0 <= v[0] < w and 0 <= v[1] < h and v not in visto and px[v][3]:
+                        visto.add(v)
+                        fila.append(v)
+            if len(pedaco) < 6 or 2 * sum(1 for a, b in pedaco if pe[a] - b <= 4) >= len(pedaco):
+                for p in pedaco:
+                    px[p] = (0, 0, 0, 0)
+    return im.crop(im.getchannel("A").getbbox())
+
+
+def tres_quartos(im):
+    """A peça em 3/4 com pixel nítido: ampliada 3x pelo vizinho e reduzida em blocos de 4x4, cada bloco com a cor mais
+    frequente dos pixels opacos (o contorno escuro pesa o dobro, para não sumir); opaco se a maior parte era opaca."""
+    from PIL import Image
+    w, h = im.size
+    tres = im.resize((w * 3, h * 3), Image.NEAREST)
+    px, nw, nh = tres.load(), (w * 3 + 3) // 4, (h * 3 + 3) // 4
+    out = Image.new("RGBA", (nw, nh))
+    o = out.load()
+    for j in range(nh):
+        for i in range(nw):
+            bloco = [px[x, y] for y in range(j * 4, min(j * 4 + 4, h * 3)) for x in range(i * 4, min(i * 4 + 4, w * 3))]
+            opacos = [c for c in bloco if c[3] >= 128]
+            if len(opacos) * 2 < len(bloco):
+                continue
+            conta = Counter()
+            for c in opacos:
+                conta[c[:3]] += 2 if sum(c[:3]) < 150 else 1
+            o[i, j] = min(conta.items(), key=lambda kv: (-kv[1], kv[0]))[0] + (255,)
+    return out.crop(out.getchannel("A").getbbox())
+
+
 def janelas(im):
     """As janelas da peça, [x, y, w, h, ...]: manchas de vidro (azul) pequenas, fora da base (os 12% de baixo, onde ficam
     flores e grama), em ordem de leitura; acima de JANELAS_MAX, um de cada tantos (espalhadas pela fachada)."""
@@ -408,7 +465,9 @@ def montar_atlas(arte, cidades, saida):
         im = im.crop(im.getchannel("A").getbbox())
         if nome in MANCHAS:
             im = sem_mancha(im, MANCHAS[nome])
-        return metade(im) if nome in METADE else im
+        if nome in SEM_AGUA:
+            im = sem_agua(im)
+        return metade(im) if nome in METADE else tres_quartos(im) if nome in TRES_QUARTOS else im
     for nome in GENERICOS:
         if not os.path.exists(os.path.join(arte, nome + ".png")):
             raise FileNotFoundError(f"atlas: falta a arte {nome}.png em {arte}")

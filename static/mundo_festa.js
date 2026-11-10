@@ -91,7 +91,7 @@ const MundoFesta = (() => {
       const k = f ? `${id}|${f.chave}|${!!recorte(p.praca.peca)}` : "";
       if (k === chave) return;
       chave = k; festa = f; cordoes = []; itens = []; anel = []; fogos = []; confete = []; fitas = []; desvio = 0; fonteR = null;
-      rgbs = f ? f.cores.map(rgb) : [];   // o RGB de cada cor da festa, uma vez (o brilho guarda o sprite por esse array)
+      rgbs = f ? f.cores.map(rgb) : [];   // o RGB de cada cor da festa, uma vez (o brilho guarda o sprite pela cor, não pelo array)
       noPoste = f ? NOS_POSTES.find(tem) || null : null;
       if (!f) return;
       const A = CidadePlanta.E / 2 + 1, cruz = p.cruzamentos;

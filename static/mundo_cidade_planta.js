@@ -37,6 +37,8 @@ const CidadePlanta = (() => {
   const ARVORES = { N: [1, 3, 7, 5, 1, 3], NE: [3, 7, 1, 5, 3, 7], CO: [2, 4, 1, 5, 2, 1], SE: [1, 1, 4, 2, 5, 1], S: [6, 1, 6, 4, 6, 5] };
   const CHALES = { N: 0.2, NE: 0.15, CO: 0.3, SE: 0.35, S: 0.65 };   // a parte de chalés entre as casas
   const CASAS = { metropole: [5, 3, 5, 6, 3], grande: [1, 2, 3, 5, 6], media: [1, 2, 3, 4, 6], pequena: [1, 2, 3, 4, 6, 1, 2] };
+  // os marcos que já são igreja (a cidade não ganha a predios-9 além deles)
+  const IGREJAS = new Set(["matriz-mateus-leme", "catedral-fortaleza", "igreja-rosario", "pampulha", "convento-penha"]);
   const MOBILIA = ["banca-1", "ponto-onibus-1", "banco-poste-1", "carrinho-1", "rua-1", "rua-2", "rua-3"];
   // as construções que mostram o nome (clique, toque ou Tab); o marco usa o nome do ponto turístico
   const NOMES = { "predios-9": "Igreja", "predios-10": "Hospital", "predios-14": "Mercado Municipal", "predios-13": "Bombeiros",
@@ -67,7 +69,7 @@ const CidadePlanta = (() => {
     return l;
   }
 
-  // cidade: { porte, litoral, uf } (o que faltar vale cidade média, sem praia, no Sudeste)
+  // cidade: { porte, litoral, uf, marco } (o que faltar vale cidade média, sem praia, no Sudeste)
   function planta(id, cidade = {}) {
     const r = sorteio(String(id));
     const entre = (a, b) => a + Math.floor(r() * (b - a + 1));
@@ -77,6 +79,7 @@ const CidadePlanta = (() => {
       return l;
     };
     const porte = PORTES[cidade.porte] ? cidade.porte : "media", P = PORTES[porte], regiao = REGIAO[cidade.uf] || "SE";
+    const igreja = IGREJAS.has(cidade.marco);
     const arvore = () => "arvore-" + um(ARVORES[regiao]);
     const v0 = 176 + 4 * entre(-4, 4), v1 = 400 + 4 * entre(-4, 4), h0 = 112 + 4 * entre(-2, 2), h1 = 304 + 4 * entre(-2, 2);
     const dv = v1 - v0, dh = h1 - h0, rv = k => v0 + k * dv, rh = k => h0 + k * dh;
@@ -145,15 +148,20 @@ const CidadePlanta = (() => {
     }
     const predio = (lista, altos) => "predios-" + (lista.length ? lista.shift() : um(r() < altos ? ALTOS : BAIXOS));
 
-    // as zonas em volta do marco: o parque num lado (no litoral, o da terra) e o esporte no outro ou num canto
-    const lado = orla ? -1 : r() < 0.5 ? -1 : 1, qParque = quadra(lado, 0);
-    const outro = orla ? [quadra(-1, -1), quadra(0, -1), quadra(-1, 1)] : porte === "metropole" ? [quadra(-lado, -1), quadra(-lado, 1)]
-      : porte === "grande" && r() < 0.5 ? [quadra(-lado, -1)] : [quadra(-lado, 0)];
-    const qEsporte = um(outro);
+    // as zonas em volta do marco, pela semente: o parque num lado ou em cima do marco (no litoral, do lado da terra; na
+    // cidade pequena, sempre num lado, com o coreto à vista) e o esporte em outra quadra do anel (nunca na da casa; na
+    // metrópole, fora dos lados, que ficam para as torres)
+    const lado = orla ? -1 : r() < 0.5 ? -1 : 1, emCima = !orla && porte !== "pequena" && r() < 0.3;
+    const qParque = emCima ? quadra(0, -1) : quadra(lado, 0);
+    const livres = [[-lado, 0], [lado, -1], [-lado, -1], [lado, 1], [-lado, 1], [0, -1]].map(([a, b]) => quadra(a, b))
+      .filter(q => q && q !== qParque && (porte !== "metropole" || q.b !== 0));
+    const qEsporte = porte === "metropole" || r() < 0.45 ? um(livres) : livres[0];
     qParque.zona = "parque"; qEsporte.zona = "esporte";
 
-    // o parque: na frente a praça (a fonte, ou o lago numa fila larga), atrás o coreto (ou a feira) com os cantos
-    const frente = de(qParque, 1), fundo = de(qParque, 0), largo = frente.x1 - frente.x0 >= 176;
+    // o parque: a praça (a fonte, ou o lago numa fila larga) numa fila e o coreto (ou a feira) com os cantos na outra; em
+    // cima do marco, a praça fica na fila de baixo, a que aparece
+    const praFrente = emCima || r() < 0.55, frente = de(qParque, praFrente ? 1 : 0), fundo = de(qParque, praFrente ? 0 : 1);
+    const largo = frente.x1 - frente.x0 >= 176;
     pisos.push({ r: [qParque.x0 + C, qParque.y0 + C, qParque.x1 - C, qParque.y1 - C], piso: "parque" });
     const praca = por(noLote(frente, largo && r() < 0.4 ? "lazer-3" : "praca-1", 2, 0), "parque");
     const feiraNoParque = porte !== "pequena" && r() < 0.35;
@@ -175,7 +183,7 @@ const CidadePlanta = (() => {
     const frenteCasa = de(quadra(0, 1), 1);   // na frente da casa, só lotes baixos: nada de prédio cobrindo o chalé
     const resto = anel.filter(f => f !== filaCasa && f !== frenteCasa);
     const ordem = [...embaralhar(resto.filter(aparece)), ...embaralhar(resto.filter(f => !aparece(f)))];
-    const servicos = SERVICOS[porte].slice();
+    const servicos = SERVICOS[porte].filter(n => !(igreja && n === 9));   // o marco que já é igreja não ganha outra
     const nPredios = Math.max(1, Math.min(ordem.length - (feiraNoParque ? 0 : 1), Math.round(P.predios * ordem.length)));
     for (const f of ordem.slice(0, nPredios)) {   // na metrópole, as torres nas filas que aparecem inteiras; os serviços nas outras
       f.q.zona = f.q.zona || "centro";
@@ -217,19 +225,27 @@ const CidadePlanta = (() => {
         if (y === farol) { naAreia(agua, y, "praia-3", 4); naAreia(terra, y, "arvore-" + um([3, 7]), 14); return; }
         const u = r();
         naAreia(terra, y, u < 0.3 ? "praia-1" : u < 0.85 ? "arvore-" + um([3, 7]) : "praia-2", 10);
-        if (i % 3 === 1) naAreia(agua, y, "praia-4", 2); else if (r() < 0.75) naAreia(agua, y, "praia-2", 12);
+        if (i % 3 === 1) {   // o píer com o pé na linha d'água: o deque sai da areia molhada e entra no mar
+          const [y0, y1] = y;
+          por({ x: orla.mar + 8, y: y1 - 6, peca: "praia-4", r: [orla.mar - 14, y0, orla.mar + 30, y1] }, "orla");
+        } else if (r() < 0.75) naAreia(agua, y, "praia-2", 12);
       });
     }
 
-    // a quadra do marco: o marco no meio da praça de pedra, árvores nos cantos de trás e canteiros nos da frente
+    // a quadra do marco: o marco no meio da praça de pedra e, nos cantos, um dos arranjos (pela semente): árvores atrás e
+    // canteiros na frente, o contrário, um bosque (quatro árvores) ou um jardim (quatro canteiros)
     const qc = quadras.find(q => q.centro), cx0 = qc.x0 + C, cx1 = qc.x1 - C, cy0 = qc.y0 + C, cy1 = qc.y1 - C, canto = 26;
-    const centro = { x: meio, y: cy1 - 4, peca: "predios-" + um(porte === "pequena" ? [2, 9] : ALTOS), zona: "centro",
-                     r: [cx0 + canto, cy0, cx1 - canto, cy1] };
+    const generico = igreja ? [2] : porte === "pequena" ? [2, 9] : ALTOS;
+    const centro = { x: meio, y: cy1 - 4, peca: "predios-" + um(generico), zona: "centro", r: [cx0 + canto, cy0, cx1 - canto, cy1] };
     pisos.push({ r: [cx0, cy0, cx1, cy1], piso: "praca" });
+    const arranjo = um(["fundo", "frente", "bosque", "jardim"]);
+    const ARRANJOS = { fundo: ["a", "c"], frente: ["c", "a"], bosque: ["a", "a"], jardim: ["c", "c"] };
     for (const [x0, x1] of [[cx0, cx0 + canto], [cx1 - canto, cx1]]) {
       const m = Math.round((cy0 + cy1) / 2);
-      por(noLote({ x0, x1, y0: cy0, y1: m }, arvore(), 4, 0), "centro");
-      por(noLote({ x0, x1, y0: m, y1: cy1 }, "canteiro-1", 3, 0), "centro");
+      ARRANJOS[arranjo].forEach((o, k) => {
+        const l = { x0, x1, y0: k ? m : cy0, y1: k ? cy1 : m };
+        por(o === "a" ? noLote(l, arvore(), 4, 0) : noLote(l, "canteiro-1", 3, 0), "centro");
+      });
     }
 
     // carros nas ruas do meio (no litoral, só nas verticais: as horizontais acabam na avenida da praia). As faixas de
@@ -284,7 +300,7 @@ const CidadePlanta = (() => {
     ruas.h.forEach((y, i) => { nomeRua.h[y] = nomes[(i + ruas.v.length) % nomes.length]; });
 
     const cruzamentos = [[v0, h0], [v1, h0], [v0, h1], [v1, h1]];   // os quatro do meio, os únicos com carros nas duas ruas
-    return { W, H, ruas, quadras, centro, casa, praca, sorvete, pecas, pisos, cercas, notaveis, orla, porte, regiao,
+    return { W, H, ruas, quadras, centro, casa, praca, sorvete, pecas, arranjo, pisos, cercas, notaveis, orla, porte, regiao,
              zonas: { centro: qc, parque: qParque, esporte: qEsporte }, carros, postes, cruzamentos, nomeRua,
              rede: { nos, viz, peso }, pedestres };
   }

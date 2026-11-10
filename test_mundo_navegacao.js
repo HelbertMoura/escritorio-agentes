@@ -43,7 +43,10 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
     putImageData: () => { contexto.passadas = (contexto.passadas || 0) + 1; },
     fillRect: () => { if (contexto.cores) contexto.cores.add(String(pincel.fillStyle).toLowerCase()); },
     drawImage: (img, ...a) => { if (contexto.gravar) contexto.gravar.push(a.slice(0, 4)); } };
-  const ctx = new Proxy(pincel, { get: (o, k) => metodos[k] || nada, set: (o, k, v) => { o[k] = v; return true; } });
+  // os métodos e os valores (fillStyle...) moram no próprio pincel; só o que ele não tem cai no Proxy do protótipo (nada)
+  Object.assign(pincel, metodos);
+  Object.setPrototypeOf(pincel, new Proxy({}, { get: (o, k) => (typeof k === "string" ? nada : undefined) }));
+  const ctx = pincel;
   const canvas = elemento(); canvas.getContext = () => ctx;
   canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: tamanho[0], height: tamanho[1] });
   const ids = ["mundo", "entrar", "mundo-estado", "mundo-alvos", "mundo-dica", "mundo-voltar", "mundo-mais", "mundo-menos"];
@@ -147,48 +150,49 @@ async function principal() {
   assert.ok(c.intervalos.includes(15 * 60 * 1000));
 
   // Esc no bairro sobe para a cidade; Esc na cidade sobe para o Brasil. O bairro usa o tempo da cidade (a casa).
-  const e = await abrir("#cidade=recife", { clima: { ...CLIMA, casa: "recife" } });
+  // (aqui os quadros são de 100 ms: cada troca de nível, 0,48 s de cortina, cabe em 12 quadros)
+  const e = await abrir("#cidade=recife", { clima: { ...CLIMA, casa: "recife" }, passo: 100 });
   assert.equal(e.M.nivel, "cidade");
-  e.M.ir("bairro"); e.rodar(40);
+  e.M.ir("bairro"); e.rodar(12);
   assert.equal(e.contexto.location.hash, "#bairro");
   assert.equal(JSON.stringify(e.contexto.clima), '{"tipo":"chuva","vento":15}', "o bairro de Recife chove como Recife");
-  e.tecla("Escape"); e.rodar(40);
+  e.tecla("Escape"); e.rodar(12);
   assert.equal(e.M.nivel, "cidade"); assert.equal(e.contexto.location.hash, "#cidade=recife");
-  e.tecla("Escape"); e.rodar(40);
+  e.tecla("Escape"); e.rodar(12);
   assert.equal(e.M.nivel, "brasil"); assert.equal(e.contexto.location.hash, "#brasil");
-  e.elementos["mundo-voltar"].disparar("click"); e.rodar(40);
+  e.elementos["mundo-voltar"].disparar("click"); e.rodar(12);
   assert.equal(e.M.nivel, "globo", "Voltar no Brasil sobe para o globo"); assert.equal(e.contexto.location.hash, "#globo");
   assert.equal(e.elementos["mundo-voltar"].disabled, true, "o globo é o topo: Voltar desabilitado");
-  e.tecla("Escape"); e.rodar(40);
+  e.tecla("Escape"); e.rodar(12);
   assert.equal(e.M.nivel, "globo", "Esc no globo não sai dele");
 
   // sem fragmento, abre no globo (e #globo também vale); um clique no espaço não faz nada, um clique no Brasil desce
-  const g = await abrir(""), G = g.contexto.window.Globo;
+  const g = await abrir("", { passo: 100 }), G = g.contexto.window.Globo;
   assert.equal(g.M.nivel, "globo"); assert.equal(g.contexto.location.hash, "#globo");
   assert.equal(g.elementos["mundo-voltar"].disabled, true);
   assert.equal(g.elementos["mundo-menos"].disabled, true, "o − não faz nada no globo: desabilitado");
   assert.equal((await abrir("#globo")).M.nivel, "globo");
-  g.clicar(3, 3); g.rodar(40);
+  g.clicar(3, 3); g.rodar(12);
   assert.equal(g.M.nivel, "globo", "clique no espaço");
   // o alvo do clique são as células do Brasil no mundo.json (sem esperar imagem nenhuma): a Bolívia, dentro da caixa
   // do mapa, não desce
-  const gb = await abrir("", { reduzido: true }), bolivia = G.projetar(-17.5, -64, -50, -15, G.R);
-  gb.clicar(...gb.M.camera.tela(bolivia.x, bolivia.y)); gb.rodar(40);
+  const gb = await abrir("", { reduzido: true, passo: 100 }), bolivia = G.projetar(-17.5, -64, -50, -15, G.R);
+  gb.clicar(...gb.M.camera.tela(bolivia.x, bolivia.y)); gb.rodar(12);
   assert.equal(gb.M.nivel, "globo", "clique na Bolívia");
-  g.clicar(...g.M.camera.tela(G.B / 2, G.B / 2)); g.rodar(40);
+  g.clicar(...g.M.camera.tela(G.B / 2, G.B / 2)); g.rodar(12);
   assert.equal(g.M.nivel, "brasil", "clique no Brasil"); assert.equal(g.contexto.location.hash, "#brasil");
   assert.equal(g.elementos["mundo-menos"].disabled, false, "no Brasil o − afasta");
-  g.tecla("Escape"); g.rodar(40);
+  g.tecla("Escape"); g.rodar(12);
   assert.equal(g.M.nivel, "globo", "Esc no Brasil volta ao globo"); assert.equal(g.contexto.location.hash, "#globo");
   // o globo que falha ao abrir não derruba o mapa: a página abre no Brasil, sem Voltar, e as cidades seguem
-  const gf = await abrir("", { globoFalha: true });
+  const gf = await abrir("", { globoFalha: true, passo: 100 });
   assert.equal(gf.M.nivel, "brasil"); assert.equal(gf.contexto.location.hash, "#brasil");
   assert.equal(gf.elementos["mundo-voltar"].disabled, true, "sem globo, nada acima do Brasil");
   assert.ok((gf.contexto.erros || []).some(e => e.includes("globo quebrado")), "a falha do globo fica no console");
-  gf.tecla("Escape"); gf.rodar(40);
+  gf.tecla("Escape"); gf.rodar(12);
   assert.equal(gf.M.nivel, "brasil", "Esc no Brasil sem globo fica");
   const mg = cidade("manaus");
-  gf.clicar(...gf.M.camera.tela(mg.x, mg.y)); gf.rodar(40);
+  gf.clicar(...gf.M.camera.tela(mg.x, mg.y)); gf.rodar(12);
   assert.equal(gf.M.nivel, "cidade", "sem globo, o clique numa cidade ainda desce");
   // o + no globo com o Brasil escondido: o globo gira até ele e então desce
   const gz = await abrir("", { passo: 100 });
@@ -201,13 +205,13 @@ async function principal() {
   assert.equal(gz.M.nivel, "brasil", "o + leva ao Brasil");
 
   // um clique numa cidade leva a #cidade=<id>; no mar, nada
-  const k = await abrir("#brasil");
-  k.clicar(5, 395); k.rodar(40);
+  const k = await abrir("#brasil", { passo: 100 });
+  k.clicar(5, 395); k.rodar(12);
   assert.equal(k.M.nivel, "brasil");
   const manaus = cidade("manaus");
-  k.clicar(...k.M.camera.tela(manaus.x, manaus.y)); k.rodar(40);
+  k.clicar(...k.M.camera.tela(manaus.x, manaus.y)); k.rodar(12);
   assert.equal(k.M.nivel, "cidade"); assert.equal(k.contexto.location.hash, "#cidade=manaus");
-  k.clicar(320, 200); k.rodar(40);
+  k.clicar(320, 200); k.rodar(12);
   assert.equal(k.M.nivel, "cidade", "Manaus não é a casa: o clique na cidade não desce ao bairro");
 
   // nível Cidade: a planta sai da semente do id e dos dados da cidade, nas 28 cidades (sempre a mesma para o mesmo id)
@@ -218,7 +222,9 @@ async function principal() {
   const BORDA = CP.E / 2 + CP.C;   // do eixo da rua ao fim da calçada
   const cruza = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
   const naCaixa = s => s.x > -20 && s.x < CP.W + 20 && s.y > -20 && s.y < CP.H + 70;   // o que aparece a 1x (o pé até 70 abaixo)
-  const predios = {}, frota = new Set();
+  const predios = {}, frota = new Set(), arranjos = new Set(), parques = new Set(), esportes = new Set(), centros = new Set();
+  // as cidades cujo marco já é uma igreja não ganham outra igreja (a predios-9)
+  const IGREJAS = new Set(["matriz-mateus-leme", "catedral-fortaleza", "igreja-rosario", "pampulha", "convento-penha"]);
   for (const cc of MUNDO.cidades) {
     const p = plantaDe(cc.id), id = cc.id, itens = [p.centro, p.casa, ...p.pecas], de = re => itens.filter(s => re.test(s.peca));
     assert.equal(planta(id), JSON.stringify(p), `${id}: determinística`);
@@ -247,7 +253,11 @@ async function principal() {
     const praia = de(/^praia-/);
     if (cc.litoral) {
       assert.ok(p.orla && p.orla.x === p.ruas.v[p.ruas.v.length - 1] + CP.E / 2 && p.orla.x < CP.W - 120, `${id}: a orla à vista`);
-      assert.ok(praia.filter(naCaixa).length >= 2 && praia.every(s => s.x > p.orla.areia && s.x < p.orla.mar), `${id}: praia`);
+      const naAreia = praia.filter(s => s.peca !== "praia-4"), piers = praia.filter(s => s.peca === "praia-4");
+      assert.ok(naAreia.filter(naCaixa).length >= 2 && naAreia.every(s => s.x > p.orla.areia && s.x < p.orla.mar), `${id}: praia`);
+      // o píer sai da beira e entra no mar: o pé dele na linha d'água e a vaga atravessando a beira
+      assert.ok(piers.length >= 1 && piers.every(s => Math.abs(s.x - p.orla.mar - 8) <= 6 && s.r[0] < p.orla.mar - 4 && s.r[2] > p.orla.mar + 14),
+        `${id}: píer na beira: ${piers.map(s => s.x)} / ${p.orla.mar}`);
       assert.ok(new Set(praia.map(s => s.peca)).size >= 3, `${id}: peças de praia variadas`);
       assert.ok(itens.some(s => s.zona === "orla" && /^arvore-[37]$/.test(s.peca)), `${id}: coqueiros`);
       assert.ok(!p.quadras.some(q => q.x1 > p.orla.x) && !itens.some(s => s.zona !== "orla" && s.r[2] > p.orla.x), `${id}: nada no mar`);
@@ -256,6 +266,13 @@ async function principal() {
     // as árvores da região: pinheiro no Sul, palmeira e coqueiro no Norte e Nordeste, ipês no Centro-Oeste e Sudeste
     const arv = new Set(de(/^arvore-/).map(s => s.peca));
     const regiao = { PR: "S", RS: "S", SC: "S", DF: "CO", GO: "CO", MT: "CO", MS: "CO", ES: "SE", MG: "SE", RJ: "SE", SP: "SE" }[cc.uf] || "NNE";
+    if (IGREJAS.has(cc.marco)) assert.equal(de(/^predios-9$/).length, 0, `${id}: o marco já é a igreja`);
+    // o arranjo em volta do marco varia pela semente: onde ficam o parque e o esporte, a ordem das filas do parque e a
+    // praça do marco
+    const { parque: qp, esporte: qe } = p.zonas, filaPraca = p.praca.y > (qp.y0 + qp.y1) / 2 ? 1 : 0;
+    if (!cc.litoral) parques.add(`${qp.a},${qp.b}`);
+    esportes.add(`${qe.a},${qe.b}`); centros.add(p.arranjo);
+    arranjos.add(`${qp.a},${qp.b}|${filaPraca}|${qe.a},${qe.b}|${p.arranjo}`);
     if (regiao === "S") assert.ok(arv.has("arvore-6"), `${id}: pinheiros`);
     if (regiao === "NNE") assert.ok(arv.has("arvore-3") && arv.has("arvore-7"), `${id}: palmeiras e coqueiros`);
     if (regiao === "CO" || regiao === "SE") assert.ok(arv.has("arvore-2") || arv.has("arvore-4"), `${id}: ipês`);
@@ -285,11 +302,15 @@ async function principal() {
   assert.ok(predios["mateus-leme"] < predios["sao-paulo"] && predios["mateus-leme"] < predios["rio-de-janeiro"], JSON.stringify(predios));
   assert.ok(predios["mateus-leme"] <= 3 && predios["sao-paulo"] >= 7, JSON.stringify(predios));
   const ml = plantaDe("mateus-leme");
-  assert.ok(ml.pecas.some(s => s.peca === "predios-9" && naCaixa(s)), "a igreja de Mateus Leme à vista");
+  assert.ok(!ml.pecas.some(s => s.peca === "predios-9"), "Mateus Leme tem uma igreja só, a Matriz");
+  const [, , cw0, ch0] = ATLAS.quadros["lazer-4"], [, , mw0, mh0] = ATLAS.quadros["marco-matriz-mateus-leme"];
+  assert.ok(cw0 < mw0 && ch0 < mh0, "o coreto menor que a Matriz");
+  assert.ok(arranjos.size >= 6 && parques.size >= 3 && esportes.size >= 3 && centros.size >= 3,
+    `arranjos variados: ${arranjos.size} / parques ${[...parques]} / esportes ${[...esportes]} / centros ${[...centros]}`);
   assert.ok(ml.pecas.some(s => s.peca === "lazer-4" && s.zona === "parque"), "o coreto na praça de Mateus Leme");
   assert.ok(frota.has("carro-5"), "o fusca na frota");
   // na casa, o chalé com placa tem a porta (só depois que o desenho do chalé chega): o clique nela leva a #bairro
-  const ca = await abrir("#cidade=mateus-leme");
+  const ca = await abrir("#cidade=mateus-leme", { passo: 100 });
   ca.rodar(5);
   assert.equal(ca.M.nivel, "cidade");
   assert.equal(ca.M.niveis.cidade.alvos().length, 0, "sem o desenho do chalé, nem placa nem porta");
@@ -298,18 +319,18 @@ async function principal() {
   assert.match(ca.canvas["aria-label"], /o marco da cidade/);
   const portas = ca.M.niveis.cidade.alvos().filter(a => a.id === "porta");
   assert.equal(portas.length, 1); assert.equal(portas[0].id, "porta"); assert.deepEqual({ ...portas[0].acao }, { ir: "bairro", cidade: "mateus-leme" });
-  ca.clicar(...ca.M.camera.tela(portas[0].x, portas[0].y - 10)); ca.rodar(40);
+  ca.clicar(...ca.M.camera.tela(portas[0].x, portas[0].y - 10)); ca.rodar(12);
   assert.equal(ca.M.nivel, "bairro", "a porta da casa desce ao bairro"); assert.equal(ca.contexto.location.hash, "#bairro");
   // fora da casa, nenhum alvo e nenhum clique desce; o bairro é sempre o da casa
-  const mn = await abrir("#cidade=manaus");
+  const mn = await abrir("#cidade=manaus", { passo: 100 });
   mn.rodar(5);
   assert.equal(mn.M.niveis.cidade.alvos().filter(a => a.id === "porta").length, 0, "Manaus não tem chalé com placa");
   for (let sx = 20; sx < 640; sx += 60) for (let sy = 20; sy < 400; sy += 60) { mn.clicar(sx, sy); mn.rodar(); }
-  mn.rodar(40);
+  mn.rodar(12);
   assert.equal(mn.M.nivel, "cidade", "nenhum ponto de Manaus desce ao bairro");
-  mn.M.ir("bairro"); mn.rodar(40);
+  mn.M.ir("bairro"); mn.rodar(12);
   assert.equal(mn.M.nivel, "bairro");
-  mn.tecla("Escape"); mn.rodar(40);
+  mn.tecla("Escape"); mn.rodar(12);
   assert.equal(mn.contexto.location.hash, "#cidade=mateus-leme", "o bairro é o da casa: Esc sobe para ela");
   // a arte do marco faltando no atlas: a cidade desenha os prédios genéricos da planta (e nenhum marco), sem erro, e o
   // rótulo não promete o marco; com a arte, desenha o marco dela e nenhum outro
@@ -330,15 +351,15 @@ async function principal() {
     assert.equal(/marco/.test(sm.canvas["aria-label"]), peca.startsWith("marco-"), `${id}: ${sm.canvas["aria-label"]}`);
   }
   // o atlas.png que falha ao carregar é pedido de novo na próxima entrada
-  const fa = await abrir("#cidade=manaus");
+  const fa = await abrir("#cidade=manaus", { passo: 100 });
   await espera();
   for (const img of fa.contexto.imagens || []) img.falhar();
   const pedidosAtlas = () => fa.requisicoes.filter(([u]) => u.startsWith("/mundo/atlas.json")).length, n0 = pedidosAtlas();
   assert.equal(n0, 2, "o mapa (miniaturas) e a cidade pedem o atlas");
-  fa.tecla("Escape"); fa.rodar(40); await espera();
+  fa.tecla("Escape"); fa.rodar(12); await espera();
   assert.equal(fa.M.nivel, "brasil");
   assert.equal(pedidosAtlas(), n0 + 1, "a falha libera um novo pedido do mapa ao voltar a ele");
-  fa.M.ir("cidade", { cidade: "manaus" }); fa.rodar(40); await espera();
+  fa.M.ir("cidade", { cidade: "manaus" }); fa.rodar(12); await espera();
   assert.equal(pedidosAtlas(), n0 + 2, "a falha libera um novo pedido da cidade");
   // a cidade usa o tempo dela; com movimento reduzido carros e pedestres ficam parados e não há partículas (nada de
   // Clima.desenhar), nem fumaça, passarinhos ou copa balançando, e o zoom chega na hora; sem ele, tudo isso anda
@@ -388,8 +409,12 @@ async function principal() {
   assert.ok(faixas > 0, "algum pedestre atravessou na faixa"); assert.ok(viradas > 0, "algum pedestre virou a esquina");
   // tela larga (a vista passa da caixa): o carro só dá a volta fora da vista, com o desenho todo para fora
   // (80 s de relógio, em quadros de 250 ms: um carro anda no máximo 7,5 px por quadro)
-  const lg = await abrir("#cidade=recife", { tela: [1600, 400, 1], passo: 250 });
+  const lg = await abrir("#cidade=goiania", { tela: [1600, 400, 1], passo: 250 });
   await carregar(lg);
+  // a entrada não pinta todos os ladrilhos de uma vez: no máximo alguns por quadro (o resto, esboçado), e logo todos
+  assert.ok(lg.M.niveis.cidade.vida.novos <= 8 && lg.M.niveis.cidade.vida.faltam > 0, JSON.stringify(lg.M.niveis.cidade.vida));
+  lg.rodar(8);
+  assert.equal(lg.M.niveis.cidade.vida.faltam, 0, "todos os ladrilhos pintados em poucos quadros");
   const lc = lg.M.camera, [vx0, vy0] = lc.mundo(0, 0), [vx1, vy1] = lc.mundo(lc.W, lc.H);
   assert.ok(vx0 < -100 && vx1 > CP.W + 100, `a vista passa da caixa: ${vx0} a ${vx1}`);
   let antesCarros = lg.M.niveis.cidade.carros, voltas = 0;
@@ -415,9 +440,9 @@ async function principal() {
     }
   };
   let esperas = 0;
-  for (const id of ["recife", "curitiba", "palmas"]) {
-    // 25 s largos e 15 s encolhidos (Recife segue da tela larga de cima)
-    const vc = id === "recife" ? lg : await abrir("#cidade=" + id, { tela: [1600, 400, 1], passo: 250 });
+  for (const id of ["goiania", "curitiba", "palmas"]) {   // cidades sem praia: carros nas duas ruas do cruzamento
+    // 25 s largos e 15 s encolhidos (Goiânia segue da tela larga de cima)
+    const vc = id === "goiania" ? lg : await abrir("#cidade=" + id, { tela: [1600, 400, 1], passo: 250 });
     if (vc !== lg) await carregar(vc);
     const cid = vc.M.niveis.cidade;
     assert.ok(cid.veiculos.length >= 4, id);
@@ -433,9 +458,12 @@ async function principal() {
   }
   assert.ok(esperas > 0, "algum carro esperou num cruzamento");
   // os brilhos da noite saem de sprites guardados: nada de gradiente novo a cada quadro (num dia sem festa)
-  const nt = await abrir("#cidade=sao-paulo", { escuro: 1, busca: "?data=2026-11-18" });
+  const nt = await abrir("#cidade=sao-paulo", { escuro: 1, busca: "?data=2026-11-18", opaco: true });   // opaco: o atlas tem pixels
   await carregar(nt);
-  nt.rodar(60);   // cada raio e cor de brilho que aparece pinta o seu sprite uma vez
+  let recortes = 0, cobertas = 0;   // (os brilhos recortados e as janelas cobertas, conferidos mais abaixo)
+  for (let i = 0; i < 60; i++) {   // cada raio e cor de brilho que aparece pinta o seu sprite uma vez
+    nt.rodar(); recortes += nt.M.niveis.cidade.vida.recortes; cobertas += nt.M.niveis.cidade.vida.janelasCobertas;
+  }
   const g0 = nt.contexto.gradientes || 0;
   assert.ok(g0 > 0 && g0 < 10, "sprites de brilho: " + g0);
   nt.rodar(60);
@@ -458,14 +486,17 @@ async function principal() {
   // o brilho guardado não cresce ao trocar de cidade numa festa (a cor da festa é a chave, não o array dela)
   const br = await abrir("#cidade=sao-paulo", { escuro: 1, busca: "?data=2026-12-25", reduzido: true, clima: NOITE_TODAS });
   await carregar(br);
-  const volta = () => { for (const id of ["recife", "sao-paulo"]) { br.M.ir("cidade", { cidade: id }); br.rodar(2); } };
-  volta();
+  const ir = id => { br.M.ir("cidade", { cidade: id }); br.rodar(2); };
+  ir("recife");
   const g1 = br.contexto.gradientes;
-  volta();
+  ir("sao-paulo"); ir("recife");
   assert.ok(g1 > 0 && br.contexto.gradientes === g1, `trocar de cidade não pinta brilho novo: ${g1}, ${br.contexto.gradientes}`);
   // à noite, janelas acesas (umas sim, outras não) e nenhuma sombra; de dia, sombras no chão e nenhuma janela acesa
   const noite = nt.M.niveis.cidade.vida;
   assert.ok(noite.janelas > 20 && noite.sombras === 0 && noite.forca === 0, "à noite: " + JSON.stringify(noite));
+  // a luz atrás de uma construção não clareia a construção da frente: o brilho é recortado por ela, e a janela que ela
+  // cobre não acende por cima
+  assert.ok(recortes > 0 && cobertas > 0, `luzes atrás das construções: ${recortes} brilhos recortados, ${cobertas} janelas cobertas`);
   const dia = pe.M.niveis.cidade.vida;   // Curitiba de dia, depois da volta dos pedestres
   assert.ok(dia.janelas === 0 && dia.sombras > 20 && dia.forca > 0, "de dia: " + JSON.stringify(dia));
   // o sol: de manhã a sombra cai para o oeste e à tarde para o leste, mais longa no fim da tarde; céu fechado, mais fraca
@@ -482,30 +513,43 @@ async function principal() {
   assert.ok(!cml.vida.perto && cml.vida.placas + cml.vida.pombos + cml.vida.detalhes === 0, "a 1x: " + JSON.stringify(cml.vida));
   // as construções notáveis à vista têm botão (Tab) e mostram o nome (o marco, o do ponto turístico) no foco, no Enter
   // e no clique, em Silkscreen no próprio canvas (sem a dica de HTML)
-  const alvosML = cml.alvos(), marcoML = alvosML.find(a => a.titulo === "Igreja Matriz"), igreja = alvosML.find(a => a.titulo === "Igreja");
+  const alvosML = cml.alvos(), marcoML = alvosML.find(a => a.titulo === "Igreja Matriz"), coreto = alvosML.find(a => a.titulo === "Coreto");
   const pracaML = alvosML.find(a => a.titulo === "Praça da Fonte" || a.titulo === "Lago da Praça");
-  assert.ok(marcoML && igreja && pracaML, alvosML.map(a => a.titulo).join());
+  assert.ok(marcoML && coreto && pracaML, alvosML.map(a => a.titulo).join());
   assert.ok(alvosML.every(a => a.id === "porta" || (a.etiqueta && /: mostrar o nome$/.test(a.rotulo))));
-  const botoes = zm.elementos["mundo-alvos"].filhos, bIgreja = botoes[alvosML.indexOf(igreja)];
+  const botoes = zm.elementos["mundo-alvos"].filhos, bCoreto = botoes[alvosML.indexOf(coreto)];
   assert.equal(botoes.length, alvosML.length);
-  bIgreja.disparar("focus"); zm.rodar();
-  assert.equal(cml.vida.etiqueta, "Igreja"); assert.equal(zm.elementos["mundo-dica"].hidden, true, "a etiqueta não usa a dica de HTML");
-  bIgreja.disparar("blur"); zm.rodar();
+  bCoreto.disparar("focus"); zm.rodar();
+  assert.equal(cml.vida.etiqueta, "Coreto"); assert.equal(zm.elementos["mundo-dica"].hidden, true, "a etiqueta não usa a dica de HTML");
+  bCoreto.disparar("blur"); zm.rodar();
   assert.equal(cml.vida.etiqueta, null);
-  bIgreja.disparar("click"); zm.rodar();
-  assert.equal(cml.vida.etiqueta, "Igreja", "Enter mostra o nome");
+  bCoreto.disparar("click"); zm.rodar();
+  assert.equal(cml.vida.etiqueta, "Coreto", "Enter mostra o nome");
+  assert.match(zm.elementos["mundo-estado"].textContent, /^Coreto, em Mateus Leme\.$/, "o status anuncia o nome mostrado");
   zm.clicar(...cz.tela(marcoML.x, marcoML.y)); zm.rodar();
   assert.equal(cml.vida.etiqueta, "Igreja Matriz", "o clique no marco mostra o nome do ponto turístico");
+  assert.match(zm.elementos["mundo-estado"].textContent, /Igreja Matriz/);
   assert.equal(zm.M.nivel, "cidade");
   const praca = cml.planta.praca, alvoZoom = [praca.x, praca.y - 12], [px0, py0] = cz.tela(...alvoZoom);
   zm.canvas.disparar("dblclick", { clientX: px0, clientY: py0 }); zm.rodar(30);
   const [wx, wy] = cz.mundo(px0, py0);
   assert.ok(cz.z > 1 && Math.hypot(wx - alvoZoom[0], wy - alvoZoom[1]) < 1, `o ponto sob o cursor: ${wx}, ${wy}`);
-  for (let i = 0; i < 8; i++) { zm.canvas.disparar("dblclick", { clientX: px0, clientY: py0 }); zm.rodar(20); }
+  for (let i = 0; i < 3; i++) { zm.canvas.disparar("dblclick", { clientX: px0, clientY: py0 }); zm.rodar(15); }   // 2x, 3x e o teto
   assert.ok(cz.z >= 2 && cz.W / cz.P >= 192 - 1e-6 && cz.H / cz.P >= 160 - 1e-6, `o teto mostra uma quadra: z ${cz.z}, P ${cz.P}`);
   assert.ok(cz.W / cz.P < 200 || cz.H / cz.P < 168, "e não mais que isso perto do teto");
   const perto = cml.vida;
   assert.ok(perto.perto && perto.placas > 0 && perto.pombos > 0 && perto.detalhes > 0, "de perto: " + JSON.stringify(perto));
+  // a placa entra na ordem de profundidade: há peças desenhadas depois dela (as que ficam na frente a cobrem)
+  for (let i = 0; i < 10 && !cml.vida.depoisDaPlaca; i++) zm.rodar();
+  assert.ok(cml.vida.depoisDaPlaca > 0, "peças na frente da placa: " + JSON.stringify(cml.vida));
+  // de perto também nada novo por quadro
+  vm.runInContext(`globalThis.__arrays = [];
+    for (const k of ["map", "filter", "slice", "concat", "flatMap", "sort", "reduce", "from", "of", "fill", "splice", "toUpperCase"]) {
+      const dono = k === "from" || k === "of" ? Array : k === "toUpperCase" ? String.prototype : Array.prototype, o = dono[k];
+      dono[k] = function (...a) { const p = new Error().stack; if (/mundo_cidade|mundo_festa/.test(p)) __arrays.push(k); return o.apply(this, a); };
+    }`, zm.contexto);
+  zm.rodar(20);
+  assert.deepEqual([...vm.runInContext("__arrays", zm.contexto)], [], "de perto, nada montado por quadro");
   // no celular, o duplo toque aproxima no ponto (um toque só, não)
   const dtq = pe;   // Curitiba ainda em 1x
   assert.equal(dtq.M.camera.z, 1);
@@ -535,7 +579,7 @@ async function principal() {
   }
 
   // a câmera fica presa à caixa: 50 arrastes para o mesmo lado e zoom de 1x a 4x
-  const a = await abrir("#brasil");
+  const a = await abrir("#brasil", { passo: 100 });   // quadros de 100 ms: o mesmo relógio em menos quadros
   const cam = () => a.M.camera, dentro = () => {
     const c = cam(), [x0, y0, x1, y1] = c.caixa, mw = c.W / 2 / c.P, mh = c.H / 2 / c.P;
     assert.ok(c.z >= 1 && c.z <= 4, "zoom " + c.z);
@@ -543,16 +587,16 @@ async function principal() {
     if (mh * 2 <= y1 - y0) assert.ok(c.y - mh >= y0 - 1e-6 && c.y + mh <= y1 + 1e-6, "y " + c.y);
   };
   for (let i = 0; i < 20; i++) { a.elementos["mundo-mais"].disparar("click"); a.rodar(3); }
-  a.rodar(60);
+  a.rodar(10);
   assert.equal(cam().z, 4); dentro();
   for (const [dx, dy] of [[150, 0], [-150, 0], [0, 150], [0, -150]]) {
     for (let i = 0; i < 50; i++) { a.arrastar(dx, dy); a.rodar(); dentro(); }
-    a.rodar(90); dentro();
+    a.rodar(15); dentro();
   }
   for (let i = 0; i < 30; i++) a.canvas.disparar("wheel", { deltaY: -120, clientX: 100, clientY: 100 });
-  a.rodar(60); dentro();
+  a.rodar(10); dentro();
   for (let i = 0; i < 20; i++) { a.elementos["mundo-menos"].disparar("click"); a.rodar(3); }
-  a.rodar(60);
+  a.rodar(10);
   assert.equal(cam().z, 1); dentro();
   const solta = a.M.Camera([0, 0, 400, 400]);
   solta.tamanho(640, 400, 1); solta.x = -999; solta.y = 9999; solta.z = 9; solta.limitar();
@@ -599,18 +643,18 @@ async function principal() {
   const antes = gg.M.niveis.globo.rotacao.lon;
   gg.rodar(60);
   assert.ok(Math.abs(Math.abs(gg.M.niveis.globo.rotacao.lon - antes) - 60 * 0.016 * 6) < 0.05, "6°/s: " + (gg.M.niveis.globo.rotacao.lon - antes));
-  const gr = await abrir("", { reduzido: true });
+  const gr = await abrir("", { reduzido: true, passo: 100 });   // 2 s de relógio em 20 quadros
   const r0 = JSON.stringify(gr.M.niveis.globo.rotacao);
   assert.equal(r0, JSON.stringify({ lon: -50, lat: -15 }), "centro inicial");
-  gr.rodar(120);
+  gr.rodar(20);
   assert.equal(JSON.stringify(gr.M.niveis.globo.rotacao), r0, "reduzido: a rotação não muda entre quadros");
-  gr.arrastar(100, 0); gr.rodar(30);
+  gr.arrastar(100, 0); gr.rodar(5);
   const r1 = JSON.stringify(gr.M.niveis.globo.rotacao);
   assert.notEqual(r1, r0, "o arraste gira o globo à mão");
-  gr.rodar(60);
+  gr.rodar(10);
   assert.equal(JSON.stringify(gr.M.niveis.globo.rotacao), r1, "reduzido: sem inércia nem giro depois do arraste");
   // com o Brasil longe depois do arraste, o foco no Brasil (Tab) realça sem girar o globo até ele
-  gr.elementos["mundo-alvos"].filhos[0].disparar("focus"); gr.rodar(30);
+  gr.elementos["mundo-alvos"].filhos[0].disparar("focus"); gr.rodar(5);
   assert.equal(gr.M.niveis.globo.destaque, "brasil");
   assert.equal(JSON.stringify(gr.M.niveis.globo.rotacao), r1, "reduzido: o foco no Brasil não gira o globo");
   // terra.png e brasil.png chegam depois dos primeiros quadros: com movimento reduzido e nada mexendo, o globo se refaz
