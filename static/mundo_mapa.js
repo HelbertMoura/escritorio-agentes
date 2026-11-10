@@ -7,6 +7,9 @@
 // ícones, nomes, barcos, aviões e partículas têm tamanho fixo na tela, sempre em escala inteira e sem suavização.
 // ?clima= vale para todas as cidades; ?hora= vem do Ceu. Na festa com fogos (festas.js), estouros discretos sobre as
 // capitais onde é noite. Com movimento reduzido, nada anda: nem aviões, barcos, ondas ou partículas (nem raio, nem fogos).
+// Os níveis de detalhe (a camada de perto a partir de 2x, as UFs com o realce sob o cursor, os nomes dos estados, dos
+// vizinhos e das cidades médias) ficam em mundo_mapa_perto.js. O zoom vai a 4x, em escalas pares (a camada de perto em
+// pixel inteiro); no teto, aproximar mais uma vez sobre uma cidade entra nela, e afastar no mínimo sobe ao globo.
 // O nível Cidade fica em mundo_cidade.js; daqui ele usa porId (com o tempo de cada cidade), casa e texto.
 "use strict";
 const MundoMapa = (() => {
@@ -16,6 +19,7 @@ const MundoMapa = (() => {
   const CHUVA = { garoa: 5, chuva: 12, tempestade: 22, neve: 8 };   // partículas por segundo em cada cidade
   const NUVEM = { nublado: ["branca", 4.5], garoa: ["cinza", 4.5], chuva: ["cinza", 5], tempestade: ["escura", 5.5], neve: ["branca", 5] };
   const MAX_AVIOES = 6, MAX_PARTICULAS = 360, MAX_FOGOS = 12, VELOCIDADE = 12, MAR = "#1a3452", VAO = 4;   // VAO: nuvem→ícone
+  const ZOOM_MAX = 4, HALO = 4;   // o teto do zoom do Brasil; HALO: até onde o farol da casa passa do chalé (em S)
   const PEQUENAS = new Set(["mateus-leme"]);   // as cidades que não são capital: um marcador menor, sem miniatura
   const GRANDES = new Set(["sao-paulo", "rio-de-janeiro", "brasilia", "belo-horizonte", "salvador", "fortaleza", "recife",
     "manaus", "curitiba", "porto-alegre", "belem", "goiania"]);
@@ -25,8 +29,8 @@ const MundoMapa = (() => {
   const busca = new URLSearchParams(location.search);
   const simulado = TIPOS.includes(busca.get("clima")) ? busca.get("clima") : null;
   const horaSimulada = busca.has("hora");
-  const { PEQUENA, GRANDE, CHALE, BARCO, DIA, NOITE, DISCO, semente, tela, nitido, sprite, girado, formaNuvem, telaNuvem,
-    brilho, fazerRosa, ladrilhoMar } = MapaArte;
+  const { PEQUENA, GRANDE, CHALE, BARCO, BARCO_G, DIA, NOITE, DISCO, semente, tela, nitido, sprite, girado, formaNuvem,
+    telaNuvem, brilho, fazerRosa, ladrilhoMar } = MapaArte;
 
   // U: pixels da tela por pixel de sprite. 2 px de CSS, mas não mais que a escala base do nível (no celular o ícone não
   // cobre as cidades vizinhas) e nunca menos que 1 px de CSS (para continuar legível)
@@ -56,6 +60,8 @@ const MundoMapa = (() => {
     const avioes = [], gotas = [], ondas = [], fogos = [], icones = {}, nomes = [], rotulos = new Map(), enfeites = { rosa: false, oceano: false };
     let casa = null, vento = 0, mascara = null, espera = 0, luzes = [], vinheta = null, rosa = null, oceano = null, mar = null;
     let fonte = !document.fonts, arranjo = { chave: "", lista: [], porId: new Map() };
+    const detalhe = MapaPerto.criar({ dados, reduzido });
+    let ufSobre = null, ufFixa = null, rotulosPostos = [];   // a UF sob o cursor e a do último toque
     if (document.fonts && document.fonts.load) document.fonts.load("8px Silkscreen").then(() => { fonte = true; }, () => { fonte = true; });
 
     // o atlas (as miniaturas dos marcos e os aviões): pedido ao criar e de novo ao voltar ao mapa, se falhou
@@ -162,6 +168,8 @@ const MundoMapa = (() => {
       const alt = Math.min(1, Math.min(a.s, 1 - a.s) / 0.2);
       return [x, y, Math.atan2(dy * k, dx * k), alt * alt * (3 - 2 * alt)];
     }
+    const espelhos = new Map();   // o sprite virado para a direita, feito uma vez
+    const espelho = g => espelhos.get(g) || espelhos.set(g, g.map(l => [...l].reverse().join(""))).get(g);
     function barco(b) {   // posição do barco na rota (vai e volta)
       return [b.x0 + (b.x1 - b.x0) * b.u, b.y0 + (b.y1 - b.y0) * b.u];
     }
@@ -239,44 +247,80 @@ const MundoMapa = (() => {
       const n = NUVEM[c.tempo.tipo];
       return n ? c.formas[c.tempo.tipo] || (c.formas[c.tempo.tipo] = formaNuvem(c.n * 11 + TIPOS.indexOf(c.tempo.tipo), n[1])) : null;
     }
-    // o arranjo dos ícones na tela: cada cidade ocupa a caixa do ícone mais a da nuvem do tempo acima dele; onde as caixas
-    // se cobrem (o litoral do Nordeste a 1x), elas se afastam do ponto real, sem sair da tela, e uma linha fina liga o ícone
-    // à cidade. Com o zoom as cidades se afastam e os ícones voltam ao ponto. Refeito só quando a vista ou o tempo mudam.
+    // o arranjo dos ícones na tela: cada cidade ocupa a caixa do ícone mais a da nuvem do tempo acima dele (a casa, também
+    // a bandeira e o farol no maior tamanho); onde as caixas se cobrem (o litoral do Nordeste e Mateus Leme ao lado de BH a
+    // 1x), elas se afastam do ponto real, sem sair da tela, e uma linha fina liga o ícone à cidade; se duas linhas se
+    // cruzam, os dois ícones trocam de lugar. Só se move (e fica presa à borda) a cidade com o ponto real na tela; a de
+    // fora fica no ponto dela, parada, e as outras desviam dela. Com o zoom as cidades se afastam e os ícones voltam ao
+    // ponto. Refeito só quando a vista ou o tempo mudam.
     function arranjar(cam) {
-      const U = unidade(cam), D = degrau(cam), KN = 2 * escala(U) * D, [ox, oy] = cam.origem(), M = 2;
+      const U = unidade(cam), D = degrau(cam), KN = 2 * escala(U) * D, [ox, oy] = cam.origem();
       const chave = [ox, oy, cam.P, cam.W, cam.H, casa, !!atlas, cidades.map(c => c.tempo.tipo).join()].join();
       if (chave === arranjo.chave) return arranjo;
       const lista = cidades.map(c => {
         const ic = icone(c, U, D), f = formaDoTempo(c), ax = Math.round(ox + c.x * cam.P), ay = Math.round(oy + c.y * cam.P);
-        let x0 = -(ic.w >> 1), x1 = x0 + ic.w, y0 = -ic.h;
+        let x0 = -(ic.w >> 1), x1 = x0 + ic.w, y0 = -ic.h, extra = null;
         if (f) {   // a nuvem e o vão, com folga para o balanço
           x0 = Math.min(x0, (f.ox - 1) * KN); x1 = Math.max(x1, (f.ox + f.linhas[0].length + 1) * KN);
           y0 = -ic.h - VAO * KN - (f.linhas.length - 1) * KN;
         }
-        return { c, ic, ax, ay, px: ax, py: ay, x0, x1, y0, vis: ax > -60 && ay > -60 && ax < cam.W + 60 && ay < cam.H + 60 };
+        if (ic.tipo === "casa") {   // a bandeira (até 4S à direita do chalé e 9S acima) e o farol (HALO·S em volta)
+          const S = ic.S, ix = -(ic.w >> 1);
+          extra = { bandeira: [ix + ic.w - 2 * S, -ic.h - 9 * S, 6 * S, 9 * S],
+                    halo: [ix - HALO * S, -ic.h - HALO * S, ic.w + 2 * HALO * S, ic.h + 2 * HALO * S] };
+          for (const [x, y, w, h] of Object.values(extra)) { x0 = Math.min(x0, x); x1 = Math.max(x1, x + w); y0 = Math.min(y0, y); }
+        }
+        const dentro = ax >= 0 && ay >= 0 && ax < cam.W && ay < cam.H;
+        return { c, ic, ax, ay, px: ax, py: ay, x0, x1, y0, extra, dentro,
+          vis: ax + x1 > -40 && ax + x0 < cam.W + 40 && ay > -40 && ay + y0 < cam.H + 40 };
       });
-      const vis = lista.filter(a => a.vis), caixa = a => [a.px + a.x0 - 1, a.py + a.y0 - 1, a.px + a.x1 + 1, a.py + 1];
-      for (let volta = 0; volta < 80; volta++) {
-        let mexeu = false;
-        for (let i = 0; i < vis.length; i++) for (let j = i + 1; j < vis.length; j++) {
-          const a = vis[i], b = vis[j], A = caixa(a), B = caixa(b);
-          const sx = Math.min(A[2], B[2]) - Math.max(A[0], B[0]), sy = Math.min(A[3], B[3]) - Math.max(A[1], B[1]);
-          if (sx <= 0 || sy <= 0) continue;
-          mexeu = true;
-          if (sx < sy) {   // separa pelo eixo de menor sobreposição, metade para cada lado
-            const d = Math.ceil(sx / 2), s = a.px + (a.x0 + a.x1) / 2 <= b.px + (b.x0 + b.x1) / 2 ? 1 : -1;
-            a.px -= s * d; b.px += s * d;
+      const vis = lista.filter(a => a.vis), M = 2, caixa = a => [a.px + a.x0 - 1, a.py + a.y0 - 1, a.px + a.x1 + 1, a.py + 1];
+      const separar = () => {
+        for (let volta = 0; volta < 80; volta++) {
+          let mexeu = false;
+          for (let i = 0; i < vis.length; i++) for (let j = i + 1; j < vis.length; j++) {
+            const a = vis[i], b = vis[j];
+            if (!a.dentro && !b.dentro) continue;
+            const A = caixa(a), B = caixa(b);
+            A[3] += pe(a); B[3] += pe(b);
+            const sx = Math.min(A[2], B[2]) - Math.max(A[0], B[0]), sy = Math.min(A[3], B[3]) - Math.max(A[1], B[1]);
+            if (sx <= 0 || sy <= 0) continue;
+            mexeu = true;
+            const ka = !b.dentro ? 2 : a.dentro ? 1 : 0, kb = !a.dentro ? 2 : b.dentro ? 1 : 0;   // a de fora não sai do lugar
+            if (sx < sy) {   // separa pelo eixo de menor sobreposição, metade para cada lado
+              const d = Math.ceil(sx / 2), s = a.px + (a.x0 + a.x1) / 2 <= b.px + (b.x0 + b.x1) / 2 ? 1 : -1;
+              a.px -= s * d * ka; b.px += s * d * kb;
+            }
+            else { const d = Math.ceil(sy / 2), s = a.py <= b.py ? 1 : -1; a.py -= s * d * ka; b.py += s * d * kb; }
           }
-          else { const d = Math.ceil(sy / 2), s = a.py <= b.py ? 1 : -1; a.py -= s * d; b.py += s * d; }
+          for (const a of vis) {   // dentro da tela, com a caixa inteira (só quem tem o ponto real nela)
+            if (!a.dentro) continue;
+            a.px = Math.min(cam.W - M - a.x1 - 1, Math.max(M - a.x0 + 1, a.px));
+            a.py = Math.min(cam.H - M - 1 - pe(a), Math.max(M - a.y0 + 1, a.py));
+          }
+          if (!mexeu) break;
         }
-        for (const a of vis) {   // dentro da tela, com a caixa inteira
-          a.px = Math.min(cam.W - M - a.x1 - 1, Math.max(M - a.x0 + 1, a.px));
-          a.py = Math.min(cam.H - M - 1, Math.max(M - a.y0 + 1, a.py));
+      };
+      separar();
+      for (let volta = 0; volta < 8; volta++) {   // linhas guia que se cruzam: os dois ícones trocam de lugar
+        const fora = vis.filter(a => a.dentro && Math.abs(a.px - a.ax) + Math.abs(a.py - a.ay) > 3);
+        let par = null;
+        for (let i = 0; i < fora.length && !par; i++) for (let j = i + 1; j < fora.length && !par; j++) {
+          if (cortam(fora[i], fora[j])) par = [fora[i], fora[j]];
         }
-        if (!mexeu) break;
+        if (!par) break;
+        const [a, b] = par;
+        [a.px, b.px] = [b.px, a.px]; [a.py, b.py] = [b.py, a.py];
+        separar();
       }
       arranjo = { chave, lista, porId: new Map(lista.map(a => [a.c.id, a])) };
       return arranjo;
+    }
+    const pe = a => (a.extra ? HALO * a.ic.S : 0);   // o farol da casa passa HALO·S abaixo do pé: ela ocupa essa faixa
+    function cortam(a, b) {   // as linhas guia de a e b se cruzam (do ponto real ao pé do ícone)
+      const o = (px, py, qx, qy, rx, ry) => Math.sign((qx - px) * (ry - py) - (qy - py) * (rx - px));
+      return o(a.ax, a.ay, a.px, a.py, b.ax, b.ay) * o(a.ax, a.ay, a.px, a.py, b.px, b.py) < 0 &&
+        o(b.ax, b.ay, b.px, b.py, a.ax, a.ay) * o(b.ax, b.ay, b.px, b.py, a.px, a.py) < 0;
     }
     function rotuloNome(c, T, eCasa) {   // o nome em Silkscreen com contorno escuro, guardado por cidade e escala
       const chave = c.id + "|" + T + (eCasa ? "c" : "");
@@ -321,13 +365,22 @@ const MundoMapa = (() => {
       mar = mar || ctx.createPattern(ladrilhoMar(), "repeat");   // o mar segue além da imagem, com as mesmas ondas
       if (mar) { ctx.fillStyle = mar; ctx.fillRect(Math.floor(-ox / P) - 1, Math.floor(-oy / P) - 1, Math.ceil(TW / P) + 2, Math.ceil(TH / P) + 2); }
       if (pronta()) ctx.drawImage(imagem, 0, 0);   // a borda dela some nesse mar
-      rosa = rosa || fazerRosa();   // a rosa dos ventos e o nome do oceano, no mar, na escala do mapa (o nome espera a fonte)
-      ctx.drawImage(rosa, ROSA[0] - 13, ROSA[1] - 21);
+      detalhe.terreno(ctx, cam, dt);   // a partir de 2x, a camada de perto por cima, nos azulejos que já chegaram
+      // a rosa dos ventos e o nome do oceano, no mar, na escala do mapa até 2x; acima, param nesse tamanho (de perto,
+      // eles cobririam a costa). O nome espera a fonte
+      const se = Math.min(P, 2 * cam.base);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      rosa = rosa || fazerRosa();
+      ctx.drawImage(rosa, Math.round(tx(ROSA[0]) - 13 * se), Math.round(ty(ROSA[1] - 1) - 20 * se), rosa.width * se, rosa.height * se);
       enfeites.rosa = true; enfeites.oceano = fonte;
       if (fonte) {
         oceano = oceano || textoOceano();
-        ctx.globalAlpha = 0.85; ctx.drawImage(oceano, Math.round(OCEANO[0] - oceano.width / 2), OCEANO[1] - 11); ctx.globalAlpha = 1;
+        ctx.globalAlpha = 0.85;
+        const ow = oceano.width * se, oh = oceano.height * se;
+        ctx.drawImage(oceano, Math.round(tx(OCEANO[0]) - ow / 2), Math.round(ty(OCEANO[1]) - 11 * se), ow, oh);
+        ctx.globalAlpha = 1;
       }
+      ctx.setTransform(P, 0, 0, P, ox, oy);
       for (const c of cidades) {   // o chão de cada cidade: neve assentada, chão molhado, neblina
         const k = c.tempo.tipo;
         if (k === "neve") ctx.drawImage(sprite("neve", DISCO, "rgba(240,246,255,.85)", 1), Math.floor(c.x) - 6, Math.floor(c.y) - 5);
@@ -346,6 +399,8 @@ const MundoMapa = (() => {
       }
 
       ctx.setTransform(1, 0, 0, 1, 0, 0);
+      detalhe.realce(ctx, cam, ufAtual(), U);   // a UF sob o cursor (ou a da cidade em foco, ou a do último toque)
+      const zoom = P / cam.base, miudo = zoom >= MapaPerto.Z_MEDIAS;   // a 3x, barcos e ondas mais detalhados
       for (const a of avioes) {   // sombra no chão, mais longe quanto mais alto
         const [x, y, ang, alt] = ponto(a), i = ((Math.round(ang / (Math.PI / 8)) % 16) + 16) % 16, s = aviaoAtlas(a.modelo, i, "s");
         const dx = Math.round(alt * 3) * U, dy = Math.round(alt * 4) * U;
@@ -356,11 +411,12 @@ const MundoMapa = (() => {
         }
         else ctx.drawImage(sprite("av" + i + "s", girado(i), "rgba(4,10,18,.3)", U), tx(x) - 7 * U + dx, ty(y) - 7 * U + dy);
       }
-      for (const b of barcos) {   // os barcos e a esteira de espuma atrás deles
-        const vai = b.ida === (b.x1 > b.x0), sx = tx(b.x), sy = ty(b.y), atras = vai ? -1 : 1;
+      for (const b of barcos) {   // os barcos e a esteira de espuma atrás deles (a 3x, o barco maior, com casco e mastro)
+        const vai = b.ida === (b.x1 > b.x0), sx = tx(b.x), sy = ty(b.y), atras = vai ? -1 : 1, g = miudo ? BARCO_G : BARCO;
+        const L = g[0].length, k = miudo ? 5 : 3;
         ctx.fillStyle = "rgba(220,236,248,.55)";
-        for (let i = 1; i <= 3; i++) ctx.fillRect(sx + atras * (3 + i * 2) * K, sy + (i % 2) * K, (4 - i) * K, K);
-        ctx.drawImage(sprite("barco" + (vai ? "d" : "e"), vai ? BARCO.map(l => [...l].reverse().join("")) : BARCO, DIA, K), sx - 3 * K, sy - 4 * K);
+        for (let i = 1; i <= k; i++) ctx.fillRect(sx + atras * ((L >> 1) + i * 2) * K, sy + (i % 2) * K, (k + 1 - i) * K, K);
+        ctx.drawImage(sprite("barco" + L + (vai ? "d" : "e"), vai ? espelho(g) : g, DIA, K), sx - (L >> 1) * K, sy - (g.length - 1) * K);
       }
       ctx.globalAlpha = 0.1; ctx.fillStyle = ceu.cima; ctx.fillRect(0, 0, TW, TH); ctx.globalAlpha = 1;   // o tom do céu
       if (escuro > 0) { ctx.fillStyle = `rgba(6,10,34,${escuro * 0.62})`; ctx.fillRect(0, 0, TW, TH); }
@@ -377,8 +433,9 @@ const MundoMapa = (() => {
           ctx.fillStyle = `rgba(255,214,130,${escuro * b})`; ctx.fillRect(tx(x), ty(y), U, U);
         }
       }
-      for (const b of ondas) {   // o brilho das ondas (de noite, a lua, mais fraco)
+      for (const b of ondas) {   // o brilho das ondas (de noite, a lua, mais fraco); a 3x, a crista inteira
         ctx.fillStyle = `rgba(190,225,255,${(noite ? 0.25 : 0.55) * Math.sin(Math.PI * b.v / b.total)})`; ctx.fillRect(tx(b.x), ty(b.y), U, U);
+        if (miudo) { ctx.fillRect(tx(b.x) - 2 * U, ty(b.y) + U, 2 * U, U); ctx.fillRect(tx(b.x) + U, ty(b.y) + U, U, U); }
       }
       if (destaque && porId.has(destaque)) {   // as rotas da cidade em destaque, tracejadas e andando
         ctx.fillStyle = "rgba(255,236,170,.8)";
@@ -397,7 +454,8 @@ const MundoMapa = (() => {
       for (const g of gotas) (chuva.get(g.c) || chuva.set(g.c, []).get(g.c)).push(g);
       const ordem = arr.lista.filter(a => a.vis).sort((a, b) => (a.c.id === casa) - (b.c.id === casa) || a.py - b.py);
       for (const c of cidades) icones[c.id] = arr.porId.get(c.id).ic.tipo;
-      for (const a of ordem) if (Math.abs(a.px - a.ax) + Math.abs(a.py - a.ay) > 3) linhaGuia(ctx, a, K);
+      const T = Math.max(1, Math.round(cam.dpr));
+      for (const a of ordem) if (Math.abs(a.px - a.ax) + Math.abs(a.py - a.ay) > 3) linhaGuia(ctx, a, K, T);
       for (const a of ordem) {
         const { c, ic } = a, x0 = a.px - (ic.w >> 1), y0 = a.py - ic.h, cx = a.px;
         ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(x0 + (ic.w >> 3), a.py - K, ic.w - (ic.w >> 2), 2 * K);
@@ -409,7 +467,7 @@ const MundoMapa = (() => {
           ctx.drawImage(sprite(nome + "s", ic.lin, "rgba(0,0,0,.35)", ic.S), x0 + ic.S, y0 + ic.S);
           ctx.drawImage(sprite(nome + (noite ? "n" : "d"), ic.lin, noite ? NOITE : DIA, ic.S), x0, y0);
         }
-        if (c.id === casa) bandeira(ctx, x0 + ic.w - 2 * ic.S, y0 + 2 * ic.S, ic.S, t, cx, y0 + (ic.h >> 1));
+        if (c.id === casa) bandeira(ctx, x0 + ic.w - 2 * ic.S, y0 + 2 * ic.S, ic.S, t, x0, y0, ic.w, ic.h);
         if (c.id === destaque) colchetes(ctx, x0 - 2 * U, y0 - 2 * U, ic.w + 4 * U, ic.h + 4 * U, U, t);
         const f = formaDoTempo(c);
         if (!f) continue;
@@ -431,7 +489,7 @@ const MundoMapa = (() => {
           ctx.fillStyle = `rgba(230,236,255,${c.flash * 0.18})`; ctx.fillRect(cx - 14 * KN, fundo - 12 * KN, 28 * KN, 24 * KN);
         }
       }
-      escreverNomes(ctx, cam, arr, destaque);
+      escreverNomes(ctx, cam, arr, destaque, noite);
       if (fogos.length) {   // fogos: oito faíscas que abrem e somem, em pixels da tela
         ctx.globalCompositeOperation = "lighter";
         for (const q of fogos) {
@@ -474,8 +532,9 @@ const MundoMapa = (() => {
       ctx.fillStyle = vinheta.g; ctx.fillRect(0, 0, TW, TH);
     }
     // os nomes: o da casa e o da cidade em foco sempre; a partir de 2x, os outros que couberem sem cobrir um já posto
-    function escreverNomes(ctx, cam, arr, destaque) {
+    function escreverNomes(ctx, cam, arr, destaque, noite) {
       nomes.length = 0;
+      rotulosPostos = [];
       if (!fonte) return;
       const todos = cam.P / cam.base >= 2 - 1e-6, T = Math.max(1, Math.round(cam.dpr)), U = unidade(cam), K = escala(U);
       const lista = cidades.filter(c => todos || c.id === casa || c.id === destaque)
@@ -488,13 +547,21 @@ const MundoMapa = (() => {
         nomes.push(caixa);
         ctx.drawImage(cv, caixa.x, caixa.y);
       }
+      // os nomes de menor importância (estados, vizinhos, cidades médias) só onde não cobrem ícone nem nome de capital
+      const ocupados = () => arr.lista.filter(a => a.vis)
+        .map(a => ({ x: a.px + a.x0, y: a.py + a.y0, w: a.x1 - a.x0, h: pe(a) - a.y0 })).concat(nomes);
+      let chave = arr.chave + "|";
+      for (const n of nomes) chave += n.id + n.x + "," + n.y + ";";
+      rotulosPostos = detalhe.rotulos(ctx, cam, ocupados, chave, { T, U, noite });
     }
-    function bandeira(ctx, x, topoMastro, U, t, cx, cy) {   // a casa deste escritório: mastro, bandeira ao vento e um farol
+    // a casa deste escritório: mastro, bandeira ao vento e um farol que pulsa em volta do chalé (de 1 a HALO unidades
+    // além dele: a caixa da casa no arranjo já conta com o maior, e nenhuma cidade vizinha fica sob ele)
+    function bandeira(ctx, x, topoMastro, U, t, ix, iy, iw, ih) {
       if (!reduzido) {
-        const k = (t / 1800) % 1, lado = Math.round((8 + k * 12)) * U;
+        const k = (t / 1800) % 1, m = Math.round(1 + k * (HALO - 1)) * U;
         ctx.fillStyle = `rgba(245,184,61,${(1 - k) * 0.7})`;
-        ctx.fillRect(cx - lado, cy - lado, lado * 2, U); ctx.fillRect(cx - lado, cy + lado - U, lado * 2, U);
-        ctx.fillRect(cx - lado, cy - lado, U, lado * 2); ctx.fillRect(cx + lado - U, cy - lado, U, lado * 2);
+        ctx.fillRect(ix - m, iy - m, iw + 2 * m, U); ctx.fillRect(ix - m, iy + ih + m - U, iw + 2 * m, U);
+        ctx.fillRect(ix - m, iy - m, U, ih + 2 * m); ctx.fillRect(ix + iw + m - U, iy - m, U, ih + 2 * m);
       }
       const base = topoMastro - 2 * U;
       ctx.fillStyle = "#2a201a"; ctx.fillRect(x, base - 8 * U, U, 9 * U);
@@ -525,40 +592,86 @@ const MundoMapa = (() => {
     }
     function alvo(c, cam) {   // a posição e a altura seguem o ícone arranjado (que se afasta do ponto a 1x)
       const extra = c.id === casa ? ". O escritório fica aqui" : "", aqui = () => arranjar(cam).porId.get(c.id);
+      const uf = detalhe.porSigla.get(c.uf);   // o foco de teclado diz o estado da cidade na linha de status
       return { id: c.id, get x() { return cam.mundo(aqui().px, aqui().py)[0]; }, get y() { return cam.mundo(aqui().px, aqui().py)[1]; },
                get alto() { return (aqui().ic.h + 3 * unidade(cam)) / cam.dpr; }, titulo: `${c.nome} · ${c.uf}`,
                texto: texto(c) + (c.id === casa ? " · o escritório fica aqui" : ""),
+               anuncio: uf ? `${c.nome} fica em ${uf.nome} (${uf.uf}): ${texto(c)}.` : null,
                rotulo: `${c.nome} (${c.uf}): ${texto(c)}${extra}`, acao: { ir: "cidade", cidade: c.id } };
     }
-    function linhaGuia(ctx, a, K) {   // do ícone afastado até o ponto real: pontilhado escuro com um ponto claro na cidade
+    // a UF realçada: a do cursor; sem ela, a da cidade em foco (teclado); sem ela, a do último toque num estado
+    function ufAtual() {
+      const foco = brasil.destaque && porId.get(brasil.destaque);
+      return ufSobre || (foco && detalhe.porSigla.get(foco.uf)) || ufFixa;
+    }
+    const anuncioUf = u => `${u.nome} (${u.uf}) · capital ${(porId.get(u.capital) || { nome: u.capital }).nome}.`;
+    // do ícone afastado até o ponto real: pontilhado escuro com a beira clara (lê no chão claro e no mar à noite) e, na
+    // cidade, um ponto claro com a beira escura
+    function linhaGuia(ctx, a, K, T) {
       const n = Math.max(1, Math.round(Math.hypot(a.px - a.ax, a.py - a.ay) / (2 * K)));
-      ctx.fillStyle = "rgba(18,14,22,.8)";
-      for (let i = 0; i <= n; i++) ctx.fillRect(Math.round(a.ax + (a.px - a.ax) * i / n), Math.round(a.ay + (a.py - a.ay) * i / n), K, K);
+      const ponto = i => [Math.round(a.ax + (a.px - a.ax) * i / n), Math.round(a.ay + (a.py - a.ay) * i / n)];
+      ctx.fillStyle = "rgba(255,244,220,.7)";
+      for (let i = 0; i <= n; i++) { const [x, y] = ponto(i); ctx.fillRect(x - T, y - T, K + 2 * T, K + 2 * T); }
+      ctx.fillStyle = "rgba(18,14,22,.9)";
+      for (let i = 0; i <= n; i++) { const [x, y] = ponto(i); ctx.fillRect(x, y, K, K); }
+      ctx.fillRect(a.ax - K - T, a.ay - K - T, 2 * K + 2 * T, 2 * K + 2 * T);
       ctx.fillStyle = "#fff4dc"; ctx.fillRect(a.ax - K, a.ay - K, 2 * K, 2 * K);
     }
 
-    const camBrasil = Camera([0, 0, W, H]);
+    // a câmera vai de 1x a ZOOM_MAX em escalas pares (a camada de perto, no dobro da resolução, cai em pixel inteiro)
+    const camBrasil = Camera([0, 0, W, H], { max: ZOOM_MAX, multiplo: 2 });
     const brasil = {
       nome: "brasil", camera: camBrasil, destaque: null,
-      entrar(p) {   // voltando de uma cidade, a câmera sai de perto dela; o atlas que falhou é pedido de novo
-        carregar();
+      entrar(p) {   // voltando de uma cidade, a câmera sai de perto dela; o atlas e os azulejos que falharam são pedidos de novo
+        carregar(); detalhe.tentarDeNovo();
         const c = p && p.de && porId.get(p.de);
         if (!c) return;
         camBrasil.x = c.x; camBrasil.y = c.y; camBrasil.z = reduzido ? 2 : 4; camBrasil.zoomPara(2); camBrasil.limitar();
       },
-      sair() { brasil.destaque = null; },
+      sair() { brasil.destaque = null; ufSobre = ufFixa = null; },
       quadro(ctx, dt, t) { desenhar(ctx, dt, t, camBrasil, brasil.destaque); },
-      clique(x, y) { const c = perto(camBrasil, x, y); return c ? { ir: "cidade", cidade: c.id } : null; },
-      sobre(x, y) { const c = perto(camBrasil, x, y); return c ? alvo(c, camBrasil) : null; },
+      // a cidade sob o ponto desce a ela; fora das cidades, o toque num estado o realça e anuncia
+      clique(x, y) {
+        const c = perto(camBrasil, x, y);
+        if (c) return { ir: "cidade", cidade: c.id };
+        ufFixa = detalhe.ufEm(x, y);
+        return ufFixa ? { anuncio: anuncioUf(ufFixa) } : null;
+      },
+      sobre(x, y) {
+        const c = perto(camBrasil, x, y);
+        ufSobre = c ? null : detalhe.ufEm(x, y);
+        return c ? alvo(c, camBrasil) : null;
+      },
+      fora() { ufSobre = null; },   // o cursor saiu do mapa
+      anuncio() { return ufSobre ? anuncioUf(ufSobre) : null; },   // o estado sob o cursor, para a linha de status
+      // no teto, aproximar sobre uma cidade entra nela; no mínimo, afastar sobe ao globo. Só com a câmera parada: a roda
+      // rápida no caminho até o teto só aproxima
+      mergulhar(sinal, sx, sy) {
+        const c = camBrasil;
+        if (c.z !== c.alvoZ || c.ancora || c.voo) return null;
+        if (sinal < 0) return c.z <= 1 ? { ir: "globo" } : null;
+        if (c.z < c.maximo() - 1e-9) return null;
+        const cid = perto(c, ...c.mundo(sx, sy));
+        return cid ? { ir: "cidade", cidade: cid.id } : null;
+      },
+      assinatura() { return arranjo.chave; },   // muda quando os ícones mudam de lugar (o atlas, o tempo): os botões se refazem
       alvos() { return cidades.map(c => alvo(c, camBrasil)); },
+      get uf() { const u = ufAtual(); return u ? u.uf : null; },
+      get rotulos() { return rotulosPostos.map(({ tipo, id, x, y, w, h }) => ({ tipo, id, x, y, w, h })); },
+      get perto() { return detalhe.info; },
+      get guias() {   // as linhas guia desenhadas: do ponto real ao pé do ícone afastado
+        return arranjar(camBrasil).lista.filter(a => a.vis && Math.abs(a.px - a.ax) + Math.abs(a.py - a.ay) > 3)
+          .map(a => ({ id: a.c.id, s: [a.ax, a.ay, a.px, a.py] }));
+      },
       get avioes() { return avioes; }, get particulas() { return gotas.length; }, get fogos() { return fogos.length; },
       get icones() { return { ...icones }; }, get nomes() { return nomes.map(n => ({ ...n })); },
       get barcos() { return barcos.map(b => [b.x, b.y]); }, get ondas() { return ondas.map(b => [b.x, b.y, b.v]); },
       get enfeites() { return { ...enfeites }; },
-      get caixas() {   // as caixas dos ícones à vista (com o tempo), em pixels da tela, e o ponto real de cada cidade
+      get caixas() {   // as caixas dos ícones à vista (com o tempo; a casa, com a bandeira e o farol), em pixels da tela
+        const tela_ = (a, [x, y, w, h]) => ({ x: a.px + x, y: a.py + y, w, h });
         return arranjar(camBrasil).lista.filter(a => a.vis)
-          .map(a => ({ id: a.c.id, x: a.px + a.x0, y: a.py + a.y0, w: a.x1 - a.x0, h: -a.y0, px: a.px, py: a.py, ax: a.ax, ay: a.ay,
-            iw: a.ic.w, ih: a.ic.h }));
+          .map(a => ({ id: a.c.id, x: a.px + a.x0, y: a.py + a.y0, w: a.x1 - a.x0, h: pe(a) - a.y0, px: a.px, py: a.py, ax: a.ax,
+            ay: a.ay, iw: a.ic.w, ih: a.ic.h, ...(a.extra ? { bandeira: tela_(a, a.extra.bandeira), halo: tela_(a, a.extra.halo) } : {}) }));
       },
     };
     return { niveis: { brasil }, clima, texto, porId, get casa() { return casa; } };

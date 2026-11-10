@@ -93,7 +93,8 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
   // o Math numa ligação léxica da VM: os scripts o acham sem passar pelo objeto global contextualizado (lento a cada busca)
   vm.runInContext("const Math = globalThis.Math;", contexto);
   contexto.window.Som = som;
-  const scripts = ["static/festas.js", "static/avatar.js", "static/mundo_bairro.js", "static/mundo_mapa_arte.js", "static/mundo_mapa.js",
+  const scripts = ["static/festas.js", "static/avatar.js", "static/mundo_bairro.js", "static/mundo_mapa_arte.js", "static/mundo_mapa_perto.js",
+    "static/mundo_mapa.js",
     "static/mundo_globo.js", "static/mundo_cidade_planta.js", "static/mundo_festa.js",
     "static/mundo_cidade_chao.js", "static/mundo_cidade_letreiro.js", "static/mundo_cidade.js", "static/mundo.js"];
   for (const f of scripts) {   // cada script compilado uma vez para o arquivo todo (as páginas abertas o reaproveitam)
@@ -578,7 +579,8 @@ async function principal() {
     assert.equal(so.length, 0, `${hash || "globo"}: nenhuma chamada a Som.chuva`);
   }
 
-  // a câmera fica presa à caixa: 50 arrastes para o mesmo lado e zoom de 1x a 4x
+  // a câmera fica presa à caixa: 50 arrastes para o mesmo lado e zoom de 1x ao teto do Brasil (4x, em escalas pares:
+  // a camada de perto, no dobro da resolução, fica em pixel inteiro). O + no meio do mar, no teto, não mergulha
   const a = await abrir("#brasil", { passo: 100 });   // quadros de 100 ms: o mesmo relógio em menos quadros
   const cam = () => a.M.camera, dentro = () => {
     const c = cam(), [x0, y0, x1, y1] = c.caixa, mw = c.W / 2 / c.P, mh = c.H / 2 / c.P;
@@ -586,18 +588,82 @@ async function principal() {
     if (mw * 2 <= x1 - x0) assert.ok(c.x - mw >= x0 - 1e-6 && c.x + mw <= x1 + 1e-6, "x " + c.x);
     if (mh * 2 <= y1 - y0) assert.ok(c.y - mh >= y0 - 1e-6 && c.y + mh <= y1 + 1e-6, "y " + c.y);
   };
-  for (let i = 0; i < 20; i++) { a.elementos["mundo-mais"].disparar("click"); a.rodar(3); }
+  const escalas = new Set();
+  for (let i = 0; i < 20; i++) { a.elementos["mundo-mais"].disparar("click"); a.rodar(8); escalas.add(cam().P); }
   a.rodar(10);
   assert.equal(cam().z, 4); dentro();
+  assert.equal(a.M.nivel, "brasil", "o + no meio do mapa, sem capital sob ele, para no teto");
+  assert.ok([...escalas].every(p => p === 1 || p % 2 === 0), "parado, a escala é par: " + [...escalas]);
   for (const [dx, dy] of [[150, 0], [-150, 0], [0, 150], [0, -150]]) {
     for (let i = 0; i < 50; i++) { a.arrastar(dx, dy); a.rodar(); dentro(); }
     a.rodar(15); dentro();
   }
   for (let i = 0; i < 30; i++) a.canvas.disparar("wheel", { deltaY: -120, clientX: 100, clientY: 100 });
   a.rodar(10); dentro();
-  for (let i = 0; i < 20; i++) { a.elementos["mundo-menos"].disparar("click"); a.rodar(3); }
+  for (let i = 0; i < 10 && cam().alvoZ > 1; i++) { a.elementos["mundo-menos"].disparar("click"); a.rodar(8); }
   a.rodar(10);
   assert.equal(cam().z, 1); dentro();
+  assert.equal(a.M.nivel, "brasil");
+  // afastar mais uma vez no mínimo do mapa volta ao globo
+  a.elementos["mundo-menos"].disparar("click"); a.rodar(12);
+  assert.equal(a.M.nivel, "globo", "o − no mínimo do Brasil sobe ao globo");
+
+  // zoom centrado no cursor: o ponto do mapa sob ele é o mesmo antes e depois (roda e duplo clique)
+  const zc = await abrir("#brasil", { passo: 50 });
+  const czc = zc.M.camera, [mx0, my0] = czc.mundo(380, 230);
+  zc.canvas.disparar("wheel", { deltaY: -120, clientX: 380, clientY: 230 }); zc.rodar(40);
+  const [mx1, my1] = czc.mundo(380, 230);
+  assert.ok(czc.z >= 2 && Math.hypot(mx1 - mx0, my1 - my0) < 0.6, `a roda: ${mx0},${my0} → ${mx1},${my1}`);
+  zc.canvas.disparar("dblclick", { clientX: 300, clientY: 210 }); zc.rodar(3);
+  const [dx0, dy0] = czc.mundo(300, 210);
+  zc.rodar(40);
+  const [dx1, dy1] = czc.mundo(300, 210);
+  assert.ok(czc.z >= 3 && Math.hypot(dx1 - dx0, dy1 - dy0) < 0.6, `o duplo clique: ${dx0},${dy0} → ${dx1},${dy1}`);
+  // movimento reduzido: o zoom chega sem animação
+  const zr = await abrir("#brasil", { reduzido: true });
+  zr.canvas.disparar("wheel", { deltaY: -120, clientX: 380, clientY: 230 }); zr.rodar(1);
+  assert.ok(zr.M.camera.z > 1 && zr.M.camera.z === zr.M.camera.alvoZ, "reduzido: o zoom do mapa chega na hora");
+
+  // mergulho contínuo: no teto, aproximar mais uma vez sobre uma capital entra nela; sobre o mar, o zoom só para. Antes
+  // de parar no teto, a roda só aproxima (o mergulho não vem de uma roda rápida no meio do caminho)
+  const mgl = await abrir("#brasil", { passo: 50 });
+  await carregar(mgl);
+  const rec = cidade("recife"), cmg = mgl.M.camera;
+  cmg.zoomPara(99); mgl.rodar(60);
+  cmg.x = rec.x; cmg.y = rec.y; cmg.limitar(); mgl.rodar(3);
+  assert.equal(cmg.z, 4, "no teto");
+  const cr = mgl.M.niveis.brasil.caixas.find(k => k.id === "recife");
+  mgl.canvas.disparar("wheel", { deltaY: -120, clientX: cr.px, clientY: cr.py - cr.ih / 2 }); mgl.rodar(20);
+  assert.equal(mgl.contexto.location.hash, "#cidade=recife", "a roda no teto sobre Recife entra nela");
+  const mar = await abrir("#brasil", { passo: 50 });
+  mar.M.camera.zoomPara(99); mar.rodar(60);
+  mar.M.camera.x = 395; mar.M.camera.y = 250; mar.M.camera.limitar(); mar.rodar(3);
+  const zmar = mar.M.camera.z;
+  mar.canvas.disparar("wheel", { deltaY: -120, clientX: 600, clientY: 200 }); mar.rodar(20);
+  assert.equal(mar.M.nivel, "brasil", "no teto, sobre o mar: o zoom só para");
+  assert.equal(mar.M.camera.z, zmar);
+  const rapida = await abrir("#brasil", { passo: 50 });
+  await carregar(rapida);
+  rapida.M.camera.x = rec.x; rapida.M.camera.y = rec.y;
+  const [rx, ry] = rapida.M.camera.tela(rec.x, rec.y);
+  for (let i = 0; i < 8; i++) { rapida.canvas.disparar("wheel", { deltaY: -120, clientX: rx, clientY: ry }); rapida.rodar(1); }
+  assert.equal(rapida.M.nivel, "brasil", "a roda rápida não mergulha antes de parar no teto");
+  // o + no teto com Brasília no meio da tela também entra nela
+  const mm = await abrir("#brasil", { passo: 50 });
+  await carregar(mm);
+  const bsb = cidade("brasilia");
+  mm.M.camera.zoomPara(99); mm.rodar(60);
+  mm.M.camera.x = bsb.x; mm.M.camera.y = bsb.y; mm.rodar(3);
+  const cm = mm.M.niveis.brasil.caixas.find(k => k.id === "brasilia");
+  mm.M.camera.x += (cm.px - mm.M.camera.W / 2) / mm.M.camera.P; mm.M.camera.y += (cm.py - cm.ih / 2 - mm.M.camera.H / 2) / mm.M.camera.P;
+  mm.rodar(3);
+  mm.elementos["mundo-mais"].disparar("click"); mm.rodar(20);
+  assert.equal(mm.contexto.location.hash, "#cidade=brasilia", "o + no teto sobre Brasília entra nela");
+  // afastar com a roda no mínimo volta ao globo
+  const ag = await abrir("#brasil", { passo: 50 });
+  ag.rodar(5);
+  ag.canvas.disparar("wheel", { deltaY: 120, clientX: 300, clientY: 200 }); ag.rodar(20);
+  assert.equal(ag.contexto.location.hash, "#globo", "a roda no mínimo do Brasil sobe ao globo");
   const solta = a.M.Camera([0, 0, 400, 400]);
   solta.tamanho(640, 400, 1); solta.x = -999; solta.y = 9999; solta.z = 9; solta.limitar();
   assert.equal(solta.z, 4); assert.ok(solta.x - 320 / solta.P >= 0 && solta.y + 200 / solta.P <= 400);

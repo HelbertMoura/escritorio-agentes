@@ -12,10 +12,12 @@ const MapaArte = (() => {
     ".kRRRRRRrrrrk", "kkkkkkkkkkkkk", ".kaaaaaaaaak.", ".kajjakdkajk.", ".kajjakdkajk.", ".kaaaakdkaak.", "kkkkkkkkkkkkk"];
   const AVIAO = ["....g......", "....gg.....", "t...ggg....", "twwwwwwwwwc", "t...ggg....", "....gg.....", "....g......"];   // para o leste
   const BARCO = ["...m...", "..wmv..", ".wwmvv.", "hhhhhhh", ".hhhhh."];   // vela para a esquerda (o barco anda para a esquerda)
+  // o barco de perto (3x): vela grande com a sombra dela, a flâmula no mastro, casco com a faixa escura e a linha d'água
+  const BARCO_G = ["....mt...", "...wm....", "..wwmv...", ".wwwmvv..", "wwwwmvvv.", "....m....", "hhhhhhhhh", ".hHHHHHh.", "..HHHHH.."];
   const DIA = { k: "#25301f", a: "#e6e0cc", j: "#7d9bbb", r: "#a8402c", R: "#d0583a", d: "#5a3a26", o: "#f5c84d", w: "#f2f5f8",
-    g: "#b8c4d2", c: "#28374f", t: "#d8473a", m: "#5a3a26", v: "#c9c4b6", h: "#8a4a2a" };
+    g: "#b8c4d2", c: "#28374f", t: "#d8473a", m: "#5a3a26", v: "#c9c4b6", h: "#8a4a2a", H: "#4e2a19" };
   const NOITE = { k: "#0c1120", a: "#454b62", j: "#ffd977", r: "#4a2a2a", R: "#5e3434", d: "#ffd977", o: "#f5c84d", w: "#a4adc0",
-    g: "#6c768a", c: "#ffe9a8", t: "#7a3a3a", m: "#2a2030", v: "#7a7a88", h: "#3a2a2a" };
+    g: "#6c768a", c: "#ffe9a8", t: "#7a3a3a", m: "#2a2030", v: "#7a7a88", h: "#3a2a2a", H: "#241818" };
   const CORES_NUVEM = { branca: ["#ffffff", "#eef2f6", "#c4ccd8"], cinza: ["#d8dde4", "#aab2be", "#7c8594"],
     escura: ["#8a93a2", "#5f6776", "#3e4452"] };
 
@@ -140,7 +142,7 @@ const MapaArte = (() => {
     }
     return c;
   }
-  return { PEQUENA, GRANDE, CHALE, BARCO, DIA, NOITE, DISCO, semente, mistura, tela, nitido, sprite, girado, formaNuvem,
+  return { PEQUENA, GRANDE, CHALE, BARCO, BARCO_G, DIA, NOITE, DISCO, semente, mistura, tela, nitido, sprite, girado, formaNuvem,
     telaNuvem, brilho, fazerRosa, ladrilhoMar };
 })();
 window.MapaArte = MapaArte;

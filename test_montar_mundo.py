@@ -48,6 +48,13 @@ BIOMAS = {"amazonia", "cerrado", "caatinga", "pantanal", "mata-atlantica", "pamp
 NO_BIOMA = {"amazonia": (-5.0, -64.0), "cerrado": (-13.0, -46.5), "caatinga": (-6.5, -39.8),
             "pantanal": (-18.5, -56.8), "mata-atlantica": (-22.8, -51.0), "pampa": (-31.0, -54.0)}
 SERRAS = {"serra-do-mar", "mantiqueira", "espinhaco", "chapada-diamantina", "serra-geral", "guianas", "andes"}
+FONTES = os.path.join(RAIZ, "arte", "mundo", "fontes")
+# a camada de perto (o mapa a partir de 2x): 4x4 azulejos de 200 px, o dobro da resolução do brasil.png
+PERTO = {"escala": 2, "azulejo": 200, "n": 4}
+RECORTES_PERTO = ("ne_10m_rivers_lake_centerlines.geojson", "ne_10m_roads.geojson", "ne_10m_populated_places.geojson")
+# o teto de peso do que a camada de perto acrescenta: cada recorte do Natural Earth e os 16 azulejos juntos
+TETO_RECORTE, TETO_AZULEJOS = 150_000, 900_000
+AZULEJOS = tuple(f"perto/{i}-{j}.png" for j in range(PERTO["n"]) for i in range(PERTO["n"]))
 
 
 class Cidades(unittest.TestCase):
@@ -122,6 +129,36 @@ class Cidades(unittest.TestCase):
             nomes.add(" ".join(r["properties"]["name"].split()))
         self.assertTrue({"Amazonas", "Paraná", "São Francisco", "Tocantins", "Negro"} <= nomes, nomes)
 
+    def test_recortes_de_perto_validos_e_registrados(self):
+        """Os recortes 1:10m da camada de perto: rios menores e rodovias em linhas dentro da caixa (com 1° de folga),
+        cidades em pontos no Brasil; cada um pequeno e registrado em LICENCA.md com a origem e o SHA-256 do original."""
+        caixa = lambda lon, lat: -75 <= lon <= -33 and -35 <= lat <= 7
+        with open(os.path.join(FONTES, "LICENCA.md"), encoding="utf-8") as f:
+            licenca = f.read()
+        for nome in RECORTES_PERTO:
+            caminho = os.path.join(FONTES, nome)
+            self.assertLessEqual(os.path.getsize(caminho), TETO_RECORTE, nome)
+            self.assertIn(f"`{nome}`", licenca)
+            linha = next(l for l in licenca.splitlines() if l.startswith(f"| `{nome}`"))
+            self.assertRegex(linha, r"SHA-256 do original `[0-9a-f]{64}`", nome)
+            with open(caminho, encoding="utf-8") as f:
+                feicoes = json.load(f)["features"]
+            self.assertTrue(feicoes, nome)
+            for ft in feicoes:
+                g = ft["geometry"]
+                if nome == "ne_10m_populated_places.geojson":
+                    self.assertEqual(g["type"], "Point")
+                    self.assertTrue(-34 <= g["coordinates"][1] <= 6 and -74 <= g["coordinates"][0] <= -34, ft["properties"])
+                    self.assertTrue(ft["properties"]["NAME"] and ft["properties"]["POP_MAX"] > 0)
+                    continue
+                self.assertEqual(g["type"], "MultiLineString", nome)
+                for linha_ in g["coordinates"]:
+                    self.assertGreaterEqual(len(linha_), 2)
+                    self.assertTrue(all(caixa(lon, lat) for lon, lat in linha_), nome)
+        with open(os.path.join(FONTES, "ne_10m_roads.geojson"), encoding="utf-8") as f:
+            tipos = {ft["properties"]["type"] for ft in json.load(f)["features"]}
+        self.assertLessEqual(tipos, {"Major Highway", "Road"})
+
 
 class Preencher(unittest.TestCase):
     def test_preencher_quadrado(self):
@@ -178,9 +215,25 @@ class Montagem(unittest.TestCase):
         return json.loads(r.stdout)
 
     @classmethod
+    def cores_perto(cls, pontos, pasta=None):
+        """Cor '#rrggbb' de cada (x, y) da camada de perto (pixels de 800x800), lida dos azulejos no processo filho."""
+        ler = ("import json, os, sys\nfrom PIL import Image\nA = int(sys.argv[2])\nabertos = {}\nsaida = []\n"
+               "for x, y in json.loads(sys.stdin.read()):\n"
+               "    k = (x // A, y // A)\n"
+               "    if k not in abertos:\n"
+               "        abertos[k] = Image.open(os.path.join(sys.argv[1], 'perto', '%d-%d.png' % k)).convert('RGB')\n"
+               "    saida.append('#%02x%02x%02x' % abertos[k].getpixel((x % A, y % A)))\n"
+               "print(json.dumps(saida))")
+        r = subprocess.run([sys.executable, "-c", ler, pasta or cls.pastas[0], str(PERTO["azulejo"])], input=json.dumps(pontos),
+                           capture_output=True, text=True, timeout=120)
+        if r.returncode:
+            raise AssertionError(r.stderr)
+        return json.loads(r.stdout)
+
+    @classmethod
     def montar(cls, pasta):
         r = subprocess.run([sys.executable, "-B", cls.SCRIPT, cls.ENTRADA, pasta], capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=120)
+                           encoding="utf-8", errors="replace", timeout=300)
         if r.returncode:
             raise AssertionError(r.stderr)
 
@@ -190,7 +243,7 @@ class Montagem(unittest.TestCase):
 
     def test_deterministico(self):
         self.montar(self.pastas[1])
-        for nome in ("brasil.png", "terra.png", "mundo.json", "atlas.png", "atlas.json"):
+        for nome in ("brasil.png", "terra.png", "mundo.json", "atlas.png", "atlas.json") + AZULEJOS:
             self.assertEqual(self.sha(self.pastas[0], nome), self.sha(self.pastas[1], nome), nome)
 
     def atlas(self, arte, pasta):
@@ -386,7 +439,8 @@ class Montagem(unittest.TestCase):
         self.assertEqual({k: brasil[k] for k in ("w", "h", "caixa")}, {"w": 400, "h": 400, "caixa": [-74.0, -34.0, -34.0, 6.0]})
         # as células de 0,5° do Brasil, para o globo (80 linhas de 80, de lat 6 para baixo e de lon −74 para a direita)
         celulas = brasil["celulas"]
-        self.assertEqual(set(brasil), {"w", "h", "caixa", "celulas"})
+        self.assertEqual(set(brasil), {"w", "h", "caixa", "celulas", "perto", "ufs", "medias", "paises"})
+        self.assertEqual(brasil["perto"], PERTO)
         self.assertEqual(len(celulas), 80)
         self.assertTrue(all(len(l) == 80 and set(l) <= {"0", "1"} for l in celulas))
         celula = lambda lat, lon: celulas[int((6 - lat) * 2)][int((lon + 74) * 2)]
@@ -575,9 +629,141 @@ class Montagem(unittest.TestCase):
         self.assertEqual(antes, depois)  # mesmos pixels
         self.assertNotEqual(versao, self.mundo["versao"])
 
+    # --- a camada de perto (Tarefa 6g) -------------------------------------------------------------------------------
+    def ufs(self):
+        """O mapa das UFs do mundo.json decodificado: linhas de 400 siglas (None fora do Brasil)."""
+        ufs = self.mundo["niveis"]["brasil"]["ufs"]
+        import re
+        import string
+        siglas, linhas = [u["uf"] for u in ufs["lista"]], []
+        for texto in ufs["mapa"]:
+            linha = []
+            for letra, n in re.findall(r"([.a-zA-Z])(\d+)", texto):
+                linha += [None if letra == "." else siglas[string.ascii_letters.index(letra)]] * int(n)
+            linhas.append(linha)
+        return linhas
+
+    def test_azulejos_de_perto(self):
+        """A camada de perto: 16 azulejos PNG de 200x200 (o mapa em 800x800), dentro do teto de peso declarado."""
+        total = 0
+        for nome in AZULEJOS:
+            caminho = os.path.join(self.pastas[0], nome)
+            with open(caminho, "rb") as f:
+                cabeca = f.read(24)
+            self.assertEqual(cabeca[1:4], b"PNG", nome)
+            self.assertEqual((int.from_bytes(cabeca[16:20], "big"), int.from_bytes(cabeca[20:24], "big")), (200, 200), nome)
+            total += os.path.getsize(caminho)
+        self.assertLessEqual(total, TETO_AZULEJOS, f"azulejos: {total} bytes")
+
+    def test_perto_coerente_com_longe(self):
+        """A camada de perto é o mesmo mapa com mais detalhe: amostrando uma grade, a água fica onde é água e o bioma
+        no meio de cada bioma é o mesmo (o bloco 2x2 de perto nas cores do bioma do pixel de longe)."""
+        import mundo_terreno as mt
+        agua = {mt.CORES[n] for n in mt.AGUA}
+        pontos = [[x, y] for y in range(24, 376, 8) for x in range(24, 376, 8)]
+        longe = self.cores(pontos)
+        perto = self.cores_perto([[2 * x + dx, 2 * y + dy] for x, y in pontos for dy in (0, 1) for dx in (0, 1)])
+        blocos = [perto[k * 4:k * 4 + 4] for k in range(len(pontos))]
+        mesma_agua = sum((c in agua) == (sum(b in agua for b in bloco) >= 2) for c, bloco in zip(longe, blocos))
+        self.assertGreaterEqual(mesma_agua / len(pontos), 0.96, f"água: {mesma_agua} de {len(pontos)}")
+        import montar_mundo as mm
+        for bioma, (lat, lon) in NO_BIOMA.items():
+            x, y = mm.para_pixel(lat, lon, mm.CAIXA_BRASIL, 400, 400)
+            janela = [[2 * x + dx, 2 * y + dy] for dy in range(-10, 11) for dx in range(-10, 11)]
+            dele = mt.cores_do_bioma(bioma)
+            cores = self.cores_perto(janela)
+            self.assertGreaterEqual(sum(c in dele for c in cores) / len(cores), 0.5, bioma)
+
+    def test_perto_tem_mais_geografia(self):
+        """De perto aparecem rodovias e rios menores: na mesma amostra da área do mapa (uma grade de 200x200 pontos nas
+        duas camadas), o rio cobre bem mais área de perto (os rios de longe têm a mesma largura no mapa; os menores
+        somam) e há centenas de pontos de rodovia; de longe, nenhuma rodovia."""
+        import mundo_terreno as mt
+        rio, estradas = mt.CORES["rio"], {mt.CORES[n] for n in mt.CORES if n.split("_ap")[0].rstrip("~") in mt.ESTRADA}
+        longe = self.cores([[x, y] for y in range(0, 400, 2) for x in range(0, 400, 2)])
+        perto = self.cores_perto([[x, y] for y in range(0, 800, 4) for x in range(0, 800, 4)])
+        self.assertGreater(sum(c == rio for c in perto), 1.2 * sum(c == rio for c in longe))
+        self.assertGreater(sum(c in estradas for c in perto), 300)
+        self.assertEqual(sum(c in estradas for c in longe), 0)
+
+    def test_estados(self):
+        """As 27 UFs no mundo.json: nome, capital e o ponto do nome dentro da própria UF; o mapa delas em linhas de 400
+        (a UF de cada pixel, pelo mesmo contorno do desenho), para o realce sob o cursor."""
+        ufs = self.mundo["niveis"]["brasil"]["ufs"]
+        lista, mapa = ufs["lista"], self.ufs()
+        self.assertEqual({u["uf"] for u in lista}, UFS)
+        self.assertEqual(len(mapa), 400)
+        self.assertTrue(all(len(l) == 400 for l in mapa))
+        capitais = {c["uf"]: c["id"] for c in self.mundo["cidades"] if c["id"] != "mateus-leme"}
+        for u in lista:   # o ponto do nome e até 3 de reserva (para quando uma miniatura cai em cima), todos na UF
+            self.assertEqual(set(u), {"uf", "nome", "capital", "x", "y", "r", "outros"})
+            self.assertEqual(u["capital"], capitais[u["uf"]])
+            self.assertEqual(mapa[u["y"]][u["x"]], u["uf"], u["uf"])
+            self.assertGreaterEqual(u["r"], 1)
+            self.assertLessEqual(len(u["outros"]), 3)
+            for x, y, r in u["outros"]:
+                self.assertEqual(mapa[y][x], u["uf"], u["uf"])
+                self.assertTrue(1 <= r <= u["r"])
+        self.assertGreaterEqual(len(next(u for u in lista if u["uf"] == "MG")["outros"]), 2)
+        nomes = {u["uf"]: u["nome"] for u in lista}
+        self.assertEqual((nomes["MG"], nomes["SP"], nomes["DF"]), ("Minas Gerais", "São Paulo", "Distrito Federal"))
+        for c in self.mundo["cidades"]:
+            self.assertEqual(mapa[c["y"]][c["x"]], c["uf"], c["id"])
+        self.assertIsNone(mapa[200][390])   # mar
+        self.assertIsNone(mapa[280][150])   # Paraguai
+
+    def test_cidades_medias(self):
+        """As cidades médias (3x): as maiores do Brasil que não são capitais, de 40 a 60, em terra brasileira, cada uma com
+        a UF do pixel, longe das capitais (o subúrbio fica sob a miniatura) e da média maior vizinha."""
+        import mundo_terreno as mt
+        medias, mapa = self.mundo["niveis"]["brasil"]["medias"], self.ufs()
+        self.assertTrue(40 <= len(medias) <= 60, len(medias))
+        self.assertEqual(len({m["nome"] for m in medias}), len(medias))
+        for m in medias:
+            self.assertEqual(set(m), {"nome", "uf", "x", "y", "pop"})
+            self.assertEqual(mapa[m["y"]][m["x"]], m["uf"], m["nome"])
+            for c in self.mundo["cidades"]:   # a mais de 3 px (uns 35 km) de toda capital e de Mateus Leme
+                self.assertGreater((m["x"] - c["x"]) ** 2 + (m["y"] - c["y"]) ** 2, 9, (m, c["id"]))
+        self.assertEqual([m["pop"] for m in medias], sorted((m["pop"] for m in medias), reverse=True))
+        self.assertTrue({"Campinas", "Uberlândia", "Feira de Santana", "Juiz de Fora"} <= {m["nome"] for m in medias})
+        agua = {mt.CORES[n] for n in mt.AGUA if not n.startswith("rio")} | mt.cores_apagadas()
+        for m, cor in zip(medias, self.cores([[m["x"], m["y"]] for m in medias])):
+            self.assertNotIn(cor, agua, m["nome"])
+
+    def test_paises_vizinhos(self):
+        """Os nomes dos vizinhos (o sudoeste e a borda deixam de ser só terra apagada): o ponto de cada um na terra dele."""
+        paises = self.mundo["niveis"]["brasil"]["paises"]
+        self.assertTrue({"Paraguai", "Bolívia", "Argentina", "Peru", "Uruguai", "Venezuela"} <= {p["nome"] for p in paises})
+        import mundo_terreno as mt
+        for p, cor in zip(paises, self.cores([[p["x"], p["y"]] for p in paises])):
+            self.assertEqual(set(p), {"nome", "x", "y"})
+            self.assertIn(cor, mt.cores_apagadas(), p["nome"])
+
+    def test_chaco_com_desenho_proprio(self):
+        """O chaco (oeste do Paraguai, sudeste da Bolívia) tem paleta e glifos próprios, apagados como todo vizinho."""
+        import mundo_terreno as mt
+        dele = {mt.CORES[n] for n in mt.CORES if n.startswith("ch_") and "_ap" in n}
+        cores = self.janela(-22.5, -60.5, 5)
+        self.assertGreaterEqual(sum(c in dele for c in cores) / len(cores), 0.5)
+        self.assertGreaterEqual(len(set(cores)), 5)
+
+    def test_borda_some_em_nevoa(self):
+        """A borda da caixa esmaece em névoa: nenhum pixel de terra encosta no mar de fora (FORA), sempre há névoa ou
+        mar entre os dois, e a névoa aparece nas bordas com terra (oeste, sul e norte)."""
+        import mundo_terreno as mt
+        fora, nevoa = mt.CORES[mt.FORA], {mt.CORES[n] for n in mt.NEVOA}
+        agua = {mt.CORES[n] for n in mt.AGUA}
+        pontos = [[x, y] for y in range(400) for x in range(0, 30)] + [[x, y] for y in range(370, 400) for x in range(400)]
+        pontos += [[x, y] for y in range(0, 30) for x in range(400)]
+        cor = dict(zip(map(tuple, pontos), self.cores(pontos)))
+        colados = [(x, y) for (x, y), c in cor.items() if c not in agua
+                   and any(cor.get((x + a, y + b)) == fora for a, b in ((1, 0), (-1, 0), (0, 1), (0, -1)))]
+        self.assertEqual(colados, [])
+        self.assertGreater(sum(c in nevoa for c in cor.values()), 1500)
+
     def test_estaticos_em_dia(self):
         """static/mundo/ versionado bate com o que a ferramenta gera hoje."""
-        for nome in ("brasil.png", "terra.png", "mundo.json", "atlas.png", "atlas.json"):
+        for nome in ("brasil.png", "terra.png", "mundo.json", "atlas.png", "atlas.json") + AZULEJOS:
             self.assertEqual(self.sha(os.path.join(RAIZ, "static", "mundo"), nome), self.sha(self.pastas[0], nome), nome)
 
 if __name__ == "__main__":

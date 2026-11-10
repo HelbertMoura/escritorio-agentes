@@ -131,7 +131,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "recepcionista.js": "text/javascript; charset=utf-8",
     "mundo.html": "text/html; charset=utf-8", "mundo.js": "text/javascript; charset=utf-8",
     "mundo_bairro.js": "text/javascript; charset=utf-8", "mundo_mapa.js": "text/javascript; charset=utf-8",
-    "mundo_mapa_arte.js": "text/javascript; charset=utf-8",
+    "mundo_mapa_arte.js": "text/javascript; charset=utf-8", "mundo_mapa_perto.js": "text/javascript; charset=utf-8",
     "mundo_globo.js": "text/javascript; charset=utf-8", "mundo_cidade.js": "text/javascript; charset=utf-8",
     "mundo_cidade_planta.js": "text/javascript; charset=utf-8", "mundo_festa.js": "text/javascript; charset=utf-8",
     "mundo_cidade_chao.js": "text/javascript; charset=utf-8", "mundo_cidade_letreiro.js": "text/javascript; charset=utf-8",
@@ -157,6 +157,9 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "manifest.webmanifest": "application/manifest+json", "icone-180.png": "image/png", "icone-192.png": "image/png",
     "icone-512.png": "image/png", "icone-mascara-512.png": "image/png",
 }
+# a camada de perto do mapa do Brasil (a partir de 2x): 4x4 azulejos, pedidos conforme a vista
+AZULEJOS_PERTO = {f"mundo/perto/{i}-{j}.png" for i in range(4) for j in range(4)}
+ARQUIVOS.update(dict.fromkeys(sorted(AZULEJOS_PERTO), "image/png"))
 TIMEOUT = 20
 
 
@@ -2298,7 +2301,7 @@ PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "fontes/figtree.ttf", "fonte
             # mapa do mundo: imagens, cidades e código de desenho, sem dados do escritório
             "mundo/terra.png", "mundo/brasil.png", "mundo/mundo.json", "mundo/atlas.png", "mundo/atlas.json",
             "mundo_globo.js", "mundo_mapa.js", "mundo_mapa_arte.js", "mundo_cidade.js", "mundo_cidade_planta.js", "mundo_bairro.js",
-            "mundo_festa.js", "mundo_cidade_chao.js", "mundo_cidade_letreiro.js",
+            "mundo_festa.js", "mundo_cidade_chao.js", "mundo_cidade_letreiro.js", "mundo_mapa_perto.js", *AZULEJOS_PERTO,
             "festas.js",  # o calendário embutido; as datas próprias só chegam pelo /api/config
             "fontes/doto.woff2", "logo.png",  # liberados na tela de login
             # PWA: o navegador busca o manifesto sem cookie; nenhum deles tem segredo. O sw.js fica na raiz (escopo /)

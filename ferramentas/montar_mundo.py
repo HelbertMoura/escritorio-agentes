@@ -12,6 +12,7 @@ import hashlib
 import json
 import math
 import os
+import string
 import sys
 from collections import Counter, deque
 
@@ -34,6 +35,18 @@ ESTRANGEIRO = mundo_terreno.ESTRANGEIRO  # rótulo da terra de outros países no
 FRESTA_LONGE_DO_MAR = 4  # pixels: ver desenhar_brasil()
 CIDADE_RAIO = 6  # pixels: até onde a cidade da costa pode ser puxada para a terra brasileira
 RIOS = "ne_50m_rivers_lake_centerlines.geojson"
+# a camada de perto (a partir de 2x): o mesmo mapa no dobro da resolução, em 4x4 azulejos de 200 px pedidos conforme a
+# vista, com as rodovias principais e os rios menores do 1:10m
+ESCALA_PERTO, AZULEJO = 2, 200
+RIOS_MENORES, ESTRADAS, LUGARES = ("ne_10m_rivers_lake_centerlines.geojson", "ne_10m_roads.geojson",
+                                   "ne_10m_populated_places.geojson")
+# as cidades médias (3x): as maiores que não são capitais, longe de toda capital (o subúrbio ficaria sob a miniatura) e
+# da média maior vizinha; ERRADAS são duplicatas com a UF trocada no Natural Earth
+MEDIAS_MAX, MEDIA_LONGE_KM, MEDIA_VIZINHA_KM = 50, 40, 30
+ERRADAS = {("Vila Velha", "Amapi"), ("Natal", "Amazonas"), ("Crato", "Amazonas")}
+PAISES = {"ARG": "Argentina", "BOL": "Bolívia", "CHL": "Chile", "COL": "Colômbia", "ECU": "Equador", "FRA": "Guiana Francesa",
+          "GUY": "Guiana", "PER": "Peru", "PRY": "Paraguai", "SUR": "Suriname", "URY": "Uruguai", "VEN": "Venezuela"}
+PAIS_MIOLO = 6   # pixels: o vizinho só ganha nome se tiver um miolo assim longe da beira (e da névoa da borda)
 
 
 def para_pixel(lat, lon, caixa, w, h):
@@ -148,23 +161,24 @@ def desenhar_terra(paises, fontes, celulas_brasil):
     return pintar(W_TERRA, H_TERRA, lambda x, y: nomes[y * W_TERRA + x])
 
 
-def rotular_brasil(paises, estados):
-    """O rótulo de cada pixel de terra do brasil.png: a UF (contorno 1:50m) ou ESTRANGEIRO; pixel ausente é água."""
+def rotular_brasil(paises, estados, w=W_BRASIL, h=H_BRASIL):
+    """O rótulo de cada pixel de terra do mapa w×h (o brasil.png ou a camada de perto): a UF (contorno 1:50m) ou
+    ESTRANGEIRO; pixel ausente é água."""
     rotulo, brasil_110m = {}, set()
     for p in paises:
-        pixels = preencher_aneis(aneis_em_pixels(p["geometry"], CAIXA_BRASIL, W_BRASIL, H_BRASIL), W_BRASIL, H_BRASIL)
+        pixels = preencher_aneis(aneis_em_pixels(p["geometry"], CAIXA_BRASIL, w, h), w, h)
         if p["properties"]["ADM0_A3"] == "BRA":  # o Brasil vem das UFs, no contorno 1:50m
             brasil_110m |= pixels
         else:
             rotulo.update(dict.fromkeys(pixels, ESTRANGEIRO))
-    ate_o_mar = distancias(brasil_110m | set(rotulo), W_BRASIL, H_BRASIL)  # mar do 1:110m
+    ate_o_mar = distancias(brasil_110m | set(rotulo), w, h)  # mar do 1:110m
     for e in sorted(estados, key=lambda e: e["properties"]["postal"]):
         uf = e["properties"]["postal"]
-        for px in preencher_aneis(aneis_em_pixels(e["geometry"], CAIXA_BRASIL, W_BRASIL, H_BRASIL), W_BRASIL, H_BRASIL):
+        for px in preencher_aneis(aneis_em_pixels(e["geometry"], CAIXA_BRASIL, w, h), w, h):
             rotulo[px] = uf
     # O 1:110m e o 1:50m não casam: sobra Brasil 110m fora das UFs. Longe do mar e ligada a um vizinho, é
     # fresta de fronteira e vira terra do vizinho; o resto (costa e canais da foz do Amazonas) fica água.
-    fresta = {px for px in brasil_110m - set(rotulo) if ate_o_mar[px] > FRESTA_LONGE_DO_MAR}
+    fresta = {px for px in brasil_110m - set(rotulo) if ate_o_mar[px] > FRESTA_LONGE_DO_MAR * w / W_BRASIL}
     fila = deque(px for px in sorted(fresta) if any(rotulo.get(v) == ESTRANGEIRO for v in vizinhos8(*px)))
     rotulo.update(dict.fromkeys(fila, ESTRANGEIRO))
     while fila:
@@ -172,7 +186,109 @@ def rotular_brasil(paises, estados):
             if v in fresta and v not in rotulo:
                 rotulo[v] = ESTRANGEIRO
                 fila.append(v)
-    return alisar_costa(rotulo, W_BRASIL, H_BRASIL)
+    return alisar_costa(rotulo, w, h)
+
+
+def rotular_paises(paises, rotulo, w=W_BRASIL, h=H_BRASIL):
+    """O país (ADM0_A3) de cada pixel de terra dos vizinhos, para a divisa entre eles e o nome de cada um."""
+    pais = {}
+    for p in paises:
+        if p["properties"]["ADM0_A3"] != "BRA":
+            for px in preencher_aneis(aneis_em_pixels(p["geometry"], CAIXA_BRASIL, w, h), w, h):
+                if rotulo.get(px) == ESTRANGEIRO:
+                    pais[px] = p["properties"]["ADM0_A3"]
+    return pais
+
+
+def miolo(rotulos, w, h, margem=0):
+    """Para cada pixel rotulado, a distância (8 vizinhos) até a beira da região dele: um pixel de outro rótulo (ou sem
+    rótulo) ou a faixa de `margem` pixels na borda da imagem. O ponto mais fundo é onde cabe o nome."""
+    dist, fila = {}, deque()
+    for (x, y), r in sorted(rotulos.items()):
+        if min(x, y, w - 1 - x, h - 1 - y) < margem or any(rotulos.get(v) != r for v in vizinhos4(x, y)):
+            dist[(x, y)] = 1
+            fila.append((x, y))
+    while fila:
+        p = fila.popleft()
+        for v in vizinhos8(*p):
+            if v not in dist and rotulos.get(v) == rotulos[p]:
+                dist[v] = dist[p] + 1
+                fila.append(v)
+    return dist
+
+
+def mais_fundo(dist, rotulos, alvo, outros=0):
+    """O pixel mais fundo da região `alvo` (no empate, o mais perto do meio dela) e a profundidade; com `outros`, também
+    até tantos pontos fundos de reserva (com 45% da profundidade ou mais, a 70% dela uns dos outros), para o nome que não
+    couber no primeiro (uma miniatura em cima dele, por exemplo)."""
+    pixels = [p for p, r in rotulos.items() if r == alvo]
+    mx, my = sum(p[0] for p in pixels) / len(pixels), sum(p[1] for p in pixels) / len(pixels)
+    ordem = sorted(pixels, key=lambda p: (-dist[p], (p[0] - mx) ** 2 + (p[1] - my) ** 2, p))
+    p, fundo = ordem[0], dist[ordem[0]]
+    reservas = []
+    for q in ordem[1:]:
+        if len(reservas) >= outros or dist[q] < max(2, fundo * 0.45):
+            break
+        if all((q[0] - a[0]) ** 2 + (q[1] - a[1]) ** 2 >= (fundo * 0.7) ** 2 for a in [p] + reservas):
+            reservas.append(q)
+    return p, fundo, [[x, y, dist[(x, y)]] for x, y in reservas]
+
+
+def estados_do_mapa(rotulo, estados, cidades):
+    """As UFs para o navegador: lista com sigla, nome, capital e o ponto do nome (o mais fundo da UF), e o mapa da UF de
+    cada pixel em linhas de texto: a letra da UF (a-z e A-Z, na ordem da lista; '.' fora do Brasil) e quantos pixels."""
+    ufs = {p: r for p, r in rotulo.items() if r != ESTRANGEIRO}
+    nomes = {e["properties"]["postal"]: e["properties"]["name"] for e in estados}
+    capitais = {c["uf"]: c["id"] for c in cidades if c["id"] not in NAO_CAPITAIS}
+    dist, lista = miolo(ufs, W_BRASIL, H_BRASIL), []
+    for uf in sorted(nomes):
+        (x, y), r, outros = mais_fundo(dist, ufs, uf, outros=3)
+        lista.append({"uf": uf, "nome": nomes[uf], "capital": capitais[uf], "x": x, "y": y, "r": r, "outros": outros})
+    letra = {u["uf"]: string.ascii_letters[k] for k, u in enumerate(lista)}
+    mapa = []
+    for y in range(H_BRASIL):
+        linha, x = "", 0
+        while x < W_BRASIL:
+            atual, n = ufs.get((x, y)), 0
+            while x < W_BRASIL and ufs.get((x, y)) == atual:
+                x, n = x + 1, n + 1
+            linha += (letra[atual] if atual else ".") + str(n)
+        mapa.append(linha)
+    return {"lista": lista, "mapa": mapa}
+
+
+def nomes_dos_paises(pais):
+    """O ponto do nome de cada vizinho com miolo de PAIS_MIOLO px ou mais (longe da beira e da névoa da borda)."""
+    dist, lista = miolo(pais, W_BRASIL, H_BRASIL, margem=mundo_terreno.VINHETA + 8), []
+    for a3 in sorted(set(pais.values())):
+        (x, y), r, _ = mais_fundo(dist, pais, a3)
+        if r >= PAIS_MIOLO and a3 in PAISES:
+            lista.append({"nome": PAISES[a3], "x": x, "y": y})
+    return lista
+
+
+def cidades_medias(fontes, cidades, rotulo):
+    """As cidades médias do 3x: do recorte do Natural Earth, as maiores (POP_MAX) a mais de MEDIA_LONGE_KM de toda
+    cidade do mundo e a mais de MEDIA_VIZINHA_KM de uma média já escolhida, no pixel de UF mais perto (até 2 px)."""
+    escolhidas = []
+    for f in ler(os.path.join(fontes, "fontes", LUGARES))["features"]:
+        p, (lon, lat) = f["properties"], f["geometry"]["coordinates"]
+        ponto = {"lat": lat, "lon": lon}
+        if (p["NAME"], p["ADM1NAME"]) in ERRADAS or any(km(ponto, c) < MEDIA_LONGE_KM for c in cidades) \
+                or any(km(ponto, m) < MEDIA_VIZINHA_KM for m in escolhidas):
+            continue
+        x0, y0 = para_pixel(lat, lon, CAIXA_BRASIL, W_BRASIL, H_BRASIL)
+        perto = sorted((dx * dx + dy * dy, dy, dx) for dy in range(-2, 3) for dx in range(-2, 3)
+                       if rotulo.get((x0 + dx, y0 + dy)) not in (None, ESTRANGEIRO))
+        if not perto:
+            continue
+        x, y = x0 + perto[0][2], y0 + perto[0][1]
+        if any((x - c["x"]) ** 2 + (y - c["y"]) ** 2 <= 9 for c in cidades):
+            continue
+        escolhidas.append({"nome": p["NAME"], "uf": rotulo[(x, y)], "x": x, "y": y, "pop": p["POP_MAX"], **ponto})
+        if len(escolhidas) == MEDIAS_MAX:
+            break
+    return [{k: m[k] for k in ("nome", "uf", "x", "y", "pop")} for m in escolhidas]
 
 
 def alisar_costa(rotulo, w, h, vezes=2):
@@ -193,29 +309,59 @@ def alisar_costa(rotulo, w, h, vezes=2):
     return rotulo
 
 
-def em_pixels(lon, lat):
-    """(lon, lat) em pixels (fracionários) do brasil.png."""
+def em_pixels(lon, lat, w=W_BRASIL, h=H_BRASIL):
+    """(lon, lat) em pixels (fracionários) do mapa w×h (o brasil.png ou a camada de perto)."""
     lon0, lat0, lon1, lat1 = CAIXA_BRASIL
-    return (lon - lon0) * W_BRASIL / (lon1 - lon0), (lat1 - lat) * H_BRASIL / (lat1 - lat0)
+    return (lon - lon0) * w / (lon1 - lon0), (lat1 - lat) * h / (lat1 - lat0)
 
 
-def desenhar_brasil(rotulo, fontes):
-    """O mapa ilustrado (mundo_terreno.desenhar), com biomas, serras e rios passados para pixels."""
+def rios_menores(fontes):
+    """Os rios do 1:10m que o 1:50m não tem (os afluentes): sai a feição com metade ou mais dos pontos a até 1 px (de
+    longe) de um rio do 1:50m, que já é desenhado com a forma do mapa de longe."""
+    grandes = set()
+    for r in ler(os.path.join(fontes, "fontes", RIOS))["features"]:
+        for l in r["geometry"]["coordinates"]:
+            for (x0, y0), (x1, y1) in zip(l, l[1:]):
+                for x, y in mundo_terreno._linha(*map(int, em_pixels(x0, y0)), *map(int, em_pixels(x1, y1))):
+                    grandes.update((x + a, y + b) for a in (-1, 0, 1) for b in (-1, 0, 1))
+    menores = []
+    for r in ler(os.path.join(fontes, "fontes", RIOS_MENORES))["features"]:
+        pontos = [tuple(map(int, em_pixels(*p))) for l in r["geometry"]["coordinates"] for p in l]
+        if 2 * sum(p in grandes for p in pontos) < len(pontos):
+            menores.append(r)
+    return menores
+
+
+def desenhar_brasil(rotulo, fontes, pais, w=W_BRASIL, h=H_BRASIL, escala=1):
+    """O mapa ilustrado (mundo_terreno.desenhar) em w×h, com biomas, serras e rios passados para pixels; na escala de
+    perto, também as rodovias e os rios menores."""
     from PIL import Image
-    poligono = lambda pontos: preencher([em_pixels(*p) for p in pontos], W_BRASIL, H_BRASIL)
+    px = lambda p: em_pixels(*p, w, h)
+    poligono = lambda pontos: preencher([px(p) for p in pontos], w, h)
     dados = ler(os.path.join(fontes, "biomas.json"))
     biomas = [(b["id"], poligono(b["poligono"])) for b in dados["biomas"]]
     extras = {nome: poligono(e["poligono"]) for nome, e in dados["extras"].items()}
-    serras = [{"tipo": s["tipo"], "forma": s.get("forma"), "linhas": [[em_pixels(*p) for p in l] for l in s["linhas"]],
-               "picos": [em_pixels(*p["ponto"]) for p in s.get("picos", [])]}
+    serras = [{"tipo": s["tipo"], "forma": s.get("forma"), "linhas": [[px(p) for p in l] for l in s["linhas"]],
+               "picos": [px(p["ponto"]) for p in s.get("picos", [])]}
               for s in ler(os.path.join(fontes, "serras.json"))]
-    rios = [(r["properties"]["name"], [[em_pixels(*p) for p in l] for l in r["geometry"]["coordinates"]])
-            for r in ler(os.path.join(fontes, "fontes", RIOS))["features"]]
-    indices = mundo_terreno.desenhar(rotulo, biomas, extras, serras, rios, W_BRASIL, H_BRASIL)
-    im = Image.new("P", (W_BRASIL, H_BRASIL))
+    linhas = lambda r: [[px(p) for p in l] for l in r["geometry"]["coordinates"]]
+    rios = [(r["properties"]["name"], linhas(r)) for r in ler(os.path.join(fontes, "fontes", RIOS))["features"]]
+    afluentes, estradas = [], []
+    if escala > 1:
+        afluentes = [(r["properties"]["name"] or "", linhas(r)) for r in rios_menores(fontes)]
+        estradas = [linhas(r) for r in ler(os.path.join(fontes, "fontes", ESTRADAS))["features"]]
+    indices = mundo_terreno.desenhar(rotulo, biomas, extras, serras, rios, w, h, escala=escala, estradas=estradas,
+                                     afluentes=afluentes, paises=pais)
+    im = Image.new("P", (w, h))
     im.putpalette([int(c[i:i + 2], 16) for c in mundo_terreno.CORES.values() for i in (1, 3, 5)])
     im.putdata(indices)
     return im
+
+
+def azulejos(im):
+    """A camada de perto cortada em azulejos AZULEJO×AZULEJO: {(coluna, linha): imagem}."""
+    n = im.width // AZULEJO
+    return {(i, j): im.crop((i * AZULEJO, j * AZULEJO, (i + 1) * AZULEJO, (j + 1) * AZULEJO)) for j in range(n) for i in range(n)}
 
 
 def celulas(rotulo):
@@ -259,7 +405,11 @@ def montar(fontes, saida):
     paises = ler(os.path.join(fontes, "fontes", "ne_110m_admin_0_countries.geojson"))["features"]
     estados = ler(os.path.join(fontes, "fontes", "ne_50m_admin_1_states_provinces_lakes.geojson"))["features"]
     rotulo = rotular_brasil(paises, estados)
-    terra, brasil = desenhar_terra(paises, fontes, celulas(rotulo)), desenhar_brasil(rotulo, fontes)
+    pais = rotular_paises(paises, rotulo)
+    terra, brasil = desenhar_terra(paises, fontes, celulas(rotulo)), desenhar_brasil(rotulo, fontes, pais)
+    wp, hp = W_BRASIL * ESCALA_PERTO, H_BRASIL * ESCALA_PERTO   # a camada de perto, desenhada de novo na resolução dela
+    rotulo_perto = rotular_brasil(paises, estados, wp, hp)
+    perto = desenhar_brasil(rotulo_perto, fontes, rotular_paises(paises, rotulo_perto, wp, hp), wp, hp, ESCALA_PERTO)
 
     mundo = {
         "cidades": [{"id": c["id"], "nome": c["nome"], "uf": c["uf"], "lat": c["lat"], "lon": c["lon"],
@@ -267,17 +417,23 @@ def montar(fontes, saida):
                      "litoral": c["litoral"]}
                     for c in cidades for x, y in [na_terra(c, rotulo)]],
         "rotas": rotas(cidades),
-        "niveis": {"brasil": {"w": W_BRASIL, "h": H_BRASIL, "caixa": list(CAIXA_BRASIL), "celulas": celulas(rotulo)}},
     }
+    mundo["niveis"] = {"brasil": {
+        "w": W_BRASIL, "h": H_BRASIL, "caixa": list(CAIXA_BRASIL), "celulas": celulas(rotulo),
+        "perto": {"escala": ESCALA_PERTO, "azulejo": AZULEJO, "n": wp // AZULEJO},
+        "ufs": estados_do_mapa(rotulo, estados, cidades), "medias": cidades_medias(fontes, mundo["cidades"], rotulo),
+        "paises": nomes_dos_paises(pais)}}
     # versão derivada do conteúdo (pixels, cores e dados), para o navegador não guardar arquivo velho;
     # tobytes() de imagem em modo P só traz os índices, então a paleta entra à parte
-    h = hashlib.sha256(terra.tobytes() + brasil.tobytes()
+    h = hashlib.sha256(terra.tobytes() + brasil.tobytes() + perto.tobytes()
                        + json.dumps([PALETA, mundo_terreno.CORES, mundo], sort_keys=True).encode())
     mundo = {"versao": int(h.hexdigest()[:8], 16), **mundo}
 
-    os.makedirs(saida, exist_ok=True)
+    os.makedirs(os.path.join(saida, "perto"), exist_ok=True)
     terra.save(os.path.join(saida, "terra.png"), optimize=True)
     brasil.save(os.path.join(saida, "brasil.png"), optimize=True)
+    for (i, j), azulejo in azulejos(perto).items():
+        azulejo.save(os.path.join(saida, "perto", f"{i}-{j}.png"), optimize=True)
     with open(os.path.join(saida, "mundo.json"), "w", encoding="utf-8", newline="\n") as f:
         json.dump(mundo, f, ensure_ascii=False, indent=1)
         f.write("\n")

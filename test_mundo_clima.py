@@ -279,8 +279,11 @@ class Rota(unittest.TestCase):
     def test_publicos_do_mundo(self):
         for nome in ("mundo/terra.png", "mundo/brasil.png", "mundo/mundo.json", "mundo/atlas.png", "mundo/atlas.json",
                      "mundo_globo.js", "mundo_mapa.js", "mundo_mapa_arte.js", "mundo_cidade.js", "mundo_cidade_planta.js", "mundo_bairro.js",
-                     "avatar.js", "festas.js", "mundo_festa.js", "mundo_cidade_chao.js", "mundo_cidade_letreiro.js"):
+                     "avatar.js", "festas.js", "mundo_festa.js", "mundo_cidade_chao.js", "mundo_cidade_letreiro.js",
+                     "mundo_mapa_perto.js") + tuple(f"mundo/perto/{i}-{j}.png" for i in range(4) for j in range(4)):
             self.assertIn(nome, e.PUBLICOS)
+            self.assertIn(nome, e.ARQUIVOS)
+            self.assertTrue(os.path.isfile(os.path.join(e.ESTATICO, nome)), nome)
 
     def test_arquivos_do_mundo_sem_cookie(self):
         for nome, tipo in (("mundo/brasil.png", "image/png"), ("mundo/mundo.json", "application/json")):

@@ -13,13 +13,20 @@ ESTRANGEIRO = "--"
 BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
 VINHETA = 18      # pixels: até onde, na média, a borda da caixa some no mar de fora (com ruído, nunca em linha reta)
 FORA = "mar_fundo"  # o mar além da imagem (o navegador pinta essa cor e as ondas fora dela)
+NEVOA = ("nevoa", "nevoa_2")   # a névoa em que a terra esmaece na borda, antes do mar de fora
+NEVOA_ESCURA, NEVOA_FORA = 0.22, 0.42   # na borda: acima de 0 a névoa clara, depois a escura, depois o mar
+ESTRADA = {"estrada", "estrada_sombra"}   # as rodovias (só na camada de perto)
 LARGOS = {"Amazonas", "Paraná", "São Francisco"}   # rios de 2 px
+# a camada de perto: os glifos miúdos entre os grandes saem com MIUDO da chance da camada; entre duas montanhas de uma
+# serra, um morro de SOPE linhas (mais relevo, de perto)
+MIUDO, SOPE = 0.4, (3, 5)
 
 # as cores cheias (Brasil); cada uma ganha a versão apagada (vizinhos) e a da divisa de UF (mais escura; na Amazônia, o
 # verde claro am_divisa, que lê sobre as copas escuras)
 BASE = {
     "mar": "#1d3b5c", "mar_fundo": "#1a3452", "onda": "#26496d", "raso": "#2a5a7c", "raso_claro": "#3a7a99",
     "rio": "#56a2d2", "areia": "#dcc890", "fronteira": "#2a2217",
+    "estrada": "#e2d2a4", "estrada_sombra": "#6e5f45", "nevoa": "#7c8c98", "nevoa_2": "#4a6680",
     # Amazônia: copas densas e escuras
     "am_chao": "#173d22", "am_chao2": "#1c4626", "am_sombra": "#22532b", "am_copa": "#2c6a32", "am_luz": "#41843a",
     "am_brilho": "#5f9e43", "am_divisa": "#93bd66",
@@ -40,12 +47,16 @@ BASE = {
     "pp_arau": "#2a5532", "pp_arau_luz": "#3d7141", "pp_tronco": "#5d402b",
     # altiplano e puna (só nos vizinhos)
     "an_chao": "#a88c60", "an_chao2": "#b69b6c", "an_pedra": "#7c6446", "an_mato": "#7f8650", "an_sal": "#e2dccb",
+    # chaco (só nos vizinhos): mato seco oliva com quebrachos, palmeiras carandá e esteros
+    "ch_chao": "#9a9152", "ch_chao2": "#a79d5c", "ch_seco": "#c2b26c", "ch_copa": "#5d6f33", "ch_luz": "#7f8f42",
+    "ch_sombra": "#424f25", "ch_tronco": "#5e4429", "ch_palma": "#6f8a3c", "ch_estero": "#4e8790", "ch_estero_luz": "#8cc0c8",
     # serras: verdes, de rocha e com neve
     "mv_luz": "#b4c08e", "mv_sombra": "#6d7d5a", "mv_contorno": "#26331f",
     "mr_luz": "#dcc596", "mr_sombra": "#9a7c58", "mr_contorno": "#3f3022",
     "mn_luz": "#bdb5a6", "mn_sombra": "#746c62", "mn_contorno": "#332f2a", "mn_neve": "#f3f4ef", "mn_neve_sombra": "#c9d0ce",
 }
-AGUA_BASE = {"mar", "mar_fundo", "onda", "raso", "raso_claro", "rio", "pa_poca", "pa_poca_luz"}
+AGUA_BASE = {"mar", "mar_fundo", "onda", "raso", "raso_claro", "rio", "pa_poca", "pa_poca_luz", "ch_estero", "ch_estero_luz",
+             *NEVOA}
 CINZA = (112, 117, 106)   # para onde os vizinhos se apagam (G >= B: a terra continua terra)
 APAGA, ESCURECE = 0.42, 0.74
 
@@ -71,7 +82,8 @@ def _paleta():
 CORES = _paleta()   # nome -> '#rrggbb', na ordem dos índices do PNG
 AGUA = {n for n in CORES if n.split("_ap")[0].rstrip("~") in AGUA_BASE}
 PREFIXO = {"amazonia": "am_", "mata-atlantica": "ma_", "cerrado": "ce_", "caatinga": "ca_", "pantanal": "pa_",
-           "pampa": "pp_", "andes": "an_"}
+           "pampa": "pp_", "andes": "an_", "chaco": "ch_"}
+assert len(CORES) <= 256, "a paleta do PNG tem no máximo 256 cores"
 
 
 def cores_do_bioma(bioma):
@@ -126,6 +138,9 @@ ARAUCARIA = [".lllll.", "aaaaaaa", "..lll..", ".aaaaa.", "...t...", "...t..."]
 PEDRA = [".p", "pp"]
 ARBUSTO = [".m.", "mms"]
 SALAR = [".ss..", "sssss", ".sss."]
+QUEBRACHO = [".llll.", "lcccss", ".ssss.", "..tt..", "..t..."]   # copa chata de guarda-chuva
+CARANDA = ["p.l.p", ".plp.", "..t..", "..t..", "..t.."]            # a palmeira do chaco
+ESTERO = [".mmmm.", "meEeem", ".meem."]                             # o banhado raso
 
 # por bioma: as cores dos papéis e as camadas de glifos (célula da grade, chance, glifos)
 ESTILOS = {
@@ -150,6 +165,11 @@ ESTILOS = {
               "camadas": [((5, 4), 0.55, [TUFO, CAPIM])]},
     "andes": {"papeis": {"p": "an_pedra", "m": "an_mato", "s": "an_sal"}, "manchas": ("an_chao", "an_chao2", "an_pedra"),
               "camadas": [((5, 4), 0.55, [PEDRA, ARBUSTO, PEDRA]), ((23, 19), 0.35, [SALAR])]},
+    "chaco": {"papeis": {"l": "ch_luz", "c": "ch_copa", "s": "ch_sombra", "t": "ch_tronco", "p": "ch_palma", "k": "ch_seco",
+                         "d": "ch_sombra", "m": "ch_sombra", "e": "ch_estero", "E": "ch_estero_luz"},
+              "manchas": ("ch_chao", "ch_chao2", "ch_seco"),
+              "camadas": [((5, 4), 0.45, [TUFO, CAPIM]), ((7, 6), 0.6, [QUEBRACHO, QUEBRACHO, CARANDA]),
+                          ((19, 14), 0.45, [ESTERO])]},
 }
 ARAUCARIAS = ((7, 6), 0.75, [ARAUCARIA])
 ONDA = [".ww..", "w..ww"]
@@ -174,9 +194,38 @@ def montanha(alto, mesa=False):
                 s += "o"
             else:
                 neve = r <= alto * 0.4 and not mesa
-                s += ("N" if neve else "L") if d <= -(r // 3) else ("M" if neve else "S")
+                luz = d <= -(r // 3)
+                if alto >= 10 and not mesa and r > alto * 0.4:   # as grandes (de perto): uma aresta clara na face da sombra
+                    if d == r // 2 + 1 and r < alto - 1:          # e um sulco escuro na face da luz
+                        luz = True
+                    elif d == -(r * 2 // 3) and r > alto * 0.55:
+                        luz = False
+                s += ("N" if neve else "L") if luz else ("M" if neve else "S")
         linhas.append(s if r >= topo or not mesa else "." * (2 * alto - 1))
     return [l for l in linhas if l.strip(".")]
+
+
+_DOBROS = {}
+
+
+def _dobro(glifo):
+    """O glifo no dobro por Scale2x (EPX): cada pixel vira 2x2 e a quina vira a cor dos dois vizinhos iguais dela. O
+    desenho e as cores ficam os mesmos; as diagonais saem em degraus de 1 px, não de 2."""
+    chave = tuple(glifo)
+    if chave in _DOBROS:
+        return _DOBROS[chave]
+    alto, largo = len(glifo), len(glifo[0])
+    em = lambda x, y: glifo[y][x] if 0 <= x < largo and 0 <= y < alto else "."
+    linhas = []
+    for y in range(alto):
+        cima, baixo = "", ""
+        for x in range(largo):
+            p, a, b, c, d = em(x, y), em(x, y - 1), em(x + 1, y), em(x - 1, y), em(x, y + 1)
+            cima += (a if c == a and c != d and a != b else p) + (b if a == b and a != c and b != d else p)
+            baixo += (c if d == c and d != b and c != a else p) + (d if b == d and b != a and d != c else p)
+        linhas += [cima, baixo]
+    _DOBROS[chave] = linhas
+    return linhas
 
 
 # --- o desenho ---------------------------------------------------------------------------------------------------------
@@ -200,8 +249,9 @@ def _distancia(dentro, w, h):
     return dist
 
 
-def _biomas(terra, biomas, w, h):
-    """O bioma de cada pixel de terra: o primeiro polígono que o contém ou, fora de todos, o mais perto (pela terra)."""
+def _biomas(terra, biomas, w, h, f=1):
+    """O bioma de cada pixel de terra: o primeiro polígono que o contém ou, fora de todos, o mais perto (pela terra).
+    f: a escala da imagem sobre o mapa de longe (as manchas grandes seguem o mapa de longe; o grão fica mais fino)."""
     bioma, fila = [None] * (w * h), deque()
     for nome, pixels in biomas:
         for x, y in sorted(pixels):
@@ -221,8 +271,8 @@ def _biomas(terra, biomas, w, h):
     misto = list(bioma)
     for y in range(h):
         for x in range(w):
-            sx = x + round((_ruido(x, y, 16, 21) - 0.5) * 22) + int(_h(x, y, 23) * 5) - 2
-            sy = y + round((_ruido(x, y, 16, 22) - 0.5) * 22) + int(_h(x, y, 24) * 5) - 2
+            sx = x + round((_ruido(x / f, y / f, 16, 21) - 0.5) * 22 * f) + int(_h(x, y, 23) * 5) - 2
+            sy = y + round((_ruido(x / f, y / f, 16, 22) - 0.5) * 22 * f) + int(_h(x, y, 24) * 5) - 2
             if terra[y * w + x] and 0 <= sx < w and 0 <= sy < h and bioma[sy * w + sx] is not None:
                 misto[y * w + x] = bioma[sy * w + sx]
     return misto
@@ -261,10 +311,15 @@ def _ao_longo(linha, passo):
     return pontos
 
 
-def desenhar(rotulo, biomas, extras, serras, rios, w, h):
-    """O brasil.png em índices da paleta CORES. rotulo: (x, y) -> UF ou ESTRANGEIRO (ausente é mar); biomas: lista
-    (nome, pixels) na ordem de precedência; extras: nome -> pixels ('araucarias', 'andes'); serras: lista de
-    {tipo, linhas, picos, forma} em pixels; rios: lista (nome, linhas) em pixels."""
+def desenhar(rotulo, biomas, extras, serras, rios, w, h, escala=1, estradas=(), afluentes=(), paises=None):
+    """O mapa em índices da paleta CORES. rotulo: (x, y) -> UF ou ESTRANGEIRO (ausente é mar); biomas: lista
+    (nome, pixels) na ordem de precedência; extras: nome -> pixels ('araucarias', 'andes', 'chaco'); serras: lista de
+    {tipo, linhas, picos, forma} em pixels; rios: lista (nome, linhas) em pixels; paises: (x, y) -> país do vizinho
+    (para a divisa entre dois vizinhos), opcional.
+    escala: 1 é o brasil.png (o mapa de longe); 2 é a camada de perto, o mesmo mapa no dobro da resolução: as manchas
+    grandes (biomas, chão, mar fundo, borda) seguem o ruído do mapa de longe, e o detalhe (glifos, rios, serras,
+    costa, divisas) sai na resolução nova, mais denso. Só ela leva as rodovias e os rios menores (afluentes)."""
+    f = escala
     N = w * h
     estado = [0] * N   # 0 mar, 1 Brasil, 2 vizinho
     uf = [None] * N
@@ -273,8 +328,8 @@ def desenhar(rotulo, biomas, extras, serras, rios, w, h):
             estado[y * w + x] = 2 if r == ESTRANGEIRO else 1
             uf[y * w + x] = r
     terra = [e > 0 for e in estado]
-    andes = extras.get("andes", set())
-    bioma = _biomas(terra, [("andes", {p for p in andes if rotulo.get(p) == ESTRANGEIRO})] + biomas, w, h)
+    fora_do_brasil = lambda nome: {p for p in extras.get(nome, ()) if rotulo.get(p) == ESTRANGEIRO}
+    bioma = _biomas(terra, [("andes", fora_do_brasil("andes")), ("chaco", fora_do_brasil("chaco"))] + biomas, w, h, f)
     arau = [False] * N
     for x, y in extras.get("araucarias", ()):
         if 0 <= x < w and 0 <= y < h:
@@ -292,39 +347,42 @@ def desenhar(rotulo, biomas, extras, serras, rios, w, h):
                 continue
             b = "pampa" if arau[i] and bioma[i] in ("mata-atlantica", "pampa") else bioma[i]
             c1, c2, c3 = ESTILOS[b]["manchas"]
-            v = _ruido(x, y, 14, 3) * 0.7 + _ruido(x, y, 5, 4) * 0.3
+            v = _ruido(x / f, y / f, 14, 3) * 0.7 + _ruido(x, y, 5, 4) * 0.3
             nome = c2 if v > 0.42 + 0.16 * _bayer(x, y) else c1
             if c3 and _h(x, y, 5) < 0.07:
                 nome = c3
             por(i, nome)
 
-    # 2. os glifos dos biomas, de cima para baixo (a copa de baixo cobre a de cima)
+    # 2. os glifos dos biomas, de cima para baixo (a copa de baixo cobre a de cima). De perto, a mesma grade nos mesmos
+    # lugares (vezes f), com cada glifo no dobro, redesenhado por Scale2x (o mesmo desenho, de beira mais fina): a troca
+    # de camada não pula. Entre eles, uma grade de glifos miúdos (os de longe, no tamanho deles, com MIUDO da chance):
+    # o detalhe que só aparece de perto
     carimbos = []
+
+    def semear(celula, chance, glifos, s, m, papeis, aqui, sementes=None):
+        """Uma grade de glifos: célula `celula` em pixels de longe vezes m; sementes (x, y, chance, glifo) fixas."""
+        cw, ch = celula
+        sx, sy, sc, sg = sementes or (s, s + 7, s + 13, s + 17)
+        for gy in range(-1, h // (ch * m) + 2):
+            for gx in range(-1, w // (cw * m) + 2):
+                ax, ay = (gx * cw + int(_h(gx, gy, sx) * cw)) * m, (gy * ch + int(_h(gx, gy, sy) * ch)) * m
+                if not (0 <= ax < w and 0 <= ay < h) or not terra[ay * w + ax] or not aqui(ay * w + ax):
+                    continue
+                if _h(gx, gy, sc) > chance * (0.95 if estado[ay * w + ax] == 2 and sg is not None else 1):
+                    continue
+                g = glifos[int(_h(gx, gy, sg) * len(glifos))] if sg is not None else glifos[0]
+                carimbos.append((ay, ax, g if m == 1 else _dobro(g), papeis))
+
+    def do_bioma(nome):
+        return lambda i: ("pampa" if arau[i] and bioma[i] in ("mata-atlantica", "pampa") else bioma[i]) == nome
     for nome, estilo in ESTILOS.items():
-        for k, ((cw, ch), chance, glifos) in enumerate(estilo["camadas"]):
+        for k, (celula, chance, glifos) in enumerate(estilo["camadas"]):
             s = len(nome) * 31 + k   # semente da camada
-            for gy in range(-1, h // ch + 2):
-                for gx in range(-1, w // cw + 2):
-                    ax = gx * cw + int(_h(gx, gy, s) * cw)
-                    ay = gy * ch + int(_h(gx, gy, s + 7) * ch)
-                    if not (0 <= ax < w and 0 <= ay < h) or not terra[ay * w + ax]:
-                        continue
-                    i = ay * w + ax
-                    b = bioma[i]
-                    if arau[i] and b in ("mata-atlantica", "pampa"):
-                        b = "pampa"
-                    if b != nome:
-                        continue
-                    if _h(gx, gy, s + 13) > chance * (0.95 if estado[i] == 2 else 1):
-                        continue
-                    g = glifos[int(_h(gx, gy, s + 17) * len(glifos))]
-                    carimbos.append((ay, ax, g, estilo["papeis"]))
-    (cw, ch), chance, glifos = ARAUCARIAS
-    for gy in range(-1, h // ch + 2):
-        for gx in range(-1, w // cw + 2):
-            ax, ay = gx * cw + int(_h(gx, gy, 91) * cw), gy * ch + int(_h(gx, gy, 92) * ch)
-            if 0 <= ax < w and 0 <= ay < h and arau[ay * w + ax] and terra[ay * w + ax] and _h(gx, gy, 93) < chance:
-                carimbos.append((ay, ax, glifos[0], ESTILOS["pampa"]["papeis"]))
+            semear(celula, chance, glifos, s, f, estilo["papeis"], do_bioma(nome))
+            if f > 1:
+                semear(celula, chance * MIUDO, glifos, s + 500, 1, estilo["papeis"], do_bioma(nome))
+    celula, chance, glifos = ARAUCARIAS
+    semear(celula, chance, glifos, 91, f, ESTILOS["pampa"]["papeis"], lambda i: arau[i], sementes=(91, 92, 93, None))
     for ay, ax, g, papeis in sorted(carimbos, key=lambda c: (c[0] + len(c[2]), c[1])):   # pelo pé do glifo
         for dy, linha in enumerate(g):
             for dx, letra in enumerate(linha):
@@ -332,25 +390,44 @@ def desenhar(rotulo, biomas, extras, serras, rios, w, h):
                 if letra != "." and 0 <= x < w and 0 <= y < h and terra[y * w + x]:
                     por(y * w + x, papeis[letra])
 
-    # 3. os rios, por cima da terra (2 px nos três largos)
-    for nome, linhas in rios:
-        largo = " ".join(nome.split()) in LARGOS
+    # 3. os rios, por cima da terra (os três largos com 2 px de longe; tudo na largura vezes a escala); de perto, os rios
+    # menores em 1 px
+    def tracar(linhas, largura, nome):
         for linha in linhas:
             for (x0, y0), (x1, y1) in zip(linha, linha[1:]):
                 a, b = (int(x0), int(y0)), (int(x1), int(y1))
                 deitado = abs(b[0] - a[0]) >= abs(b[1] - a[1])
                 for x, y in _linha(*a, *b):
-                    for px, py in ((x, y), (x, y + 1) if deitado else (x + 1, y))[: 2 if largo else 1]:
+                    for k in range(largura):
+                        px, py = (x, y + k) if deitado else (x + k, y)
                         if 0 <= px < w and 0 <= py < h and terra[py * w + px]:
-                            por(py * w + px, "rio")
+                            yield py * w + px
+    for nome, linhas in afluentes:
+        for i in tracar(linhas, 1, nome):
+            por(i, "rio")
+    for nome, linhas in rios:
+        for i in tracar(linhas, (2 if " ".join(nome.split()) in LARGOS else 1) * f, nome):
+            por(i, "rio")
 
-    # 4. as serras: fileiras de montanhas, de cima para baixo
+    # 4. as rodovias (só de perto): 1 px claro com a sombra embaixo; passam por cima dos rios (a ponte)
+    via = [False] * N
+    for linhas in estradas:
+        for i in tracar(linhas, 1, ""):
+            via[i] = True
+    for i in range(N):
+        if via[i]:
+            por(i, "estrada")
+            if i + w < N and terra[i + w] and not via[i + w] and cor[i + w].split("_ap")[0] != "rio":
+                por(i + w, "estrada_sombra")
+
+    # 5. as serras: fileiras de montanhas, de cima para baixo. De perto, as mesmas montanhas nos mesmos lugares, na
+    # altura vezes f (o glifo sai de novo na resolução nova, com a encosta mais fina), e um morro baixo entre duas delas
     montes = []
     for serra in serras:
         mesa = serra.get("forma") == "mesa"
         for k, linha in enumerate(serra["linhas"]):
             grande = serra["tipo"] == "neve"
-            for j, (x, y, ux, uy) in enumerate(_ao_longo(linha, 4.0 if grande else 5.0)):
+            for j, (x, y, ux, uy) in enumerate(_ao_longo(linha, (4.0 if grande else 5.0) * f)):
                 if grande:   # os Andes: picos de 4 a 8 linhas, uns fora da fila e outros faltando (nada de zíper)
                     if _h(j, k, 60) < 0.15:
                         continue
@@ -358,9 +435,14 @@ def desenhar(rotulo, biomas, extras, serras, rios, w, h):
                     lado, ao_longo = (_h(j, k, 63) - 0.5) * 7, (_h(j, k, 64) - 0.5) * 2.5
                 else:
                     alto, lado, ao_longo = (6 if _h(j, k, 62) < 0.4 else 5), (1 if j % 2 else -1) * 1.5, 0
-                montes.append((x - uy * lado + ux * ao_longo, y + ux * lado + uy * ao_longo, montanha(alto, mesa), serra["tipo"]))
+                lado, ao_longo = lado * f, ao_longo * f
+                montes.append((x - uy * lado + ux * ao_longo, y + ux * lado + uy * ao_longo, montanha(alto * f, mesa), serra["tipo"]))
+                if f > 1 and not mesa and _h(j, k, 65) < 0.7:   # o morro do sopé, do outro lado da fila, meio passo adiante
+                    meio, m = (2.0 if grande else 2.5) * f, -lado * 0.6
+                    alto = SOPE[0] + int(_h(j, k, 66) * (SOPE[1] - SOPE[0] + 1))
+                    montes.append((x - uy * m + ux * meio, y + ux * m + uy * meio, montanha(alto), serra["tipo"]))
         for x, y in serra.get("picos", ()):
-            montes.append((x, y, montanha(9), serra["tipo"]))
+            montes.append((x, y, montanha(9 * f), serra["tipo"]))
     for x, y, g, tipo in sorted(montes, key=lambda m: (round(m[1]), round(m[0]))):
         luz, sombra, contorno, neve, neve_sombra = SERRA_CORES[tipo]
         papel = {"L": luz, "S": sombra, "o": contorno, "N": neve, "M": neve_sombra}
@@ -374,7 +456,8 @@ def desenhar(rotulo, biomas, extras, serras, rios, w, h):
                     else:
                         por(py * w + px, papel[c])
 
-    # 5. a areia da costa (1 px) e 6. as divisas: a da UF, um tom mais escuro do chão; a do país, forte
+    # 6. a areia da costa (1 px) e 7. as divisas: a da UF, um tom mais escuro do chão; a do país, forte (f px); a entre
+    # dois vizinhos, pontilhada no tom apagado
     for y in range(h):
         for x in range(w):
             i = y * w + x
@@ -386,13 +469,19 @@ def desenhar(rotulo, biomas, extras, serras, rios, w, h):
                     por(i, "areia")
                 continue
             if estado[i] == 1:
-                if any(estado[vy * w + vx] == 2 for vx, vy in viz if 0 <= vx < w and 0 <= vy < h):
+                perto = [(x + dx * k, y + dy * k) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)) for k in range(1, f + 1)]
+                if any(estado[vy * w + vx] == 2 for vx, vy in perto if 0 <= vx < w and 0 <= vy < h):
                     cor[i] = "fronteira"
                 elif any(0 <= vx < w and 0 <= vy < h and estado[vy * w + vx] == 1 and uf[vy * w + vx] != uf[i]
                          for vx, vy in viz[0::2]) and cor[i] not in AGUA:
                     cor[i] = cor[i] + "~"
+            elif paises and (x // f + y // f) % 2 == 0 and cor[i] not in AGUA:
+                meu = paises.get((x, y))
+                if meu and any(paises.get(v, meu) != meu for v in viz[0::2] if 0 <= v[0] < w and 0 <= v[1] < h
+                               and estado[v[1] * w + v[0]] == 2):
+                    cor[i] = "fronteira_ap"
 
-    # 7. o mar: duas faixas rasas em pontilhado junto da costa, ondas no fundo e o alto-mar um pouco mais escuro
+    # 8. o mar: duas faixas rasas em pontilhado junto da costa, ondas no fundo e o alto-mar um pouco mais escuro
     do_mar = _distancia([not t for t in terra], w, h)
     for y in range(h):
         for x in range(w):
@@ -400,37 +489,52 @@ def desenhar(rotulo, biomas, extras, serras, rios, w, h):
             if terra[i]:
                 continue
             d, t = do_mar[i], _bayer(x, y)
-            if d <= 1 or (d == 2 and t < 0.5):
+            if d <= f or (d <= 2 * f and t < 0.5):
                 cor[i] = "raso_claro"
-            elif d <= 4 or (d == 5 and t < 0.5) or (d == 6 and t < 0.25):
+            elif d <= 4 * f or (d <= 5 * f and t < 0.5) or (d <= 6 * f and t < 0.25):
                 cor[i] = "raso"
-            elif d > 24 + 8 * _ruido(x, y, 30, 8) + 4 * t:
+            elif d > (24 + 8 * _ruido(x / f, y / f, 30, 8) + 4 * t) * f:
                 cor[i] = "mar_fundo"
             else:
                 cor[i] = "mar"
-    for gy in range(h // 7 + 1):
-        for gx in range(w // 11 + 1):
-            ax, ay = gx * 11 + int(_h(gx, gy, 71) * 11), gy * 7 + int(_h(gx, gy, 72) * 7)
+    onda = ONDA if f == 1 else _dobro(ONDA)   # de perto, as mesmas ondas nos mesmos lugares, redesenhadas no dobro
+    for gy in range(h // (7 * f) + 1):
+        for gx in range(w // (11 * f) + 1):
+            ax, ay = (gx * 11 + int(_h(gx, gy, 71) * 11)) * f, (gy * 7 + int(_h(gx, gy, 72) * 7)) * f
             if _h(gx, gy, 73) > 0.6:
                 continue
-            for dy, linha in enumerate(ONDA):
+            for dy, linha in enumerate(onda):
                 for dx, c in enumerate(linha):
                     px, py = ax + dx, ay + dy
-                    if c != "." and 0 <= px < w and 0 <= py < h and not terra[py * w + px] and do_mar[py * w + px] > 7:
+                    if c != "." and 0 <= px < w and 0 <= py < h and not terra[py * w + px] and do_mar[py * w + px] > 7 * f:
                         cor[py * w + px] = "onda"
 
-    # 8. a borda: o mapa some no mar de fora da imagem (FORA) a uma distância que ondula com o ruído, em pontilhado de
-    # manchinhas; a terra do Brasil numa faixa estreita (o litoral do Nordeste e as cidades dele ficam a 8 px ou mais da
-    # borda); os 2 px de fora são só mar, iguais ao que o navegador pinta além da imagem
+    # 9. a borda: o mapa some no mar de fora da imagem (FORA) a uma distância que ondula com o ruído; a terra esmaece em
+    # névoa (dois tons, em manchinhas) antes do mar, e nunca encosta nele; a terra do Brasil numa faixa estreita (o
+    # litoral do Nordeste e as cidades dele ficam longe da borda); os 2 px de fora são só mar, iguais ao que o navegador
+    # pinta além da imagem
     for y in range(h):
         for x in range(w):
+            i = y * w + x
             e = min(x, y, w - 1 - x, h - 1 - y)
-            alcance = VINHETA * (0.6 + 1.0 * _ruido(x, y, 19, 31))
-            if estado[y * w + x] == 1:
-                alcance = min(alcance, 7)
-            sorte = 0.6 * _ruido(x, y, 4, 34) + 0.4 * _h(x, y, 33)   # o pontilhado em manchinhas, não em grão solto
-            if e < 2 or (e < alcance and sorte < ((alcance - e) / alcance) ** 0.7):
-                cor[y * w + x] = FORA
+            alcance = VINHETA * f * (0.6 + 1.0 * _ruido(x / f, y / f, 19, 31))
+            if estado[i] == 1:
+                alcance = min(alcance, 7 * f)
+            sorte = 0.75 * _ruido(x / f, y / f, 6, 34) + 0.25 * _h(x, y, 33)   # em manchas de névoa, não em grão solto
+            nevoa = ((alcance - e) / alcance) ** 0.7 - sorte if e < alcance else -1
+            raso = cor[i] in ("raso", "raso_claro")   # o raso da costa fica (a costa nunca encosta no mar de fora)
+            if e < 2 * f or (not terra[i] and not raso and nevoa > 0) or (terra[i] and nevoa > NEVOA_FORA):
+                cor[i] = FORA
+            elif terra[i] and nevoa > NEVOA_ESCURA:
+                cor[i] = "nevoa_2"
+            elif terra[i] and nevoa > 0:
+                cor[i] = "nevoa"
+    for y in range(h):   # terra colada no mar de fora vira névoa escura (nunca um recorte seco de terra)
+        for x in range(w):
+            i = y * w + x
+            if cor[i] not in AGUA and any(0 <= x + a < w and 0 <= y + b < h and cor[(y + b) * w + x + a] == FORA
+                                          for a, b in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                cor[i] = "nevoa_2"
 
     indice = {n: k for k, n in enumerate(CORES)}
     return [indice[n] for n in cor]

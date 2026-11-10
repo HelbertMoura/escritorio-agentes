@@ -142,5 +142,155 @@ async function principal() {
   const g0 = n.contexto.gradientes || 0;
   n.rodar(120);
   assert.equal((n.contexto.gradientes || 0) - g0, 0, "brilhos em cache");
+  // de perto também (azulejos, estados, cidades médias): nada de gradiente novo por quadro
+  n.M.camera.zoomPara(3); n.rodar(40); await carregar(n); n.rodar(20);
+  const g1 = n.contexto.gradientes || 0;
+  n.rodar(60);
+  assert.equal((n.contexto.gradientes || 0) - g1, 0, "de perto, brilhos em cache");
+
+  await niveisDeDetalhe();
+  await casaEmMateusLeme();
+  await estados();
+  await arranjoSemPuxarNemCruzar();
+}
+
+const azulejosPedidos = m => (m.contexto.imagens || []).map(i => String(i.src || "")).filter(s => s.includes("/mundo/perto/"));
+const centrar = (m, x, y) => { m.M.camera.x = x; m.M.camera.y = y; m.M.camera.limitar(); m.rodar(3); };
+
+// a camada de perto: nenhum azulejo a 1x; a partir de 2x, só os da vista (com versão), e desenhados quando chegam. Os
+// nomes dos estados entram a 2x e as cidades médias a 3x, sem cobrir um ao outro, os nomes das capitais nem os ícones
+async function niveisDeDetalhe() {
+  const p = await brasil({ tela: [940, 800, 1] });   // a tela do desktop (o arnês de 640x400 aperta tudo a 2x)
+  p.rodar(30);
+  assert.deepEqual(azulejosPedidos(p), [], "a 1x, nenhum azulejo pedido");
+  assert.ok(!p.M.niveis.brasil.rotulos.some(r => r.tipo === "estado" || r.tipo === "media"), "a 1x, sem estados nem médias");
+  const bh = cidade("belo-horizonte");
+  p.M.camera.zoomPara(4, ...p.M.camera.tela(bh.x, bh.y)); p.rodar(2);   // o pedido sai assim que o zoom pedido passa de 2x,
+  const pedidos = azulejosPedidos(p);                                    // só com os azulejos da vista de chegada
+  assert.ok(pedidos.length > 0 && pedidos.length <= 9, "azulejos pedidos: " + pedidos.length);
+  assert.ok(pedidos.every(u => /^\/mundo\/perto\/[0-3]-[0-3]\.png\?v=\d+$/.test(u)), pedidos.join());
+  p.M.camera.zoomPara(2); p.rodar(80); centrar(p, bh.x, bh.y);
+  await carregar(p); p.rodar(30);
+  const b = p.M.niveis.brasil;
+  assert.ok(b.perto.desenhados > 0, "os azulejos à vista são desenhados: " + JSON.stringify(b.perto));
+  assert.ok(new Set(azulejosPedidos(p)).size === azulejosPedidos(p).length, "cada azulejo pedido uma vez");
+  const semColisao = (m, rotulo) => {
+    const b = m.M.niveis.brasil, todos = [...b.rotulos, ...b.nomes.map(n => ({ ...n, tipo: "capital" }))];
+    for (let i = 0; i < todos.length; i++) for (let j = i + 1; j < todos.length; j++) {
+      assert.ok(!cruza(todos[i], todos[j]), `${rotulo}: ${todos[i].tipo} ${todos[i].id} cobre ${todos[j].tipo} ${todos[j].id}`);
+    }
+    for (const r of b.rotulos) for (const c of b.caixas) assert.ok(!cruza(r, c), `${rotulo}: ${r.tipo} ${r.id} cobre o ícone de ${c.id}`);
+  };
+  const estados2 = b.rotulos.filter(r => r.tipo === "estado");
+  assert.ok(estados2.some(r => r.id === "MG"), "a 2x, o nome de Minas: " + estados2.map(r => r.id));
+  assert.ok(!b.rotulos.some(r => r.tipo === "media"), "a 2x, ainda sem as cidades médias");
+  semColisao(p, "2x");
+  p.M.camera.zoomPara(3); p.rodar(80); centrar(p, bh.x, bh.y - 20);
+  const medias = p.M.niveis.brasil.rotulos.filter(r => r.tipo === "media");
+  assert.ok(medias.length >= 2, "a 3x, cidades médias à vista: " + medias.map(r => r.id));
+  semColisao(p, "3x");
+}
+
+// a casa real (Mateus Leme) colada em Belo Horizonte: a 1x, nas três telas, a caixa da casa (chalé, bandeira e o halo
+// no maior tamanho) não cobre a de BH; a bandeira e o halo ficam dentro da caixa da casa
+async function casaEmMateusLeme() {
+  for (const tela of [[640, 400, 1], [940, 800, 1], [390, 507, 3]]) {
+    const v = await brasil({ tela, clima: { ...CLIMA, casa: "mateus-leme" } });
+    v.rodar(3);
+    const caixas = v.M.niveis.brasil.caixas, ml = caixas.find(c => c.id === "mateus-leme"), bh = caixas.find(c => c.id === "belo-horizonte");
+    assert.ok(ml.bandeira && ml.halo, `${tela}: a casa traz a bandeira e o halo`);
+    for (const r of [ml.bandeira, ml.halo]) {
+      assert.ok(r.x >= ml.x && r.y >= ml.y && r.x + r.w <= ml.x + ml.w && r.y + r.h <= ml.y + ml.h, `${tela}: dentro da caixa da casa`);
+    }
+    assert.ok(!cruza(ml, bh), `${tela}: a casa cobre BH`);
+    for (let i = 0; i < caixas.length; i++) for (let j = i + 1; j < caixas.length; j++) {
+      assert.ok(!cruza(caixas[i], caixas[j]), `${tela}: ${caixas[i].id} e ${caixas[j].id} se cobrem`);
+    }
+  }
+}
+
+// os estados: o cursor sobre uma UF (longe das cidades) a realça e põe nome e capital no status; o clique nela anuncia
+// sem sair do mapa; o clique numa cidade continua descendo a ela; o foco de teclado numa cidade diz o estado dela
+async function estados() {
+  const ufs = MUNDO.niveis.brasil.ufs, letras = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const mapa = ufs.mapa.map(l => {
+    const o = [];
+    for (const [, c, n] of l.matchAll(/([.a-zA-Z])(\d+)/g)) for (let i = 0; i < +n; i++) o.push(c);
+    return o;
+  });
+  const e = await brasil();
+  e.rodar(3);
+  const cam = e.M.camera, b = e.M.niveis.brasil, mg = letras[ufs.lista.findIndex(u => u.uf === "MG")];
+  let alvo = null;   // um pixel de Minas a mais de 6 px de tela da caixa de todo ícone (o alvo do clique fica dentro dela)
+  for (let y = 0; y < 400 && !alvo; y += 2) for (let x = 0; x < 400 && !alvo; x += 2) {
+    if (mapa[y][x] !== mg) continue;
+    const [sx, sy] = cam.tela(x + 0.5, y + 0.5);
+    if (b.caixas.every(c => sx < c.x - 6 || sx > c.x + c.w + 6 || sy < c.y - 6 || sy > c.y + c.h + 6)) alvo = [sx, sy];
+  }
+  assert.ok(alvo, "um ponto de Minas longe das cidades");
+  e.canvas.disparar("pointermove", { pointerId: 9, clientX: alvo[0], clientY: alvo[1], button: 0 });
+  e.rodar(2);
+  assert.equal(b.uf, "MG", "o cursor realça Minas");
+  assert.match(e.elementos["mundo-estado"].textContent, /Minas Gerais.*Belo Horizonte/, "status com o estado e a capital");
+  e.canvas.disparar("pointerleave", {}); e.rodar(2);
+  assert.equal(b.uf, null, "fora do mapa, sem realce");
+  assert.doesNotMatch(e.elementos["mundo-estado"].textContent, /Minas Gerais/);
+  e.clicar(...alvo); e.rodar(20);
+  assert.equal(e.M.nivel, "brasil", "o clique no estado não sai do mapa");
+  assert.match(e.elementos["mundo-estado"].textContent, /Minas Gerais/);
+  assert.equal(b.uf, "MG", "o toque deixa o estado realçado");
+  const cb = b.caixas.find(c => c.id === "belo-horizonte");
+  e.clicar(cb.x + cb.w / 2, cb.y + cb.h - 10); e.rodar(20);
+  assert.equal(e.contexto.location.hash, "#cidade=belo-horizonte", "o estado não rouba o clique da cidade");
+  // teclado: o foco numa cidade põe o estado dela no status (os estados não entram no Tab: um botão por cidade)
+  const t = await brasil();
+  t.rodar(3);
+  const botoes = t.elementos["mundo-alvos"].filhos, i = MUNDO.cidades.findIndex(c => c.id === "recife");
+  assert.equal(botoes.length, MUNDO.cidades.length, "só as cidades no Tab");
+  botoes[i].disparar("focus"); t.rodar(2);
+  assert.match(t.elementos["mundo-estado"].textContent, /Recife.*Pernambuco/);
+  assert.equal(t.M.niveis.brasil.uf, "PE", "o foco realça o estado da cidade");
+  botoes[i].disparar("blur"); t.rodar(2);
+  assert.doesNotMatch(t.elementos["mundo-estado"].textContent, /Pernambuco/);
+}
+
+// o arranjo: a cidade com o ponto real fora da tela não é presa na borda (a 2x em Salvador, Aracaju e Maceió ficam no
+// ponto delas, fora da vista); no celular a 1x, as linhas guia não se cruzam; os botões de Tab acompanham o ícone quando
+// o atlas chega depois do clima
+async function arranjoSemPuxarNemCruzar() {
+  for (const [tela, id] of [[[640, 400, 1], "salvador"], [[940, 800, 1], "salvador"], [[940, 800, 1], "brasilia"]]) {
+    const s = await brasil({ tela });
+    s.rodar(2);
+    const sa = cidade(id);
+    s.M.camera.zoomPara(3); s.rodar(80); centrar(s, sa.x, sa.y);
+    const W = tela[0] * tela[2], H = tela[1] * tela[2], cs = s.M.niveis.brasil.caixas;
+    const fora = cs.filter(c => c.ax < 0 || c.ay < 0 || c.ax >= W || c.ay >= H);
+    assert.ok(fora.length > 0, `${tela} ${id}: há cidades à beira, com o ponto fora da tela`);
+    for (const c of fora) assert.ok(c.px === c.ax && c.py === c.ay, `${tela} ${id}: ${c.id} fora da tela e puxada para a borda`);
+  }
+  const chuva = { cidades: Object.fromEntries(MUNDO.cidades.map(c => [c.id, { tipo: "chuva", vento: 0, noite: false }])),
+    casa: "mateus-leme", versao: 1 };
+  const corta = ([a, b, c, d], [e, f, g, h]) => {   // os segmentos (a,b)-(c,d) e (e,f)-(g,h) se cruzam (não só se tocam)
+    const o = (px, py, qx, qy, rx, ry) => Math.sign((qx - px) * (ry - py) - (qy - py) * (rx - px));
+    return o(a, b, c, d, e, f) * o(a, b, c, d, g, h) < 0 && o(e, f, g, h, a, b) * o(e, f, g, h, c, d) < 0;
+  };
+  for (const tela of [[390, 507, 3], [390, 760, 3], [940, 800, 1]]) {
+    const v = await brasil({ tela, clima: chuva });
+    v.rodar(3);
+    const guias = v.M.niveis.brasil.guias;
+    for (let i = 0; i < guias.length; i++) for (let j = i + 1; j < guias.length; j++) {
+      assert.ok(!corta(guias[i].s, guias[j].s), `${tela}: as linhas de ${guias[i].id} e ${guias[j].id} se cruzam`);
+    }
+  }
+  // o atlas chega depois do clima: os botões se refazem no lugar novo do ícone
+  const a = await abrir("#brasil", { passo: 50 });
+  a.rodar(3);
+  await carregar(a);
+  a.rodar(3);
+  const cam = a.M.camera, alvos = a.M.niveis.brasil.alvos();
+  a.elementos["mundo-alvos"].filhos.forEach((b, i) => {
+    const [x, y] = cam.tela(alvos[i].x, alvos[i].y);
+    assert.equal(b.style.transform, `translate(${x}px, ${y - alvos[i].alto / 2}px)`, alvos[i].id);
+  });
 }
 principal().catch(e => { console.error(e); process.exitCode = 1; });

@@ -8,15 +8,25 @@
 // O tempo das cidades vem de POST /api/mundo/clima ao abrir e a cada 15 min.
 "use strict";
 const Mundo = (() => {
-  // Câmera de um nível: centro (x, y) no mundo e zoom z de 1x a 4x sobre a escala base, a maior escala (pode ser
-  // fracionária) em que a caixa do nível cabe inteira na tela. O 1x é sempre a base exata; acima dele, parada, a escala
-  // final (base·z) é inteira até o teto de 4x, e no teto pode ser fracionária. A origem cai sempre em pixel inteiro.
-  // O nível pode baixar o teto com camera.teto() (o z máximo agora; a cidade: o que ainda mostra uma quadra inteira).
-  function Camera(caixa) {
-    const MIN = 1, MAX = 4, teto = () => (c.teto ? Math.max(MIN, Math.min(MAX, c.teto() || MAX)) : MAX);
+  // Câmera de um nível: centro (x, y) no mundo e zoom z de 1x ao teto (4x, ou opcoes.max) sobre a escala base, a maior
+  // escala (pode ser fracionária) em que a caixa do nível cabe inteira na tela. O 1x é sempre a base exata; acima dele,
+  // parada, a escala final (base·z) é inteira (múltipla de opcoes.multiplo: o Brasil usa 2, para a camada de perto no
+  // dobro da resolução cair em pixel inteiro) até o teto, e no teto pode ser fracionária (com múltiplo, não: o teto
+  // desce ao múltiplo de baixo). A origem cai sempre em pixel inteiro. O nível pode baixar o teto com camera.teto() (o z
+  // máximo agora; a cidade: o que ainda mostra uma quadra inteira); camera.maximo() diz o teto valendo.
+  function Camera(caixa, opcoes = {}) {
+    const MIN = 1, MAX = opcoes.max || 4, M = opcoes.multiplo || 1;
+    const teto = () => {
+      const t = c.teto ? Math.max(MIN, Math.min(MAX, c.teto() || MAX)) : MAX;
+      return M > 1 ? Math.max(MIN, Math.floor(c.base * t / M + 1e-9) * M / c.base) : t;
+    };
     const prender = z => Math.min(teto(), Math.max(MIN, z));
-    // o zoom parado: a escala inteira mais perto de base·z, ou 1 (a base exata) se ela não passar da base arredondada
-    const parado = z => { const p = Math.round(c.base * z); return p <= Math.round(c.base) ? 1 : prender(p / c.base); };
+    // o zoom parado: a escala inteira (múltipla de M) mais perto de base·z, ou 1 (a base exata) se ela não passar da base
+    // arredondada
+    const parado = z => {
+      const p = Math.round(c.base * z);
+      return p <= Math.round(c.base) ? 1 : prender(Math.max(M, Math.round(c.base * z / M) * M) / c.base);
+    };
     const c = {
       caixa, x: (caixa[0] + caixa[2]) / 2, y: (caixa[1] + caixa[3]) / 2, z: 1, alvoZ: 1, W: 1, H: 1, dpr: 1, base: 1,
       vx: 0, vy: 0, ancora: null, voo: null,
@@ -42,10 +52,13 @@ const Mundo = (() => {
         c.alvoZ = parado(z);
         if (sx != null) { const [wx, wy] = c.mundo(sx, sy); c.ancora = { sx, sy, wx, wy }; c.voo = null; } else c.ancora = null;
       },
-      passoZoom(sinal, sx = c.W / 2, sy = c.H / 2) {
-        const p = Math.round(c.base * c.alvoZ), q = sinal > 0 ? Math.max(p + 1, Math.round(p * 1.5)) : Math.min(p - 1, Math.round(p / 1.5));
+      passoZoom(sinal, sx = c.W / 2, sy = c.H / 2) {   // um degrau: 1,5 vez a escala (com múltiplo, o par de baixo)
+        const p = Math.round(c.base * c.alvoZ);
+        const q = M === 1 ? (sinal > 0 ? Math.max(p + 1, Math.round(p * 1.5)) : Math.min(p - 1, Math.round(p / 1.5)))
+          : sinal > 0 ? Math.max(p + M, Math.floor(p * 1.5 / M) * M) : Math.min(p - M, Math.ceil(p / 1.5 / M) * M);
         c.zoomPara(q / c.base, sx, sy);
       },
+      maximo: () => teto(),
       voar(x, y, z) { c.voo = { x, y }; c.ancora = null; c.vx = c.vy = 0; if (z != null) c.alvoZ = parado(z); },
       passo(dt, imediato) {
         const k = imediato ? 1 : 1 - Math.exp(-dt * 12), x = c.x, y = c.y;
@@ -143,7 +156,7 @@ const Mundo = (() => {
     if (!nivel || reduzido || opcoes.instantaneo) return trocar(a, opcoes);
     const cam = nivel.camera, c = a.cidade && mapa && mapa.porId.get(a.cidade);
     if (ORDEM.indexOf(a.ir) > ORDEM.indexOf(nome)) {   // descendo: mergulha na cidade (ou no meio da tela)
-      if (nome === "brasil" && c) cam.voar(c.x, c.y, 4);
+      if (nome === "brasil" && c) cam.voar(c.x, c.y, cam.maximo());
       else if (nivel.mergulho) cam.zoomPara(4, ...cam.tela(...nivel.mergulho()));   // do globo, no Brasil; da cidade, na casa
       else if (c) cam.zoomPara(4, ...cam.tela(c.x, c.y));
     } else cam.zoomPara(1, cam.W / 2, cam.H / 2);
@@ -159,23 +172,34 @@ const Mundo = (() => {
     endereco(a, opcoes.substituir);
     voltar.disabled = !niveis[ACIMA[nome]];   // sem o nível de cima (o globo que não abriu), nada a subir
     menos.disabled = nome === "globo";        // o globo não se afasta: o − ficaria mudo
-    rotular(); montarAlvos(); destacar(null); mostrar();
+    anunciado = null; rotular(); montarAlvos(); destacar(null); mostrar();
   }
   // o rótulo do canvas; o da cidade vem dela (marco, chalé da casa) e é refeito quando a casa ou o atlas chegam
   const ROTULOS = {
     globo: "Globo terrestre em pixel art girando, com biomas, nuvens, a noite de agora e as luzes das cidades, estrelas e a lua",
     brasil: "Mapa ilustrado do Brasil em pixel art, com biomas, rios e serras, o marco de cada capital e de Mateus Leme, o tempo de " +
-      "agora em cada uma, barcos na costa, aviões nas rotas e a noite pelo horário",
+      "agora em cada uma, barcos na costa, aviões nas rotas e a noite pelo horário. De perto aparecem rodovias, rios menores, os " +
+      "nomes dos estados e as cidades médias; o cursor sobre um estado diz o nome e a capital",
     bairro: "Bairro com o chalé deste escritório, rua, pessoas, cachorro, carro e céu do horário atual",
   };
   function rotular() { if (nivel) canvas.setAttribute("aria-label", nivel.rotulo ? nivel.rotulo() : ROTULOS[nome]); }
   function subir() { if (nivel && ACIMA[nome]) ir(ACIMA[nome], { cidade: atualCidade }); }
   // a ação de um clique: ir a um nível ou, numa construção da cidade, anunciar no status o nome que a etiqueta mostra
   function executar(a) { if (a && a.ir) ir(a.ir, a); else if (a && a.anuncio) estado.textContent = a.anuncio; }
-  // roda, botões, teclado, duplo clique e pinça: o globo decide o próprio zoom (desce ao Brasil); os outros níveis aproximam
-  function aproximar(sinal, sx, sy) {
+  // roda, botões, teclado, duplo clique e pinça: o globo decide o próprio zoom (desce ao Brasil); os outros níveis
+  // aproximam, e o que mergulha (o Brasil) troca de nível no teto ou no mínimo do zoom
+  function aproximar(sinal, sx = W / 2, sy = H / 2) {
     if (!nivel) return;
-    if (nivel.zoom) { if (!trans) executar(nivel.zoom(sinal, sx, sy)); } else nivel.camera.passoZoom(sinal, sx, sy);
+    if (nivel.zoom) { if (!trans) executar(nivel.zoom(sinal, sx, sy)); return; }
+    const mergulho = nivel.mergulhar && !trans ? nivel.mergulhar(sinal, sx, sy) : null;
+    if (mergulho) executar(mergulho); else nivel.camera.passoZoom(sinal, sx, sy);
+  }
+  let anunciado = null;   // o estado sob o cursor na linha de status (o Brasil diz qual), até ele sair de baixo do cursor
+  function anunciar() {
+    const s = nivel && nivel.anuncio ? nivel.anuncio() : null;
+    if (s === anunciado) return;
+    anunciado = s;
+    if (s) estado.textContent = s; else mostrar();
   }
 
   function mostrar() {
@@ -209,8 +233,9 @@ const Mundo = (() => {
           const a = par[1];
           executar(a.acao ? a.acao : a.etiqueta && nivel.escolher ? nivel.escolher(a.id) : nivel.clique(a.x, a.y));
         });
-        b.addEventListener("focus", () => { destacar(par[1]); verAlvo(par[1]); });
-        b.addEventListener("blur", () => destacar(null));
+        // o foco mostra a dica; se o alvo tem anúncio (a cidade do mapa: o estado dela), ele vai à linha de status
+        b.addEventListener("focus", () => { destacar(par[1]); verAlvo(par[1]); if (par[1].anuncio) estado.textContent = par[1].anuncio; });
+        b.addEventListener("blur", () => { destacar(null); if (par[1].anuncio) mostrar(); });
         caixaAlvos.appendChild(b);
         return par;
       });
@@ -229,8 +254,8 @@ const Mundo = (() => {
     forte.textContent = a.titulo; texto.textContent = a.texto;
     dica.replaceChildren(forte, texto); dica.hidden = false; chaveAlvos = "";
   }
-  function posicionar() {   // botões e dica acompanham a câmera (só quando ela mexe)
-    const cam = nivel.camera, chave = cam.origem().join() + "," + cam.P + "," + W + "," + H;
+  function posicionar() {   // botões e dica acompanham a câmera e os ícones (o atlas que chega muda o arranjo do mapa)
+    const cam = nivel.camera, chave = cam.origem().join() + "," + cam.P + "," + W + "," + H + "," + (nivel.assinatura ? nivel.assinatura() : "");
     if (chave === chaveAlvos) return;
     chaveAlvos = chave;
     for (const [b, a] of botoes) { const [x, y] = cam.tela(a.x, a.y); b.style.transform = `translate(${x / dpr}px, ${y / dpr - a.alto / 2}px)`; }
@@ -304,6 +329,7 @@ const Mundo = (() => {
       const a = nivel.sobre(...nivel.camera.mundo(x, y));
       canvas.style.cursor = a ? "pointer" : "grab";
       if ((a && a.id) !== (dicaAlvo && dicaAlvo.id)) destacar(a);
+      anunciar();
       return;
     }
     toques.set(ev.pointerId, [x, y]);
@@ -311,8 +337,15 @@ const Mundo = (() => {
     if (gesto.pinca && toques.size >= 2) {
       const [d, mx, my] = dois(), p = gesto.pinca;
       if (nivel.zoom) { if (!p.feito && d / p.d > 1.25) { p.feito = true; aproximar(1, mx, my); } return; }
-      cam.z = cam.alvoZ = Math.min(4, Math.max(1, p.z * d / p.d));
+      // a pinça que começa no teto e abre (ou começa no mínimo e fecha) além de um quarto troca de nível, uma vez por gesto
+      const sinal = d > p.d ? 1 : -1, naBeira = sinal > 0 ? p.z >= cam.maximo() - 1e-9 : p.z <= 1;
+      if (nivel.mergulhar && !p.feito && naBeira && (d / p.d > 1.25 || d / p.d < 0.8)) {
+        const m = nivel.mergulhar(sinal, mx, my);
+        if (m) { p.feito = true; executar(m); return; }
+      }
+      cam.z = cam.alvoZ = Math.max(1, p.z * d / p.d);
       cam.x = p.wx - (mx - W / 2) / cam.P; cam.y = p.wy - (my - H / 2) / cam.P; cam.limitar();
+      p.mx = mx; p.my = my;
       return;
     }
     if (toques.size > 1) return;
@@ -327,10 +360,10 @@ const Mundo = (() => {
   function soltar(ev, cancelado) {
     if (!toques.delete(ev.pointerId) || !gesto) return;
     const cam = nivel.camera;
-    if (toques.size === 1) {   // largou um dedo da pinça: o outro segue arrastando
-      const [[x, y]] = [...toques.values()];
+    if (toques.size === 1) {   // largou um dedo da pinça: o outro segue arrastando (o zoom assenta no meio da pinça)
+      const [[x, y]] = [...toques.values()], p = gesto.pinca;
       Object.assign(gesto, { x, y, pinca: null, t: performance.now(), vx: 0, vy: 0 });
-      cam.zoomPara(cam.z);
+      if (p && p.mx != null) cam.zoomPara(cam.z, p.mx, p.my); else cam.zoomPara(cam.z);
       return;
     }
     if (toques.size) return;
@@ -340,13 +373,13 @@ const Mundo = (() => {
     toque = ev.pointerType === "touch" && !gesto.moveu && !cancelado && !duplo ? { t: agora, x: gesto.x0, y: gesto.y0 } : null;
     if (duplo) { aproximar(1, gesto.x0, gesto.y0); toque = { t: agora, x: -1e9, y: -1e9, zoom: true }; }   // duplo toque
     else if (!gesto.moveu && !cancelado) clicar(gesto.x0, gesto.y0);
-    else if (gesto.pinca) cam.zoomPara(cam.z, W / 2, H / 2);
+    else if (gesto.pinca) cam.zoomPara(cam.z, gesto.pinca.mx != null ? gesto.pinca.mx : W / 2, gesto.pinca.my != null ? gesto.pinca.my : H / 2);
     else if (!nivel.soltar && !reduzido && !cancelado && performance.now() - gesto.t < 90) { cam.vx = gesto.vx; cam.vy = gesto.vy; }   // o globo cuida da própria inércia
     gesto = null; canvas.style.cursor = "grab";
   }
   canvas.addEventListener("pointerup", ev => soltar(ev, false));
   canvas.addEventListener("pointercancel", ev => soltar(ev, true));
-  canvas.addEventListener("pointerleave", () => { if (!gesto) destacar(null); });
+  canvas.addEventListener("pointerleave", () => { if (!gesto) { destacar(null); if (nivel && nivel.fora) nivel.fora(); anunciar(); } });
   canvas.addEventListener("wheel", ev => {
     if (!nivel || trans) return;
     ev.preventDefault();
