@@ -152,11 +152,11 @@ class Montagem(unittest.TestCase):
             shutil.rmtree(p, ignore_errors=True)
 
     @classmethod
-    def cores(cls, pontos):
-        """Cor '#rrggbb' de cada (x, y) do brasil.png montado, lida pelo Pillow no processo filho."""
+    def cores(cls, pontos, nome="brasil.png"):
+        """Cor '#rrggbb' de cada (x, y) do PNG montado (brasil.png ou terra.png), lida pelo Pillow no processo filho."""
         ler = ("import json, sys\nfrom PIL import Image\nim = Image.open(sys.argv[1]).convert('RGB')\n"
                "print(json.dumps(['#%02x%02x%02x' % im.getpixel(tuple(p)) for p in json.loads(sys.stdin.read())]))")
-        r = subprocess.run([sys.executable, "-c", ler, os.path.join(cls.pastas[0], "brasil.png")], input=json.dumps(pontos),
+        r = subprocess.run([sys.executable, "-c", ler, os.path.join(cls.pastas[0], nome)], input=json.dumps(pontos),
                            capture_output=True, text=True, timeout=60)
         if r.returncode:
             raise AssertionError(r.stderr)
@@ -299,23 +299,24 @@ class Montagem(unittest.TestCase):
         brasil = self.mundo["niveis"]["brasil"]
         self.assertEqual(set(self.mundo["niveis"]), {"brasil"})
         self.assertEqual({k: brasil[k] for k in ("w", "h", "caixa")}, {"w": 400, "h": 400, "caixa": [-74.0, -34.0, -34.0, 6.0]})
-        # as células de 1° do Brasil, para o globo (40 linhas de 40, de lat 6 para baixo e de lon −74 para a direita)
+        # as células de 0,5° do Brasil, para o globo (80 linhas de 80, de lat 6 para baixo e de lon −74 para a direita)
         celulas = brasil["celulas"]
         self.assertEqual(set(brasil), {"w", "h", "caixa", "celulas"})
-        self.assertEqual(len(celulas), 40)
-        self.assertTrue(all(len(l) == 40 and set(l) <= {"0", "1"} for l in celulas))
-        celula = lambda lat, lon: celulas[int(6 - lat)][int(lon + 74)]
+        self.assertEqual(len(celulas), 80)
+        self.assertTrue(all(len(l) == 80 and set(l) <= {"0", "1"} for l in celulas))
+        celula = lambda lat, lon: celulas[int((6 - lat) * 2)][int((lon + 74) * 2)]
         self.assertEqual(celula(-15.8, -47.9), "1")   # Brasília
         self.assertEqual(celula(-3.1, -60.0), "1")    # Manaus
         self.assertEqual(celula(-23.0, -58.0), "0")   # Paraguai
         self.assertEqual(celula(-20.0, -36.0), "0")   # mar
-        self.assertTrue(650 <= "".join(celulas).count("1") <= 800, "".join(celulas).count("1"))
+        self.assertEqual(celula(-12.0, -70.0), "0")   # Peru, logo ao sul do Acre
+        self.assertTrue(2600 <= "".join(celulas).count("1") <= 3200, "".join(celulas).count("1"))
         self.assertEqual(len(self.mundo["cidades"]), 28)
         bh = next(c for c in self.mundo["cidades"] if c["id"] == "belo-horizonte")
         self.assertEqual((bh["x"], bh["y"]), (300, 259))
         for c in self.mundo["cidades"]:
             self.assertEqual(set(c), {"id", "nome", "uf", "lat", "lon", "x", "y", "marco"})
-        for nome, tamanho in (("brasil.png", (400, 400)), ("terra.png", (360, 180))):
+        for nome, tamanho in (("brasil.png", (400, 400)), ("terra.png", (720, 360))):
             with open(os.path.join(self.pastas[0], nome), "rb") as f:
                 cabeca = f.read(24)
             self.assertEqual(cabeca[1:4], b"PNG", nome)
@@ -376,9 +377,39 @@ class Montagem(unittest.TestCase):
     def test_agua_e_terra_pela_cor(self):
         """O navegador separa água de terra pelo azul: água com B > G, terra com G >= B (todas as cores)."""
         import mundo_terreno as mt
-        for nome, cor in mt.CORES.items():
-            r, g, b = (int(cor[i:i + 2], 16) for i in (1, 3, 5))
-            self.assertEqual(b > g, nome in mt.AGUA, nome)
+        import mundo_planeta as mp
+        for cores, agua in ((mt.CORES, mt.AGUA), (mp.PALETA, mp.AGUA)):   # o mapa e o terra.png (o globo)
+            for nome, cor in cores.items():
+                r, g, b = (int(cor[i:i + 2], 16) for i in (1, 3, 5))
+                self.assertEqual(b > g, nome in agua, nome)
+
+    def janela_terra(self, lat, lon, r):
+        """As cores da janela (2r+1)² em volta de (lat, lon) no terra.png (0,5° por pixel, a longitude dá a volta)."""
+        x, y = int((lon + 180) * 2), int((90 - lat) * 2)
+        return self.cores([[(i + 720) % 720, j] for j in range(y - r, y + r + 1) for i in range(x - r, x + r + 1)
+                           if 0 <= j < 360], "terra.png")
+
+    def test_planeta_com_biomas(self):
+        """O terra.png fala a língua do mapa: cada bioma do mundo no seu lugar (a maior parte da janela nas cores dele),
+        montanhas com rocha e neve, gelo nos polos e no mar do Ártico, e água rasa mais clara junto da costa."""
+        import mundo_planeta as mp
+        lugares = {"deserto": [(25.0, 10.0), (21.0, 47.0), (-25.0, 128.0)], "floresta": [(-4.0, -63.0), (0.0, 22.0), (0.5, 114.0)],
+                   "taiga": [(60.0, 100.0), (55.0, -110.0)], "tundra": [(70.0, 150.0)], "gelo": [(75.0, -40.0), (-80.0, 30.0), (86.0, 0.0)],
+                   "cerrado": [(-13.0, -46.5)], "savana": [(-12.0, 25.0)], "mata": [(-22.8, -51.0), (49.0, 10.0)],
+                   "estepe": [(48.0, 68.0)], "caatinga": [(-6.5, -39.8)]}
+        for classe, pontos in lugares.items():
+            dela = mp.cores_da_classe(classe)
+            for lat, lon in pontos:
+                cores = self.janela_terra(lat, lon, 2)
+                self.assertGreaterEqual(sum(c in dela for c in cores) / len(cores), 0.5, (classe, lat, lon, cores))
+        himalaia = set(self.janela_terra(28.5, 86.0, 3))
+        self.assertTrue(himalaia & mp.cores_da_classe("neve") and himalaia & mp.cores_da_classe("rocha"), himalaia)
+        agua = {mp.PALETA[n] for n in mp.AGUA}
+        alto_mar = self.janela_terra(-30.0, -20.0, 4)
+        self.assertTrue(set(alto_mar) <= agua - {mp.PALETA["raso_claro"]}, set(alto_mar))
+        costa = self.janela_terra(-8.0, -34.6, 3)   # Recife: terra, a faixa clara e o raso
+        self.assertIn(mp.PALETA["raso_claro"], costa)
+        self.assertIn(mp.PALETA["raso"], costa)
 
     def test_versao_muda_com_a_paleta(self):
         """Só uma cor da PALETA muda: os índices dos pixels ficam iguais e a versão muda (cache do navegador)."""

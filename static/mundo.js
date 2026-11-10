@@ -66,6 +66,7 @@ const Mundo = (() => {
   if (!canvas) return { Camera };
   const ctx = canvas.getContext("2d"), $ = id => document.getElementById(id);
   const estado = $("mundo-estado"), botaoEntrar = $("entrar"), voltar = $("mundo-voltar"), caixaAlvos = $("mundo-alvos"), dica = $("mundo-dica");
+  const menos = $("mundo-menos");
   const reduzido = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const ORDEM = ["globo", "brasil", "cidade", "bairro"], ACIMA = { bairro: "cidade", cidade: "brasil", brasil: "globo" };
   const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5], FUNDO = "#0b0d12";
@@ -153,12 +154,13 @@ const Mundo = (() => {
     nivel.camera.tamanho(W, H, dpr);
     nivel.entrar({ cidade: atualCidade, de: deCidade, nivel: deNivel });
     endereco(a, opcoes.substituir);
-    voltar.disabled = !ACIMA[nome];
+    voltar.disabled = !niveis[ACIMA[nome]];   // sem o nível de cima (o globo que não abriu), nada a subir
+    menos.disabled = nome === "globo";        // o globo não se afasta: o − ficaria mudo
     rotular(); montarAlvos(); destacar(null); mostrar();
   }
   // o rótulo do canvas; o da cidade vem dela (marco, chalé da casa) e é refeito quando a casa ou o atlas chegam
   const ROTULOS = {
-    globo: "Globo terrestre em pixel art girando, com a noite de agora, as luzes das cidades do Brasil, nuvens e a lua",
+    globo: "Globo terrestre em pixel art girando, com biomas, nuvens, a noite de agora e as luzes das cidades, estrelas e a lua",
     brasil: "Mapa ilustrado do Brasil em pixel art, com biomas, rios e serras, o marco de cada capital e de Mateus Leme, o tempo de " +
       "agora em cada uma, barcos na costa, aviões nas rotas e a noite pelo horário",
     bairro: "Bairro com o chalé deste escritório, rua, pessoas, cachorro, carro e céu do horário atual",
@@ -342,7 +344,7 @@ const Mundo = (() => {
   }, { passive: false });
   canvas.addEventListener("dblclick", ev => { if (nivel && !trans) aproximar(1, ...ponto(ev)); });
   $("mundo-mais").addEventListener("click", () => aproximar(1));
-  $("mundo-menos").addEventListener("click", () => aproximar(-1));
+  menos.addEventListener("click", () => aproximar(-1));
   voltar.addEventListener("click", subir);
   window.addEventListener("keydown", ev => {
     const alvo = ev.target, campo = alvo && /^(INPUT|TEXTAREA|SELECT)$/.test(alvo.tagName || "");
@@ -376,9 +378,10 @@ const Mundo = (() => {
     .then(r => r.ok ? r.json() : Promise.reject(new Error("mundo.json " + r.status)))
     .then(dados => {
       mapa = MundoMapa.criar({ dados, Camera, reduzido, festa: () => festa });
-      Object.assign(niveis, mapa.niveis, { globo: Globo.criar({ dados, Camera, reduzido }),
+      Object.assign(niveis, mapa.niveis, {
         cidade: MundoCidade.criar({ dados, Camera, reduzido, mapa, clima: climaDaCidade, festa: () => festa,
           avisar: () => { if (nome === "cidade") { rotular(); montarAlvos(); } } }) });   // o atlas chegou: placa, porta e marco
+      try { niveis.globo = Globo.criar({ dados, Camera, reduzido }); } catch (e) { /* sem o globo, a página abre no Brasil */ }
     })
     .catch(() => { mapa = null; })   // sem o mapa, a página segue com o bairro, como antes
     .then(() => {

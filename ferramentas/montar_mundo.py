@@ -1,10 +1,10 @@
 """Monta o mundo vivo: static/mundo/terra.png, brasil.png, mundo.json e o atlas da arte do PixelLab.
 
-Entradas (arte/mundo): cidades.json, biomas.json, serras.json e os contornos e rios do Natural Earth em fontes/ (países
-1:110m, as 27 UFs e os rios 1:50m). Aqui os dados viram pixels: preenchimento de polígono por varredura par-ímpar (pixel
-marcado pelo centro), a costa alisada e as linhas das serras e dos rios na escala da imagem. O terra.png (o globo) sai
-numa paleta fixa de quatro cores; o desenho do brasil.png (o mapa ilustrado) fica em mundo_terreno.py. O mesmo dado gera
-sempre os mesmos PNG.
+Entradas (arte/mundo): cidades.json, biomas.json, serras.json, planeta.json e os contornos e rios do Natural Earth em
+fontes/ (países 1:110m, as 27 UFs e os rios 1:50m). Aqui os dados viram pixels: preenchimento de polígono por varredura
+par-ímpar (pixel marcado pelo centro), a costa alisada e as linhas das serras e dos rios na escala da imagem. O desenho
+do brasil.png (o mapa ilustrado) fica em mundo_terreno.py; o do terra.png (o globo, com os biomas do mundo), em
+mundo_planeta.py. O mesmo dado gera sempre os mesmos PNG.
 
 Uso: python ferramentas/montar_mundo.py [pasta de entrada] [pasta de saída]
 """
@@ -16,6 +16,7 @@ import sys
 from collections import Counter, deque
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mundo_planeta  # noqa: E402  (o desenho do globo; sem Pillow)
 import mundo_terreno  # noqa: E402  (o desenho do mapa; sem Pillow)
 
 RAIZ = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
@@ -25,9 +26,8 @@ SAIDA = os.path.join(RAIZ, "static", "mundo")
 CAIXA_BRASIL = (-74.0, -34.0, -34.0, 6.0)  # (lon_min, lat_min, lon_max, lat_max)
 W_BRASIL, H_BRASIL = 400, 400
 CAIXA_TERRA = (-180.0, -90.0, 180.0, 90.0)
-W_TERRA, H_TERRA = 360, 180  # 1° por pixel
-PALETA = {"mar": "#1d3b5c", "mar_raso": "#2a5a7c", "terra": "#5a8a3c", "terra_alta": "#7a9a4a"}  # terra.png
-COSTA = 3  # terra.png: mar raso e terra baixa até 3 pixels da costa
+W_TERRA, H_TERRA = 720, 360  # 0,5° por pixel
+PALETA = mundo_planeta.PALETA  # terra.png
 NAO_CAPITAIS = {"mateus-leme"}
 ROTA_MAX_KM, ROTAS_MAX = 1500, 40
 ESTRANGEIRO = mundo_terreno.ESTRANGEIRO  # rótulo da terra de outros países no mapa do Brasil
@@ -79,9 +79,8 @@ def aneis_em_pixels(geometria, caixa, w, h):
     return [[((lon - lon0) * sx, (lat1 - lat) * sy) for lon, lat in anel] for poligono in poligonos for anel in poligono]
 
 
-def distancias(dentro, w, h, rodar=False):
-    """Para cada pixel de `dentro`, quantos passos (8 vizinhos) até o pixel mais perto fora dele.
-    rodar=True liga a borda esquerda à direita (mapa-múndi)."""
+def distancias(dentro, w, h):
+    """Para cada pixel de `dentro`, quantos passos (8 vizinhos) até o pixel mais perto fora dele."""
     dist, fila = {}, deque()
     for y in range(h):
         for x in range(w):
@@ -93,7 +92,7 @@ def distancias(dentro, w, h, rodar=False):
         d = dist[(x, y)] + 1
         for dx in (-1, 0, 1):
             for dy in (-1, 0, 1):
-                nx, ny = (x + dx) % w if rodar else x + dx, y + dy
+                nx, ny = x + dx, y + dy
                 if 0 <= nx < w and 0 <= ny < h and (nx, ny) not in dist:
                     dist[(nx, ny)] = d
                     fila.append((nx, ny))
@@ -118,28 +117,35 @@ def pintar(w, h, cor_de):
     return im
 
 
-def desenhar(terra, w, h, rodar=False):
-    """terra.png: mar raso perto da costa e a terra em duas faixas (baixa perto da costa, alta no interior)."""
-    da_terra = distancias(terra, w, h, rodar)                   # na terra: passos até o mar
-    do_mar = distancias(set(da_terra) - terra, w, h, rodar)     # no mar: passos até a terra
-
-    def cor(x, y):
-        if (x, y) not in terra:
-            return "mar_raso" if do_mar[(x, y)] <= COSTA else "mar"
-        return "terra" if da_terra[(x, y)] <= COSTA else "terra_alta"
-    return pintar(w, h, cor)
-
-
 def ler(caminho):
     with open(caminho, encoding="utf-8") as f:
         return json.load(f)
 
 
-def desenhar_terra(paises):
+def desenhar_terra(paises, fontes, celulas_brasil):
+    """O terra.png (mundo_planeta.desenhar): a terra dos países menos os lagos, os biomas do Brasil (biomas.json; o
+    altiplano só fora das células do Brasil) e os do planeta.json, passados para os pixels de 0,5°."""
     terra = set()
     for p in paises:
         terra |= preencher_aneis(aneis_em_pixels(p["geometry"], CAIXA_TERRA, W_TERRA, H_TERRA), W_TERRA, H_TERRA)
-    return desenhar(terra, W_TERRA, H_TERRA, rodar=True)
+    sx, sy = W_TERRA / 360, H_TERRA / 180
+    em_px = lambda lon, lat: ((lon + 180) * sx, (90 - lat) * sy)
+    poligono = lambda pontos: preencher([em_px(*p) for p in pontos], W_TERRA, H_TERRA)
+    planeta = ler(os.path.join(fontes, "planeta.json"))
+    for lago in planeta["lagos"]:   # os grandes lagos, que os contornos dos países cobrem
+        terra -= poligono(lago["poligono"])
+    do_brasil = {(int((CAIXA_BRASIL[0] + 180) * sx) + i, int((90 - CAIXA_BRASIL[3]) * sy) + j)
+                 for j, linha in enumerate(celulas_brasil) for i, c in enumerate(linha) if c == "1"}
+    biomas = ler(os.path.join(fontes, "biomas.json"))
+    brasil = [(mundo_planeta.DO_BRASIL["andes"], poligono(biomas["extras"]["andes"]["poligono"]) - do_brasil),
+              (mundo_planeta.DO_BRASIL["araucarias"], poligono(biomas["extras"]["araucarias"]["poligono"]))]
+    brasil += [(mundo_planeta.DO_BRASIL[b["id"]], poligono(b["poligono"])) for b in biomas["biomas"]]
+    mundo = [(b["classe"], poligono(b["poligono"])) for b in planeta["biomas"]]
+    serras = [{"tipo": s["tipo"], "largura": s["largura"] * sx, "linha": [em_px(*p) for p in s["linha"]]}
+              for s in planeta["serras"]]
+    lista = [(x, y) in terra for y in range(H_TERRA) for x in range(W_TERRA)]
+    nomes = mundo_planeta.desenhar(lista, brasil, mundo, serras, W_TERRA, H_TERRA)
+    return pintar(W_TERRA, H_TERRA, lambda x, y: nomes[y * W_TERRA + x])
 
 
 def rotular_brasil(paises, estados):
@@ -213,11 +219,11 @@ def desenhar_brasil(rotulo, fontes):
 
 
 def celulas(rotulo):
-    """As células de 1° do Brasil, para o globo: 40 linhas (de lat 6 para baixo) de 40 '0'/'1' (de lon −74 para a
-    direita). A célula é do Brasil se 4 das 9 amostras (2, 5 e 8 px dentro do bloco de 10x10) forem de UF."""
+    """As células de 0,5° do Brasil, para o globo: 80 linhas (de lat 6 para baixo) de 80 '0'/'1' (de lon −74 para a
+    direita). A célula é do Brasil se 4 das 9 amostras (1, 2 e 3 px dentro do bloco de 5x5) forem de UF."""
     uf = lambda x, y: rotulo.get((x, y)) not in (None, ESTRANGEIRO)
-    return ["".join("1" if sum(uf(i * 10 + a, j * 10 + b) for a in (2, 5, 8) for b in (2, 5, 8)) >= 4 else "0"
-                    for i in range(40)) for j in range(40)]
+    return ["".join("1" if sum(uf(i * 5 + a, j * 5 + b) for a in (1, 2, 3) for b in (1, 2, 3)) >= 4 else "0"
+                    for i in range(80)) for j in range(80)]
 
 
 def na_terra(cidade, rotulo):
@@ -253,7 +259,7 @@ def montar(fontes, saida):
     paises = ler(os.path.join(fontes, "fontes", "ne_110m_admin_0_countries.geojson"))["features"]
     estados = ler(os.path.join(fontes, "fontes", "ne_50m_admin_1_states_provinces_lakes.geojson"))["features"]
     rotulo = rotular_brasil(paises, estados)
-    terra, brasil = desenhar_terra(paises), desenhar_brasil(rotulo, fontes)
+    terra, brasil = desenhar_terra(paises, fontes, celulas(rotulo)), desenhar_brasil(rotulo, fontes)
 
     mundo = {
         "cidades": [{"id": c["id"], "nome": c["nome"], "uf": c["uf"], "lat": c["lat"], "lon": c["lon"],

@@ -26,10 +26,9 @@ function elemento() {
 // Opções: clima (a resposta da rota), climaFalha (a rota cai), climaPendente (a resposta nunca chega), reduzido, tela
 // [w, h, dpr], atlas, som, busca (location.search, como "?data=2026-12-25"), escuro (a noite do Ceu, de 0 a 1), opaco
 // (getImageData devolve pixels opacos: o contorno dos telhados), passo (ms de relógio por quadro; o dt vai até 0,1 s) e
-// globo: o globo de verdade (mundo_globo.js) só quando a página abre nele ou o teste pede; nos outros, um globo mínimo,
-// porque montar o campo de nuvens leva ~0,4 s e nenhum desses testes chega ao globo
+// globoFalha (Globo.criar lança erro). O globo é sempre o de verdade: o campo de nuvens só é montado quando ele desenha
 async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false, climaPendente = false, tela = [640, 400, 1],
-  atlas = ATLAS, som = null, busca = "", escuro = 0, opaco = false, passo = 16, globo = hash === "" || hash === "#globo" } = {}) {
+  atlas = ATLAS, som = null, busca = "", escuro = 0, opaco = false, passo = 16, globoFalha = false } = {}) {
   const quadros = [], requisicoes = [], intervalos = [], tamanho = [...tela];
   // putImageData conta as passadas pixel a pixel do globo; getImageData dá pixels zerados (ou opacos) quando o teste faz uma
   // imagem carregar. drawImage guarda o recorte de origem [sx, sy, sw, sh] quando o teste liga contexto.gravar (um array);
@@ -83,14 +82,12 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
       return { ok: true, json: async () => clima };
     },
   };
-  if (!globo) contexto.Globo = { criar: ({ Camera }) => ({ nome: "globo", camera: Camera([0, 0, 360, 180]), entrar() {}, sair() {},
-    quadro() { return null; }, clique: () => null, zoom: () => null, mergulho: () => [180, 90], alvos: () => [] }) };
   vm.createContext(contexto);
   contexto.window.Som = som;
   const scripts = ["static/festas.js", "static/avatar.js", "static/mundo_bairro.js", "static/mundo_mapa_arte.js", "static/mundo_mapa.js",
-    ...(globo ? ["static/mundo_globo.js"] : []),
-    "static/mundo_cidade_planta.js", "static/mundo_festa.js", "static/mundo_cidade.js", "static/mundo.js"];
+    "static/mundo_globo.js", "static/mundo_cidade_planta.js", "static/mundo_festa.js", "static/mundo_cidade.js", "static/mundo.js"];
   for (const f of scripts) vm.runInContext(fs.readFileSync(f, "utf8"), contexto, { filename: f });
+  if (globoFalha) vm.runInContext("Globo.criar = () => { throw new Error('globo quebrado'); };", contexto);
   for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r));   // mundo.json e clima chegam
   let relogio = 0;
   const rodar = (n = 1) => { for (let i = 0; i < n; i++) { const f = quadros.shift(); if (!f) return; relogio += passo; f(relogio); } };
@@ -139,7 +136,7 @@ async function principal() {
   assert.ok(c.intervalos.includes(15 * 60 * 1000));
 
   // Esc no bairro sobe para a cidade; Esc na cidade sobe para o Brasil. O bairro usa o tempo da cidade (a casa).
-  const e = await abrir("#cidade=recife", { clima: { ...CLIMA, casa: "recife" }, globo: true });
+  const e = await abrir("#cidade=recife", { clima: { ...CLIMA, casa: "recife" } });
   assert.equal(e.M.nivel, "cidade");
   e.M.ir("bairro"); e.rodar(40);
   assert.equal(e.contexto.location.hash, "#bairro");
@@ -155,21 +152,32 @@ async function principal() {
   assert.equal(e.M.nivel, "globo", "Esc no globo não sai dele");
 
   // sem fragmento, abre no globo (e #globo também vale); um clique no espaço não faz nada, um clique no Brasil desce
-  const g = await abrir("");
+  const g = await abrir(""), G = g.contexto.window.Globo;
   assert.equal(g.M.nivel, "globo"); assert.equal(g.contexto.location.hash, "#globo");
   assert.equal(g.elementos["mundo-voltar"].disabled, true);
+  assert.equal(g.elementos["mundo-menos"].disabled, true, "o − não faz nada no globo: desabilitado");
   assert.equal((await abrir("#globo")).M.nivel, "globo");
   g.clicar(3, 3); g.rodar(40);
   assert.equal(g.M.nivel, "globo", "clique no espaço");
   // o alvo do clique são as células do Brasil no mundo.json (sem esperar imagem nenhuma): a Bolívia, dentro da caixa
   // do mapa, não desce
-  const gb = await abrir("", { reduzido: true });
-  gb.clicar(...gb.M.camera.tela(61.1, 84.5)); gb.rodar(40);
+  const gb = await abrir("", { reduzido: true }), bolivia = G.projetar(-17.5, -64, -50, -15, G.R);
+  gb.clicar(...gb.M.camera.tela(bolivia.x, bolivia.y)); gb.rodar(40);
   assert.equal(gb.M.nivel, "globo", "clique na Bolívia");
-  g.clicar(...g.M.camera.tela(80, 80)); g.rodar(40);
+  g.clicar(...g.M.camera.tela(G.B / 2, G.B / 2)); g.rodar(40);
   assert.equal(g.M.nivel, "brasil", "clique no Brasil"); assert.equal(g.contexto.location.hash, "#brasil");
+  assert.equal(g.elementos["mundo-menos"].disabled, false, "no Brasil o − afasta");
   g.tecla("Escape"); g.rodar(40);
   assert.equal(g.M.nivel, "globo", "Esc no Brasil volta ao globo"); assert.equal(g.contexto.location.hash, "#globo");
+  // o globo que falha ao abrir não derruba o mapa: a página abre no Brasil, sem Voltar, e as cidades seguem
+  const gf = await abrir("", { globoFalha: true });
+  assert.equal(gf.M.nivel, "brasil"); assert.equal(gf.contexto.location.hash, "#brasil");
+  assert.equal(gf.elementos["mundo-voltar"].disabled, true, "sem globo, nada acima do Brasil");
+  gf.tecla("Escape"); gf.rodar(40);
+  assert.equal(gf.M.nivel, "brasil", "Esc no Brasil sem globo fica");
+  const mg = cidade("manaus");
+  gf.clicar(...gf.M.camera.tela(mg.x, mg.y)); gf.rodar(40);
+  assert.equal(gf.M.nivel, "cidade", "sem globo, o clique numa cidade ainda desce");
   // o + no globo com o Brasil escondido: o globo gira até ele e então desce
   const gz = await abrir("", { passo: 100 });
   for (let i = 0; i < 3; i++) { gz.arrastar(-150, 0); gz.rodar(); }
