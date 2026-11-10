@@ -26,9 +26,10 @@ function elemento() {
 // Opções: clima (a resposta da rota), climaFalha (a rota cai), climaPendente (a resposta nunca chega), reduzido, tela
 // [w, h, dpr], atlas, som, busca (location.search, como "?data=2026-12-25"), escuro (a noite do Ceu, de 0 a 1), opaco
 // (getImageData devolve pixels opacos: o contorno dos telhados), passo (ms de relógio por quadro; o dt vai até 0,1 s) e
-// globoFalha (Globo.criar lança erro). O globo é sempre o de verdade: o campo de nuvens só é montado quando ele desenha
+// globoFalha (Globo.criar lança erro) e fontePendente (document.fonts.load nunca termina). O globo é sempre o de verdade: o
+// campo de nuvens só é montado quando ele desenha
 async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false, climaPendente = false, tela = [640, 400, 1],
-  atlas = ATLAS, som = null, busca = "", escuro = 0, opaco = false, passo = 16, globoFalha = false } = {}) {
+  atlas = ATLAS, som = null, busca = "", escuro = 0, opaco = false, passo = 16, globoFalha = false, fontePendente = false } = {}) {
   const quadros = [], requisicoes = [], intervalos = [], tamanho = [...tela];
   // putImageData conta as passadas pixel a pixel do globo; getImageData dá pixels zerados (ou opacos) quando o teste faz uma
   // imagem carregar. drawImage guarda o recorte de origem [sx, sy, sw, sh] quando o teste liga contexto.gravar (um array);
@@ -53,6 +54,7 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
   documento.hidden = false;
   documento.getElementById = id => elementos[id];
   documento.createElement = () => { const e = elemento(); e.getContext = () => ctx; return e; };
+  if (fontePendente) documento.fonts = { load: () => new Promise(() => {}) };
   const contexto = {
     window: janela, document: documento, location: { hash, pathname: "/mundo.html", search: busca, href: "" },
     history: {

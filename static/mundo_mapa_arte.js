@@ -130,7 +130,17 @@ const MapaArte = (() => {
     for (let x = -6; x <= 6; x++) s += x * x + y * y * 1.5 <= 36 && (x * x + y * y * 1.5 <= 16 || (x + y) % 2 === 0) ? "x" : ".";
     DISCO.push(s);
   }
-  return { PEQUENA, GRANDE, CHALE, BARCO, DIA, NOITE, DISCO, semente, mistura, tela, nitido, sprite, telas, girado, formaNuvem,
-    telaNuvem, brilho, fazerRosa };
+  // o mar de fora da imagem: um ladrilho de 44x28 px do mapa no tom do alto-mar, com as ondas do brasil.png
+  function ladrilhoMar() {
+    const c = tela(44, 28), g = c.getContext("2d"), ONDA = [".ww..", "w..ww"];
+    g.fillStyle = "#1a3452"; g.fillRect(0, 0, 44, 28);
+    g.fillStyle = "#26496d";
+    for (const [x, y] of [[3, 4], [27, 9], [14, 19], [36, 23]]) {
+      ONDA.forEach((l, j) => { for (let i = 0; i < 5; i++) if (l[i] === "w") g.fillRect(x + i, y + j, 1, 1); });
+    }
+    return c;
+  }
+  return { PEQUENA, GRANDE, CHALE, BARCO, DIA, NOITE, DISCO, semente, mistura, tela, nitido, sprite, girado, formaNuvem,
+    telaNuvem, brilho, fazerRosa, ladrilhoMar };
 })();
 window.MapaArte = MapaArte;

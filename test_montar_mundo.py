@@ -374,6 +374,54 @@ class Montagem(unittest.TestCase):
         self.assertGreaterEqual(len(set(alto_mar)), 2, "o mar fundo tem textura")
         self.assertTrue(set(alto_mar) <= {mt.CORES[n] for n in mt.AGUA}, set(alto_mar))
 
+    def test_borda_irregular(self):
+        """A borda da caixa não é moldura: os 2 px de fora são do mar de fora da imagem (a cor que o navegador pinta além
+        dela) e a terra some a uma distância que varia ao longo da borda (ruído), não numa linha reta."""
+        import mundo_terreno as mt
+        fora = mt.CORES[mt.FORA]
+        with open(os.path.join(RAIZ, "static", "mundo_mapa.js"), encoding="utf-8") as f:
+            self.assertIn(f'MAR = "{fora}"', f.read())
+        borda = [[x, y] for y in range(400) for x in (0, 1, 398, 399)] + [[x, y] for x in range(400) for y in (0, 1, 398, 399)]
+        self.assertEqual(set(self.cores(borda)), {fora})
+        agua = {mt.CORES[n] for n in mt.AGUA}
+        for linhas in ((range(60, 340), lambda j, i: [i, j]), (range(30, 160), lambda j, i: [j, i])):   # borda oeste e norte
+            fundo = []
+            for j in linhas[0][::4]:
+                cores = self.cores([linhas[1](j, i) for i in range(0, 40)])
+                fundo.append(next((i for i, c in enumerate(cores) if c not in agua), 40))
+            terra = [d for d in fundo if d < 40]
+            self.assertGreater(len(terra), 10)
+            self.assertGreaterEqual(max(terra) - min(terra), 6, terra)
+
+    def test_barcos_rosa_e_oceano_no_mar(self):
+        """As rotas dos barcos, a rosa dos ventos e o nome do oceano (pixels fixos em mundo_mapa.js) caem no mar."""
+        import re
+        import mundo_terreno as mt
+        with open(os.path.join(RAIZ, "static", "mundo_mapa.js"), encoding="utf-8") as f:
+            js = f.read()
+        barcos = json.loads(re.search(r"const BARCOS = (\[\[.*?\]\]);", js).group(1))
+        rosa, oceano = (json.loads(re.search(nome + r" = (\[\d+, \d+\])", js).group(1)) for nome in ("ROSA", "OCEANO"))
+        agua = {mt.CORES[n] for n in mt.AGUA}
+        pontos = [[round(x0 + (x1 - x0) * k / 20), round(y0 + (y1 - y0) * k / 20)] for x0, y0, x1, y1 in barcos for k in range(21)]
+        pontos += [[rosa[0] + dx, rosa[1] + dy] for dx in range(-13, 14) for dy in range(-13, 14)]
+        pontos += [[oceano[0] + dx, oceano[1] + dy] for dx in range(-46, 47) for dy in range(-12, 12)]
+        fora = [p for p, c in zip(pontos, self.cores(pontos)) if c not in agua]
+        self.assertEqual(fora, [])
+
+    def test_divisa_le_na_floresta(self):
+        """A divisa de UF é o tom do chão local: mais escuro, salvo na Amazônia, onde as copas já são escuras e a divisa é
+        um verde claro, para ler sobre elas."""
+        import mundo_terreno as mt
+        lum = lambda h: sum(k * int(h[i:i + 2], 16) for k, i in ((0.3, 1), (0.59, 3), (0.11, 5)))
+        for nome, cor in mt.BASE.items():
+            if nome in mt.AGUA_BASE or nome == "am_divisa":
+                continue
+            divisa = mt.CORES[nome + "~"]
+            if nome.startswith("am_"):
+                self.assertGreaterEqual(lum(divisa) - lum(cor), 30, nome)
+            else:
+                self.assertLessEqual(lum(divisa), lum(cor) * 0.8, nome)
+
     def test_agua_e_terra_pela_cor(self):
         """O navegador separa água de terra pelo azul: água com B > G, terra com G >= B (todas as cores)."""
         import mundo_terreno as mt

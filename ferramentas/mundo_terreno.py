@@ -11,16 +11,18 @@ from collections import deque
 
 ESTRANGEIRO = "--"
 BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
-VINHETA = 12      # pixels: a borda da caixa some no mar
+VINHETA = 18      # pixels: até onde, na média, a borda da caixa some no mar de fora (com ruído, nunca em linha reta)
+FORA = "mar_fundo"  # o mar além da imagem (o navegador pinta essa cor e as ondas fora dela)
 LARGOS = {"Amazonas", "Paraná", "São Francisco"}   # rios de 2 px
 
-# as cores cheias (Brasil); cada uma ganha a versão apagada (vizinhos) e a escura (divisa de UF)
+# as cores cheias (Brasil); cada uma ganha a versão apagada (vizinhos) e a da divisa de UF (mais escura; na Amazônia, o
+# verde claro am_divisa, que lê sobre as copas escuras)
 BASE = {
     "mar": "#1d3b5c", "mar_fundo": "#1a3452", "onda": "#26496d", "raso": "#2a5a7c", "raso_claro": "#3a7a99",
     "rio": "#56a2d2", "areia": "#dcc890", "fronteira": "#2a2217",
     # Amazônia: copas densas e escuras
     "am_chao": "#173d22", "am_chao2": "#1c4626", "am_sombra": "#22532b", "am_copa": "#2c6a32", "am_luz": "#41843a",
-    "am_brilho": "#5f9e43",
+    "am_brilho": "#5f9e43", "am_divisa": "#93bd66",
     # Mata Atlântica: copas mais claras e recortadas
     "ma_chao": "#3b7a3c", "ma_chao2": "#468644", "ma_sombra": "#2e6836", "ma_copa": "#409046", "ma_luz": "#62ad55",
     "ma_brilho": "#8cc868",
@@ -37,7 +39,7 @@ BASE = {
     "pp_chao": "#93b85e", "pp_chao2": "#88ad56", "pp_tufo": "#b3d27b", "pp_tufo_sombra": "#6f9548", "pp_flor": "#e3d47c",
     "pp_arau": "#2a5532", "pp_arau_luz": "#3d7141", "pp_tronco": "#5d402b",
     # altiplano e puna (só nos vizinhos)
-    "an_chao": "#a88c60", "an_chao2": "#b69b6c", "an_pedra": "#7c6446",
+    "an_chao": "#a88c60", "an_chao2": "#b69b6c", "an_pedra": "#7c6446", "an_mato": "#7f8650", "an_sal": "#e2dccb",
     # serras: verdes, de rocha e com neve
     "mv_luz": "#b4c08e", "mv_sombra": "#6d7d5a", "mv_contorno": "#26331f",
     "mr_luz": "#dcc596", "mr_sombra": "#9a7c58", "mr_contorno": "#3f3022",
@@ -62,8 +64,7 @@ def _paleta():
         c = _rgb(h)
         cores[n + "_ap"] = _hex([v * (1 - APAGA) + g * APAGA for v, g in zip(c, CINZA)])
         if n not in AGUA_BASE:
-            cores[n + "~"] = _hex([v * ESCURECE for v in c])
-            cores[n + "_ap~"] = _hex([v * ESCURECE for v in _rgb(cores[n + "_ap"])])
+            cores[n + "~"] = BASE["am_divisa"] if n.startswith("am_") else _hex([v * ESCURECE for v in c])
     return cores
 
 
@@ -123,6 +124,8 @@ POCA_G = [".mppm.", "mpLppm", ".mppm."]
 POCA_M = ["mpLm", ".mm."]
 ARAUCARIA = [".lllll.", "aaaaaaa", "..lll..", ".aaaaa.", "...t...", "...t..."]
 PEDRA = [".p", "pp"]
+ARBUSTO = [".m.", "mms"]
+SALAR = [".ss..", "sssss", ".sss."]
 
 # por bioma: as cores dos papéis e as camadas de glifos (célula da grade, chance, glifos)
 ESTILOS = {
@@ -145,8 +148,8 @@ ESTILOS = {
     "pampa": {"papeis": {"k": "pp_tufo", "d": "pp_tufo_sombra", "a": "pp_arau", "l": "pp_arau_luz", "t": "pp_tronco"},
               "manchas": ("pp_chao", "pp_chao2", "pp_flor"),
               "camadas": [((5, 4), 0.55, [TUFO, CAPIM])]},
-    "andes": {"papeis": {"p": "an_pedra"}, "manchas": ("an_chao", "an_chao2", None),
-              "camadas": [((6, 5), 0.5, [PEDRA])]},
+    "andes": {"papeis": {"p": "an_pedra", "m": "an_mato", "s": "an_sal"}, "manchas": ("an_chao", "an_chao2", "an_pedra"),
+              "camadas": [((5, 4), 0.55, [PEDRA, ARBUSTO, PEDRA]), ((23, 19), 0.35, [SALAR])]},
 }
 ARAUCARIAS = ((7, 6), 0.75, [ARAUCARIA])
 ONDA = [".ww..", "w..ww"]
@@ -213,12 +216,13 @@ def _biomas(terra, biomas, w, h):
             if 0 <= nx < w and 0 <= ny < h and terra[ny * w + nx] and bioma[ny * w + nx] is None:
                 bioma[ny * w + nx] = bioma[i]
                 fila.append(ny * w + nx)
-    # a passagem em pontilhado: cada pixel perto da linha pega o bioma de um vizinho deslocado pela matriz de Bayer
+    # a passagem: cada pixel pega o bioma de um ponto deslocado por ruído suave (a divisa ondula, sem linha reta nem de
+    # polígono) e por um sorteio fixo de ±2 px (o pontilhado, sem a faixa regular de uma matriz)
     misto = list(bioma)
     for y in range(h):
         for x in range(w):
-            o = BAYER[(y & 3) * 4 + (x & 3)]
-            sx, sy = x + (o & 3) * 2 - 3, y + (o >> 2) * 2 - 3
+            sx = x + round((_ruido(x, y, 16, 21) - 0.5) * 22) + int(_h(x, y, 23) * 5) - 2
+            sy = y + round((_ruido(x, y, 16, 22) - 0.5) * 22) + int(_h(x, y, 24) * 5) - 2
             if terra[y * w + x] and 0 <= sx < w and 0 <= sy < h and bioma[sy * w + sx] is not None:
                 misto[y * w + x] = bioma[sy * w + sx]
     return misto
@@ -311,7 +315,7 @@ def desenhar(rotulo, biomas, extras, serras, rios, w, h):
                         b = "pampa"
                     if b != nome:
                         continue
-                    if _h(gx, gy, s + 13) > chance * (0.75 if estado[i] == 2 else 1):
+                    if _h(gx, gy, s + 13) > chance * (0.95 if estado[i] == 2 else 1):
                         continue
                     g = glifos[int(_h(gx, gy, s + 17) * len(glifos))]
                     carimbos.append((ay, ax, g, estilo["papeis"]))
@@ -346,10 +350,15 @@ def desenhar(rotulo, biomas, extras, serras, rios, w, h):
         mesa = serra.get("forma") == "mesa"
         for k, linha in enumerate(serra["linhas"]):
             grande = serra["tipo"] == "neve"
-            for j, (x, y, ux, uy) in enumerate(_ao_longo(linha, 4.5 if grande else 5.0)):
-                alto = (7 if _h(j, k, 61) < 0.5 else 6) if grande else (6 if _h(j, k, 62) < 0.4 else 5)
-                lado = (1 if j % 2 else -1) * (2.5 if grande else 1.5)
-                montes.append((x - uy * lado, y + ux * lado, montanha(alto, mesa), serra["tipo"]))
+            for j, (x, y, ux, uy) in enumerate(_ao_longo(linha, 4.0 if grande else 5.0)):
+                if grande:   # os Andes: picos de 4 a 8 linhas, uns fora da fila e outros faltando (nada de zíper)
+                    if _h(j, k, 60) < 0.15:
+                        continue
+                    alto = 4 + int(_h(j, k, 61) ** 1.5 * 5)
+                    lado, ao_longo = (_h(j, k, 63) - 0.5) * 7, (_h(j, k, 64) - 0.5) * 2.5
+                else:
+                    alto, lado, ao_longo = (6 if _h(j, k, 62) < 0.4 else 5), (1 if j % 2 else -1) * 1.5, 0
+                montes.append((x - uy * lado + ux * ao_longo, y + ux * lado + uy * ao_longo, montanha(alto, mesa), serra["tipo"]))
         for x, y in serra.get("picos", ()):
             montes.append((x, y, montanha(9), serra["tipo"]))
     for x, y, g, tipo in sorted(montes, key=lambda m: (round(m[1]), round(m[0]))):
@@ -410,12 +419,18 @@ def desenhar(rotulo, biomas, extras, serras, rios, w, h):
                     if c != "." and 0 <= px < w and 0 <= py < h and not terra[py * w + px] and do_mar[py * w + px] > 7:
                         cor[py * w + px] = "onda"
 
-    # 8. a vinheta: na borda da caixa, o mapa some no mar de fora da imagem
+    # 8. a borda: o mapa some no mar de fora da imagem (FORA) a uma distância que ondula com o ruído, em pontilhado de
+    # manchinhas; a terra do Brasil numa faixa estreita (o litoral do Nordeste e as cidades dele ficam a 8 px ou mais da
+    # borda); os 2 px de fora são só mar, iguais ao que o navegador pinta além da imagem
     for y in range(h):
         for x in range(w):
             e = min(x, y, w - 1 - x, h - 1 - y)
-            if e < VINHETA and _bayer(x, y) < (VINHETA - e) / VINHETA:
-                cor[y * w + x] = "mar"
+            alcance = VINHETA * (0.6 + 1.0 * _ruido(x, y, 19, 31))
+            if estado[y * w + x] == 1:
+                alcance = min(alcance, 7)
+            sorte = 0.6 * _ruido(x, y, 4, 34) + 0.4 * _h(x, y, 33)   # o pontilhado em manchinhas, não em grão solto
+            if e < 2 or (e < alcance and sorte < ((alcance - e) / alcance) ** 0.7):
+                cor[y * w + x] = FORA
 
     indice = {n: k for k, n in enumerate(CORES)}
     return [indice[n] for n in cor]

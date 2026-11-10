@@ -61,11 +61,55 @@ async function principal() {
     assert.ok(!cruza(lista[a], lista[b]), `${lista[a].id} e ${lista[b].id} se cobrem`);
   }
 
-  // clique na miniatura (um pouco acima do ponto da cidade) desce a #cidade=<id>
+  // clique no meio da miniatura (onde ela está desenhada, que a 1x pode ser afastada do ponto) desce a #cidade=<id>
   const k = await brasil();
-  const [cx, cy] = k.M.camera.tela(rec.x, rec.y);
-  k.clicar(cx, cy - 8); k.rodar(40);
+  k.rodar(2);
+  const cr = k.M.niveis.brasil.caixas.find(c => c.id === "recife");
+  k.clicar(cr.x + cr.w / 2, cr.y + cr.h - 10); k.rodar(40);
   assert.equal(k.contexto.location.hash, "#cidade=recife");
+
+  // o nome sob o cursor aparece (sem foco nem zoom)
+  const cu = await brasil();
+  cu.rodar(2);
+  const cm = cu.M.niveis.brasil.caixas.find(c => c.id === "manaus");
+  cu.canvas.disparar("pointermove", { pointerId: 9, clientX: cm.x + cm.w / 2, clientY: cm.y + cm.h - 10, button: 0 });
+  cu.rodar(2);
+  assert.ok(cu.M.niveis.brasil.nomes.some(n => n.id === "manaus"), "o cursor sobre Manaus mostra o nome");
+
+  // a 1x (desktop, celular em pé e o arnês), com nuvem de chuva em todas: nenhuma caixa (miniatura + ícone do tempo) cobre
+  // outra e nenhuma sai da tela; a cidade sem vizinha fica no ponto; Mateus Leme, que não é capital, tem marcador menor
+  const chuva = { cidades: Object.fromEntries(MUNDO.cidades.map(c => [c.id, { tipo: "chuva", vento: 0, noite: false }])),
+    casa: "sao-paulo", versao: 1 };
+  for (const tela of [[640, 400, 1], [940, 800, 1], [390, 507, 3]]) {
+    const v = await brasil({ tela, clima: chuva });
+    v.rodar(3);
+    const b = v.M.niveis.brasil, caixas = b.caixas, W = tela[0] * tela[2], H = tela[1] * tela[2];
+    assert.equal(caixas.length, 28, `${tela}: as 28 à vista`);
+    for (const c of caixas) assert.ok(c.x >= 0 && c.y >= 0 && c.x + c.w <= W && c.y + c.h <= H, `${tela}: ${c.id} cortada pela borda`);
+    for (let i = 0; i < caixas.length; i++) for (let j = i + 1; j < caixas.length; j++) {
+      assert.ok(!cruza(caixas[i], caixas[j]), `${tela}: ${caixas[i].id} e ${caixas[j].id} se cobrem`);
+    }
+    const ma = caixas.find(c => c.id === "manaus");   // no arnês (mapa de 400 px na tela) tudo é apertado; nos outros, não
+    if (tela[0] !== 640) assert.ok(ma.px === ma.ax && ma.py === ma.ay, `${tela}: Manaus no ponto (${ma.px - ma.ax}, ${ma.py - ma.ay})`);
+    assert.ok(caixas.some(c => c.px !== c.ax || c.py !== c.ay), `${tela}: o Nordeste se afasta do ponto`);
+    assert.equal(b.icones["mateus-leme"], "pequena");
+    const ml = caixas.find(c => c.id === "mateus-leme"), bh = caixas.find(c => c.id === "belo-horizonte");
+    assert.ok(ml.iw < bh.iw && ml.ih < bh.ih, `${tela}: Mateus Leme menor que BH`);
+  }
+
+  // a miniatura cresce com o zoom, em degraus inteiros: o dobro a 2x
+  const z = await brasil();
+  z.rodar(2);
+  const w1 = z.M.niveis.brasil.caixas.find(c => c.id === "manaus").iw;
+  z.M.camera.zoomPara(2); z.rodar(80);
+  const man = cidade("manaus");
+  z.M.camera.x = man.x; z.M.camera.y = man.y; z.M.camera.limitar(); z.rodar(2);
+  assert.equal(z.M.niveis.brasil.caixas.find(c => c.id === "manaus").iw, 2 * w1, "a 2x, a miniatura dobra");
+
+  // a rosa dos ventos não espera a fonte (o nome do oceano, sim)
+  const f = await brasil({ fontePendente: true });
+  f.rodar(2);
+  assert.equal(JSON.stringify(f.M.niveis.brasil.enfeites), '{"rosa":true,"oceano":false}');
 
   // movimento reduzido: barcos, ondas e aviões parados; sem ele, barcos e ondas andam e os aviões vêm do atlas
   for (const reduzido of [true, false]) {
@@ -77,7 +121,12 @@ async function principal() {
     let voando = 0;
     for (let i = 0; i < 120; i++) { r.rodar(); voando = Math.max(voando, b.avioes.length); }
     const depois = JSON.stringify([b.barcos, b.ondas]);
-    if (reduzido) { assert.equal(depois, antes, "reduzido: barcos e ondas parados"); assert.equal(voando, 0); }
+    if (reduzido) {   // os barcos ficam onde nasceram, nenhum brilho de onda chega a aparecer e nenhum avião decola
+      assert.equal(JSON.stringify(b.barcos), JSON.stringify(JSON.parse(antes)[0]), "barcos parados");
+      assert.equal(b.ondas.length, 0, "reduzido: nenhum brilho de onda");
+      assert.equal(voando, 0);
+      assert.equal(depois, antes);
+    }
     else {
       assert.notEqual(JSON.stringify(b.barcos), JSON.stringify(JSON.parse(antes)[0]), "os barcos navegam");
       assert.notEqual(JSON.stringify(b.ondas), JSON.stringify(JSON.parse(antes)[1]), "as ondas brilham");

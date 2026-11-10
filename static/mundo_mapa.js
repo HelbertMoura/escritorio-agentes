@@ -15,7 +15,8 @@ const MundoMapa = (() => {
     neve: "neve" };
   const CHUVA = { garoa: 5, chuva: 12, tempestade: 22, neve: 8 };   // partículas por segundo em cada cidade
   const NUVEM = { nublado: ["branca", 4.5], garoa: ["cinza", 4.5], chuva: ["cinza", 5], tempestade: ["escura", 5.5], neve: ["branca", 5] };
-  const MAX_AVIOES = 6, MAX_PARTICULAS = 360, MAX_FOGOS = 12, VELOCIDADE = 12, MAR = "#1d3b5c", VAO = 4;   // VAO: nuvem→ícone
+  const MAX_AVIOES = 6, MAX_PARTICULAS = 360, MAX_FOGOS = 12, VELOCIDADE = 12, MAR = "#1a3452", VAO = 4;   // VAO: nuvem→ícone
+  const PEQUENAS = new Set(["mateus-leme"]);   // as cidades que não são capital: um marcador menor, sem miniatura
   const GRANDES = new Set(["sao-paulo", "rio-de-janeiro", "brasilia", "belo-horizonte", "salvador", "fortaleza", "recife",
     "manaus", "curitiba", "porto-alegre", "belem", "goiania"]);
   // as rotas dos barcos, no mar a uns 8 px da costa (pixels do brasil.png): Nordeste, Espírito Santo, Rio–Santos e Norte
@@ -24,14 +25,16 @@ const MundoMapa = (() => {
   const busca = new URLSearchParams(location.search);
   const simulado = TIPOS.includes(busca.get("clima")) ? busca.get("clima") : null;
   const horaSimulada = busca.has("hora");
-  const { PEQUENA, GRANDE, CHALE, BARCO, DIA, NOITE, DISCO, semente, tela, nitido, sprite, telas, girado, formaNuvem, telaNuvem,
-    brilho, fazerRosa } = MapaArte;
+  const { PEQUENA, GRANDE, CHALE, BARCO, DIA, NOITE, DISCO, semente, tela, nitido, sprite, girado, formaNuvem, telaNuvem,
+    brilho, fazerRosa, ladrilhoMar } = MapaArte;
 
   // U: pixels da tela por pixel de sprite. 2 px de CSS, mas não mais que a escala base do nível (no celular o ícone não
   // cobre as cidades vizinhas) e nunca menos que 1 px de CSS (para continuar legível)
   function unidade(cam) { return Math.max(1, Math.min(Math.round(2 * cam.dpr), Math.max(Math.round(cam.base), Math.round(cam.dpr)))); }
   // K: a escala das miniaturas do atlas (já reduzidas a 1 px de CSS por pixel no desktop): metade de U, ao menos 1
   const escala = U => Math.max(1, Math.round(U / 2));
+  // D: o degrau do zoom: miniaturas, ícones e o tempo dobram a partir de 2x (escala inteira, pixel nítido)
+  const degrau = cam => Math.min(2, Math.max(1, Math.floor(cam.P / cam.base + 1e-6)));
 
   function criar({ dados, Camera, reduzido, festa = () => null }) {
     const nivel = dados.niveis && dados.niveis.brasil, W = (nivel && nivel.w) || 400, H = (nivel && nivel.h) || 400;
@@ -50,8 +53,9 @@ const MundoMapa = (() => {
     const longas = rotas.filter(r => r.d >= 20).length ? rotas.filter(r => r.d >= 20) : rotas;
     const ambiente = [0, 1, 2, 3, 4].map(i => ({ x: rnd() * W, y: 30 + rnd() * (H - 60), forma: formaNuvem(100 + i, 7 + i * 1.6) }));
     const barcos = BARCOS.map(([x0, y0, x1, y1], i) => ({ x0, y0, x1, y1, u: rnd(), ida: i % 2 === 0, v: 1.2 + rnd() * 0.8, x: 0, y: 0 }));
-    const avioes = [], gotas = [], ondas = [], fogos = [], icones = {}, nomes = [];
-    let casa = null, vento = 0, mascara = null, espera = 0, luzes = [], vinheta = null, rosa = null, oceano = null, fonte = !document.fonts;
+    const avioes = [], gotas = [], ondas = [], fogos = [], icones = {}, nomes = [], rotulos = new Map(), enfeites = { rosa: false, oceano: false };
+    let casa = null, vento = 0, mascara = null, espera = 0, luzes = [], vinheta = null, rosa = null, oceano = null, mar = null;
+    let fonte = !document.fonts, arranjo = { chave: "", lista: [], porId: new Map() };
     if (document.fonts && document.fonts.load) document.fonts.load("8px Silkscreen").then(() => { fonte = true; }, () => { fonte = true; });
 
     // o atlas (as miniaturas dos marcos e os aviões): pedido ao criar e de novo ao voltar ao mapa, se falhou
@@ -221,17 +225,62 @@ const MundoMapa = (() => {
       }
     }
 
-    // o ícone da cidade: a casa (chalé), a miniatura do marco ou o genérico; altura em pixels da tela
-    function icone(c, U) {
-      if (c.id === casa) return { tipo: "casa", h: CHALE.length * U, w: CHALE[0].length * U };
-      const r = c.marco && recorte("mini-" + c.marco), K = escala(U);
+    // o ícone da cidade: a casa (chalé), o marcador da cidade pequena, a miniatura do marco ou o genérico, no degrau D do
+    // zoom; tamanho e escala (S) em pixels da tela
+    function icone(c, U, D) {
+      if (c.id === casa) return { tipo: "casa", lin: CHALE, S: U * D, h: CHALE.length * U * D, w: CHALE[0].length * U * D };
+      if (PEQUENAS.has(c.id)) return { tipo: "pequena", lin: PEQUENA, S: U * D, h: PEQUENA.length * U * D, w: PEQUENA[0].length * U * D };
+      const r = c.marco && recorte("mini-" + c.marco), K = escala(U) * D;
       if (r) return { tipo: "mini-" + c.marco, r, h: r[3] * K, w: r[2] * K };
       const lin = c.grande ? GRANDE : PEQUENA;
-      return { tipo: "generico", lin, h: lin.length * U, w: lin[0].length * U };
+      return { tipo: "generico", lin, S: U * D, h: lin.length * U * D, w: lin[0].length * U * D };
+    }
+    function formaDoTempo(c) {   // a nuvem do ícone do tempo (ou null), guardada por cidade e tipo
+      const n = NUVEM[c.tempo.tipo];
+      return n ? c.formas[c.tempo.tipo] || (c.formas[c.tempo.tipo] = formaNuvem(c.n * 11 + TIPOS.indexOf(c.tempo.tipo), n[1])) : null;
+    }
+    // o arranjo dos ícones na tela: cada cidade ocupa a caixa do ícone mais a da nuvem do tempo acima dele; onde as caixas
+    // se cobrem (o litoral do Nordeste a 1x), elas se afastam do ponto real, sem sair da tela, e uma linha fina liga o ícone
+    // à cidade. Com o zoom as cidades se afastam e os ícones voltam ao ponto. Refeito só quando a vista ou o tempo mudam.
+    function arranjar(cam) {
+      const U = unidade(cam), D = degrau(cam), KN = 2 * escala(U) * D, [ox, oy] = cam.origem(), M = 2;
+      const chave = [ox, oy, cam.P, cam.W, cam.H, casa, !!atlas, cidades.map(c => c.tempo.tipo).join()].join();
+      if (chave === arranjo.chave) return arranjo;
+      const lista = cidades.map(c => {
+        const ic = icone(c, U, D), f = formaDoTempo(c), ax = Math.round(ox + c.x * cam.P), ay = Math.round(oy + c.y * cam.P);
+        let x0 = -(ic.w >> 1), x1 = x0 + ic.w, y0 = -ic.h;
+        if (f) {   // a nuvem e o vão, com folga para o balanço
+          x0 = Math.min(x0, (f.ox - 1) * KN); x1 = Math.max(x1, (f.ox + f.linhas[0].length + 1) * KN);
+          y0 = -ic.h - VAO * KN - (f.linhas.length - 1) * KN;
+        }
+        return { c, ic, ax, ay, px: ax, py: ay, x0, x1, y0, vis: ax > -60 && ay > -60 && ax < cam.W + 60 && ay < cam.H + 60 };
+      });
+      const vis = lista.filter(a => a.vis), caixa = a => [a.px + a.x0 - 1, a.py + a.y0 - 1, a.px + a.x1 + 1, a.py + 1];
+      for (let volta = 0; volta < 80; volta++) {
+        let mexeu = false;
+        for (let i = 0; i < vis.length; i++) for (let j = i + 1; j < vis.length; j++) {
+          const a = vis[i], b = vis[j], A = caixa(a), B = caixa(b);
+          const sx = Math.min(A[2], B[2]) - Math.max(A[0], B[0]), sy = Math.min(A[3], B[3]) - Math.max(A[1], B[1]);
+          if (sx <= 0 || sy <= 0) continue;
+          mexeu = true;
+          if (sx < sy) {   // separa pelo eixo de menor sobreposição, metade para cada lado
+            const d = Math.ceil(sx / 2), s = a.px + (a.x0 + a.x1) / 2 <= b.px + (b.x0 + b.x1) / 2 ? 1 : -1;
+            a.px -= s * d; b.px += s * d;
+          }
+          else { const d = Math.ceil(sy / 2), s = a.py <= b.py ? 1 : -1; a.py -= s * d; b.py += s * d; }
+        }
+        for (const a of vis) {   // dentro da tela, com a caixa inteira
+          a.px = Math.min(cam.W - M - a.x1 - 1, Math.max(M - a.x0 + 1, a.px));
+          a.py = Math.min(cam.H - M - 1, Math.max(M - a.y0 + 1, a.py));
+        }
+        if (!mexeu) break;
+      }
+      arranjo = { chave, lista, porId: new Map(lista.map(a => [a.c.id, a])) };
+      return arranjo;
     }
     function rotuloNome(c, T, eCasa) {   // o nome em Silkscreen com contorno escuro, guardado por cidade e escala
-      const chave = "nome" + c.id + "|" + T + (eCasa ? "c" : "");
-      let cv = telas.get(chave);
+      const chave = c.id + "|" + T + (eCasa ? "c" : "");
+      let cv = rotulos.get(chave);
       if (cv) return cv;
       const fonteCss = `${8 * T}px Silkscreen, monospace`, medir = tela(1, 1).getContext("2d");
       medir.font = fonteCss;
@@ -241,7 +290,7 @@ const MundoMapa = (() => {
       g.font = fonteCss; g.textBaseline = "top"; g.fillStyle = "#120e16";
       for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]]) g.fillText(c.nome, T + dx * T, T + dy * T);
       g.fillStyle = eCasa ? "#ffe08a" : "#fff4dc"; g.fillText(c.nome, T, T);
-      telas.set(chave, nitido(cv));
+      rotulos.set(chave, nitido(cv));
       return cv;
     }
     function textoOceano() {   // OCEANO / ATLÂNTICO em Silkscreen espaçado, em pixels do mapa
@@ -269,10 +318,14 @@ const MundoMapa = (() => {
       const tx = x => Math.round(ox + x * P), ty = y => Math.round(oy + y * P);
       ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = MAR; ctx.fillRect(0, 0, TW, TH);
       ctx.setTransform(P, 0, 0, P, ox, oy);
-      if (pronta()) ctx.drawImage(imagem, 0, 0);   // fora da imagem fica o mar (a borda dela some nele)
-      if (fonte) {   // a rosa dos ventos e o nome do oceano, no mar, na escala do mapa
-        rosa = rosa || fazerRosa(); oceano = oceano || textoOceano();
-        ctx.drawImage(rosa, ROSA[0] - 13, ROSA[1] - 21);
+      mar = mar || ctx.createPattern(ladrilhoMar(), "repeat");   // o mar segue além da imagem, com as mesmas ondas
+      if (mar) { ctx.fillStyle = mar; ctx.fillRect(Math.floor(-ox / P) - 1, Math.floor(-oy / P) - 1, Math.ceil(TW / P) + 2, Math.ceil(TH / P) + 2); }
+      if (pronta()) ctx.drawImage(imagem, 0, 0);   // a borda dela some nesse mar
+      rosa = rosa || fazerRosa();   // a rosa dos ventos e o nome do oceano, no mar, na escala do mapa (o nome espera a fonte)
+      ctx.drawImage(rosa, ROSA[0] - 13, ROSA[1] - 21);
+      enfeites.rosa = true; enfeites.oceano = fonte;
+      if (fonte) {
+        oceano = oceano || textoOceano();
         ctx.globalAlpha = 0.85; ctx.drawImage(oceano, Math.round(OCEANO[0] - oceano.width / 2), OCEANO[1] - 11); ctx.globalAlpha = 1;
       }
       for (const c of cidades) {   // o chão de cada cidade: neve assentada, chão molhado, neblina
@@ -338,54 +391,47 @@ const MundoMapa = (() => {
           }
         }
       }
-      const ordem = cidades.slice().sort((a, b) => (a.id === casa) - (b.id === casa) || a.y - b.y);
-      const topo = new Map();
-      for (const c of ordem) {   // cidades: sombra no chão, ícone (escurecido à noite), a bandeira da casa e o destaque
-        const ic = icone(c, U), cx = tx(c.x), base = ty(c.y), x0 = cx - (ic.w >> 1), y0 = base - ic.h;
-        icones[c.id] = ic.tipo; topo.set(c.id, y0);
-        if (cx + ic.w < 0 || x0 - ic.w > TW || base < 0 || y0 > TH + 40) continue;
-        ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(x0 + (ic.w >> 3), base - K, ic.w - (ic.w >> 2), 2 * K);
+      // as cidades numa só passada, de cima para baixo (a de baixo cobre a de cima): a linha até o ponto real, a sombra, o
+      // ícone (escurecido à noite), a bandeira da casa, o destaque, e o ícone do tempo dela, com a chuva e o raio
+      const arr = arranjar(cam), D = degrau(cam), KN = 2 * K * D, chuva = new Map();
+      for (const g of gotas) (chuva.get(g.c) || chuva.set(g.c, []).get(g.c)).push(g);
+      const ordem = arr.lista.filter(a => a.vis).sort((a, b) => (a.c.id === casa) - (b.c.id === casa) || a.py - b.py);
+      for (const c of cidades) icones[c.id] = arr.porId.get(c.id).ic.tipo;
+      for (const a of ordem) if (Math.abs(a.px - a.ax) + Math.abs(a.py - a.ay) > 3) linhaGuia(ctx, a, K);
+      for (const a of ordem) {
+        const { c, ic } = a, x0 = a.px - (ic.w >> 1), y0 = a.py - ic.h, cx = a.px;
+        ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(x0 + (ic.w >> 3), a.py - K, ic.w - (ic.w >> 2), 2 * K);
         if (ic.r) {
           if (noite) ctx.drawImage(miniNoite(ic.tipo, ic.r), x0, y0, ic.w, ic.h);
           else ctx.drawImage(atlas, ic.r[0], ic.r[1], ic.r[2], ic.r[3], x0, y0, ic.w, ic.h);
         } else {
-          const lin = ic.lin || CHALE, nome = ic.tipo === "casa" ? "chale" : c.grande ? "grande" : "pequena";
-          ctx.drawImage(sprite(nome + "s", lin, "rgba(0,0,0,.35)", U), x0 + U, y0 + U);
-          ctx.drawImage(sprite(nome + (noite ? "n" : "d"), lin, noite ? NOITE : DIA, U), x0, y0);
+          const nome = ic.tipo === "casa" ? "chale" : ic.lin === GRANDE ? "grande" : "pequena";
+          ctx.drawImage(sprite(nome + "s", ic.lin, "rgba(0,0,0,.35)", ic.S), x0 + ic.S, y0 + ic.S);
+          ctx.drawImage(sprite(nome + (noite ? "n" : "d"), ic.lin, noite ? NOITE : DIA, ic.S), x0, y0);
         }
-        if (c.id === casa) bandeira(ctx, x0 + ic.w - 2 * U, y0 + 2 * U, U, t, cx, y0 + (ic.h >> 1));
+        if (c.id === casa) bandeira(ctx, x0 + ic.w - 2 * ic.S, y0 + 2 * ic.S, ic.S, t, cx, y0 + (ic.h >> 1));
         if (c.id === destaque) colchetes(ctx, x0 - 2 * U, y0 - 2 * U, ic.w + 4 * U, ic.h + 4 * U, U, t);
-      }
-      const KN = 2 * K;   // o ícone do tempo: a nuvem e as gotas no dobro da escala das miniaturas, para ler
-      for (const c of ordem) {   // o tempo: a nuvem logo acima do ícone, com a chuva caindo no vão até ele
-        const n = NUVEM[c.tempo.tipo];
-        c.fundo = null;
-        if (!n || !topo.has(c.id)) continue;
-        const f = c.formas[c.tempo.tipo] || (c.formas[c.tempo.tipo] = formaNuvem(c.n * 11 + TIPOS.indexOf(c.tempo.tipo), n[1]));
-        const balanco = reduzido ? 0 : Math.round(Math.sin(t / 2600 + c.fase) * 1.2), fundo = topo.get(c.id) - VAO * KN;
-        const nx = tx(c.x) + (f.ox + balanco) * KN, ny = fundo - (f.linhas.length - 1) * KN, nv = telaNuvem(f, n[0], escuro);
-        if (nx > TW || nx + nv.width * KN < 0 || fundo < -20 || ny > TH) continue;
+        const f = formaDoTempo(c);
+        if (!f) continue;
+        const balanco = reduzido ? 0 : Math.round(Math.sin(t / 2600 + c.fase) * 1.2), fundo = y0 - VAO * KN;
+        const nx = cx + (f.ox + balanco) * KN, ny = fundo - (f.linhas.length - 1) * KN, nv = telaNuvem(f, NUVEM[c.tempo.tipo][0], escuro);
         ctx.drawImage(sprite(f.id + "s", f.linhas, "rgba(6,14,24,.25)", 1), nx + KN, ny + KN, nv.width * KN, nv.height * KN);
         ctx.drawImage(nv, nx, ny, nv.width * KN, nv.height * KN);
-        c.fundo = fundo;
+        for (const g of chuva.get(c) || []) {   // chuva em traço, neve em floco, respingo no telhado
+          ctx.fillStyle = g.neve ? "rgba(255,255,255,.95)" : g.resp ? "rgba(200,220,255,.7)" : "rgba(170,200,255,.85)";
+          const x = cx + Math.round(g.x) * KN, y = fundo + Math.round(g.y) * KN, k = K * D;
+          if (g.neve) ctx.fillRect(x, y, KN, KN);
+          else if (g.resp) { ctx.fillRect(x - k, y, k, k); ctx.fillRect(x + KN, y, k, k); }
+          else ctx.fillRect(x, y, k, KN + k);
+        }
+        if (c.flash > 0.4 && !reduzido) {   // raio: da nuvem ao ícone, em zigue-zague
+          const r = semente(c.bolt), k = K * D;
+          ctx.fillStyle = `rgba(255,255,230,${c.flash})`;
+          for (let y = fundo, dx = 0; y < y0; y += k) { ctx.fillRect(cx + dx * k, y, KN, k); if (r() < 0.4) dx += r() < 0.5 ? -1 : 1; }
+          ctx.fillStyle = `rgba(230,236,255,${c.flash * 0.18})`; ctx.fillRect(cx - 14 * KN, fundo - 12 * KN, 28 * KN, 24 * KN);
+        }
       }
-      let cor = "";
-      for (const g of gotas) {   // chuva em traço, neve em floco, respingo no telhado
-        if (g.c.fundo == null) continue;
-        const c = g.neve ? "rgba(255,255,255,.95)" : g.resp ? "rgba(200,220,255,.7)" : "rgba(170,200,255,.85)";
-        if (c !== cor) ctx.fillStyle = cor = c;
-        const x = tx(g.c.x) + Math.round(g.x) * KN, y = g.c.fundo + Math.round(g.y) * KN;
-        if (g.neve) ctx.fillRect(x, y, KN, KN);
-        else if (g.resp) { ctx.fillRect(x - K, y, K, K); ctx.fillRect(x + KN, y, K, K); }
-        else ctx.fillRect(x, y, K, KN + K);
-      }
-      for (const c of cidades) if (c.flash > 0.4 && !reduzido && c.fundo != null) {   // raio: da nuvem ao ícone, em zigue-zague
-        const r = semente(c.bolt), x = tx(c.x), y1 = c.fundo, y2 = c.fundo + VAO * KN;
-        ctx.fillStyle = `rgba(255,255,230,${c.flash})`;
-        for (let y = y1, dx = 0; y < y2; y += K) { ctx.fillRect(x + dx * K, y, KN, K); if (r() < 0.4) dx += r() < 0.5 ? -1 : 1; }
-        ctx.fillStyle = `rgba(230,236,255,${c.flash * 0.18})`; ctx.fillRect(x - 14 * KN, y1 - 12 * KN, 28 * KN, 24 * KN);
-      }
-      escreverNomes(ctx, cam, tx, ty, destaque);
+      escreverNomes(ctx, cam, arr, destaque);
       if (fogos.length) {   // fogos: oito faíscas que abrem e somem, em pixels da tela
         ctx.globalCompositeOperation = "lighter";
         for (const q of fogos) {
@@ -428,15 +474,15 @@ const MundoMapa = (() => {
       ctx.fillStyle = vinheta.g; ctx.fillRect(0, 0, TW, TH);
     }
     // os nomes: o da casa e o da cidade em foco sempre; a partir de 2x, os outros que couberem sem cobrir um já posto
-    function escreverNomes(ctx, cam, tx, ty, destaque) {
+    function escreverNomes(ctx, cam, arr, destaque) {
       nomes.length = 0;
       if (!fonte) return;
       const todos = cam.P / cam.base >= 2 - 1e-6, T = Math.max(1, Math.round(cam.dpr)), U = unidade(cam), K = escala(U);
       const lista = cidades.filter(c => todos || c.id === casa || c.id === destaque)
         .sort((a, b) => (b.id === casa) - (a.id === casa) || (b.id === destaque) - (a.id === destaque) || b.grande - a.grande || a.n - b.n);
       for (const c of lista) {
-        const cv = rotuloNome(c, T, c.id === casa), w = cv.width, h = cv.height;
-        const caixa = { id: c.id, x: tx(c.x) - (w >> 1), y: ty(c.y) + 2 * K, w, h };
+        const cv = rotuloNome(c, T, c.id === casa), w = cv.width, h = cv.height, a = arr.porId.get(c.id);
+        const caixa = { id: c.id, x: a.px - (w >> 1), y: a.py + 2 * K, w, h };
         if (caixa.x > cam.W || caixa.x + w < 0 || caixa.y > cam.H || caixa.y + h < 0) continue;
         if (nomes.some(o => caixa.x < o.x + o.w && o.x < caixa.x + w && caixa.y < o.y + o.h && o.y < caixa.y + h)) continue;
         nomes.push(caixa);
@@ -466,21 +512,29 @@ const MundoMapa = (() => {
       }
     }
 
-    // a cidade mais perto do ponto, medida do meio do ícone, até metade da altura dele (ou uns 12 px de tela)
+    // a cidade cujo ícone (onde ele está desenhado) fica mais perto do ponto, medida do meio dele, até metade da altura
+    // (ou uns 12 px de tela)
     function perto(cam, x, y) {
-      const U = unidade(cam);
+      const [sx, sy] = cam.tela(x, y), arr = arranjar(cam);
       let melhor = null, d = Infinity;
-      for (const c of cidades) {
-        const ic = icone(c, U), raio = Math.max(ic.h / 2, 12 * cam.dpr) / cam.P, e = Math.hypot(c.x - x, c.y - ic.h / 2 / cam.P - y);
-        if (e <= raio && e < d) { d = e; melhor = c; }
+      for (const a of arr.lista) {
+        const e = Math.hypot(a.px - sx, a.py - a.ic.h / 2 - sy);
+        if (e <= Math.max(a.ic.h / 2, 12 * cam.dpr) && e < d) { d = e; melhor = a.c; }
       }
       return melhor;
     }
-    function alvo(c, cam) {
-      const extra = c.id === casa ? ". O escritório fica aqui" : "";
-      return { id: c.id, x: c.x, y: c.y, alto: (icone(c, unidade(cam)).h + 3 * unidade(cam)) / cam.dpr, titulo: `${c.nome} · ${c.uf}`,
+    function alvo(c, cam) {   // a posição e a altura seguem o ícone arranjado (que se afasta do ponto a 1x)
+      const extra = c.id === casa ? ". O escritório fica aqui" : "", aqui = () => arranjar(cam).porId.get(c.id);
+      return { id: c.id, get x() { return cam.mundo(aqui().px, aqui().py)[0]; }, get y() { return cam.mundo(aqui().px, aqui().py)[1]; },
+               get alto() { return (aqui().ic.h + 3 * unidade(cam)) / cam.dpr; }, titulo: `${c.nome} · ${c.uf}`,
                texto: texto(c) + (c.id === casa ? " · o escritório fica aqui" : ""),
                rotulo: `${c.nome} (${c.uf}): ${texto(c)}${extra}`, acao: { ir: "cidade", cidade: c.id } };
+    }
+    function linhaGuia(ctx, a, K) {   // do ícone afastado até o ponto real: pontilhado escuro com um ponto claro na cidade
+      const n = Math.max(1, Math.round(Math.hypot(a.px - a.ax, a.py - a.ay) / (2 * K)));
+      ctx.fillStyle = "rgba(18,14,22,.8)";
+      for (let i = 0; i <= n; i++) ctx.fillRect(Math.round(a.ax + (a.px - a.ax) * i / n), Math.round(a.ay + (a.py - a.ay) * i / n), K, K);
+      ctx.fillStyle = "#fff4dc"; ctx.fillRect(a.ax - K, a.ay - K, 2 * K, 2 * K);
     }
 
     const camBrasil = Camera([0, 0, W, H]);
@@ -500,6 +554,12 @@ const MundoMapa = (() => {
       get avioes() { return avioes; }, get particulas() { return gotas.length; }, get fogos() { return fogos.length; },
       get icones() { return { ...icones }; }, get nomes() { return nomes.map(n => ({ ...n })); },
       get barcos() { return barcos.map(b => [b.x, b.y]); }, get ondas() { return ondas.map(b => [b.x, b.y, b.v]); },
+      get enfeites() { return { ...enfeites }; },
+      get caixas() {   // as caixas dos ícones à vista (com o tempo), em pixels da tela, e o ponto real de cada cidade
+        return arranjar(camBrasil).lista.filter(a => a.vis)
+          .map(a => ({ id: a.c.id, x: a.px + a.x0, y: a.py + a.y0, w: a.x1 - a.x0, h: -a.y0, px: a.px, py: a.py, ax: a.ax, ay: a.ay,
+            iw: a.ic.w, ih: a.ic.h }));
+      },
     };
     return { niveis: { brasil }, clima, texto, porId, get casa() { return casa; } };
   }
