@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 
 async function testar(falhar) {
-  const ids = ["estado", "mensagens", "formulario", "texto", "sair", "cena", "mapa-estado", "ver-sala", "ver-escritorio"];
+  const ids = ["estado", "mensagens", "mensagens-vazio", "caracteres-restantes", "formulario", "texto", "sair", "cena", "mapa-estado", "ver-sala", "ver-escritorio"];
   const elementos = Object.fromEntries(ids.map(id => [id, {
     disabled: false, value: "", textContent: "", children: [],
     addEventListener(_, fn) { this.acao = fn; },
@@ -37,7 +37,7 @@ async function testar(falhar) {
 }
 
 async function limitarTemporariamente() {
-  const ids = ["estado", "mensagens", "formulario", "texto", "sair", "cena", "mapa-estado", "ver-sala", "ver-escritorio"];
+  const ids = ["estado", "mensagens", "mensagens-vazio", "caracteres-restantes", "formulario", "texto", "sair", "cena", "mapa-estado", "ver-sala", "ver-escritorio"];
   const elementos = Object.fromEntries(ids.map(id => [id, {
     disabled: false, value: "", textContent: "", children: [],
     addEventListener(_, fn) { this.acao = fn; }, replaceChildren() {}, append() {},
@@ -70,7 +70,7 @@ async function limitarTemporariamente() {
 }
 
 async function entradaLimitada(sairDuranteEspera) {
-  const ids = ["estado", "mensagens", "formulario", "texto", "sair", "cena", "mapa-estado", "ver-sala", "ver-escritorio"];
+  const ids = ["estado", "mensagens", "mensagens-vazio", "caracteres-restantes", "formulario", "texto", "sair", "cena", "mapa-estado", "ver-sala", "ver-escritorio"];
   const elementos = Object.fromEntries(ids.map(id => [id, {
     disabled: false, value: "", textContent: "", children: [],
     addEventListener(_, fn) { this.acao = fn; }, replaceChildren() {}, append() {},
@@ -112,7 +112,7 @@ async function entradaLimitada(sairDuranteEspera) {
 }
 
 async function avisoDoAgente(agente) {
-  const ids = ["estado", "mensagens", "formulario", "texto", "sair", "cena", "mapa-estado", "ver-sala", "ver-escritorio", "aviso-agente"];
+  const ids = ["estado", "mensagens", "mensagens-vazio", "caracteres-restantes", "formulario", "texto", "sair", "cena", "mapa-estado", "ver-sala", "ver-escritorio", "aviso-agente"];
   const elementos = Object.fromEntries(ids.map(id => [id, {
     disabled: false, value: "", textContent: "", hidden: true, addEventListener() {}, replaceChildren() {}, append() {},
     querySelector() { return { disabled: false }; }, getContext() { return { clearRect() {} }; }

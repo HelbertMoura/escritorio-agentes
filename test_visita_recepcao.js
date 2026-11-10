@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 
 async function principal() {
-  const ids = ["estado", "mensagens", "formulario", "texto", "sair", "cena", "mapa-estado", "ver-sala", "ver-escritorio"];
+  const ids = ["estado", "mensagens", "mensagens-vazio", "caracteres-restantes", "formulario", "texto", "sair", "cena", "mapa-estado", "ver-sala", "ver-escritorio"];
   const transforms = [], requisicoes = [], retangulos = [], preenchimentos = [], textos = [], recortes = [];
   const ctx = { clearRect() {}, drawImage() {}, save() {}, restore() {}, beginPath() {}, clip() { recortes.push(true); },
     rect(...v) { retangulos.push(v); }, fill(regra) { preenchimentos.push(regra); }, fillText(texto, x, y) { textos.push([texto, x, y]); },

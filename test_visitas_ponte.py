@@ -16,7 +16,7 @@ CANAL = '01a1bda0-9c52-74b8-8f93-79ac3cc91d90'
 
 class MCPFalso:
     def __init__(self):
-        self.sessao, self.chamadas, self.respostas, self.falhar = 's', [], [], None
+        self.sessao, self.chamadas, self.respostas, self.canal, self.falhar = 's', [], [], [], None
 
     def iniciar(self, token):
         self.sessao = 's'
@@ -28,7 +28,7 @@ class MCPFalso:
         if nome == 'send_to_agent':
             return {'task_id': 'tarefa-1', 'status': 'queued'}
         if nome == 'read_conversation':
-            return {'messages': self.respostas}
+            return {'messages': self.canal if 'channel_id' in args else self.respostas}
         raise AssertionError(nome)
 
 
@@ -65,7 +65,7 @@ class PonteTest(unittest.TestCase):
             {'id': 'm1', 'author': {'kind': 'person', 'name': 'Helbert'}, 'untrusted_text': 'mensagem enviada'},
             {'id': 'm2', 'author': {'kind': 'agent', 'id': 'ag-1', 'name': 'Senku'}, 'untrusted_text': 'Olá! Posso ajudar.'},
             {'id': 'm3', 'author': {'kind': 'agent', 'id': 'outro', 'name': 'Outro'}, 'untrusted_text': 'não é daqui'},
-            {'id': 'm4', 'author': {'kind': 'agent', 'name': 'Sem id'}, 'untrusted_text': 'agente sem id não entra'},
+            {'id': 'm4', 'author': {'kind': 'agent', 'name': 'Sem id'}, 'untrusted_text': 'agente sem id e outro nome não entra'},
         ]
         self.tempo += 10
         self.passo()
@@ -99,8 +99,14 @@ class PonteTest(unittest.TestCase):
         self.assertNotIn('primeira', log)
         self.assertEqual(json.loads(log.splitlines()[0])['resultado'], 'erro_envio')
 
-    def test_envio_sem_tarefa_avisa_a_sala_e_loga_so_os_nomes_dos_campos(self):
-        self.mcp.ferramenta = lambda nome, args, token: {'id': 'tarefa-secreta', 'status': 'queued', 'x y': 'z'}
+    def test_envio_sem_tarefa_loga_so_os_nomes_dos_campos_e_le_o_canal(self):
+        original = self.mcp.ferramenta
+        def sem_tarefa(nome, args, token):
+            if nome == 'send_to_agent':
+                self.mcp.chamadas.append((nome, args))
+                return {'id': 'tarefa-secreta', 'status': 'queued', 'x y': 'z'}
+            return original(nome, args, token)
+        self.mcp.ferramenta = sem_tarefa
         self.salas.enviar(self.visita, 'oi')
         self.salas.receber(self.visita)
         log = self.passo()
@@ -108,7 +114,93 @@ class PonteTest(unittest.TestCase):
         self.assertEqual((linha['resultado'], linha['campos'], linha['tipo']), ('enviado_sem_tarefa', ['id', 'status'], 'dict'))
         self.assertNotIn('tarefa-secreta', log)
         self.assertNotIn('queued', log)
-        self.assertEqual(sum('Não consegui trazer' in m for m in self.salas.receber(self.visita)), 1)
+        self.mcp.canal = [self.msg('agent', 'Senku', 5, 'Resposta no canal', id_autor='ag-1')]
+        self.tempo += 10
+        self.passo()
+        leituras = [a for n, a in self.mcp.chamadas if n == 'read_conversation']
+        self.assertEqual(leituras, [{'channel_id': CANAL, 'limit': 20}], 'sem tarefa, só o canal')
+        self.assertEqual(self.salas.receber(self.visita), ['Senku (agente): Resposta no canal'])
+
+    def msg(self, tipo, nome, segundos, texto, id_autor=None):
+        autor = {'kind': tipo, 'name': nome, **({'id': id_autor} if id_autor else {})}
+        return {'id': f'm-{segundos}-{texto[:5]}', 'author': autor, 'sent_at': e._iso(1000.0 + segundos),
+                'untrusted_text': texto}
+
+    def test_resposta_solta_no_canal_chega_so_a_que_veio_depois_do_envio(self):
+        self.salas.enviar(self.visita, 'Quais são os serviços?')
+        self.salas.receber(self.visita)
+        self.passo()
+        self.mcp.respostas = [self.msg('person', 'Helbert', 1, 'raiz da tarefa')]   # a thread só tem a raiz
+        self.mcp.canal = [
+            self.msg('agent', 'Senku', -600, 'resposta a outra visita, de antes'),
+            self.msg('person', 'Helbert', 1, 'a mensagem da visita'),
+            self.msg('agent', 'Outro', 30, 'outro agente não entra'),
+            self.msg('person', 'Senku', 31, 'pessoa com o mesmo nome não entra'),
+            self.msg('agent', 'Senku', 40, 'Olá! Fazemos sistemas web.'),
+        ]
+        self.tempo += 10
+        log = self.passo()
+        self.tempo += 10
+        self.passo()   # a mesma resposta não entra duas vezes
+        self.assertEqual(self.salas.receber(self.visita), ['Senku (agente): Olá! Fazemos sistemas web.'])
+        leituras = [a for n, a in self.mcp.chamadas if n == 'read_conversation']
+        self.assertEqual(leituras[:2], [{'task_id': 'tarefa-1', 'limit': 20}, {'channel_id': CANAL, 'limit': 20}])
+        self.assertNotIn({'task_id': 'tarefa-1', 'limit': 20}, leituras[2:], 'thread só com a raiz não é relida')
+        lidos = [json.loads(linha) for linha in log.splitlines() if '"lido"' in linha]
+        self.assertEqual([(l['origem'], l['mensagens'], l['do_anfitriao']) for l in lidos], [('tarefa', 1, 0), ('canal', 5, 2)])
+        self.assertEqual(lidos[1]['autor_campos'], ['kind', 'name'])
+        for proibido in ('Olá', 'Senku', 'Helbert', 'tarefa-1', CANAL, 'm-40'):
+            self.assertNotIn(proibido, log)
+
+    def test_resposta_na_thread_para_de_ler_o_canal(self):
+        self.salas.enviar(self.visita, 'oi')
+        self.salas.receber(self.visita)
+        self.passo()
+        self.mcp.respostas = [self.msg('person', 'Helbert', 1, 'raiz'), self.msg('agent', 'Senku', 9, 'na thread', 'ag-1')]
+        self.tempo += 10
+        self.passo()
+        self.tempo += 10
+        self.passo()
+        self.assertEqual(self.salas.receber(self.visita), ['Senku (agente): na thread'])
+        self.assertNotIn('channel_id', str([a for n, a in self.mcp.chamadas if n == 'read_conversation']))
+
+    def test_autor_com_id_vale_o_id_e_sem_id_vale_o_nome(self):
+        agente = {'id': 'ag-1', 'nome': 'Recepção'}
+        self.assertTrue(e.PonteVisitas.do_anfitriao({'author': {'kind': 'agent', 'name': 'recepção '}}, agente))
+        self.assertFalse(e.PonteVisitas.do_anfitriao({'author': {'kind': 'agent', 'id': 'outro', 'name': 'Recepção'}}, agente))
+        self.assertTrue(e.PonteVisitas.do_anfitriao({'author': {'kind': 'agent', 'id': 'ag-1', 'name': 'X'}}, agente))
+        self.assertFalse(e.PonteVisitas.do_anfitriao({'author': {'kind': 'person', 'name': 'Recepção'}}, agente))
+        self.assertFalse(e.PonteVisitas.do_anfitriao({'author': {'kind': 'agent', 'name': ''}}, {'id': 'ag-1', 'nome': ''}))
+        self.assertFalse(e.PonteVisitas.do_anfitriao({'author': 'Recepção'}, agente))
+
+    def test_duas_salas_com_o_mesmo_agente_nao_leem_o_canal(self):
+        outra = self.salas.criar({'id': 'ag-1', 'nome': 'Senku'})
+        pessoa = self.salas.entrar(outra)
+        self.salas.enviar(self.visita, 'visita A')
+        self.salas.enviar(pessoa, 'visita B')
+        self.salas.receber(self.visita)
+        self.salas.receber(pessoa)
+        self.passo()
+        self.mcp.canal = [self.msg('agent', 'Senku', 9, 'resposta que pode ser de qualquer uma', 'ag-1')]
+        self.tempo += 10
+        log = self.passo()
+        self.assertNotIn('channel_id', str([a for n, a in self.mcp.chamadas if n == 'read_conversation']))
+        for p in (self.visita, pessoa):
+            recebidas = self.salas.receber(p)
+            self.assertEqual(sum('Não consegui trazer' in m for m in recebidas), 1)
+            self.assertFalse(any('qualquer uma' in m for m in recebidas))
+        self.assertEqual(sum('canal_dividido' in linha for linha in log.splitlines()), 2)
+        # 15 min depois do último envio da outra sala, o canal volta a ser só desta
+        self.assertTrue(self.salas.revogar(outra))
+        self.tempo += e.PonteVisitas.VIDA_TAREFA
+        self.visita = self.salas.entrar(self.convite)   # a sessão anterior venceu por inatividade
+        self.salas.enviar(self.visita, 'de novo')
+        self.salas.receber(self.visita)
+        self.passo()
+        self.mcp.canal = [self.msg('agent', 'Senku', e.PonteVisitas.VIDA_TAREFA + 20, 'agora sim', 'ag-1')]
+        self.tempo += 10
+        self.passo()
+        self.assertIn('Senku (agente): agora sim', self.salas.receber(self.visita))
 
     def test_leitura_sem_o_agente_guarda_a_mensagem_e_avisa_de_novo_depois(self):
         sem = {'agentes': []}
@@ -225,6 +317,7 @@ class PonteTest(unittest.TestCase):
                 unica.passo()
             self.tempo += e.PonteVisitas.A_CADA
             unica.salas.receber(p)
+        tempos = sorted(set(tempos))   # a tarefa e o canal são lidos na mesma volta
         intervalos = [b - a for a, b in zip(tempos, tempos[1:])]
         self.assertEqual(intervalos[:3], [16.0, 32.0, 64.0])
         self.assertLessEqual(max(intervalos), e.PonteVisitas.ESPERA_LEITURA_MAX + e.PonteVisitas.A_CADA)
