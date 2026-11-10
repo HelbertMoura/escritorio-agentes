@@ -15,9 +15,11 @@ async function brasil(opcoes = {}) {
   return m;
 }
 
+let m_ = null;
 async function principal() {
   // cada capital desenha a miniatura do seu marco (o recorte do atlas); a casa, o chalé com a bandeira
   const m = await brasil();
+  m_ = m;
   m.contexto.gravar = []; m.rodar(2);
   const usados = new Set(m.contexto.gravar.map(r => JSON.stringify(r)));
   for (const c of MUNDO.cidades) {
@@ -164,23 +166,103 @@ async function principal() {
   await iconesForaDosBotoes();
   await nomesComMargem();
   await ufNaGradeDoContorno();
+  // rodada 3
+  await trocaSemBuraco();
+  await nomesAcompanhamOsIcones();
 }
 
-// o nível de 4x aparece no zoom máximo em toda tela comum: o teto é o zoom em que o pixel dele (P/4) chega ao pixel do mapa
-// a 1x arredondado, e ali os azulejos de 4x são pedidos e o pixel cai inteiro (P múltiplo de 4)
+// ao sair do 4x (para 3x), nenhum quadro fica sem chão: em cada quadro, ou o brasil.png é desenhado, ou todo azulejo de 2x
+// à vista é desenhado, ou o de 4x por cima dele (com e sem movimento reduzido)
+async function trocaSemBuraco() {
+  for (const reduzido of [true, false]) {
+    const p = await abrir("#brasil", { passo: 50, reduzido, tela: [940, 800, 1] });
+    await carregar(p);
+    const c = p.M.camera;
+    c.zoomPara(99, ...c.tela(230, 230)); p.rodar(40); c.x = 230; c.y = 230; c.limitar(); p.rodar(3);
+    await carregar(p); p.rodar(20);
+    assert.ok(p.M.niveis.brasil.perto.niveis.perto4x.desenhados > 0);
+    c.zoomPara(3);
+    for (let q = 0; q < 12; q++) {
+      p.contexto.gravar = []; p.rodar(1);
+      const g = p.contexto.gravar, [x0, y0] = c.mundo(0, 0), [x1, y1] = c.mundo(c.W, c.H);
+      const longe = g.some(r => r.length === 2 && r[0] === 0 && r[1] === 0);
+      const desenhado = (x, y, L) => g.some(r => r.length === 4 && r[0] === x && r[1] === y && r[2] === L);
+      let buraco = null;
+      for (let j = Math.max(0, Math.floor(y0 / 100)); j <= Math.min(3, Math.floor((y1 - 1e-9) / 100)) && !buraco; j++) {
+        for (let i = Math.max(0, Math.floor(x0 / 100)); i <= Math.min(3, Math.floor((x1 - 1e-9) / 100)) && !buraco; i++) {
+          const por4 = [0, 1].every(b => [0, 1].every(a => desenhado((2 * i + a) * 50, (2 * j + b) * 50, 50)));
+          if (!desenhado(i * 100, j * 100, 100) && !por4) buraco = [i, j];
+        }
+      }
+      assert.ok(longe || !buraco, `${reduzido ? "reduzido" : "animado"}, quadro ${q}: buraco no azulejo ${buraco}`);
+    }
+  }
+}
+
+// o nome acompanha o ícone deslocado (para fora dos botões ou da borda); o da casa nunca some
+async function nomesAcompanhamOsIcones() {
+  const v = await brasil({ tela: [390, 507, 3], clima: { ...CLIMA, casa: "mateus-leme" } });
+  const c = v.M.camera, r = cidade("recife");
+  c.zoomPara(2); v.rodar(40); c.x = r.x; c.y = r.y; c.limitar(); v.rodar(3);
+  const nomes = v.M.niveis.brasil.nomes, caixas = v.M.niveis.brasil.caixas;
+  for (const id of ["mateus-leme", "belo-horizonte", "vitoria"]) {
+    const n = nomes.find(k => k.id === id), k = caixas.find(q => q.id === id);
+    assert.ok(n, `${id}: o nome sumiu`);
+    const gx = Math.max(0, k.x - (n.x + n.w), n.x - (k.x + k.w)), gy = Math.max(0, k.y - (n.y + n.h), n.y - (k.y + k.h));
+    const perto = gx <= 8 * 3 && gy <= 8 * 3;   // a menos de 8 px de CSS da caixa do ícone
+    assert.ok(perto, `${id}: o nome longe do ícone`);
+  }
+  for (const tela of [[390, 507, 3], [640, 400, 1]]) {   // a casa: em qualquer vista, o nome dela aparece
+    const w = await brasil({ tela, clima: { ...CLIMA, casa: "mateus-leme" } });
+    for (const [z, x, y] of [[1, 200, 200], [2, 300, 280], [2, 330, 330], [4, 296, 262], [4, 320, 300]]) {
+      w.M.camera.zoomPara(z); w.rodar(30); w.M.camera.x = x; w.M.camera.y = y; w.M.camera.limitar(); w.rodar(3);
+      const k = w.M.niveis.brasil.caixas.find(q => q.id === "mateus-leme"), W = tela[0] * tela[2], H = tela[1] * tela[2];
+      if (k && k.ax >= 0 && k.ay >= 0 && k.ax < W && k.ay < H) {
+        assert.ok(w.M.niveis.brasil.nomes.some(n => n.id === "mateus-leme"), `${tela} ${z}x (${x}, ${y}): o nome da casa sumiu`);
+      }
+    }
+  }
+}
+
+// o zoom máximo em qualquer tela: entre 3,2x e 4,8x, acima do degrau das cidades médias, com o pixel do 4x inteiro sempre
+// que a faixa deixa (senão, o mais perto do inteiro). A varredura: o menor lado do palco de 320 a 2200 px, em seis dpr,
+// pela câmera de verdade com o teto do Brasil (rápida, sem página)
+function tetoEmTodoPalco(janela) {
+  const { Camera } = janela.Mundo, { tetoDoBrasil } = janela.MundoMapa, Z_MEDIAS = janela.MapaPerto.Z_MEDIAS;
+  let fora = 0, total = 0;
+  for (const dpr of [1, 1.25, 1.5, 2, 2.625, 3]) for (let lado = 320; lado <= 2200; lado++) {
+    const c = Camera([0, 0, 400, 400], { max: 8, multiplo: 2 });
+    c.teto = () => tetoDoBrasil(c.base); c.tetoExato = true;
+    const W = Math.round(lado * dpr), H = Math.round(lado * dpr * 1.4);
+    c.tamanho(W, H, dpr);
+    c.zoomPara(99); c.passo(1, true);
+    const z = c.z, q = c.P / 4, inteiro = Math.abs(q - Math.round(q)) < 1e-9;
+    assert.ok(z >= 3.2 - 1e-9 && z <= 4.8 + 1e-9, `palco ${lado} dpr ${dpr}: teto ${z.toFixed(3)}`);
+    assert.ok(z >= Z_MEDIAS, `palco ${lado} dpr ${dpr}: as médias não aparecem no teto ${z}`);
+    total++;
+    if (!inteiro) fora++;
+  }
+  return { fora, total };
+}
+
+// no zoom máximo, em telas comuns (inclusive as do palco baixo, 940x596 e 1280x720), os azulejos de 4x são pedidos e o
+// zoom fica na faixa
 async function quatroXEmTodaTela() {
   const telas = { "1366x768": [1026, 650, 1], "Android 360": [360, 520, 3], "Pixel 412": [412, 560, 2.625],
-    "iPhone 375": [375, 520, 3], "4K a 200%": [1500, 950, 2], "940x800": [940, 800, 1], "iPhone 390": [390, 507, 3] };
+    "iPhone 375": [375, 520, 3], "4K a 200%": [1500, 950, 2], "940x800": [940, 800, 1], "iPhone 390": [390, 507, 3],
+    "940x596": [940, 596, 1], "1280x720": [940, 580, 1] };
   const bh = cidade("belo-horizonte");
   for (const [nome, tela] of Object.entries(telas)) {
     const p = await brasil({ tela });
     const c = p.M.camera;
     c.zoomPara(99, ...c.tela(bh.x, bh.y)); p.rodar(60);
     const quatro = azulejosPedidos(p).filter(u => u.startsWith("/mundo/perto4x/"));
-    assert.ok(Math.abs(c.P - Math.round(c.P)) < 1e-9 && Math.round(c.P) % 4 === 0, `${nome}: P ${c.P} no teto`);
-    assert.ok(c.P / 4 >= Math.round(c.base), `${nome}: o pixel do 4x (${c.P / 4}) menor que o de 1x (${c.base})`);
+    assert.ok(c.z >= 3.2 - 1e-9 && c.z <= 4.8 + 1e-9, `${nome}: teto ${c.z.toFixed(2)} fora da faixa`);
     assert.ok(quatro.length > 0, `${nome}: nenhum azulejo de 4x no teto (z ${c.z.toFixed(2)}, P ${c.P})`);
+    assert.ok(p.M.niveis.brasil.rotulos.some(r => r.tipo === "media"), `${nome}: as cidades médias no teto`);
   }
+  const { fora, total } = tetoEmTodoPalco(m_.contexto.window);
+  console.log(`teto: ${total} palcos, ${fora} com o pixel do 4x fora do inteiro`);
 }
 
 // a 4x, onde o azulejo de 4x já chegou e está inteiro (opaco), o de 2x e o brasil.png por baixo não são desenhados (a vista

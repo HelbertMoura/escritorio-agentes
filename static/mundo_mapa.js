@@ -48,6 +48,17 @@ const MundoMapa = (() => {
     return o(a.ax, a.ay, a.px, a.py, b.ax, b.ay) * o(a.ax, a.ay, a.px, a.py, b.px, b.py) < 0 &&
       o(b.ax, b.ay, b.px, b.py, a.ax, a.ay) * o(b.ax, b.ay, b.px, b.py, a.px, a.py) < 0;
   }
+  // o teto do zoom do Brasil para a escala base da tela: entre 3,2x e 4,8x (perto de 4x), na escala em que o pixel do nível
+  // de 4x fica inteiro (P = 4n, n píxeis de tela por pixel dele); se nenhum n inteiro cair na faixa (base de 1,25 a 1,67,
+  // ou abaixo de 0,83), a faixa ganha: o pixel do 4x fica perto do inteiro, desenhado pelo vizinho mais próximo
+  function tetoDoBrasil(base) {
+    let melhor = null;
+    for (let n = Math.max(1, Math.floor(base * 0.8)); n <= Math.ceil(base * 1.2); n++) {
+      const z = 4 * n / base;
+      if (z >= 3.2 - 1e-9 && z <= 4.8 + 1e-9 && (melhor === null || Math.abs(z - 4) < Math.abs(melhor - 4))) melhor = z;
+    }
+    return melhor !== null ? melhor : Math.min(4.8, Math.max(3.2, 4 * Math.max(1, Math.round(base)) / base));
+  }
   // linhas guia que se cruzam: os dois ícones trocam de lugar e o arranjo separa de novo (separar), até 8 vezes. Só entre
   // ícones afastados do ponto (mais de 3 px) que têm o ponto real na tela (dentro)
   function descruzar(itens, separar = () => {}) {
@@ -389,8 +400,9 @@ const MundoMapa = (() => {
       mar = mar || ctx.createPattern(ladrilhoMar(), "repeat");   // o mar segue além da imagem, com as mesmas ondas
       if (mar) { ctx.fillStyle = mar; ctx.fillRect(Math.floor(-ox / P) - 1, Math.floor(-oy / P) - 1, Math.ceil(TW / P) + 2, Math.ceil(TH / P) + 2); }
       // a borda dela some nesse mar; onde os níveis de perto já cobrem a vista inteira, ela nem é desenhada
+      detalhe.atualizar(cam, dt, !partindo);   // os pedidos e as transições dos níveis de perto, antes de desenhar
       if (!detalhe.cobre(cam) && pronta()) ctx.drawImage(imagem, 0, 0);
-      detalhe.terreno(ctx, cam, dt, !partindo);   // a partir de 2x, os níveis de perto por cima, nos azulejos que já chegaram
+      detalhe.terreno(ctx, cam);   // a partir de 2x, os níveis de perto por cima, nos azulejos que já chegaram
       // a rosa dos ventos e o nome do oceano, no mar, na escala do mapa até 2x; acima, param nesse tamanho (de perto,
       // eles cobririam a costa). Nunca cortados nem sob os botões (lugarDoEnfeite). O nome espera a fonte
       const se = Math.min(P, 2 * cam.base);
@@ -572,10 +584,24 @@ const MundoMapa = (() => {
       for (const c of lista) {
         const cv = rotuloNome(c, T, c.id === casa), w = cv.width, h = cv.height, a = arr.porId.get(c.id);
         if (!a.vis) continue;
-        const x0 = a.px - (w >> 1), y0 = a.py + 2 * K, x = Math.min(cam.W - M - w, Math.max(M, x0));
-        const caixa = { id: c.id, x, y: y0, w, h };
-        if (Math.abs(x - x0) > w || y0 < M || y0 + h > cam.H - M || cobertos.some(o => cruza(o, caixa))) continue;
-        if (nomes.some(o => cruza(o, { x: x - fx, y: y0 - T, w: w + 2 * fx, h: h + 2 * T }))) continue;
+        // junto do ícone (onde ele estiver, também deslocado): embaixo, em cima, à direita ou à esquerda, o primeiro lugar
+        // inteiro na tela, fora dos botões e com respiro dos outros nomes; o da casa, se nenhum servir, vai embaixo ou em
+        // cima, empurrado para dentro da tela
+        const meio = a.py - (a.ic.h >> 1) - (h >> 1), lados = [[a.px - (w >> 1), a.py + 2 * K], [a.px - (w >> 1), a.py + a.y0 - h - K],
+          [a.px + a.x1 + K, meio], [a.px + a.x0 - w - K, meio]];
+        const posto = ([x0, y0]) => {
+          const x = Math.min(cam.W - M - w, Math.max(M, x0)), caixa = { id: c.id, x, y: y0, w, h };
+          if (Math.abs(x - x0) > w || y0 < M || y0 + h > cam.H - M || cobertos.some(o => cruza(o, caixa))) return null;
+          return nomes.some(o => cruza(o, { x: x - fx, y: y0 - T, w: w + 2 * fx, h: h + 2 * T })) ? null : caixa;
+        };
+        let caixa = null;
+        for (const l of lados) if ((caixa = posto(l))) break;
+        if (!caixa && c.id === casa) {
+          const y = Math.min(cam.H - M - h, Math.max(M, a.py + 2 * K));
+          caixa = { id: c.id, x: Math.min(cam.W - M - w, Math.max(M, a.px - (w >> 1))), y, w, h };
+          for (const o of cobertos) if (cruza(o, caixa)) caixa.y = Math.max(M, o.y - h - K);
+        }
+        if (!caixa) continue;
         nomes.push(caixa);
         ctx.drawImage(cv, caixa.x, caixa.y);
       }
@@ -680,10 +706,10 @@ const MundoMapa = (() => {
     }
 
     // a câmera vai de 1x ao teto em escalas pares (a camada de perto, no dobro da resolução, cai em pixel inteiro). O teto
-    // é por tela: o zoom em que o pixel do nível de 4x (P/4) chega ao pixel do mapa a 1x arredondado (2 px no desktop, 3 no
-    // celular), para o nível de 4x aparecer em toda tela, no tamanho de pixel da vista inteira
+    // é por tela (tetoDoBrasil): entre 3,2x e 4,8x, onde o nível de 4x aparece, com o pixel dele inteiro
     const camBrasil = Camera([0, 0, W, H], { max: ZOOM_MAX, multiplo: 2 });
-    camBrasil.teto = () => 4 * Math.max(1, Math.round(camBrasil.base)) / camBrasil.base;
+    camBrasil.teto = () => tetoDoBrasil(camBrasil.base);
+    camBrasil.tetoExato = true;
     const brasil = {
       nome: "brasil", camera: camBrasil, destaque: null,
       entrar(p) {   // voltando de uma cidade, a câmera sai de perto dela; o atlas e os azulejos que falharam são pedidos de novo
@@ -745,6 +771,6 @@ const MundoMapa = (() => {
     };
     return { niveis: { brasil }, clima, texto, porId, get casa() { return casa; } };
   }
-  return { criar, TIPOS, descruzar, cortam };
+  return { criar, TIPOS, descruzar, cortam, tetoDoBrasil };
 })();
 window.MundoMapa = MundoMapa;

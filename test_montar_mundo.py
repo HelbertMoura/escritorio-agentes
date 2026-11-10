@@ -2,6 +2,7 @@
 Uso: python -B -I -m unittest discover -p "test_montar_mundo.py"
 """
 import hashlib
+from collections import Counter
 import json
 import os
 import shutil
@@ -842,6 +843,55 @@ class Montagem(unittest.TestCase):
         manaus = next(c for c in self.mundo["cidades"] if c["id"] == "manaus")
         self.assertGreater(sum(c in lavoura for c in perto(bh, 40)), 10, "lavoura em volta de BH")
         self.assertEqual(sum(c in lavoura for c in perto(manaus, 60)), 0, "nada de lavoura na Amazônia")
+    def test_serras_a_4x_sao_cordilheiras(self):
+        """A 4x uma serra é uma cordilheira contínua ao longo da linha do serras.json (não uma fila de cones): quase todo ponto
+        da linha cai no relevo, e em volta dela há luz e sombra bem distintas (o tom claro e os dois escuros, cada um com
+        uma boa parte do relevo)."""
+        import mundo_terreno as mt
+        nome = {h: n for n, h in reversed(list(mt.CORES.items()))}
+        with open(os.path.join(RAIZ, "arte", "mundo", "serras.json"), encoding="utf-8") as f:
+            serras = {s["id"]: s for s in json.load(f)}
+        px = lambda lon, lat: ((lon + 74) * 40, (6 - lat) * 40)
+        for sid in ("mantiqueira", "espinhaco", "serra-do-mar"):
+            linha = serras[sid]["linhas"][0]
+            pontos = []
+            for (a, b), (c, d) in zip(linha, linha[1:]):
+                for k in range(12):
+                    x, y = px(a + (c - a) * k / 12, b + (d - b) * k / 12)
+                    pontos.append([round(x), round(y)])
+            por_cima = ("estrada", "asfalto", "faixa", "ponte", "rio", "raso", "areia")   # a rodovia e o rio passam por cima
+            cores = [n for n in (nome.get(c, "") for c in self.cores_4x(pontos) if c) if not n.startswith(por_cima)]
+            relevo = [c for c in cores if c[:3] in ("mv_", "mr_")]
+            self.assertGreaterEqual(len(relevo) / len(cores), 0.8, f"{sid}: {len(relevo)} de {len(cores)} pontos da linha no relevo")
+            janela = [[x + a, y + b] for x, y in pontos[::3] for a in range(-24, 25, 4) for b in range(-24, 25, 4)]
+            em_volta = [nome.get(c, "") for c in self.cores_4x(janela) if c]
+            tons = Counter(c.split("_")[1] for c in em_volta if c[:3] in ("mv_", "mr_"))
+            total = sum(tons.values())
+            self.assertGreaterEqual(tons["luz"] / total, 0.15, f"{sid}: {tons}")
+            self.assertGreaterEqual((tons["sombra"] + tons["contorno"]) / total, 0.2, f"{sid}: {tons}")
+
+    def test_glifos_de_4x(self):
+        """Os glifos de 4x: o mandacaru sem pixel solto (tudo ligado ao tronco), a araucária nunca mais larga que a copa da
+        Mata Atlântica e de tamanhos variados, e a rodovia de asfalto escuro com a faixa clara."""
+        import mundo_terreno as mt
+        for s in range(400):
+            g = mt.mandacaru4(10 + s % 9, 14 + s % 13, s)
+            cheios = {(x, y) for y, f in enumerate(g) for x, ch in enumerate(f) if ch != "."}
+            visto, fila = set(), [next(iter(cheios))]
+            while fila:
+                p = fila.pop()
+                if p in visto or p not in cheios:
+                    continue
+                visto.add(p)
+                fila += [(p[0] + 1, p[1]), (p[0] - 1, p[1]), (p[0], p[1] + 1), (p[0], p[1] - 1)]
+            self.assertEqual(visto, cheios, f"mandacaru {s}: pixel solto")
+        mata = max(mt.tamanho4("copa", len(mt.COPA_MATA[0]) * 2, len(mt.COPA_MATA) * 2, s)[0] for s in range(200))
+        arau = [mt.tamanho4("araucaria", len(mt.ARAUCARIA[0]) * 2, len(mt.ARAUCARIA) * 2, s) for s in range(200)]
+        self.assertLessEqual(max(w for w, h in arau), mata)
+        self.assertGreaterEqual(len({(w, h) for w, h in arau}), 6, "tamanhos variados")
+        lum = lambda h: sum(k * int(h[i:i + 2], 16) for k, i in ((0.3, 1), (0.59, 3), (0.11, 5)))
+        self.assertLess(lum(mt.CORES["asfalto"]), 90)
+        self.assertGreater(lum(mt.CORES["faixa"]), 200)
     def test_mapa_das_ufs_de_perto(self):
         """O mapa das UFs na grade de 2x (perto/ufs.json, para o contorno do realce seguir a divisa desenhada): 800 linhas
         de 800, e a UF de cada cidade em volta do pixel dela vezes 2 (a costa de 2x é a do contorno na resolução nova: a

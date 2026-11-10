@@ -63,8 +63,10 @@ const MapaPerto = (() => {
     }
     const camadas = [camada(nivel.perto, "perto"), camada(nivel.perto4x, "perto4x")].filter(Boolean);
     let relogio = 0;
-    // o nível vale na escala P quando o pixel dele (P/F) chega ao do mapa a 1x arredondado (2 px no desktop, 3 no celular)
-    const vale = (c, P, cam) => P / c.F >= Math.max(1, Math.round(cam.base)) - 1e-6;
+    // o nível vale na escala P quando o pixel dele (P/F) chega ao do mapa a 1x arredondado (2 px no desktop, 3 no celular);
+    // o de cima (4x), no teto do zoom (o teto do Brasil é escolhido para ele)
+    const vale = (c, P, cam) => (c === camadas[camadas.length - 1] && camadas.length > 1
+      ? P >= cam.base * (cam.maximo ? cam.maximo() : 4) - 1e-6 : P / c.F >= Math.max(1, Math.round(cam.base)) - 1e-6);
     function pedir(c, k) {
       const img = new Image(), a = { img, pronto: false, alfa: 0, erro: 0 };
       img.addEventListener("load", () => { a.pronto = true; });
@@ -99,8 +101,10 @@ const MapaPerto = (() => {
       const x = a ? a.wx - (a.sx - cam.W / 2) / P : v ? v.x : cam.x, y = a ? a.wy - (a.sy - cam.H / 2) / P : v ? v.y : cam.y;
       cada(c, x - mw, y - mh, x + mw, y + mh, quer);
     }
-    // o azulejo k da camada já chegou e está inteiro (sem transição): o que fica embaixo dele não precisa ser desenhado
-    const opaco = (c, k) => { const a = c.azulejos[k]; return !!(a && a.pronto && a.alfa >= 1); };
+    // o azulejo k da camada já chegou e está inteiro (sem transição) e a camada vale neste quadro: o que fica embaixo dele
+    // não precisa ser desenhado (os alfas já foram atualizados por atualizar, antes de qualquer desenho do quadro)
+    let valeAgora = [];
+    const opaco = (c, k) => { const a = c.azulejos[k]; return !!(a && a.pronto && a.alfa >= 1 && valeAgora[camadas.indexOf(c)]); };
     // a parte à vista do azulejo (i, j) da camada de índice n está coberta pelas camadas de cima, inteiras e opacas
     // (vista: [x0, y0, x1, y1] do mundo; o pedaço do azulejo fora dela não conta)
     function coberto(n, i, j, vista) {
@@ -127,20 +131,29 @@ const MapaPerto = (() => {
       const [x0, y0] = cam.mundo(0, 0), [x1, y1] = cam.mundo(cam.W, cam.H);   // a vista toda dentro do mapa (fora dele, mar)
       return (cobertaAgora = tudo && x0 >= 0 && y0 >= 0 && x1 <= W && y1 <= H);
     }
-    // os azulejos da vista, de baixo para cima, sobre a camada de longe (o ctx já está na escala do mundo), cada nível
-    // entrando e saindo numa transição de TROCA segundos; o azulejo coberto pelos de cima (inteiros) não é desenhado
-    function terreno(ctx, cam, dt, pode = true) {   // pode: pedir azulejos novos (não durante a saída do nível)
+    // o começo do quadro, antes de qualquer desenho: os pedidos e os alfas de todas as camadas (cada nível entrando e saindo
+    // numa transição de TROCA segundos), para cobre e coberto olharem o quadro de agora (nunca um buraco na troca)
+    function atualizar(cam, dt, pode = true) {   // pode: pedir azulejos novos (não durante a saída do nível)
       relogio += dt;
+      valeAgora = camadas.map(c => vale(c, cam.P, cam));
+      camadas.forEach((c, n) => {
+        if (pode) pedirVista(c, cam);
+        const alvo = valeAgora[n] ? 1 : 0;
+        cada(c, ...vistaDe(cam), k => {
+          const a = c.azulejos[k];
+          if (a && a.pronto) a.alfa = reduzido ? alvo : alvo > a.alfa ? Math.min(alvo, a.alfa + dt / TROCA) : Math.max(alvo, a.alfa - dt / TROCA);
+        });
+      });
+    }
+    // os azulejos da vista, de baixo para cima, sobre a camada de longe (o ctx já está na escala do mundo); o azulejo coberto
+    // pelos de cima (inteiros) não é desenhado
+    function terreno(ctx, cam) {
       const vista = vistaDe(cam);
       camadas.forEach((c, n) => {
         c.desenhados = 0;
-        if (pode) pedirVista(c, cam);
-        const alvo = vale(c, cam.P, cam) ? 1 : 0;
-        cada(c, ...cam.mundo(0, 0), ...cam.mundo(cam.W, cam.H), (k, i, j) => {
+        cada(c, ...vista, (k, i, j) => {
           const a = c.azulejos[k];
-          if (!a || !a.pronto) return;
-          a.alfa = reduzido ? alvo : alvo > a.alfa ? Math.min(alvo, a.alfa + dt / TROCA) : Math.max(alvo, a.alfa - dt / TROCA);
-          if (a.alfa <= 0 || coberto(n, i, j, vista)) return;
+          if (!a || !a.pronto || a.alfa <= 0 || coberto(n, i, j, vista)) return;
           ctx.globalAlpha = a.alfa;
           ctx.drawImage(a.img, i * c.LADO, j * c.LADO, c.LADO, c.LADO);
           c.desenhados++;
@@ -307,7 +320,7 @@ const MapaPerto = (() => {
       return postos;
     }
 
-    return { terreno, cobre, tentarDeNovo, ufEm, realce, rotulos, porSigla, get estados() { return lista; },
+    return { atualizar, terreno, cobre, tentarDeNovo, ufEm, realce, rotulos, porSigla, get estados() { return lista; },
       get info() {   // por nível: quantos azulejos pedidos e quantos desenhados no último quadro
         const soma = k => camadas.reduce((t, c) => t + c[k], 0);
         return { pedidos: soma("pedidos"), desenhados: soma("desenhados"), longe: !cobertaAgora,

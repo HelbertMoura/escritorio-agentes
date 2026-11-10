@@ -17,8 +17,8 @@ const Mundo = (() => {
   function Camera(caixa, opcoes = {}) {
     const MIN = 1, MAX = opcoes.max || 4, M = opcoes.multiplo || 1;
     const teto = () => {
-      const t = c.teto ? Math.max(MIN, Math.min(MAX, c.teto() || MAX)) : MAX;
-      return M > 1 ? Math.max(MIN, Math.floor(c.base * t / M + 1e-9) * M / c.base) : t;
+      const t = c.teto ? Math.max(MIN, Math.min(MAX, c.teto() || MAX)) : MAX;   // tetoExato: o nível já escolheu a escala
+      return M > 1 && !c.tetoExato ? Math.max(MIN, Math.floor(c.base * t / M + 1e-9) * M / c.base) : t;
     };
     const prender = z => Math.min(teto(), Math.max(MIN, z));
     // o zoom parado: a escala inteira (múltipla de M) mais perto de base·z, ou 1 (a base exata) se ela não passar da base
