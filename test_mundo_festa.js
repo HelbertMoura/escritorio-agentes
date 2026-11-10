@@ -37,7 +37,8 @@ async function principal() {
   assert.match(natal.m.canvas["aria-label"], /Natal/);
   assert.match(natal.m.elementos["mundo-estado"].textContent, /Hoje é Natal\./);
   // as peças ficam na quadra da praça, ao lado da fonte, sem cruzar a fonte nem outra peça
-  const p = natal.m.contexto.window.CidadePlanta.planta("sao-paulo"), [, , fw, fh] = ATLAS.quadros["praca-1"];
+  const p = natal.m.contexto.window.CidadePlanta.planta("sao-paulo", MUNDO.cidades.find(c => c.id === "sao-paulo"));
+  const [, , fw, fh] = ATLAS.quadros[p.praca.peca];
   const fonte = [p.praca.x - fw / 2, p.praca.y - fh, p.praca.x + fw / 2, p.praca.y];
   for (const [nome, ...r] of natal.e.pecas) {
     assert.ok(!cruza(r, fonte), `${nome} sobre a fonte`);
@@ -72,8 +73,8 @@ async function principal() {
   assert.equal(pas.e.chave, "pascoa");
   assert.ok(pas.e.cordoes > 0 && pas.e.formas.includes("coelho") && pas.e.pecas.some(([n]) => n === "festa-ovo-pascoa"));
 
-  // nas 28 cidades, toda festa com peça de praça desenha a arte dela ao lado da fonte (a fonte abre espaço nas praças
-  // estreitas), sem cruzar a fonte, outra peça ou a fila da praça; a forma por código só sem a arte (teste abaixo)
+  // nas 28 cidades, toda festa com peça de praça desenha a arte dela ao lado da fonte ou do lago (a praça abre espaço nas
+  // filas estreitas), sem cruzar a fonte, outra peça ou a fila da praça; a forma por código só sem a arte (teste abaixo)
   const DA_PRACA = { natal: ["festa-arvore-natal"], junina: ["festa-fogueira", "festa-barraca-junina"], halloween: ["festa-abobora"],
                      pascoa: ["festa-ovo-pascoa"], carnaval: ["festa-carro-alegorico"], anonovo: ["festa-palco-anonovo"] };
   const DATAS = { natal: "2026-12-25", junina: "2026-06-24", halloween: "2026-10-31", pascoa: "2026-04-05", carnaval: "2027-02-07",
@@ -87,7 +88,7 @@ async function principal() {
       const e = v.M.niveis.cidade.enfeites, desenhadas = e.pecas.map(([n]) => n);
       assert.equal(e.chave, chave, cc.id);
       for (const n of pecas) if (!desenhadas.includes(n)) faltas.push(`${cc.id}/${chave}: ${n}`);
-      vistas.push([`${cc.id}/${chave}`, v.contexto.window.CidadePlanta.planta(cc.id).praca.r, e.pecas, e.fonte]);
+      vistas.push([`${cc.id}/${chave}`, v.contexto.window.CidadePlanta.planta(cc.id, cc).praca.r, e.pecas, e.fonte]);
     }
   }
   assert.equal(faltas.join(", "), "", "peças sem lugar");

@@ -11,8 +11,10 @@ const Mundo = (() => {
   // Câmera de um nível: centro (x, y) no mundo e zoom z de 1x a 4x sobre a escala base, a maior escala (pode ser
   // fracionária) em que a caixa do nível cabe inteira na tela. O 1x é sempre a base exata; acima dele, parada, a escala
   // final (base·z) é inteira até o teto de 4x, e no teto pode ser fracionária. A origem cai sempre em pixel inteiro.
+  // O nível pode baixar o teto com camera.teto() (o z máximo agora; a cidade: o que ainda mostra uma quadra inteira).
   function Camera(caixa) {
-    const MIN = 1, MAX = 4, prender = z => Math.min(MAX, Math.max(MIN, z));
+    const MIN = 1, MAX = 4, teto = () => (c.teto ? Math.max(MIN, Math.min(MAX, c.teto() || MAX)) : MAX);
+    const prender = z => Math.min(teto(), Math.max(MIN, z));
     // o zoom parado: a escala inteira mais perto de base·z, ou 1 (a base exata) se ela não passar da base arredondada
     const parado = z => { const p = Math.round(c.base * z); return p <= Math.round(c.base) ? 1 : prender(p / c.base); };
     const c = {
@@ -81,6 +83,7 @@ const Mundo = (() => {
 
   let W = 0, H = 0, dpr = 1, mapa = null, nome = null, nivel = null, atualCidade = null, ultimaCidade = null, trans = null;
   let botoes = [], chaveAlvos = "", dicaAlvo = null, anterior = performance.now(), pedido_ = false, gesto = null, roda = 0;
+  let toque = null;   // o último toque solto (tempo e ponto): o segundo, logo depois e perto, aproxima no ponto
   // a festa do dia (festas.js): só depois da resposta do clima, que traz as festas desligadas (antes dela, nada de
   // enfeite). Só o calendário embutido: as datas próprias da empresa nunca chegam à página pública
   let festa = null, restoChuva = 0;
@@ -215,8 +218,8 @@ const Mundo = (() => {
   }
   function destacar(a) {
     if (nivel) nivel.destaque = a ? a.id : null;
-    dicaAlvo = a;
-    if (!a) { dica.hidden = true; return; }
+    dicaAlvo = a && !a.etiqueta ? a : null;   // a etiqueta, o próprio nível desenha (a cidade, em Silkscreen no canvas)
+    if (!dicaAlvo) { dica.hidden = true; return; }
     const forte = document.createElement("strong"), texto = document.createElement("span");
     forte.textContent = a.titulo; texto.textContent = a.texto;
     dica.replaceChildren(forte, texto); dica.hidden = false; chaveAlvos = "";
@@ -246,7 +249,7 @@ const Mundo = (() => {
   function quadro(t) {
     pedido_ = false;
     if (document.hidden) return;   // aba escondida: nada de quadro; o visibilitychange retoma
-    const dt = Math.min(0.1, Math.max(0, (t - anterior) / 1000));
+    const dt = Math.min(0.25, Math.max(0, (t - anterior) / 1000));   // um quadro atrasado anda até 0,25 s, não mais
     anterior = t;
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = FUNDO; ctx.fillRect(0, 0, W, H);
@@ -327,7 +330,11 @@ const Mundo = (() => {
     }
     if (toques.size) return;
     if (nivel.soltar) nivel.soltar(gesto.moveu && !gesto.pinca && !cancelado && performance.now() - gesto.t < 90);
-    if (!gesto.moveu && !cancelado) clicar(gesto.x0, gesto.y0);
+    const agora = performance.now(), duplo = ev.pointerType === "touch" && !gesto.moveu && !cancelado && toque &&
+      agora - toque.t < 320 && Math.hypot(gesto.x0 - toque.x, gesto.y0 - toque.y) < 30 * dpr;
+    toque = ev.pointerType === "touch" && !gesto.moveu && !cancelado && !duplo ? { t: agora, x: gesto.x0, y: gesto.y0 } : null;
+    if (duplo) { aproximar(1, gesto.x0, gesto.y0); toque = { t: agora, x: -1e9, y: -1e9, zoom: true }; }   // duplo toque
+    else if (!gesto.moveu && !cancelado) clicar(gesto.x0, gesto.y0);
     else if (gesto.pinca) cam.zoomPara(cam.z, W / 2, H / 2);
     else if (!nivel.soltar && !reduzido && !cancelado && performance.now() - gesto.t < 90) { cam.vx = gesto.vx; cam.vy = gesto.vy; }   // o globo cuida da própria inércia
     gesto = null; canvas.style.cursor = "grab";
@@ -342,7 +349,9 @@ const Mundo = (() => {
     if (Math.abs(roda) < 50) return;
     aproximar(roda < 0 ? 1 : -1, ...ponto(ev)); roda = 0;
   }, { passive: false });
-  canvas.addEventListener("dblclick", ev => { if (nivel && !trans) aproximar(1, ...ponto(ev)); });
+  canvas.addEventListener("dblclick", ev => {   // (o duplo toque já aproximou: o dblclick que o navegador manda depois não conta)
+    if (nivel && !trans && !(toque && toque.zoom && performance.now() - toque.t < 600)) aproximar(1, ...ponto(ev));
+  });
   $("mundo-mais").addEventListener("click", () => aproximar(1));
   menos.addEventListener("click", () => aproximar(-1));
   voltar.addEventListener("click", subir);

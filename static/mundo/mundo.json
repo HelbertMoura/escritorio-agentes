@@ -1,5 +1,5 @@
 {
- "versao": 1131760389,
+ "versao": 2942435101,
  "cidades": [
   {
    "id": "rio-branco",
@@ -9,7 +9,10 @@
    "lon": -67.81,
    "x": 61,
    "y": 159,
-   "marco": "palacio-rio-branco"
+   "marco": "palacio-rio-branco",
+   "marco_nome": "Palácio Rio Branco",
+   "porte": "media",
+   "litoral": false
   },
   {
    "id": "maceio",
@@ -19,7 +22,10 @@
    "lon": -35.74,
    "x": 382,
    "y": 156,
-   "marco": "jangada"
+   "marco": "jangada",
+   "marco_nome": "Jangadas da Pajuçara",
+   "porte": "media",
+   "litoral": true
   },
   {
    "id": "macapa",
@@ -29,7 +35,10 @@
    "lon": -51.07,
    "x": 229,
    "y": 59,
-   "marco": "fortaleza-macapa"
+   "marco": "fortaleza-macapa",
+   "marco_nome": "Fortaleza de São José",
+   "porte": "media",
+   "litoral": false
   },
   {
    "id": "manaus",
@@ -39,7 +48,10 @@
    "lon": -60.02,
    "x": 139,
    "y": 91,
-   "marco": "teatro-amazonas"
+   "marco": "teatro-amazonas",
+   "marco_nome": "Teatro Amazonas",
+   "porte": "grande",
+   "litoral": false
   },
   {
    "id": "salvador",
@@ -49,7 +61,10 @@
    "lon": -38.5,
    "x": 355,
    "y": 188,
-   "marco": "pelourinho"
+   "marco": "pelourinho",
+   "marco_nome": "Pelourinho",
+   "porte": "grande",
+   "litoral": true
   },
   {
    "id": "fortaleza",
@@ -59,7 +74,10 @@
    "lon": -38.53,
    "x": 354,
    "y": 97,
-   "marco": "catedral-fortaleza"
+   "marco": "catedral-fortaleza",
+   "marco_nome": "Catedral de Fortaleza",
+   "porte": "grande",
+   "litoral": true
   },
   {
    "id": "brasilia",
@@ -69,7 +87,10 @@
    "lon": -47.88,
    "x": 261,
    "y": 217,
-   "marco": "congresso"
+   "marco": "congresso",
+   "marco_nome": "Congresso Nacional",
+   "porte": "grande",
+   "litoral": false
   },
   {
    "id": "vitoria",
@@ -79,7 +100,10 @@
    "lon": -40.34,
    "x": 336,
    "y": 263,
-   "marco": "convento-penha"
+   "marco": "convento-penha",
+   "marco_nome": "Convento da Penha",
+   "porte": "media",
+   "litoral": true
   },
   {
    "id": "goiania",
@@ -89,7 +113,10 @@
    "lon": -49.26,
    "x": 247,
    "y": 226,
-   "marco": "tres-racas"
+   "marco": "tres-racas",
+   "marco_nome": "Monumento às Três Raças",
+   "porte": "grande",
+   "litoral": false
   },
   {
    "id": "sao-luis",
@@ -99,7 +126,10 @@
    "lon": -44.3,
    "x": 297,
    "y": 86,
-   "marco": "casarao-azulejos"
+   "marco": "casarao-azulejos",
+   "marco_nome": "Casarões de Azulejos",
+   "porte": "grande",
+   "litoral": true
   },
   {
    "id": "cuiaba",
@@ -109,7 +139,10 @@
    "lon": -56.1,
    "x": 178,
    "y": 216,
-   "marco": "igreja-rosario"
+   "marco": "igreja-rosario",
+   "marco_nome": "Igreja do Rosário",
+   "porte": "media",
+   "litoral": false
   },
   {
    "id": "campo-grande",
@@ -119,7 +152,10 @@
    "lon": -54.62,
    "x": 193,
    "y": 264,
-   "marco": "obelisco"
+   "marco": "obelisco",
+   "marco_nome": "Obelisco",
+   "porte": "media",
+   "litoral": false
   },
   {
    "id": "belo-horizonte",
@@ -129,7 +165,10 @@
    "lon": -43.94,
    "x": 300,
    "y": 259,
-   "marco": "pampulha"
+   "marco": "pampulha",
+   "marco_nome": "Igreja da Pampulha",
+   "porte": "grande",
+   "litoral": false
   },
   {
    "id": "belem",
@@ -139,7 +178,10 @@
    "lon": -48.5,
    "x": 255,
    "y": 74,
-   "marco": "ver-o-peso"
+   "marco": "ver-o-peso",
+   "marco_nome": "Ver-o-Peso",
+   "porte": "grande",
+   "litoral": false
   },
   {
    "id": "joao-pessoa",
@@ -149,7 +191,10 @@
    "lon": -34.86,
    "x": 391,
    "y": 131,
-   "marco": "farol-cabo-branco"
+   "marco": "farol-cabo-branco",
+   "marco_nome": "Farol do Cabo Branco",
+   "porte": "media",
+   "litoral": true
   },
   {
    "id": "curitiba",
@@ -159,7 +204,10 @@
    "lon": -49.27,
    "x": 247,
    "y": 314,
-   "marco": "jardim-botanico"
+   "marco": "jardim-botanico",
+   "marco_nome": "Jardim Botânico",
+   "porte": "grande",
+   "litoral": false
   },
   {
    "id": "recife",
@@ -169,7 +217,10 @@
    "lon": -34.88,
    "x": 391,
    "y": 139,
-   "marco": "recife-antigo"
+   "marco": "recife-antigo",
+   "marco_nome": "Recife Antigo",
+   "porte": "grande",
+   "litoral": true
   },
   {
    "id": "teresina",
@@ -179,7 +230,10 @@
    "lon": -42.8,
    "x": 312,
    "y": 110,
-   "marco": "ponte-estaiada"
+   "marco": "ponte-estaiada",
+   "marco_nome": "Ponte Estaiada",
+   "porte": "media",
+   "litoral": false
   },
   {
    "id": "rio-de-janeiro",
@@ -189,7 +243,10 @@
    "lon": -43.17,
    "x": 308,
    "y": 288,
-   "marco": "cristo"
+   "marco": "cristo",
+   "marco_nome": "Cristo Redentor",
+   "porte": "metropole",
+   "litoral": true
   },
   {
    "id": "natal",
@@ -199,7 +256,10 @@
    "lon": -35.21,
    "x": 387,
    "y": 117,
-   "marco": "forte-reis-magos"
+   "marco": "forte-reis-magos",
+   "marco_nome": "Forte dos Reis Magos",
+   "porte": "media",
+   "litoral": true
   },
   {
    "id": "porto-alegre",
@@ -209,7 +269,10 @@
    "lon": -51.23,
    "x": 227,
    "y": 360,
-   "marco": "mercado-publico"
+   "marco": "mercado-publico",
+   "marco_nome": "Mercado Público",
+   "porte": "grande",
+   "litoral": false
   },
   {
    "id": "porto-velho",
@@ -219,7 +282,10 @@
    "lon": -63.9,
    "x": 101,
    "y": 147,
-   "marco": "tres-caixas-dagua"
+   "marco": "tres-caixas-dagua",
+   "marco_nome": "Três Caixas d'Água",
+   "porte": "media",
+   "litoral": false
   },
   {
    "id": "boa-vista",
@@ -229,7 +295,10 @@
    "lon": -60.67,
    "x": 133,
    "y": 31,
-   "marco": "garimpeiro"
+   "marco": "garimpeiro",
+   "marco_nome": "Monumento ao Garimpeiro",
+   "porte": "media",
+   "litoral": false
   },
   {
    "id": "florianopolis",
@@ -239,7 +308,10 @@
    "lon": -48.55,
    "x": 253,
    "y": 335,
-   "marco": "hercilio-luz"
+   "marco": "hercilio-luz",
+   "marco_nome": "Ponte Hercílio Luz",
+   "porte": "media",
+   "litoral": true
   },
   {
    "id": "sao-paulo",
@@ -249,7 +321,10 @@
    "lon": -46.63,
    "x": 273,
    "y": 295,
-   "marco": "paulista"
+   "marco": "paulista",
+   "marco_nome": "Avenida Paulista",
+   "porte": "metropole",
+   "litoral": false
   },
   {
    "id": "aracaju",
@@ -259,7 +334,10 @@
    "lon": -37.07,
    "x": 369,
    "y": 169,
-   "marco": "arcos-atalaia"
+   "marco": "arcos-atalaia",
+   "marco_nome": "Arcos da Orla de Atalaia",
+   "porte": "media",
+   "litoral": true
   },
   {
    "id": "palmas",
@@ -269,7 +347,10 @@
    "lon": -48.33,
    "x": 256,
    "y": 161,
-   "marco": "palacio-araguaia"
+   "marco": "palacio-araguaia",
+   "marco_nome": "Palácio Araguaia",
+   "porte": "media",
+   "litoral": false
   },
   {
    "id": "mateus-leme",
@@ -279,7 +360,10 @@
    "lon": -44.43,
    "x": 295,
    "y": 259,
-   "marco": "matriz-mateus-leme"
+   "marco": "matriz-mateus-leme",
+   "marco_nome": "Igreja Matriz",
+   "porte": "pequena",
+   "litoral": false
   }
  ],
  "rotas": [

@@ -27,13 +27,20 @@ MARCOS = {"rio-de-janeiro": "cristo", "belo-horizonte": "pampulha", "sao-paulo":
           "teresina": "ponte-estaiada", "natal": "forte-reis-magos", "porto-velho": "tres-caixas-dagua",
           "boa-vista": "garimpeiro", "aracaju": "arcos-atalaia", "palmas": "palacio-araguaia"}
 # as peças que toda cidade pode usar; carros e mobiliário entram no atlas já na metade do desenho
-GENERICOS = ({f"predios-{i}" for i in range(1, 7)} | {f"chale-{i}" for i in range(1, 9)}
-             | {f"arvore-{i}" for i in range(1, 4)} | {f"carro-{i}" for i in range(1, 5)} | {"aviao-1", "aviao-2"}
-             | {"praca-1", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1"})
+GENERICOS = ({f"predios-{i}" for i in range(1, 15)} | {f"chale-{i}" for i in range(1, 9)} | {f"casa-{i}" for i in range(1, 7)}
+             | {f"arvore-{i}" for i in range(1, 8)} | {f"carro-{i}" for i in range(1, 6)} | {"aviao-1", "aviao-2"}
+             | {"praca-1", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1"}
+             | {f"lazer-{i}" for i in range(1, 7)} | {f"praia-{i}" for i in range(1, 5)} | {f"rua-{i}" for i in range(1, 5)}
+             | {"canteiro-1", "canteiro-2"})
 # peças de festa que podem faltar na arte: entram no atlas quando existem, na metade como o mobiliário
 OPCIONAIS = {"festa-arvore-natal", "festa-fogueira", "festa-barraca-junina", "festa-abobora", "festa-ovo-pascoa",
              "festa-carro-alegorico", "festa-palco-anonovo"}
-METADE = {"carro-1", "carro-2", "carro-3", "carro-4", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1"} | OPCIONAIS
+METADE = ({"carro-1", "carro-2", "carro-3", "carro-4", "carro-5", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1",
+           "rua-1", "rua-2", "rua-3", "rua-4", "canteiro-1", "canteiro-2", "praia-1", "praia-2"} | OPCIONAIS)
+# o porte de cada cidade (pela população da capital) e as capitais de praia (Belém e Macapá ficam no rio)
+PORTES = {"metropole", "grande", "media", "pequena"}
+LITORAL = {"rio-de-janeiro", "salvador", "recife", "fortaleza", "natal", "joao-pessoa", "maceio", "aracaju", "vitoria",
+           "florianopolis", "sao-luis"}
 # as miniaturas do mapa do Brasil: uma por marco e as dos dois aviões
 MINIS = {"mini-" + m for m in MARCOS.values()} | {"mini-aviao-1", "mini-aviao-2"}
 BIOMAS = {"amazonia", "cerrado", "caatinga", "pantanal", "mata-atlantica", "pampa"}
@@ -52,7 +59,10 @@ class Cidades(unittest.TestCase):
         ids = [c["id"] for c in cidades]
         self.assertEqual(len(set(ids)), 28)
         for c in cidades:
-            self.assertEqual(set(c), {"id", "nome", "uf", "lat", "lon", "marco"}, c["id"])
+            self.assertEqual(set(c), {"id", "nome", "uf", "lat", "lon", "marco", "marco_nome", "porte", "litoral"}, c["id"])
+            self.assertIn(c["porte"], PORTES, c["id"])
+            self.assertIs(type(c["litoral"]), bool, c["id"])
+            self.assertTrue(isinstance(c["marco_nome"], str) and 3 <= len(c["marco_nome"].strip()) <= 34, c["id"])
             self.assertRegex(c["id"], r"^[a-z-]+$")
             self.assertTrue(c["nome"].strip(), c["id"])
             self.assertTrue(-34 <= c["lat"] <= 6, c["id"])
@@ -63,6 +73,11 @@ class Cidades(unittest.TestCase):
         self.assertEqual({c["uf"] for c in cidades}, UFS)
         self.assertEqual(por_id["mateus-leme"]["uf"], "MG")
         self.assertEqual({c["id"]: c["marco"] for c in cidades}, MARCOS)
+        self.assertEqual({c["id"] for c in cidades if c["litoral"]}, LITORAL)
+        self.assertEqual({c["id"] for c in cidades if c["porte"] == "metropole"}, {"sao-paulo", "rio-de-janeiro"})
+        self.assertEqual({c["id"] for c in cidades if c["porte"] == "pequena"}, {"mateus-leme"})
+        self.assertEqual(por_id["manaus"]["porte"], "grande")
+        self.assertEqual(por_id["palmas"]["porte"], "media")
 
     def test_todo_marco_tem_arte(self):
         for cid, marco in MARCOS.items():
@@ -198,10 +213,12 @@ class Montagem(unittest.TestCase):
             self.assertEqual(self.sha(self.pastas[0], nome), self.sha(pasta, nome), nome)
         marcos = {"marco-" + m for m in MARCOS.values()}   # as 28 cidades: todo marco tem quadro no atlas
         self.assertEqual(len(marcos), 28)
-        self.assertEqual(set(atlas), {"versao", "quadros"})
+        self.assertEqual(set(atlas), {"versao", "quadros", "janelas"})
         self.assertIsInstance(atlas["versao"], int)
         presentes = {n for n in OPCIONAIS if os.path.exists(os.path.join(ARTE, n + ".png"))}
         self.assertEqual(set(atlas["quadros"]), marcos | GENERICOS | presentes | MINIS)
+        self.assertFalse(any(n.startswith("bicho-") for n in atlas["quadros"]), "os bichos ficam fora")
+        self.assertFalse(any(n.startswith("bicho-") for n in os.listdir(ARTE)), "os bichos nem entram na arte")
         with open(os.path.join(pasta, "atlas.png"), "rb") as f:
             cabeca = f.read(24)
         largura, altura = int.from_bytes(cabeca[16:20], "big"), int.from_bytes(cabeca[20:24], "big")
@@ -211,6 +228,39 @@ class Montagem(unittest.TestCase):
         for i, (x, y, w, h) in enumerate(caixas):
             for a, b, c, d in caixas[i + 1:]:
                 self.assertFalse(x < a + c and a < x + w and y < b + d and b < y + h, ((x, y, w, h), (a, b, c, d)))
+
+    def test_janelas_das_construcoes(self):
+        """As janelas de cada construção (para acender à noite): retângulos pequenos [x, y, w, h] dentro do recorte,
+        fora da base do desenho, no máximo JANELAS_MAX por peça; casas, chalés e prédios têm, árvores e carros não."""
+        with open(os.path.join(self.pastas[0], "atlas.json"), encoding="utf-8") as f:
+            atlas = json.load(f)
+        janelas, quadros = atlas["janelas"], atlas["quadros"]
+        self.assertTrue({"chale-1", "casa-3", "predios-1", "predios-12", "marco-paulista"} <= set(janelas), sorted(janelas))
+        self.assertFalse(any(n.startswith(("arvore-", "carro-", "mini-", "praia-", "lazer-")) for n in janelas))
+        for nome, lista in janelas.items():
+            self.assertEqual(len(lista) % 4, 0, nome)
+            self.assertTrue(0 < len(lista) // 4 <= 48, nome)
+            w, h = quadros[nome][2:]
+            for i in range(0, len(lista), 4):
+                x, y, jw, jh = lista[i:i + 4]
+                self.assertTrue(x >= 0 and y >= 0 and x + jw <= w and y + jh <= h * 0.88 and 0 < jw <= 10 and 0 < jh <= 12,
+                                (nome, lista[i:i + 4]))
+
+    def test_predio_11_sem_sombra_solta(self):
+        """A sombra cinza solta do predios-11 (#404040, ligada ao fundo) sai no atlas."""
+        with open(os.path.join(self.pastas[0], "atlas.json"), encoding="utf-8") as f:
+            x, y, w, h = json.load(f)["quadros"]["predios-11"]
+        ler = ("import json, sys\nfrom PIL import Image\nim = Image.open(sys.argv[1]).convert('RGBA')\n"
+               "x, y, w, h = json.loads(sys.argv[2])\npx = im.load()\n"
+               "fora = lambda i, j: not (x <= i < x + w and y <= j < y + h) or px[i, j][3] == 0\n"
+               "print(sum(1 for j in range(y, y + h) for i in range(x, x + w) if px[i, j] == (64, 64, 64, 255)\n"
+               "          and any(fora(i + a, j + b) for a, b in ((1, 0), (-1, 0), (0, 1), (0, -1)))))")
+        r = subprocess.run([sys.executable, "-c", ler, os.path.join(self.pastas[0], "atlas.png"), json.dumps([x, y, w, h])],
+                           capture_output=True, text=True, timeout=60)
+        if r.returncode:
+            raise AssertionError(r.stderr)
+        self.assertEqual(int(r.stdout), 0, "nenhum #404040 na borda do desenho (a mancha do canto)")
+        self.assertLessEqual(w, 104, "sem a sombra, o recorte fica mais estreito")
 
     def test_atlas_sem_marco_usa_generico(self):
         """Marco sem arte não derruba a montagem: ele fica fora do atlas, e a cidade usa os prédios genéricos."""
@@ -281,6 +331,8 @@ class Montagem(unittest.TestCase):
             if nome in METADE:   # metade arredondada para cima; o recorte do alfa pode tirar uma linha da borda
                 self.assertTrue((w + 1) // 2 - 1 <= qw <= (w + 1) // 2 and (h + 1) // 2 - 1 <= qh <= (h + 1) // 2,
                                 (nome, w, h, qw, qh))
+            elif nome == "predios-11":   # sem a mancha solta, mais estreito (test_predio_11_sem_sombra_solta)
+                self.assertTrue(qw < w and qh <= h, (nome, w, h, qw, qh))
             else:
                 self.assertEqual([qw, qh], [w, h], nome)
 
@@ -315,7 +367,7 @@ class Montagem(unittest.TestCase):
         bh = next(c for c in self.mundo["cidades"] if c["id"] == "belo-horizonte")
         self.assertEqual((bh["x"], bh["y"]), (300, 259))
         for c in self.mundo["cidades"]:
-            self.assertEqual(set(c), {"id", "nome", "uf", "lat", "lon", "x", "y", "marco"})
+            self.assertEqual(set(c), {"id", "nome", "uf", "lat", "lon", "x", "y", "marco", "marco_nome", "porte", "litoral"})
         for nome, tamanho in (("brasil.png", (400, 400)), ("terra.png", (720, 360))):
             with open(os.path.join(self.pastas[0], nome), "rb") as f:
                 cabeca = f.read(24)

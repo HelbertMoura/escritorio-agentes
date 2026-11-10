@@ -263,7 +263,8 @@ def montar(fontes, saida):
 
     mundo = {
         "cidades": [{"id": c["id"], "nome": c["nome"], "uf": c["uf"], "lat": c["lat"], "lon": c["lon"],
-                     "x": x, "y": y, "marco": c["marco"]}
+                     "x": x, "y": y, "marco": c["marco"], "marco_nome": c["marco_nome"], "porte": c["porte"],
+                     "litoral": c["litoral"]}
                     for c in cidades for x, y in [na_terra(c, rotulo)]],
         "rotas": rotas(cidades),
         "niveis": {"brasil": {"w": W_BRASIL, "h": H_BRASIL, "caixa": list(CAIXA_BRASIL), "celulas": celulas(rotulo)}},
@@ -284,16 +285,24 @@ def montar(fontes, saida):
 
 
 ARTE = os.path.join(RAIZ, "arte", "pixellab", "mundo")   # a arte do PixelLab (marcos e peças genéricas)
-# as peças que toda cidade pode usar: prédios, chalés, árvores, carros, aviões, a praça e o mobiliário da rua
-GENERICOS = ([f"predios-{i}" for i in range(1, 7)] + [f"chale-{i}" for i in range(1, 9)] + ["arvore-1", "arvore-2", "arvore-3"]
-             + ["carro-1", "carro-2", "carro-3", "carro-4", "aviao-1", "aviao-2"]
-             + ["praca-1", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1"])
+# as peças que toda cidade pode usar: prédios, casas, chalés, árvores e canteiros, carros, aviões, a praça, o lazer (campo,
+# parquinho, lago, coreto, feira e quadra), a praia e o mobiliário da rua
+GENERICOS = ([f"predios-{i}" for i in range(1, 15)] + [f"chale-{i}" for i in range(1, 9)] + [f"casa-{i}" for i in range(1, 7)]
+             + [f"arvore-{i}" for i in range(1, 8)] + ["canteiro-1", "canteiro-2"]
+             + [f"carro-{i}" for i in range(1, 6)] + ["aviao-1", "aviao-2"]
+             + [f"lazer-{i}" for i in range(1, 7)] + [f"praia-{i}" for i in range(1, 5)]
+             + ["praca-1", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1"] + [f"rua-{i}" for i in range(1, 5)])
 # as peças das festas, ao lado da fonte da praça: entram quando a arte existe (sem ela, a festa fica só nos enfeites)
 OPCIONAIS = ["festa-arvore-natal", "festa-fogueira", "festa-barraca-junina", "festa-abobora", "festa-ovo-pascoa",
              "festa-carro-alegorico", "festa-palco-anonovo"]
 # desenhadas pelo PixelLab grandes demais para a cidade: entram no atlas na metade (o navegador desenha 1:1)
-METADE = {"carro-1", "carro-2", "carro-3", "carro-4", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1",
-          *OPCIONAIS}
+METADE = {"carro-1", "carro-2", "carro-3", "carro-4", "carro-5", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1",
+          "rua-1", "rua-2", "rua-3", "rua-4", "canteiro-1", "canteiro-2", "praia-1", "praia-2", *OPCIONAIS}
+# manchas soltas que a arte trouxe: a cor que sai quando ligada ao fundo (a sombra cinza do canto do predios-11)
+MANCHAS = {"predios-11": (64, 64, 64)}
+# as construções com janelas (acesas à noite): até JANELAS_MAX por peça, só as pequenas e fora da base do desenho
+COM_JANELAS = ("chale-", "casa-", "predios-", "marco-")
+JANELAS_MAX, JANELA_AREA = 48, 30
 ATLAS_LARGURA = 512
 MINI_MARCO, MINI_AVIAO = 32, 20   # pixels: o lado maior da miniatura do mapa, antes do contorno de 1 px
 MINI_CONTORNO = (28, 22, 18, 255)
@@ -339,18 +348,66 @@ def mini(im, lado):
     return out
 
 
+def sem_mancha(im, cor):
+    """Tira a mancha da cor `cor` ligada ao fundo transparente (4 vizinhos): a sombra solta que a arte trouxe."""
+    w, h = im.size
+    px = im.load()
+    fila = deque((x, y) for y in range(h) for x in range(w) if px[x, y][3] == 255 and px[x, y][:3] == cor
+                 and any(not (0 <= a < w and 0 <= b < h) or px[a, b][3] == 0 for a, b in vizinhos4(x, y)))
+    while fila:
+        x, y = fila.popleft()
+        if px[x, y][3] == 0:
+            continue
+        px[x, y] = (0, 0, 0, 0)
+        fila.extend((a, b) for a, b in vizinhos4(x, y) if 0 <= a < w and 0 <= b < h and px[a, b][3] == 255 and px[a, b][:3] == cor)
+    return im.crop(im.getchannel("A").getbbox())
+
+
+def janelas(im):
+    """As janelas da peça, [x, y, w, h, ...]: manchas de vidro (azul) pequenas, fora da base (os 12% de baixo, onde ficam
+    flores e grama), em ordem de leitura; acima de JANELAS_MAX, um de cada tantos (espalhadas pela fachada)."""
+    w, h = im.size
+    px = im.load()
+    vidro = lambda c: c[3] == 255 and c[2] >= c[0] + 30 and c[2] >= c[1] - 5 and c[2] >= 60 and c[0] < 170
+    visto, achadas = set(), []
+    for y in range(h):
+        for x in range(w):
+            if (x, y) in visto or not vidro(px[x, y]):
+                continue
+            mancha, fila = [], deque([(x, y)])
+            visto.add((x, y))
+            while fila:
+                p = fila.popleft()
+                mancha.append(p)
+                for v in vizinhos4(*p):
+                    if 0 <= v[0] < w and 0 <= v[1] < h and v not in visto and vidro(px[v]):
+                        visto.add(v)
+                        fila.append(v)
+            xs, ys = [p[0] for p in mancha], [p[1] for p in mancha]
+            x0, y0, jw, jh = min(xs), min(ys), max(xs) - min(xs) + 1, max(ys) - min(ys) + 1
+            if len(mancha) <= JANELA_AREA and jw <= 10 and jh <= 12 and y0 + jh <= h * 0.88:
+                achadas.append([x0, y0, jw, jh])
+    achadas.sort(key=lambda j: (j[1], j[0]))
+    if len(achadas) > JANELAS_MAX:
+        achadas = [achadas[i * len(achadas) // JANELAS_MAX] for i in range(JANELAS_MAX)]
+    return [v for j in achadas for v in j]
+
+
 def montar_atlas(arte, cidades, saida):
     """atlas.png e atlas.json em `saida` com a arte do PixelLab (`arte`): os marcos das cidades e as peças genéricas.
     Cada peça vai recortada pela caixa do alfa (o código ancora pelo pé do recorte), as de METADE já reduzidas, e é
     empilhada em prateleiras, da mais alta para a mais baixa. Marco ou peça OPCIONAL sem arte fica de fora (a cidade
     usa os prédios genéricos, a festa fica nos enfeites desenhados por código); peça genérica sem arte é erro. Cada
-    marco e os dois aviões ganham também a miniatura do mapa do Brasil (mini-<nome>, ver mini())."""
+    marco e os dois aviões ganham também a miniatura do mapa do Brasil (mini-<nome>, ver mini()). As construções levam
+    as janelas (janelas()), para a cidade acender à noite."""
     from PIL import Image
     pecas = {}
 
     def abrir(nome):
         im = Image.open(os.path.join(arte, nome + ".png")).convert("RGBA")
         im = im.crop(im.getchannel("A").getbbox())
+        if nome in MANCHAS:
+            im = sem_mancha(im, MANCHAS[nome])
         return metade(im) if nome in METADE else im
     for nome in GENERICOS:
         if not os.path.exists(os.path.join(arte, nome + ".png")):
@@ -381,8 +438,9 @@ def montar_atlas(arte, cidades, saida):
     for nome, (px, py, _, _) in quadros.items():
         imagem.paste(pecas[nome], (px, py))
     quadros = dict(sorted(quadros.items()))
-    h = hashlib.sha256(imagem.tobytes() + json.dumps(quadros, sort_keys=True).encode())
-    atlas = {"versao": int(h.hexdigest()[:8], 16), "quadros": quadros}
+    vidros = {nome: j for nome, im in sorted(pecas.items()) if nome.startswith(COM_JANELAS) for j in [janelas(im)] if j}
+    h = hashlib.sha256(imagem.tobytes() + json.dumps([quadros, vidros], sort_keys=True).encode())
+    atlas = {"versao": int(h.hexdigest()[:8], 16), "quadros": quadros, "janelas": vidros}
 
     os.makedirs(saida, exist_ok=True)
     imagem.save(os.path.join(saida, "atlas.png"), optimize=True)

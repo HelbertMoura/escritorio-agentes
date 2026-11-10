@@ -88,7 +88,7 @@ const MundoFesta = (() => {
 
     // a festa nova (ou outra cidade): cordões, peças da praça e o anel de luzes saem da planta
     function preparar(f, p, id) {
-      const k = f ? `${id}|${f.chave}|${!!recorte("praca-1")}` : "";
+      const k = f ? `${id}|${f.chave}|${!!recorte(p.praca.peca)}` : "";
       if (k === chave) return;
       chave = k; festa = f; cordoes = []; itens = []; anel = []; fogos = []; confete = []; fitas = []; desvio = 0; fonteR = null;
       rgbs = f ? f.cores.map(rgb) : [];   // o RGB de cada cor da festa, uma vez (o brilho guarda o sprite por esse array)
@@ -105,7 +105,7 @@ const MundoFesta = (() => {
       }
       praca(p);
       if (tem("pisca")) {   // o pisca no chão, contornando a frente e os lados do círculo da praça (atrás ficam os bancos)
-        const fonte = recorte("praca-1"), rx = (fonte ? fonte[2] : 90) / 2 + 3, ry = rx * 0.64, cy = p.praca.y - ry + 1;
+        const fonte = recorte(p.praca.peca), rx = (fonte ? fonte[2] : 90) / 2 + 3, ry = rx * 0.64, cy = p.praca.y - ry + 1;
         const n = Math.round(Math.PI * (rx + ry) / 3.5);
         for (let i = 0; i < n; i++) {
           const a = i / n * Math.PI * 2;
@@ -113,7 +113,8 @@ const MundoFesta = (() => {
         }
       }
     }
-    // as peças da festa ao lado da fonte: a arte do PixelLab (na metade, no atlas) ou a forma por código. A maior vai
+    // as peças da festa ao lado da fonte (ou do lago, quando a praça da cidade é o lago): a arte do PixelLab (na metade,
+    // no atlas) ou a forma por código. A maior vai
     // num lado da fonte e as outras no espaço que sobra, sem cruzar a fonte nem sair da fila da praça. Numa praça
     // estreita, a fonte se afasta para o outro lado (desvio) até a maior caber; só se nem assim couber, entra a forma
     function praca(p) {
@@ -124,7 +125,7 @@ const MundoFesta = (() => {
       }
       for (const n of EXTRAS[festa.chave] || []) { const arte = recorte(n); if (arte) lista.push({ peca: n, w: arte[2] }); }
       lista.sort((a, b) => b.w - a.w);
-      const fonte = recorte("praca-1"), meia = Math.ceil((fonte ? fonte[2] : 90) / 2), [x0, , x1] = p.praca.r;
+      const fonte = recorte(p.praca.peca), meia = Math.ceil((fonte ? fonte[2] : 90) / 2), [x0, , x1] = p.praca.r;
       const esq = p.praca.x - meia - M - (x0 + M), dir = x1 - M - (p.praca.x + meia + M), maior = lista.length ? lista[0].w : 0;
       desvio = maior > Math.max(esq, dir) ? Math.min(maior - esq, dir) : 0;   // a fonte vai para a direita
       const cx = p.praca.x + desvio;
