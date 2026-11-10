@@ -4,6 +4,20 @@
 
 All notable changes to this project are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Since 1.1.0, versions follow [SemVer](https://semver.org/); older entries are dated milestones.
 
+## Unreleased
+
+### Added
+- **World:** `/mundo.html`, a public, cookieless page that goes from the globe down to Brazil, the city and the reception door, all in pixel art. See [World](./README.md#world).
+  - **Globe:** spins with the current night side, with clouds, the moon in the day's phase and city lights. Brazil is outlined, and clicking it goes down to the map.
+  - **Map of Brazil:** biomes, rivers, mountain ranges and the 27 state capitals plus Mateus Leme, each with a miniature of its landmark and the current weather. Zooming in reveals highways, smaller rivers, state names and mid-size cities; at maximum zoom over a capital, zooming in once more enters it.
+  - **City:** the landmark in the middle, a square, buildings and houses according to the city's size, streets with cars and pedestrians, and a waterfront in coastal capitals. The chalet with the sign only exists in the office's city and leads to the reception.
+  - **Live:** the real weather of the 28 cities from Open-Meteo (one server-side query every 15 minutes), day and night by the clock, and the calendar holidays, which decorate the city.
+  - **Privacy:** the page shows nothing from agentes.chat. The `POST /api/mundo/clima` route returns only the weather type, the wind and whether it is night per city, the office's city, the map version and the calendar holidays turned off. The company's own dates never leave. See [Security](./README.md#security).
+- **`ferramentas/montar_mundo.py`:** builds the files in `static/mundo/` from `arte/mundo/` and `arte/pixellab/mundo/`. Only those who want to change cities or art need to run it (it needs Pillow); the generated files ship in the repository.
+
+### Changed
+- The `?data=YYYY-MM-DD` parameter also works in the world: it changes the holiday and, on the globe, the sun and the moon.
+
 ## 1.2.0 · 2026-11-08 · What's new
 
 Commits: [`v1.1.0...v1.2.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.1.0...v1.2.0).

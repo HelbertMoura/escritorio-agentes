@@ -55,6 +55,7 @@ It **does not call any AI model** and does not spend tokens. Approving always ha
 - 📺 **TV mode:** full screen, the screen kept on and a camera director that rushes to requests, fights and strikes, with a news ticker (see [TV mode](#tv-mode)).
 - 📲 **App and phone alerts:** install the office on your home screen and get an alert when an agent asks for your approval or asks a question (see [Installable app](#installable-app-pwa) and [Phone alerts](#phone-alerts)).
 - 👀 **Visitors:** whoever else has the office open shows up on the map, wearing a badge (see [Visitors](#visitors)).
+- 🌎 **World:** a public page that goes from the globe down to Brazil, the city and the reception door, with the real weather of 28 cities (see [World](#world)).
 - 📰 **Weekly newspaper:** a headline, notes and each agent's numbers for this week and last week (see [Newspaper](#newspaper)).
 - 🎞️ **Daily time-lapse:** the office's day in a ~30 s video, recorded only in your browser (see [Time-lapse](#time-lapse)).
 - 📸 **Photo mode:** hides the interface and saves a PNG of the office.
@@ -283,6 +284,51 @@ Whoever else has the office open (another device, another browser or another per
 - **On the TV, nobody shows up:** the TV does not count as a visitor and does not draw visitors, so the wall map shows only the agents.
 - In demo mode, the line does not show. What the server keeps and sends is in [Security](#security).
 
+## World
+
+`/mundo.html` shows where the office is: a pixel-art planet that goes all the way down to the reception door. The page is **public and cookieless**, shows nothing from agentes.chat and has no menu link yet: open it by its address. Its text is in Portuguese.
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/18-mundo-globo.png"><img src="./docs/screenshots/18-mundo-globo.png" alt="The pixel-art globe, with clouds, the moon and Brazil outlined in gold, with an arrow pointing at it" width="100%"></a>
+      <p><em>The globe, with the current night side. Click Brazil to go down.</em></p>
+    </td>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/19-mundo-brasil.png"><img src="./docs/screenshots/19-mundo-brasil.png" alt="The illustrated map of Brazil: biomes, rivers, mountain ranges, a miniature landmark for each state capital and the office chalet in São Paulo" width="100%"></a>
+      <p><em>Brazil, with the current weather in each capital.</em></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/20-mundo-zoom.png"><img src="./docs/screenshots/20-mundo-zoom.png" alt="The map at maximum zoom over Minas Gerais: mountain ranges, highways, smaller rivers, named mid-size cities and the state highlighted" width="100%"></a>
+      <p><em>Zooming in reveals highways, mid-size cities and relief.</em></p>
+    </td>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/21-mundo-cidade.png"><img src="./docs/screenshots/21-mundo-cidade.png" alt="The city of São Paulo seen from above: the MASP museum in the middle, buildings, a square with a bandstand and a fountain, streets with cars and pedestrians, and the chalet with the Recepção sign" width="100%"></a>
+      <p><em>The office's city, with the reception chalet.</em></p>
+    </td>
+  </tr>
+</table>
+
+- **Four levels:** the **globe** spins with the current night side; **Brazil** shows the 27 state capitals and Mateus Leme (MG), each with its landmark; the **city** has the landmark, a square, streets, cars and people on the sidewalks (coastal capitals get a waterfront); the **neighborhood** leads to the reception door.
+- **Getting around:** click or tap to go down, **Esc** or **Voltar** (back) to go up. The wheel, pinch, double click and the `+` and `-` keys zoom; at maximum zoom over a capital, zooming in once more enters it, and zooming out at the minimum returns to the globe. The arrow keys spin the globe or move the map, and **Tab** and **Enter** walk through the cities and the buildings.
+- **Live:** the real weather of the 28 cities (clear, cloudy, fog, drizzle, rain, storm or snow, with wind), day and night by the clock, and the calendar holidays, which decorate the city. Holidays you turned off in **Personalizar** (Customize) do not show; the company's own dates never reach the world.
+- **The office's city:** the map city closest to the **weather city** set in **Personalizar**, up to 300 km away. Only it has the chalet with the sign and the door that leads to the neighborhood. Farther than that, the map works the same, without a chalet. **For now the map is Brazil only.**
+- **Light:** the far map weighs 47 KB. The two detail levels are only downloaded when you zoom: 160 KB from 2x and 395 KB at maximum zoom, in tiles, and only the ones in view. With "reduce motion" on nothing moves, and the animation pauses when the tab is hidden.
+- **Try it:** `python ferramentas/previa.py ferramentas/previa.exemplo.json` and open `http://127.0.0.1:7372/mundo.html`. `?hora=22`, `?clima=chuva` and `?data=2026-12-25` simulate the hour, the weather and the date.
+
+What the server sends to this page is in [Security](#security).
+
+### Changing the cities or the world art
+
+If you only install the office you need none of this: the files in `static/mundo/` ship ready in the repository.
+
+- **Cities:** `arte/mundo/cidades.json`. Each city has `id`, `nome` (name), `uf` (state), `lat`, `lon`, `marco` (the `marco-<marco>.png` art file), `marco_nome` (the name shown), `porte` (size: `metropole`, `grande`, `media` or `pequena`) and `litoral` (`true` for a waterfront).
+- **Art:** `arte/pixellab/mundo/` (landmarks, buildings, houses, trees, cars, mountain ranges). Without a landmark's art, the city uses a generic building.
+- **Terrain:** `arte/mundo/biomas.json` and `serras.json`, plus the Natural Earth extracts in `arte/mundo/fontes/` (outlines, rivers, highways and cities; the source of each is in `LICENCA.md`).
+- **Rebuild:** `python ferramentas/montar_mundo.py` rewrites `static/mundo/` in about a minute. It needs [Pillow](https://python-pillow.org) on your machine; the server never runs this tool.
+
 ## Newspaper
 
 The **Jornal** (newspaper) page, in the menu, tells the office's week as a newspaper: the issue number (the week of the year), the period, the headline, the notes and a table with everyone.
@@ -326,6 +372,7 @@ An alert on your phone, or computer, when an agent asks for your approval or ask
 In short: with the installer, the office is reachable **only on your tailnet** (on Docker with a public address, read [Public address](#public-address)); it **fails closed** when its user file cannot be read, and **no secret ever reaches the browser**: the agentes.chat token stays on the server, and the browser only holds an HttpOnly session cookie.
 
 - **Read-only on agentes.chat:** OAuth scope `read`. A token with more permissions is refused. The exception is the `"responder"` mode (below), which asks for `read write`; `manage` is always refused.
+- **World (`/mundo.html`):** the page and its files are served without login, by exact name. It only calls `POST /api/mundo/clima`, rate-limited per origin, which returns, per city, the weather type, the wind (0 to 1) and whether it is night; the `id` of the office's city (`casa`); the map version; and the keys of the calendar holidays you turned off (`festas_desligadas`). It never sends temperature, coordinates, IP, the company name or your own dates, and nothing from agentes.chat. Open-Meteo is queried by the server, once every 15 minutes for the 28 cities; the browser never talks to it. See [World](#world).
 - **Passwords and sessions:**
   - passwords are stored as scrypt hashes (N=2^15, r=8, p=1), and the session travels in a `__Host-esc_sessao` cookie, HttpOnly, SameSite=Lax and Secure;
   - every form submission is checked by origin;
@@ -431,6 +478,7 @@ To test the whole **Connect** flow without the real agentes.chat, use the fake s
 ### Art
 
 - Furniture and objects: generated with [PixelLab](https://pixellab.ai) for this project (`arte/pixellab`).
+- World: landmarks, buildings, houses, trees, cars and mountain ranges from PixelLab (`arte/pixellab/mundo`); the globe, the map terrain, the streets and the holiday decorations, drawn in code; outlines, rivers, highways and cities from [Natural Earth](https://www.naturalearthdata.com), public domain (see [Changing the cities or the world art](#changing-the-cities-or-the-world-art)).
 - Floors, walls, desks, avatars, sky, weather and procedural decorations: drawn in code.
 - Default logo (`static/logo.png`, also the favicon): drawn in code, with `python ferramentas/montar_tema.py --logo`.
 

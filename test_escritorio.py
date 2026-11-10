@@ -3373,6 +3373,16 @@ class Previa(unittest.TestCase):
             r = ler(f"/api/conversa?id={itens[agente]}")   # erro na leitura (o TypeError de antes) vira HTTP 502
             self.assertEqual({m["autor"] for m in r["mensagens"]}, {"pessoa", "agente"}, agente)
 
+    def test_previa_com_clima_do_mundo(self):
+        # sem Open-Meteo: um tempo de exemplo fixo nas 28 cidades, com todos os tipos, para ver o mapa sem rede
+        base = self.subir(os.path.join("ferramentas", "previa.exemplo.json"))
+        req = urllib.request.Request(base + "/api/mundo/clima", data=b"{}", method="POST",
+                                     headers={"Origin": base, "Content-Type": "application/json"})
+        d = json.loads(urllib.request.urlopen(req, timeout=10).read())
+        self.assertEqual(len(d["cidades"]), 28)
+        self.assertEqual({c["tipo"] for c in d["cidades"].values()}, set(e.TIPOS_CLIMA))
+        self.assertTrue(all(0 <= c["vento"] <= 1 and c["noite"] is False for c in d["cidades"].values()))
+
     def test_previa_com_visitantes(self):
         exemplo = os.path.join("ferramentas", "previa.exemplo.json")
         base = self.subir("--visitantes", "3", exemplo)
