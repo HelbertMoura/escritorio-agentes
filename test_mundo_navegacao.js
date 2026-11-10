@@ -87,7 +87,7 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
     quadro() { return null; }, clique: () => null, zoom: () => null, mergulho: () => [180, 90], alvos: () => [] }) };
   vm.createContext(contexto);
   contexto.window.Som = som;
-  const scripts = ["static/festas.js", "static/avatar.js", "static/mundo_bairro.js", "static/mundo_mapa.js",
+  const scripts = ["static/festas.js", "static/avatar.js", "static/mundo_bairro.js", "static/mundo_mapa_arte.js", "static/mundo_mapa.js",
     ...(globo ? ["static/mundo_globo.js"] : []),
     "static/mundo_cidade_planta.js", "static/mundo_festa.js", "static/mundo_cidade.js", "static/mundo.js"];
   for (const f of scripts) vm.runInContext(fs.readFileSync(f, "utf8"), contexto, { filename: f });
@@ -130,9 +130,11 @@ async function principal() {
   sem.elementos.entrar.disparar("click");
   assert.equal(sem.contexto.location.href, "/visita.html", "fragmento inválido não é repassado");
 
-  // só o mapa e o clima do mundo são pedidos, sem cookie e com o corpo vazio; o clima de novo a cada 15 min
-  assert.deepEqual(c.requisicoes.map(([u]) => u.split("?")[0]), ["/mundo/mundo.json", "/api/mundo/clima"]);
-  const [, op] = c.requisicoes[1];
+  // só o mapa (com o atlas das miniaturas) e o clima do mundo são pedidos, sem cookie e com o corpo vazio; o clima de novo
+  // a cada 15 min
+  assert.deepEqual(c.requisicoes.map(([u]) => u.split("?")[0]), ["/mundo/mundo.json", "/mundo/atlas.json", "/api/mundo/clima"]);
+  assert.ok(c.requisicoes.every(([, o]) => o && o.credentials === "omit"));
+  const [, op] = c.requisicoes[2];
   assert.equal(op.method, "POST"); assert.equal(op.credentials, "omit"); assert.equal(op.body, "{}");
   assert.ok(c.intervalos.includes(15 * 60 * 1000));
 
@@ -159,6 +161,11 @@ async function principal() {
   assert.equal((await abrir("#globo")).M.nivel, "globo");
   g.clicar(3, 3); g.rodar(40);
   assert.equal(g.M.nivel, "globo", "clique no espaço");
+  // o alvo do clique são as células do Brasil no mundo.json (sem esperar imagem nenhuma): a Bolívia, dentro da caixa
+  // do mapa, não desce
+  const gb = await abrir("", { reduzido: true });
+  gb.clicar(...gb.M.camera.tela(61.1, 84.5)); gb.rodar(40);
+  assert.equal(gb.M.nivel, "globo", "clique na Bolívia");
   g.clicar(...g.M.camera.tela(80, 80)); g.rodar(40);
   assert.equal(g.M.nivel, "brasil", "clique no Brasil"); assert.equal(g.contexto.location.hash, "#brasil");
   g.tecla("Escape"); g.rodar(40);
@@ -263,10 +270,13 @@ async function principal() {
   const fa = await abrir("#cidade=manaus");
   await espera();
   for (const img of fa.contexto.imagens || []) img.falhar();
-  fa.tecla("Escape"); fa.rodar(40);
+  const pedidosAtlas = () => fa.requisicoes.filter(([u]) => u.startsWith("/mundo/atlas.json")).length, n0 = pedidosAtlas();
+  assert.equal(n0, 2, "o mapa (miniaturas) e a cidade pedem o atlas");
+  fa.tecla("Escape"); fa.rodar(40); await espera();
   assert.equal(fa.M.nivel, "brasil");
+  assert.equal(pedidosAtlas(), n0 + 1, "a falha libera um novo pedido do mapa ao voltar a ele");
   fa.M.ir("cidade", { cidade: "manaus" }); fa.rodar(40); await espera();
-  assert.equal(fa.requisicoes.filter(([u]) => u.startsWith("/mundo/atlas.json")).length, 2, "a falha libera um novo pedido");
+  assert.equal(pedidosAtlas(), n0 + 2, "a falha libera um novo pedido da cidade");
   // a cidade usa o tempo dela; com movimento reduzido carros e pedestres ficam parados e não há partículas (nada de Clima.desenhar)
   const temporal = { cidades: { recife: { tipo: "tempestade", vento: 1, noite: false } }, casa: null, versao: 1 };
   for (const reduz of [true, false]) {

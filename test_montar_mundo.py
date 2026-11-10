@@ -34,6 +34,13 @@ GENERICOS = ({f"predios-{i}" for i in range(1, 7)} | {f"chale-{i}" for i in rang
 OPCIONAIS = {"festa-arvore-natal", "festa-fogueira", "festa-barraca-junina", "festa-abobora", "festa-ovo-pascoa",
              "festa-carro-alegorico", "festa-palco-anonovo"}
 METADE = {"carro-1", "carro-2", "carro-3", "carro-4", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1"} | OPCIONAIS
+# as miniaturas do mapa do Brasil: uma por marco e as dos dois aviões
+MINIS = {"mini-" + m for m in MARCOS.values()} | {"mini-aviao-1", "mini-aviao-2"}
+BIOMAS = {"amazonia", "cerrado", "caatinga", "pantanal", "mata-atlantica", "pampa"}
+# um ponto bem dentro de cada bioma (lat, lon): ali o desenho tem de ser o do bioma
+NO_BIOMA = {"amazonia": (-5.0, -64.0), "cerrado": (-13.0, -46.5), "caatinga": (-6.5, -39.8),
+            "pantanal": (-18.5, -56.8), "mata-atlantica": (-22.8, -51.0), "pampa": (-31.0, -54.0)}
+SERRAS = {"serra-do-mar", "mantiqueira", "espinhaco", "chapada-diamantina", "serra-geral", "guianas", "andes"}
 
 
 class Cidades(unittest.TestCase):
@@ -60,6 +67,45 @@ class Cidades(unittest.TestCase):
     def test_todo_marco_tem_arte(self):
         for cid, marco in MARCOS.items():
             self.assertTrue(os.path.isfile(os.path.join(ARTE, f"marco-{marco}.png")), cid)
+
+    def test_biomas_e_serras_validos(self):
+        """biomas.json: os seis biomas, cada um com um polígono em (lon, lat) perto da caixa do mapa; serras.json: as
+        serras pedidas, cada uma uma linha de dois pontos ou mais, com a neve só nos Andes."""
+        dentro = lambda lon, lat: -80 <= lon <= -28 and -40 <= lat <= 12
+        with open(os.path.join(RAIZ, "arte", "mundo", "biomas.json"), encoding="utf-8") as f:
+            biomas = json.load(f)
+        self.assertEqual({b["id"] for b in biomas["biomas"]}, BIOMAS)
+        for b in biomas["biomas"] + list(biomas["extras"].values()):
+            pontos = b["poligono"]
+            self.assertGreaterEqual(len(pontos), 3)
+            self.assertTrue(all(len(p) == 2 and dentro(*p) for p in pontos), b.get("id"))
+        self.assertIn("araucarias", biomas["extras"])
+        with open(os.path.join(RAIZ, "arte", "mundo", "serras.json"), encoding="utf-8") as f:
+            serras = json.load(f)
+        self.assertEqual({s["id"] for s in serras}, SERRAS)
+        for s in serras:
+            self.assertTrue(s["nome"].strip())
+            self.assertIn(s["tipo"], {"verde", "rocha", "neve"})
+            for linha in s["linhas"]:
+                self.assertGreaterEqual(len(linha), 2, s["id"])
+                self.assertTrue(all(len(p) == 2 and dentro(*p) for p in linha), s["id"])
+        self.assertEqual({s["id"] for s in serras if s["tipo"] == "neve"}, {"andes"})
+        self.assertTrue(any(p.get("nome") == "Pico da Neblina" for s in serras for p in s.get("picos", [])))
+
+    def test_rios_recortados(self):
+        """O recorte dos rios do Natural Earth: só linhas na caixa do mapa (com 1° de folga), com os três rios largos."""
+        with open(os.path.join(RAIZ, "arte", "mundo", "fontes", "ne_50m_rivers_lake_centerlines.geojson"),
+                  encoding="utf-8") as f:
+            rios = json.load(f)["features"]
+        nomes = set()
+        for r in rios:
+            g = r["geometry"]
+            self.assertEqual(g["type"], "MultiLineString")
+            for linha in g["coordinates"]:
+                self.assertGreaterEqual(len(linha), 2)
+                self.assertTrue(all(-75 <= lon <= -33 and -35 <= lat <= 7 for lon, lat in linha))
+            nomes.add(" ".join(r["properties"]["name"].split()))
+        self.assertTrue({"Amazonas", "Paraná", "São Francisco", "Tocantins", "Negro"} <= nomes, nomes)
 
 
 class Preencher(unittest.TestCase):
@@ -109,8 +155,8 @@ class Montagem(unittest.TestCase):
     def cores(cls, pontos):
         """Cor '#rrggbb' de cada (x, y) do brasil.png montado, lida pelo Pillow no processo filho."""
         ler = ("import json, sys\nfrom PIL import Image\nim = Image.open(sys.argv[1]).convert('RGB')\n"
-               "print(json.dumps(['#%02x%02x%02x' % im.getpixel(tuple(p)) for p in json.loads(sys.argv[2])]))")
-        r = subprocess.run([sys.executable, "-c", ler, os.path.join(cls.pastas[0], "brasil.png"), json.dumps(pontos)],
+               "print(json.dumps(['#%02x%02x%02x' % im.getpixel(tuple(p)) for p in json.loads(sys.stdin.read())]))")
+        r = subprocess.run([sys.executable, "-c", ler, os.path.join(cls.pastas[0], "brasil.png")], input=json.dumps(pontos),
                            capture_output=True, text=True, timeout=60)
         if r.returncode:
             raise AssertionError(r.stderr)
@@ -155,7 +201,7 @@ class Montagem(unittest.TestCase):
         self.assertEqual(set(atlas), {"versao", "quadros"})
         self.assertIsInstance(atlas["versao"], int)
         presentes = {n for n in OPCIONAIS if os.path.exists(os.path.join(ARTE, n + ".png"))}
-        self.assertEqual(set(atlas["quadros"]), marcos | GENERICOS | presentes)
+        self.assertEqual(set(atlas["quadros"]), marcos | GENERICOS | presentes | MINIS)
         with open(os.path.join(pasta, "atlas.png"), "rb") as f:
             cabeca = f.read(24)
         largura, altura = int.from_bytes(cabeca[16:20], "big"), int.from_bytes(cabeca[20:24], "big")
@@ -177,7 +223,9 @@ class Montagem(unittest.TestCase):
                 shutil.copy(os.path.join(origem, nome), arte)
         quadros = self.atlas(arte, pasta)["quadros"]
         self.assertNotIn("marco-cristo", quadros)
+        self.assertNotIn("mini-cristo", quadros)   # sem a arte, o mapa usa o ícone genérico
         self.assertIn("marco-pampulha", quadros)
+        self.assertIn("mini-pampulha", quadros)
         self.assertTrue(GENERICOS <= set(quadros))
         # sem uma peça genérica (que toda cidade usa), a montagem para com erro
         os.remove(os.path.join(arte, "predios-2.png"))
@@ -222,6 +270,12 @@ class Montagem(unittest.TestCase):
             raise AssertionError(r.stderr)
         alfa, tam = json.loads(r.stdout)
         self.assertEqual(alfa, [0, 255])
+        for nome in MINIS:   # as miniaturas do mapa: 28 a 36 px de tela a 1x (1 px da arte por px de CSS)
+            w, h = quadros[nome][2:]
+            if nome.startswith("mini-aviao"):
+                self.assertTrue(18 <= max(w, h) <= 24, (nome, w, h))
+            else:
+                self.assertTrue(26 <= max(w, h) <= 36 and min(w, h) >= 14, (nome, w, h))
         for nome, (w, h) in tam.items():
             qw, qh = quadros[nome][2:]
             if nome in METADE:   # metade arredondada para cima; o recorte do alfa pode tirar uma linha da borda
@@ -242,7 +296,20 @@ class Montagem(unittest.TestCase):
 
     def test_mundo_json(self):
         self.assertIsInstance(self.mundo["versao"], int)
-        self.assertEqual(self.mundo["niveis"], {"brasil": {"w": 400, "h": 400, "caixa": [-74.0, -34.0, -34.0, 6.0]}})
+        brasil = self.mundo["niveis"]["brasil"]
+        self.assertEqual(set(self.mundo["niveis"]), {"brasil"})
+        self.assertEqual({k: brasil[k] for k in ("w", "h", "caixa")}, {"w": 400, "h": 400, "caixa": [-74.0, -34.0, -34.0, 6.0]})
+        # as células de 1° do Brasil, para o globo (40 linhas de 40, de lat 6 para baixo e de lon −74 para a direita)
+        celulas = brasil["celulas"]
+        self.assertEqual(set(brasil), {"w", "h", "caixa", "celulas"})
+        self.assertEqual(len(celulas), 40)
+        self.assertTrue(all(len(l) == 40 and set(l) <= {"0", "1"} for l in celulas))
+        celula = lambda lat, lon: celulas[int(6 - lat)][int(lon + 74)]
+        self.assertEqual(celula(-15.8, -47.9), "1")   # Brasília
+        self.assertEqual(celula(-3.1, -60.0), "1")    # Manaus
+        self.assertEqual(celula(-23.0, -58.0), "0")   # Paraguai
+        self.assertEqual(celula(-20.0, -36.0), "0")   # mar
+        self.assertTrue(650 <= "".join(celulas).count("1") <= 800, "".join(celulas).count("1"))
         self.assertEqual(len(self.mundo["cidades"]), 28)
         bh = next(c for c in self.mundo["cidades"] if c["id"] == "belo-horizonte")
         self.assertEqual((bh["x"], bh["y"]), (300, 259))
@@ -256,23 +323,62 @@ class Montagem(unittest.TestCase):
 
     def test_cidades_em_terra(self):
         import montar_mundo as mm
-        brasil = {mm.PALETA[n] for n in ("terra", "terra_alta", "serra", "borda_uf", "borda_pais")}
+        import mundo_terreno as mt
+        # em terra: nenhuma cor de mar (o rio pode passar no ponto da cidade, como em Manaus: a miniatura fica por cima)
+        agua = {mt.CORES[n] for n in mt.AGUA if not n.startswith("rio")}
         cidades = self.mundo["cidades"]
         for c, cor in zip(cidades, self.cores([[c["x"], c["y"]] for c in cidades])):
-            self.assertIn(cor, brasil, c["id"])
+            self.assertIn(cor, set(mt.CORES.values()) - agua, c["id"])
             x0, y0 = mm.para_pixel(c["lat"], c["lon"], mm.CAIXA_BRASIL, 400, 400)
             self.assertLessEqual((c["x"] - x0) ** 2 + (c["y"] - y0) ** 2, 36, c["id"])
         movidas = {c["id"] for c in cidades
                    if (c["x"], c["y"]) != mm.para_pixel(c["lat"], c["lon"], mm.CAIXA_BRASIL, 400, 400)}
         self.assertTrue({"belem", "recife", "rio-de-janeiro", "florianopolis"} <= movidas, movidas)
 
-    def test_vizinhos_destacados(self):
+    def janela(self, lat, lon, r):
+        """As cores da janela (2r+1)² em volta de (lat, lon) no brasil.png."""
         import montar_mundo as mm
-        paraguai = mm.para_pixel(-23.0, -58.0, mm.CAIXA_BRASIL, 400, 400)
-        mato_grosso = mm.para_pixel(-13.0, -56.0, mm.CAIXA_BRASIL, 400, 400)
-        cor_py, cor_mt = self.cores([list(paraguai), list(mato_grosso)])
-        self.assertEqual(cor_py, mm.PALETA["vizinho"])
-        self.assertIn(cor_mt, {mm.PALETA[n] for n in ("terra", "terra_alta", "serra")})
+        x, y = mm.para_pixel(lat, lon, mm.CAIXA_BRASIL, 400, 400)
+        return self.cores([[i, j] for j in range(y - r, y + r + 1) for i in range(x - r, x + r + 1)
+                           if 0 <= i < 400 and 0 <= j < 400])
+
+    def test_vizinhos_apagados(self):
+        """Os vizinhos usam a mesma linguagem do Brasil em tons apagados; o Brasil, os tons cheios."""
+        import mundo_terreno as mt
+        apagadas, cheias = mt.cores_apagadas(), set(mt.CORES.values()) - mt.cores_apagadas()
+        for lat, lon in ((-23.0, -58.0), (-3.0, -72.0), (-31.5, -56.5), (4.0, -58.5)):   # Paraguai, Peru, Uruguai, Guiana
+            cores = self.janela(lat, lon, 3)
+            self.assertGreaterEqual(sum(c in apagadas for c in cores) / len(cores), 0.9, (lat, lon))
+        cores = self.janela(-13.0, -56.0, 3)   # Mato Grosso
+        self.assertGreaterEqual(sum(c in cheias for c in cores) / len(cores), 0.9)
+
+    def test_cada_bioma_no_seu_lugar(self):
+        """No meio de cada bioma, a maior parte dos pixels é das cores dele (os seis aparecem, cada um no seu canto)."""
+        import mundo_terreno as mt
+        for bioma, (lat, lon) in NO_BIOMA.items():
+            cores, dele = self.janela(lat, lon, 5), mt.cores_do_bioma(bioma)
+            self.assertGreaterEqual(sum(c in dele for c in cores) / len(cores), 0.5, bioma)
+            for outro in BIOMAS - {bioma}:   # as paletas não se confundem
+                self.assertFalse(dele & mt.cores_do_bioma(outro), (bioma, outro))
+
+    def test_rios_e_mar(self):
+        """Há rios (o Amazonas com 2 px perto de Óbidos), areia na costa e um mar com textura, não liso."""
+        import mundo_terreno as mt
+        rio = mt.CORES["rio"]
+        self.assertGreaterEqual(sum(c == rio for c in self.janela(-1.95, -55.5, 3)), 6, "Amazonas largo")
+        tudo = self.janela(-14.0, -54.0, 200)
+        self.assertGreater(sum(c == rio for c in tudo), 1500)
+        self.assertGreater(sum(c == mt.CORES["areia"] for c in tudo), 300)
+        alto_mar = self.janela(-22.0, -37.0, 12)
+        self.assertGreaterEqual(len(set(alto_mar)), 2, "o mar fundo tem textura")
+        self.assertTrue(set(alto_mar) <= {mt.CORES[n] for n in mt.AGUA}, set(alto_mar))
+
+    def test_agua_e_terra_pela_cor(self):
+        """O navegador separa água de terra pelo azul: água com B > G, terra com G >= B (todas as cores)."""
+        import mundo_terreno as mt
+        for nome, cor in mt.CORES.items():
+            r, g, b = (int(cor[i:i + 2], 16) for i in (1, 3, 5))
+            self.assertEqual(b > g, nome in mt.AGUA, nome)
 
     def test_versao_muda_com_a_paleta(self):
         """Só uma cor da PALETA muda: os índices dos pixels ficam iguais e a versão muda (cache do navegador)."""

@@ -13,7 +13,6 @@ const Globo = (() => {
   const RAD = Math.PI / 180, BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
   // terra.png: mar, mar raso, terra e terra alta (a ordem é a classe da célula)
   const TERRA = [[29, 59, 92], [42, 90, 124], [90, 138, 60], [122, 154, 74]];
-  const NAO_BRASIL = [[74, 90, 62], [46, 58, 34], [29, 59, 92], [42, 90, 124]];   // vizinho, borda do país e mar no brasil.png
   const DESERTOS = [[16, 31, -16, 33], [14, 31, 34, 58], [26, 35, 50, 65], [37, 46, 78, 110], [-31, -19, 119, 142], [-28, -18, -71, -67]];
   const SETA = ["kkkkkkk", "koooook", ".koook.", "..kok..", "...k..."], CORES_SETA = { k: "#25301f", o: "#f5c84d" };
 
@@ -106,23 +105,17 @@ const Globo = (() => {
       }
       feito.chave = "";   // a passada guardada era só de mar: refaz (com movimento reduzido, nada mais a refaria)
     });
-    ler("/mundo/brasil.png?v=" + versao, 400, 400, d => {   // a célula é do Brasil se 4 de 9 amostras do brasil.png forem
-      for (let j = 84; j < 124; j++) for (let i = 106; i < 146; i++) {
-        let n = 0;
-        for (const a of [2, 5, 8]) for (const b of [2, 5, 8]) {
-          const x = (i - 106) * 10 + a, y = (j - 84) * 10 + b, o = (y * 400 + x) * 4;
-          if (!NAO_BRASIL.some(q => q[0] === d[o] && q[1] === d[o + 1] && q[2] === d[o + 2])) n++;
-        }
-        brasil[j * 360 + i] = n >= 4 ? 1 : 0;
-      }
+    // as células de 1° do Brasil vêm prontas no mundo.json (40 linhas de 40, de lat 6 e lon −74); sem elas, vale a caixa
+    const celulas = dados.niveis && dados.niveis.brasil && dados.niveis.brasil.celulas;
+    if (Array.isArray(celulas) && celulas.length === 40 && celulas.every(l => typeof l === "string" && l.length === 40)) {
+      for (let j = 0; j < 40; j++) for (let i = 0; i < 40; i++) brasil[(j + 84) * 360 + i + 106] = celulas[j][i] === "1" ? 1 : 0;
       alvoBrasil = new Uint8Array(360 * 180);   // o alvo do clique: o Brasil com 2° de folga, para o dedo
       for (let j = 80; j < 128; j++) for (let i = 102; i < 150; i++) {
         let sim = 0;
         for (let b = -2; b <= 2 && !sim; b++) for (let a = -2; a <= 2 && !sim; a++) sim = brasil[(j + b) * 360 + i + a];
         alvoBrasil[j * 360 + i] = sim;
       }
-      feito.chave = "";
-    });
+    }
     // a cor do dia: o terra.png com gelo nos polos e na Groenlândia, desertos, floresta tropical e taiga
     function bioma(i, j, cl) {
       const lat = 89.5 - j, lon = i - 179.5, jit = (hash(i, j, 9) - 0.5) * 3, alta = cl === 3;
@@ -167,7 +160,7 @@ const Globo = (() => {
     };
     const celula = (lat, lon) => Math.min(179, Math.max(0, Math.floor(90 - lat))) * 360 + ((Math.floor(lon + 180) % 360) + 360) % 360;
     const acerta = p => alvoBrasil ? alvoBrasil[celula(p.lat, p.lon)] === 1
-      : p.lon >= BRASIL[0] && p.lon <= BRASIL[2] && p.lat >= BRASIL[1] && p.lat <= BRASIL[3];   // sem o brasil.png, a caixa
+      : p.lon >= BRASIL[0] && p.lon <= BRASIL[2] && p.lat >= BRASIL[1] && p.lat <= BRASIL[3];   // sem as células, a caixa
     const agora = () => fixa || new Date();
 
     function renderizar(t, destaque) {

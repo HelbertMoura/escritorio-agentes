@@ -159,7 +159,8 @@ const Mundo = (() => {
   // o rótulo do canvas; o da cidade vem dela (marco, chalé da casa) e é refeito quando a casa ou o atlas chegam
   const ROTULOS = {
     globo: "Globo terrestre em pixel art girando, com a noite de agora, as luzes das cidades do Brasil, nuvens e a lua",
-    brasil: "Mapa do Brasil em pixel art com as capitais e Mateus Leme, o tempo de agora em cada uma, aviões nas rotas e a noite pelo horário",
+    brasil: "Mapa ilustrado do Brasil em pixel art, com biomas, rios e serras, o marco de cada capital e de Mateus Leme, o tempo de " +
+      "agora em cada uma, barcos na costa, aviões nas rotas e a noite pelo horário",
     bairro: "Bairro com o chalé deste escritório, rua, pessoas, cachorro, carro e céu do horário atual",
   };
   function rotular() { if (nivel) canvas.setAttribute("aria-label", nivel.rotulo ? nivel.rotulo() : ROTULOS[nome]); }

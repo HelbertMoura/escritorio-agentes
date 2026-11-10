@@ -1,9 +1,10 @@
-"""Monta o mundo vivo: static/mundo/terra.png, brasil.png e mundo.json.
+"""Monta o mundo vivo: static/mundo/terra.png, brasil.png, mundo.json e o atlas da arte do PixelLab.
 
-Entradas (arte/mundo): cidades.json e os contornos do Natural Earth em fontes/ (países 1:110m e as
-27 UFs 1:50m). Tudo é desenhado aqui por código, numa paleta fixa: preenchimento de polígono por
-varredura par-ímpar (pixel marcado pelo centro), relevo em faixas por distância à costa e a borda
-de 1 pixel entre UFs. O mesmo dado gera sempre os mesmos PNG.
+Entradas (arte/mundo): cidades.json, biomas.json, serras.json e os contornos e rios do Natural Earth em fontes/ (países
+1:110m, as 27 UFs e os rios 1:50m). Aqui os dados viram pixels: preenchimento de polígono por varredura par-ímpar (pixel
+marcado pelo centro), a costa alisada e as linhas das serras e dos rios na escala da imagem. O terra.png (o globo) sai
+numa paleta fixa de quatro cores; o desenho do brasil.png (o mapa ilustrado) fica em mundo_terreno.py. O mesmo dado gera
+sempre os mesmos PNG.
 
 Uso: python ferramentas/montar_mundo.py [pasta de entrada] [pasta de saída]
 """
@@ -12,7 +13,10 @@ import json
 import math
 import os
 import sys
-from collections import deque
+from collections import Counter, deque
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mundo_terreno  # noqa: E402  (o desenho do mapa; sem Pillow)
 
 RAIZ = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 ENTRADA = os.path.join(RAIZ, "arte", "mundo")
@@ -22,16 +26,14 @@ CAIXA_BRASIL = (-74.0, -34.0, -34.0, 6.0)  # (lon_min, lat_min, lon_max, lat_max
 W_BRASIL, H_BRASIL = 400, 400
 CAIXA_TERRA = (-180.0, -90.0, 180.0, 90.0)
 W_TERRA, H_TERRA = 360, 180  # 1° por pixel
-PALETA = {"mar": "#1d3b5c", "mar_raso": "#2a5a7c", "terra": "#5a8a3c", "terra_alta": "#7a9a4a",
-          "serra": "#8a7a5a", "borda_uf": "#3e5e2a", "rio": "#3a7ab0",  # rio: sem uso até haver fonte de rios
-          "vizinho": "#4a5a3e", "borda_pais": "#2e3a22"}  # só no brasil.png
-UFS_SERRA = {"MG", "ES", "RJ", "SP", "PR", "SC", "RS"}
-COSTA, INTERIOR = 3, 20  # faixas de relevo: 0–3, 4–20 e 21+ pixels da costa
+PALETA = {"mar": "#1d3b5c", "mar_raso": "#2a5a7c", "terra": "#5a8a3c", "terra_alta": "#7a9a4a"}  # terra.png
+COSTA = 3  # terra.png: mar raso e terra baixa até 3 pixels da costa
 NAO_CAPITAIS = {"mateus-leme"}
 ROTA_MAX_KM, ROTAS_MAX = 1500, 40
-ESTRANGEIRO = "--"  # rótulo da terra de outros países no mapa do Brasil
+ESTRANGEIRO = mundo_terreno.ESTRANGEIRO  # rótulo da terra de outros países no mapa do Brasil
 FRESTA_LONGE_DO_MAR = 4  # pixels: ver desenhar_brasil()
 CIDADE_RAIO = 6  # pixels: até onde a cidade da costa pode ser puxada para a terra brasileira
+RIOS = "ne_50m_rivers_lake_centerlines.geojson"
 
 
 def para_pixel(lat, lon, caixa, w, h):
@@ -106,14 +108,6 @@ def vizinhos8(x, y):
     return [(x + dx, y + dy) for dy in (-1, 0, 1) for dx in (-1, 0, 1) if dx or dy]
 
 
-def relevo(dist_costa, uf=None):
-    if dist_costa <= COSTA:
-        return "terra"
-    if dist_costa > INTERIOR and uf in UFS_SERRA:
-        return "serra"
-    return "terra_alta"
-
-
 def pintar(w, h, cor_de):
     """Imagem em paleta (modo P): cor_de(x, y) devolve um nome da PALETA."""
     from PIL import Image  # só aqui: preencher() e para_pixel() funcionam sem o Pillow
@@ -124,27 +118,15 @@ def pintar(w, h, cor_de):
     return im
 
 
-def desenhar(rotulo, w, h, rodar=False):
-    """Mar raso perto da costa, relevo na terra, vizinhos numa cor só e borda de 1 pixel em volta de cada UF
-    (borda_pais contra vizinho, borda_uf contra outra UF).
-    rotulo: pixel -> UF, ESTRANGEIRO ou None (terra sem UF); pixel ausente é mar."""
-    terra = set(rotulo)
+def desenhar(terra, w, h, rodar=False):
+    """terra.png: mar raso perto da costa e a terra em duas faixas (baixa perto da costa, alta no interior)."""
     da_terra = distancias(terra, w, h, rodar)                   # na terra: passos até o mar
     do_mar = distancias(set(da_terra) - terra, w, h, rodar)     # no mar: passos até a terra
 
     def cor(x, y):
         if (x, y) not in terra:
             return "mar_raso" if do_mar[(x, y)] <= COSTA else "mar"
-        uf = rotulo[(x, y)]
-        if uf == ESTRANGEIRO:
-            return "vizinho"
-        if uf:
-            outros = {rotulo[v] for v in vizinhos4(x, y) if v in terra} - {uf}
-            if ESTRANGEIRO in outros:
-                return "borda_pais"
-            if outros:
-                return "borda_uf"
-        return relevo(da_terra[(x, y)], uf)
+        return "terra" if da_terra[(x, y)] <= COSTA else "terra_alta"
     return pintar(w, h, cor)
 
 
@@ -154,14 +136,14 @@ def ler(caminho):
 
 
 def desenhar_terra(paises):
-    rotulo = {}
+    terra = set()
     for p in paises:
-        for px in preencher_aneis(aneis_em_pixels(p["geometry"], CAIXA_TERRA, W_TERRA, H_TERRA), W_TERRA, H_TERRA):
-            rotulo[px] = None
-    return desenhar(rotulo, W_TERRA, H_TERRA, rodar=True)
+        terra |= preencher_aneis(aneis_em_pixels(p["geometry"], CAIXA_TERRA, W_TERRA, H_TERRA), W_TERRA, H_TERRA)
+    return desenhar(terra, W_TERRA, H_TERRA, rodar=True)
 
 
-def desenhar_brasil(paises, estados):
+def rotular_brasil(paises, estados):
+    """O rótulo de cada pixel de terra do brasil.png: a UF (contorno 1:50m) ou ESTRANGEIRO; pixel ausente é água."""
     rotulo, brasil_110m = {}, set()
     for p in paises:
         pixels = preencher_aneis(aneis_em_pixels(p["geometry"], CAIXA_BRASIL, W_BRASIL, H_BRASIL), W_BRASIL, H_BRASIL)
@@ -184,7 +166,58 @@ def desenhar_brasil(paises, estados):
             if v in fresta and v not in rotulo:
                 rotulo[v] = ESTRANGEIRO
                 fila.append(v)
-    return desenhar(rotulo, W_BRASIL, H_BRASIL), rotulo
+    return alisar_costa(rotulo, W_BRASIL, H_BRASIL)
+
+
+def alisar_costa(rotulo, w, h, vezes=2):
+    """Tira os dentes da costa: pixel de terra com um vizinho de terra ou menos (dos 4) vira água, e pixel de água
+    cercado de terra em 3 lados vira terra, com o rótulo mais comum em volta."""
+    for _ in range(vezes):
+        tirar, por = [], {}
+        for y in range(h):
+            for x in range(w):
+                viz = [rotulo[v] for v in vizinhos4(x, y) if v in rotulo]
+                if (x, y) in rotulo and len(viz) <= 1:
+                    tirar.append((x, y))
+                elif (x, y) not in rotulo and len(viz) >= 3 and 0 < x < w - 1 and 0 < y < h - 1:
+                    por[(x, y)] = sorted(Counter(viz).items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
+        for px in tirar:
+            del rotulo[px]
+        rotulo.update(por)
+    return rotulo
+
+
+def em_pixels(lon, lat):
+    """(lon, lat) em pixels (fracionários) do brasil.png."""
+    lon0, lat0, lon1, lat1 = CAIXA_BRASIL
+    return (lon - lon0) * W_BRASIL / (lon1 - lon0), (lat1 - lat) * H_BRASIL / (lat1 - lat0)
+
+
+def desenhar_brasil(rotulo, fontes):
+    """O mapa ilustrado (mundo_terreno.desenhar), com biomas, serras e rios passados para pixels."""
+    from PIL import Image
+    poligono = lambda pontos: preencher([em_pixels(*p) for p in pontos], W_BRASIL, H_BRASIL)
+    dados = ler(os.path.join(fontes, "biomas.json"))
+    biomas = [(b["id"], poligono(b["poligono"])) for b in dados["biomas"]]
+    extras = {nome: poligono(e["poligono"]) for nome, e in dados["extras"].items()}
+    serras = [{"tipo": s["tipo"], "forma": s.get("forma"), "linhas": [[em_pixels(*p) for p in l] for l in s["linhas"]],
+               "picos": [em_pixels(*p["ponto"]) for p in s.get("picos", [])]}
+              for s in ler(os.path.join(fontes, "serras.json"))]
+    rios = [(r["properties"]["name"], [[em_pixels(*p) for p in l] for l in r["geometry"]["coordinates"]])
+            for r in ler(os.path.join(fontes, "fontes", RIOS))["features"]]
+    indices = mundo_terreno.desenhar(rotulo, biomas, extras, serras, rios, W_BRASIL, H_BRASIL)
+    im = Image.new("P", (W_BRASIL, H_BRASIL))
+    im.putpalette([int(c[i:i + 2], 16) for c in mundo_terreno.CORES.values() for i in (1, 3, 5)])
+    im.putdata(indices)
+    return im
+
+
+def celulas(rotulo):
+    """As células de 1° do Brasil, para o globo: 40 linhas (de lat 6 para baixo) de 40 '0'/'1' (de lon −74 para a
+    direita). A célula é do Brasil se 4 das 9 amostras (2, 5 e 8 px dentro do bloco de 10x10) forem de UF."""
+    uf = lambda x, y: rotulo.get((x, y)) not in (None, ESTRANGEIRO)
+    return ["".join("1" if sum(uf(i * 10 + a, j * 10 + b) for a in (2, 5, 8) for b in (2, 5, 8)) >= 4 else "0"
+                    for i in range(40)) for j in range(40)]
 
 
 def na_terra(cidade, rotulo):
@@ -219,19 +252,20 @@ def montar(fontes, saida):
     cidades = ler(os.path.join(fontes, "cidades.json"))
     paises = ler(os.path.join(fontes, "fontes", "ne_110m_admin_0_countries.geojson"))["features"]
     estados = ler(os.path.join(fontes, "fontes", "ne_50m_admin_1_states_provinces_lakes.geojson"))["features"]
-    terra, (brasil, rotulo) = desenhar_terra(paises), desenhar_brasil(paises, estados)
+    rotulo = rotular_brasil(paises, estados)
+    terra, brasil = desenhar_terra(paises), desenhar_brasil(rotulo, fontes)
 
     mundo = {
         "cidades": [{"id": c["id"], "nome": c["nome"], "uf": c["uf"], "lat": c["lat"], "lon": c["lon"],
                      "x": x, "y": y, "marco": c["marco"]}
                     for c in cidades for x, y in [na_terra(c, rotulo)]],
         "rotas": rotas(cidades),
-        "niveis": {"brasil": {"w": W_BRASIL, "h": H_BRASIL, "caixa": list(CAIXA_BRASIL)}},
+        "niveis": {"brasil": {"w": W_BRASIL, "h": H_BRASIL, "caixa": list(CAIXA_BRASIL), "celulas": celulas(rotulo)}},
     }
     # versão derivada do conteúdo (pixels, cores e dados), para o navegador não guardar arquivo velho;
     # tobytes() de imagem em modo P só traz os índices, então a paleta entra à parte
     h = hashlib.sha256(terra.tobytes() + brasil.tobytes()
-                       + json.dumps([PALETA, mundo], sort_keys=True).encode())
+                       + json.dumps([PALETA, mundo_terreno.CORES, mundo], sort_keys=True).encode())
     mundo = {"versao": int(h.hexdigest()[:8], 16), **mundo}
 
     os.makedirs(saida, exist_ok=True)
@@ -255,6 +289,8 @@ OPCIONAIS = ["festa-arvore-natal", "festa-fogueira", "festa-barraca-junina", "fe
 METADE = {"carro-1", "carro-2", "carro-3", "carro-4", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1",
           *OPCIONAIS}
 ATLAS_LARGURA = 512
+MINI_MARCO, MINI_AVIAO = 32, 20   # pixels: o lado maior da miniatura do mapa, antes do contorno de 1 px
+MINI_CONTORNO = (28, 22, 18, 255)
 
 
 def metade(im):
@@ -269,11 +305,40 @@ def metade(im):
     return menor.crop(menor.getchannel("A").getbbox())
 
 
+def mini(im, lado):
+    """A miniatura do mapa do Brasil: a peça reduzida até `lado` px no lado maior, com contorno escuro de 1 px (para
+    ler sobre qualquer terreno). Cada bloco vira a cor real do bloco mais perto da média das cores opacas (sem borrão e
+    sem cor nova), opaco se a maior parte do bloco era opaca; o alfa fica binário."""
+    from PIL import Image
+    w, h = im.size
+    f = max(w, h) / lado
+    nw, nh = max(1, round(w / f)), max(1, round(h / f))
+    px, out = im.load(), Image.new("RGBA", (nw + 2, nh + 2))
+    o = out.load()
+    for j in range(nh):
+        for i in range(nw):
+            x0, y0 = i * w // nw, j * h // nh
+            x1, y1 = max(x0 + 1, (i + 1) * w // nw), max(y0 + 1, (j + 1) * h // nh)
+            bloco = [px[x, y] for y in range(y0, y1) for x in range(x0, x1)]
+            opacos = [c for c in bloco if c[3] >= 128]
+            if len(opacos) * 2 < len(bloco):
+                continue
+            m = [sum(c[k] for c in opacos) / len(opacos) for k in range(3)]
+            o[i + 1, j + 1] = min(opacos, key=lambda c: (sum((c[k] - m[k]) ** 2 for k in range(3)), c))[:3] + (255,)
+    borda = [(x, y) for y in range(nh + 2) for x in range(nw + 2) if not o[x, y][3]
+             and any(0 <= x + dx < nw + 2 and 0 <= y + dy < nh + 2 and o[x + dx, y + dy][3] == 255
+                     for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))]
+    for p in borda:
+        o[p] = MINI_CONTORNO
+    return out
+
+
 def montar_atlas(arte, cidades, saida):
     """atlas.png e atlas.json em `saida` com a arte do PixelLab (`arte`): os marcos das cidades e as peças genéricas.
     Cada peça vai recortada pela caixa do alfa (o código ancora pelo pé do recorte), as de METADE já reduzidas, e é
     empilhada em prateleiras, da mais alta para a mais baixa. Marco ou peça OPCIONAL sem arte fica de fora (a cidade
-    usa os prédios genéricos, a festa fica nos enfeites desenhados por código); peça genérica sem arte é erro."""
+    usa os prédios genéricos, a festa fica nos enfeites desenhados por código); peça genérica sem arte é erro. Cada
+    marco e os dois aviões ganham também a miniatura do mapa do Brasil (mini-<nome>, ver mini())."""
     from PIL import Image
     pecas = {}
 
@@ -288,10 +353,13 @@ def montar_atlas(arte, cidades, saida):
     for nome in OPCIONAIS:
         if os.path.exists(os.path.join(arte, nome + ".png")):
             pecas[nome] = abrir(nome)
+    for nome in ("aviao-1", "aviao-2"):
+        pecas["mini-" + nome] = mini(pecas[nome], MINI_AVIAO)
     for c in cidades:
         nome = "marco-" + c["marco"] if c["marco"] else None
         if nome and os.path.exists(os.path.join(arte, nome + ".png")):
             pecas[nome] = abrir(nome)
+            pecas["mini-" + c["marco"]] = mini(pecas[nome], MINI_MARCO)
         elif nome:
             print(f"atlas: sem {nome}.png, {c['id']} usa os prédios genéricos")
 

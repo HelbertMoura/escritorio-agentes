@@ -278,7 +278,7 @@ class Rota(unittest.TestCase):
 
     def test_publicos_do_mundo(self):
         for nome in ("mundo/terra.png", "mundo/brasil.png", "mundo/mundo.json", "mundo/atlas.png", "mundo/atlas.json",
-                     "mundo_globo.js", "mundo_mapa.js", "mundo_cidade.js", "mundo_cidade_planta.js", "mundo_bairro.js",
+                     "mundo_globo.js", "mundo_mapa.js", "mundo_mapa_arte.js", "mundo_cidade.js", "mundo_cidade_planta.js", "mundo_bairro.js",
                      "avatar.js", "festas.js", "mundo_festa.js"):
             self.assertIn(nome, e.PUBLICOS)
 

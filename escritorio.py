@@ -131,6 +131,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "recepcionista.js": "text/javascript; charset=utf-8",
     "mundo.html": "text/html; charset=utf-8", "mundo.js": "text/javascript; charset=utf-8",
     "mundo_bairro.js": "text/javascript; charset=utf-8", "mundo_mapa.js": "text/javascript; charset=utf-8",
+    "mundo_mapa_arte.js": "text/javascript; charset=utf-8",
     "mundo_globo.js": "text/javascript; charset=utf-8", "mundo_cidade.js": "text/javascript; charset=utf-8",
     "mundo_cidade_planta.js": "text/javascript; charset=utf-8", "mundo_festa.js": "text/javascript; charset=utf-8",
     "index.html": "text/html; charset=utf-8", "app.js": "text/javascript; charset=utf-8",
@@ -2295,7 +2296,7 @@ PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "fontes/figtree.ttf", "fonte
             "mundo.html", "mundo.js", "ceu.js", "clima.js", "som.js",  # bairro público: só código de desenho e som, sem dados
             # mapa do mundo: imagens, cidades e código de desenho, sem dados do escritório
             "mundo/terra.png", "mundo/brasil.png", "mundo/mundo.json", "mundo/atlas.png", "mundo/atlas.json",
-            "mundo_globo.js", "mundo_mapa.js", "mundo_cidade.js", "mundo_cidade_planta.js", "mundo_bairro.js",
+            "mundo_globo.js", "mundo_mapa.js", "mundo_mapa_arte.js", "mundo_cidade.js", "mundo_cidade_planta.js", "mundo_bairro.js",
             "mundo_festa.js", "festas.js",  # o calendário embutido; as datas próprias só chegam pelo /api/config
             "fontes/doto.woff2", "logo.png",  # liberados na tela de login
             # PWA: o navegador busca o manifesto sem cookie; nenhum deles tem segredo. O sw.js fica na raiz (escopo /)
