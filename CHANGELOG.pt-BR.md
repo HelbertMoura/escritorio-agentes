@@ -13,6 +13,11 @@ As mudanças que importam neste projeto ficam aqui, da mais nova para a mais ant
   - **Cidade:** o marco no centro, praça, prédios e casas conforme o porte, ruas com carros e pedestres, e orla nas capitais de praia. O chalé com a placa só existe na cidade do escritório e leva à recepção.
   - **Ao vivo:** o tempo real das 28 cidades pelo Open-Meteo (uma consulta do servidor a cada 15 minutos), dia e noite pelo relógio e as datas comemorativas do calendário, que enfeitam a cidade.
   - **Privacidade:** a página não mostra nada do agentes.chat. A rota `POST /api/mundo/clima` devolve só o tipo de tempo, o vento e se é noite por cidade, a cidade do escritório, a versão do mapa e as datas do calendário desligadas. As datas próprias da empresa nunca saem. Veja [Segurança](./README.pt-BR.md#segurança).
+- **Visitas por convite:** pelo menu, **Convidar para uma visita** cria um link que vale 1 hora. Quem recebe entra sem senha, vê a sala de reunião num mapa simplificado (sem nomes de agentes nem de equipes) e conversa com quem estiver na sala. Encerrar o convite derruba as sessões. Veja [Visitas por convite](./README.pt-BR.md#visitas-por-convite).
+  - **Recepção pública:** `/visita.html` sem convite mostra só a recepção; as outras salas ficam apagadas, com o aviso "Com convite", e a conversa fica travada.
+  - **Recepcionista (opcional):** a equipe pode pôr um agente do agentes.chat para responder na sala. Nesse caso o texto da visita vai ao canal de visitas do agentes.chat e fica guardado lá.
+  - **Privacidade:** sem recepcionista, convite, sessão e mensagens ficam só na memória do processo e somem ao sair, ao vencer ou ao reiniciar; nada da visita vai para o disco nem para o log. Para onde vai cada dado e o que conferir no proxy antes de abrir na internet está em [`docs/visitas-privadas-plano.md`](./docs/visitas-privadas-plano.md).
+- **Clima mais vivo:** vento com rajadas, raio desenhado na tempestade e árvores balançando, no escritório e no bairro.
 - **`ferramentas/montar_mundo.py`:** gera os arquivos de `static/mundo/` a partir de `arte/mundo/` e `arte/pixellab/mundo/`. Só quem quer trocar cidades ou arte precisa rodar (pede o Pillow); os arquivos gerados vêm no repositório.
 
 ### Alterado
