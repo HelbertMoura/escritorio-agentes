@@ -321,6 +321,8 @@ async function principal() {
   assert.ok(predios["mateus-leme"] < predios["sao-paulo"], JSON.stringify(predios));
   assert.ok(totais["mateus-leme"] * 3 < totais["sao-paulo"] && totais["mateus-leme"] * 2 < totais["rio-de-janeiro"], JSON.stringify(totais));
   assert.ok(predios["mateus-leme"] <= 3 && predios["sao-paulo"] >= 7, JSON.stringify(predios));
+  // o piso da metrópole de praia: à vista, o Rio nunca mostra menos prédios que a cidade pequena
+  assert.ok(predios["rio-de-janeiro"] >= predios["mateus-leme"] && predios["rio-de-janeiro"] >= 3, JSON.stringify(predios));
   const ml = plantaDe("mateus-leme");
   assert.ok(!ml.pecas.some(s => s.peca === "predios-9"), "Mateus Leme tem uma igreja só, a Matriz");
   const [, , cw0, ch0] = ATLAS.quadros["lazer-4"], [, , mw0, mh0] = ATLAS.quadros["marco-matriz-mateus-leme"];
@@ -782,6 +784,22 @@ async function principal() {
     assert.equal(q.M.nivel, "brasil");
     assert.equal(q.quadros.length, 1);
   }
+  // o tempo da etiqueta não vaza de nível: Enter numa construção, Esc para o Brasil e foco numa capital antes dos 5 s; o
+  // status da capital fica, em vez de ser trocado pelo texto geral do Brasil quando o tempo da etiqueta acabaria
+  const ze = await abrir("#cidade=mateus-leme", { passo: 50 });
+  await carregar(ze);
+  const ce = ze.M.niveis.cidade, alvosE = ce.alvos(), iCoreto = alvosE.findIndex(a => a.titulo === "Coreto");
+  ze.elementos["mundo-alvos"].filhos[iCoreto].disparar("click"); ze.rodar();
+  assert.match(ze.elementos["mundo-estado"].textContent, /^Coreto, em Mateus Leme/);
+  ze.tecla("Escape"); ze.rodar(30);
+  assert.equal(ze.M.nivel, "brasil");
+  const geral = ze.elementos["mundo-estado"].textContent;
+  ze.elementos["mundo-alvos"].filhos[0].disparar("focus"); ze.rodar();
+  const daCapital = ze.elementos["mundo-estado"].textContent;
+  assert.notEqual(daCapital, geral, "o foco numa capital muda o status");
+  ze.rodar(110);
+  assert.equal(ze.elementos["mundo-estado"].textContent, daCapital, "o tempo da etiqueta da cidade não troca o status do Brasil");
+
 }
 module.exports = { abrir, espera, carregar, MUNDO, ATLAS, CLIMA, UFS_PERTO };
 if (require.main === module) principal().catch(e => { console.error(e); process.exitCode = 1; });

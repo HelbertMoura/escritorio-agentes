@@ -55,6 +55,7 @@ Ele **não chama nenhum modelo de IA** e não gasta tokens. Aprovar é sempre no
 - 📺 **Modo TV:** tela cheia, tela sempre acesa e um diretor de câmera que corre para os pedidos, as brigas e as greves, com uma faixa de notícias (veja [Modo TV](#modo-tv)).
 - 📲 **App e aviso no celular:** instale o escritório na tela de início e receba um aviso quando um agente pedir a sua aprovação ou fizer uma pergunta (veja [App instalável](#app-instalável-pwa) e [Avisar no celular](#avisar-no-celular)).
 - 👀 **Visitantes:** quem mais está com o escritório aberto aparece no mapa, de crachá (veja [Visitantes](#visitantes)).
+- 🌎 **Mundo:** uma página pública que desce do globo ao Brasil, à cidade e à porta da recepção, com o tempo real de 28 cidades (veja [Mundo](#mundo)).
 - 📰 **Jornal da semana:** manchete, notas e os números de cada agente nesta semana e na passada (veja [Jornal](#jornal)).
 - 🎞️ **Time-lapse do dia:** o dia do escritório num vídeo de uns 30 s, gravado só no seu navegador (veja [Time-lapse](#time-lapse)).
 - 📸 **Modo foto:** esconde a interface e salva um PNG do escritório.
@@ -283,6 +284,51 @@ Quem mais está com o escritório aberto (outro aparelho, outro navegador ou out
 - **Na TV, ninguém aparece:** a TV não conta como visitante e não desenha os visitantes, então o mapa da parede mostra só os agentes.
 - No modo demonstração, a linha não aparece. O que o servidor guarda e manda está em [Segurança](#segurança).
 
+## Mundo
+
+`/mundo.html` mostra onde o escritório fica: um planeta em pixel art que desce até a porta da recepção. A página é **pública e sem cookie**, não mostra nada do agentes.chat e ainda não tem link no menu: abra pelo endereço.
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/18-mundo-globo.png"><img src="./docs/screenshots/18-mundo-globo.png" alt="O globo em pixel art, com nuvens, a lua e o Brasil contornado em dourado, com uma seta apontando para ele" width="100%"></a>
+      <p><em>O globo, com a noite de agora. Clique no Brasil para descer.</em></p>
+    </td>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/19-mundo-brasil.png"><img src="./docs/screenshots/19-mundo-brasil.png" alt="O mapa do Brasil ilustrado: biomas, rios, serras, a miniatura do ponto turístico de cada capital e o chalé do escritório em São Paulo" width="100%"></a>
+      <p><em>O Brasil, com o tempo de agora em cada capital.</em></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/20-mundo-zoom.png"><img src="./docs/screenshots/20-mundo-zoom.png" alt="O mapa com zoom máximo sobre Minas Gerais: serras, rodovias, rios menores, cidades médias com nome e o estado realçado" width="100%"></a>
+      <p><em>O zoom revela rodovias, cidades médias e relevo.</em></p>
+    </td>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/21-mundo-cidade.png"><img src="./docs/screenshots/21-mundo-cidade.png" alt="A cidade de São Paulo vista de cima: o MASP no centro, prédios, praça com coreto e fonte, ruas com carros e pedestres, e o chalé com a placa Recepção" width="100%"></a>
+      <p><em>A cidade do escritório, com o chalé da recepção.</em></p>
+    </td>
+  </tr>
+</table>
+
+- **Quatro níveis:** o **globo** gira com a noite de agora; o **Brasil** mostra as 27 capitais e Mateus Leme (MG), cada uma com o seu ponto turístico; a **cidade** tem o marco, praça, ruas, carros e gente nas calçadas (capital de praia tem orla); o **bairro** leva à porta da recepção.
+- **Navegar:** clique ou toque para descer, **Esc** ou **Voltar** para subir. A roda, a pinça, o duplo clique e as teclas `+` e `-` aproximam; no zoom máximo sobre uma capital, aproximar de novo entra nela, e afastar no mínimo volta ao globo. As setas giram o globo ou movem o mapa, e **Tab** e **Enter** percorrem as cidades e as construções.
+- **Ao vivo:** o tempo real das 28 cidades (limpo, nublado, neblina, garoa, chuva, tempestade ou neve, com vento), dia e noite pelo relógio e as datas comemorativas do calendário, que enfeitam a cidade. As datas que você desligou em **Personalizar** não aparecem; as datas próprias da empresa nunca vão para o mundo.
+- **A cidade do escritório:** é a cidade do mapa mais perto da **cidade do clima** de **Personalizar**, até 300 km. Só ela tem o chalé com a placa e a porta que leva ao bairro. Mais longe que isso, o mapa funciona igual, sem chalé. **Hoje o mapa é só o Brasil.**
+- **Leve:** o mapa de longe pesa 47 KB. Os dois níveis de detalhe só baixam com zoom: 160 KB a partir de 2x e 395 KB no zoom máximo, em pedaços e só os da vista. Com "reduzir movimento" ligado nada se mexe, e a animação pausa com a aba escondida.
+- **Testar:** `python ferramentas/previa.py ferramentas/previa.exemplo.json` e abra `http://127.0.0.1:7372/mundo.html`. `?hora=22`, `?clima=chuva` e `?data=2026-12-25` simulam hora, tempo e data.
+
+O que o servidor manda para essa página está em [Segurança](#segurança).
+
+### Trocar as cidades ou a arte do mundo
+
+Quem só instala não precisa de nada disto: os arquivos de `static/mundo/` já vêm prontos no repositório.
+
+- **Cidades:** `arte/mundo/cidades.json`. Cada cidade tem `id`, `nome`, `uf`, `lat`, `lon`, `marco` (o arquivo `marco-<marco>.png` da arte), `marco_nome` (o nome mostrado), `porte` (`metropole`, `grande`, `media` ou `pequena`) e `litoral` (`true` para orla).
+- **Arte:** `arte/pixellab/mundo/` (marcos, prédios, casas, árvores, carros, serras). Sem a arte de um marco, a cidade usa um prédio genérico.
+- **Terreno:** `arte/mundo/biomas.json` e `serras.json`, mais os recortes do Natural Earth em `arte/mundo/fontes/` (contornos, rios, rodovias e cidades; a origem de cada um está em `LICENCA.md`).
+- **Remontar:** `python ferramentas/montar_mundo.py` regrava `static/mundo/` em cerca de um minuto. Precisa do [Pillow](https://python-pillow.org) na sua máquina; o servidor nunca roda essa ferramenta.
+
 ## Jornal
 
 A página **Jornal**, no menu, conta a semana do escritório como um jornal: o número da edição (a semana do ano), o período, a manchete, as notas e uma tabela com todo mundo.
@@ -326,6 +372,7 @@ Um aviso no celular, ou no computador, quando um agente pede a sua aprovação o
 Em resumo: com o instalador, o escritório só é alcançável **na sua tailnet** (no Docker com endereço público, leia [Endereço público](#endereço-público)); ele **falha fechado** quando o arquivo de usuários não pode ser lido, e **nenhum segredo chega ao navegador**: o token do agentes.chat fica no servidor, e o navegador só guarda um cookie de sessão HttpOnly.
 
 - **Só leitura no agentes.chat:** escopo OAuth `read`. Um token com mais permissões é recusado. A exceção é o modo `"responder"` (abaixo), que pede `read write`; `manage` é recusado sempre.
+- **Mundo (`/mundo.html`):** a página e os arquivos dela são servidos sem login, por nome exato. Ela chama só o `POST /api/mundo/clima`, com limite de pedidos por origem, que devolve por cidade o tipo de tempo, o vento (de 0 a 1) e se é noite; o `id` da cidade do escritório (`casa`); a versão do mapa; e as chaves das datas do calendário que você desligou (`festas_desligadas`). Nunca vão temperatura, coordenadas, IP, nome da empresa nem datas próprias, e nada do agentes.chat. O Open-Meteo é consultado pelo servidor, uma vez a cada 15 minutos para as 28 cidades; o navegador não fala com ele. Veja [Mundo](#mundo).
 - **Senhas e sessões:**
   - a senha fica guardada como hash scrypt (N=2^15, r=8, p=1), e a sessão vai num cookie `__Host-esc_sessao`, HttpOnly, SameSite=Lax e Secure;
   - todo envio de formulário é conferido pela origem;
@@ -431,6 +478,7 @@ O `ferramentas/previa.exemplo.json` traz respostas fictícias do MCP (`agents` e
 ### Arte
 
 - Móveis e objetos: gerados no [PixelLab](https://pixellab.ai) para este projeto (pasta `arte/pixellab`).
+- Mundo: marcos, prédios, casas, árvores, carros e serras do PixelLab (pasta `arte/pixellab/mundo`); o globo, o terreno do mapa, as ruas e os enfeites de festa, desenhados em código; contornos, rios, rodovias e cidades do [Natural Earth](https://www.naturalearthdata.com), em domínio público (veja [Trocar as cidades ou a arte do mundo](#trocar-as-cidades-ou-a-arte-do-mundo)).
 - Pisos, paredes, mesas, avatares, céu, clima e enfeites procedurais: desenhados em código.
 - Logo padrão (`static/logo.png`, também o favicon): desenhado em código, com `python ferramentas/montar_tema.py --logo`.
 

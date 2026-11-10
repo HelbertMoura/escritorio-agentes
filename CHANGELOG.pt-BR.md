@@ -4,6 +4,20 @@
 
 As mudanças que importam neste projeto ficam aqui, da mais nova para a mais antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Desde a 1.1.0, as versões seguem o [SemVer](https://semver.org/lang/pt-BR/); as entradas mais antigas são marcos com data.
 
+## Não lançado
+
+### Adicionado
+- **Mundo:** `/mundo.html`, uma página pública e sem cookie que desce do globo ao Brasil, à cidade e à porta da recepção, toda em pixel art. Veja [Mundo](./README.pt-BR.md#mundo).
+  - **Globo:** gira com a noite de agora, com nuvens, a lua na fase do dia e as luzes das cidades. O Brasil fica contornado, e clicar nele desce ao mapa.
+  - **Mapa do Brasil:** biomas, rios, serras e as 27 capitais mais Mateus Leme, cada uma com a miniatura do seu ponto turístico e o tempo de agora. Com zoom aparecem rodovias, rios menores, nomes dos estados e cidades médias; no zoom máximo sobre uma capital, aproximar de novo entra nela.
+  - **Cidade:** o marco no centro, praça, prédios e casas conforme o porte, ruas com carros e pedestres, e orla nas capitais de praia. O chalé com a placa só existe na cidade do escritório e leva à recepção.
+  - **Ao vivo:** o tempo real das 28 cidades pelo Open-Meteo (uma consulta do servidor a cada 15 minutos), dia e noite pelo relógio e as datas comemorativas do calendário, que enfeitam a cidade.
+  - **Privacidade:** a página não mostra nada do agentes.chat. A rota `POST /api/mundo/clima` devolve só o tipo de tempo, o vento e se é noite por cidade, a cidade do escritório, a versão do mapa e as datas do calendário desligadas. As datas próprias da empresa nunca saem. Veja [Segurança](./README.pt-BR.md#segurança).
+- **`ferramentas/montar_mundo.py`:** gera os arquivos de `static/mundo/` a partir de `arte/mundo/` e `arte/pixellab/mundo/`. Só quem quer trocar cidades ou arte precisa rodar (pede o Pillow); os arquivos gerados vêm no repositório.
+
+### Alterado
+- O parâmetro `?data=AAAA-MM-DD` também vale no mundo: muda a data comemorativa e, no globo, o sol e a lua.
+
 ## 1.2.0 · 2026-11-08 · Novidades
 
 Commits: [`v1.1.0...v1.2.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.1.0...v1.2.0).

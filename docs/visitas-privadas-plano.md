@@ -71,6 +71,14 @@ Uma alternativa para descoberta é cada escritório publicar voluntariamente, em
 
 Cidade e nome do escritório podem identificar pessoas: sua publicação precisa ser voluntária, clara e limitada; não usar GPS nem endereço residencial automático. O domínio do escritório pode receber IP e dados de rede do navegador e manter seus próprios logs; a aplicação não garante anonimato perante operadores ou intermediários. Antes de implementar federação, definir autenticação dos manifestos, limites de tamanho e redirecionamento, proteção contra chamadas a redes internas, política de CORS e cache, prevenção de rastreamento e o processo de remoção. Nenhuma consulta a endereços arbitrários deve ocorrer no servidor sem proteção contra SSRF. O convite continua conferido pelo servidor do escritório, e a visualização da recepção não autoriza ler salas privadas ou conversar.
 
+### O que foi entregue em 10/11/2026
+
+O mundo saiu do bairro único para quatro níveis em `/mundo.html`: globo, mapa do Brasil, cidade e bairro. A descrição para quem usa está no [README](../README.pt-BR.md#mundo).
+
+- O mapa tem as 27 capitais e Mateus Leme. Cada instalação aparece como o chalé com a placa na cidade do mapa mais perto da cidade do clima, até 300 km. Fora do Brasil, ou longe de todas, não há chalé.
+- Continua sem diretório: o mundo mostra só o próprio escritório. O manifesto público e a lista de sementes descritos abaixo seguem como ideia, sem código.
+- A página segue pública e sem cookie. A rota `POST /api/mundo/clima` não leva nada do agentes.chat nem as datas próprias da empresa.
+
 ## Agente na sala de reunião
 
 Vem desligado. Quem conversa com o visitante é um agente que age como o usuário conectado ao escritório: ele enxerga a memória da organização e usa as próprias ferramentas, e a resposta dele aparece para quem tiver o link. Por isso, só ligue com um agente recepcionista dedicado, sem ferramentas sensíveis e orientado a não falar de clientes, conversas ou dados internos. O cabeçalho do envio pede isso, mas não garante.

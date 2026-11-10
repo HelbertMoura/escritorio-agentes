@@ -117,3 +117,18 @@ A navegação entre níveis tem transição de zoom com pixel art nítido em tod
 - Diretório real de escritórios de outras empresas (opção A da descoberta).
 - Cidades além das 28, e marcos para as outras capitais.
 - Conversar ou visitar pelo mapa além da porta do próprio chalé.
+
+## Adendo de 09 e 10/11/2026: o que mudou depois deste desenho
+
+O Helbert pediu ampliações durante a execução. O que vale hoje é o código e o [README](../../../README.pt-BR.md#mundo); este adendo registra as decisões.
+
+- **Canvas 2D, sem three.js.** Confirmado: nenhuma dependência no navegador.
+- **Cidade ampliada.** As 28 cidades ganharam ponto turístico. A cidade tem zonas (centro, casas, parque, esporte), porte (`porte` em `cidades.json`), orla nas capitais de praia (`litoral`), chão trabalhado, sombras, pedestres e etiquetas nas construções.
+- **Pedestres genéricos.** São os bonecos do escritório com semente local, sem nome nem aparência dos agentes reais: a página é pública.
+- **Datas comemorativas no mundo.** Só o calendário embutido. As datas próprias da empresa nunca vão para a página nem para a rota pública; a rota ganhou `festas_desligadas`, só com chaves do catálogo.
+- **Mapa do Brasil ilustrado.** Biomas, rios e rodovias do Natural Earth e serras. O desenho previa rios; eles entraram. As serras de perto são peças pintadas do PixelLab, depois de três tentativas por código reprovadas na revisão.
+- **Três níveis de detalhe no mapa.** 400x400 de longe, 800x800 a partir de 2x e 1600x1600 no zoom máximo, em azulejos baixados só com zoom. O zoom máximo fica entre 3,2x e 4,8x em qualquer tela.
+- **Globo refeito.** Mais resolução, nuvens em campo guardado, luzes de cidades do mundo, lua com fase.
+- **Aviões do mapa.** Usam o desenho do PixelLab reduzido; a versão por código saiu.
+- **PixelLab.** O desenho dizia "só a assinatura, nunca o crédito avulso". O Helbert autorizou depois o crédito de US$ 10; ele não chegou a ser usado. A arte foi gerada pelo site e, depois, pela API.
+- **Fora do que foi feito.** Ônibus circulando (o modelo não desenha ônibus visto de cima), chapéu de festa nos pedestres, cidades fora do Brasil, diretório de outros escritórios e link para o mundo no menu do escritório.

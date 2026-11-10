@@ -163,9 +163,11 @@ const Mundo = (() => {
     if (nivel.partindo) nivel.partindo();   // o nível que sai não pede mais nada (o mapa: os azulejos da vista do mergulho)
     trans = { fase: 0, k: 0, a, opcoes };
   }
+  let etiquetaAte = 0, ultimoT = 0;   // até quando o status mostra a etiqueta de uma construção (etiquetar)
   function trocar(a, opcoes = {}) {
     const deCidade = atualCidade, deNivel = nome;
     if (nivel) nivel.sair();
+    etiquetaAte = 0;   // o tempo da etiqueta de uma construção não passa para o nível seguinte
     nome = a.ir; nivel = niveis[nome]; atualCidade = a.cidade || null;
     if (atualCidade) ultimaCidade = atualCidade;
     cobrir(nivel.camera.tamanho(W, H, dpr));
@@ -189,7 +191,6 @@ const Mundo = (() => {
   function executar(a) { if (a && a.ir) ir(a.ir, a); else if (a && a.anuncio) etiquetar(a.anuncio); }
   // o nome da etiqueta no status por 5 s (o tempo dela), e depois o texto do nível de volta. O mesmo nome de novo (o Enter
   // repetido) troca o espaço final, para o leitor de tela anunciar outra vez
-  let etiquetaAte = 0, ultimoT = 0;
   function etiquetar(texto) {
     estado.textContent = estado.textContent === texto ? texto + "\u00a0" : texto;
     etiquetaAte = ultimoT + 5000;
