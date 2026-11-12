@@ -6,7 +6,7 @@ All notable changes to this project are listed here, newest first. The format fo
 
 ## 1.4.0 · 2026-11-12 · Self-hosting and a bigger world
 
-Commits: [`v1.3.0...v1.4.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.3.0...v1.4.0).
+Release [`v1.4.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.4.0). Commits: [`v1.3.0...v1.4.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.3.0...v1.4.0).
 
 ### Added
 - **Self-hosted agentes.chat:** the `AGENTES_URL` variable points the office at your install (its `PUBLIC_URL`). Sign-in, MCP and the "Reply" and "Review" buttons go there. The installer allows only that install's IP on the service's network, tailnet included. Without the variable, everything stays on the cloud. See [With self-hosted agentes.chat](./README.md#with-self-hosted-agenteschat).

@@ -6,7 +6,7 @@ As mudanças que importam neste projeto ficam aqui, da mais nova para a mais ant
 
 ## 1.4.0 · 2026-11-12 · Self-host e mundo maior
 
-Commits: [`v1.3.0...v1.4.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.3.0...v1.4.0).
+Release [`v1.4.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.4.0). Commits: [`v1.3.0...v1.4.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.3.0...v1.4.0).
 
 ### Adicionado
 - **agentes.chat self-host:** a variável `AGENTES_URL` aponta o escritório para a sua instalação (o `PUBLIC_URL` dela). O login, o MCP e os botões "Responder" e "Revisar" passam a ir para lá. O instalador libera na rede do serviço só o IP dessa instalação, inclusive na tailnet. Sem a variável, tudo segue na nuvem. Veja [Com o agentes.chat self-host](./README.pt-BR.md#com-o-agenteschat-self-host).
