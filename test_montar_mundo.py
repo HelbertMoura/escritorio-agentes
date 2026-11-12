@@ -45,7 +45,8 @@ PORTES = {"metropole", "grande", "media", "pequena"}
 LITORAL = {"rio-de-janeiro", "salvador", "recife", "fortaleza", "natal", "joao-pessoa", "maceio", "aracaju", "vitoria",
            "florianopolis", "sao-luis"}
 # as miniaturas do mapa do Brasil: uma por marco e as dos dois aviões
-MINIS = {"mini-" + m for m in MARCOS.values()} | {"mini-aviao-1", "mini-aviao-2"}
+MARCOS_FORA = {"torre-belem", "estatua-liberdade", "big-ben", "torre-eiffel"}   # arte/mundo/exterior.json (Buenos Aires usa o obelisco)
+MINIS = {"mini-" + m for m in set(MARCOS.values()) | MARCOS_FORA} | {"mini-aviao-1", "mini-aviao-2"}
 BIOMAS = {"amazonia", "cerrado", "caatinga", "pantanal", "mata-atlantica", "pampa"}
 # um ponto bem dentro de cada bioma (lat, lon): ali o desenho tem de ser o do bioma
 NO_BIOMA = {"amazonia": (-5.0, -64.0), "cerrado": (-13.0, -46.5), "caatinga": (-6.5, -39.8),
@@ -285,9 +286,10 @@ class Montagem(unittest.TestCase):
         self.assertEqual(sobra, set(), "azulejos de 4x que a montagem não gera mais")
 
     def atlas(self, arte, pasta):
-        """Roda só montar_atlas() com a arte de `arte`, grava em `pasta` e devolve o atlas.json."""
-        montar = ("import json, sys\nsys.path.insert(0, sys.argv[1])\nimport montar_mundo as mm\n"
-                  "mm.montar_atlas(sys.argv[2], mm.ler(sys.argv[3]), sys.argv[4])")
+        """Roda só montar_atlas() com a arte de `arte` e as cidades da montagem (as do Brasil e as de fora), grava em
+        `pasta` e devolve o atlas.json."""
+        montar = ("import json, os, sys\nsys.path.insert(0, sys.argv[1])\nimport montar_mundo as mm\n"
+                  "mm.montar_atlas(sys.argv[2], mm.ler(sys.argv[3]) + mm.exterior(os.path.dirname(sys.argv[3])), sys.argv[4])")
         r = subprocess.run([sys.executable, "-B", "-c", montar, os.path.join(RAIZ, "ferramentas"), arte, CIDADES, pasta],
                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
         if r.returncode:
@@ -304,6 +306,7 @@ class Montagem(unittest.TestCase):
             self.assertEqual(self.sha(self.pastas[0], nome), self.sha(pasta, nome), nome)
         marcos = {"marco-" + m for m in MARCOS.values()}   # as 28 cidades: todo marco tem quadro no atlas
         self.assertEqual(len(marcos), 28)
+        marcos |= {"marco-" + m for m in MARCOS_FORA}
         self.assertEqual(set(atlas), {"versao", "quadros", "janelas"})
         self.assertIsInstance(atlas["versao"], int)
         presentes = {n for n in OPCIONAIS if os.path.exists(os.path.join(ARTE, n + ".png"))}
