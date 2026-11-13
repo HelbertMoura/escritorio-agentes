@@ -530,11 +530,44 @@ def limpa_rotulo(txt, nomes=None):
     return (txt[:110] + "…") if len(txt) > 110 else txt
 
 
+# o setor (department) e a aparência que o list_agents do agentes.chat manda desde a versão que os expõe:
+# só valores das listas fechadas dele, para a tela Configurações copiar os setores como times
+CORES_SETOR = {"indigo", "violet", "rose", "amber", "green", "teal", "graphite"}
+ICONES_SETOR = {"shield", "code", "wallet", "mail", "bolt", "flag", "book", "chart", "bulb", "globe", "pullRequest",
+                "calendar", "message", "eye", "plug", "person"}
+
+
+def setor_do_agente(d):
+    """{"nome", "cor", "icone", "ordem"} do department do list_agents, ou None (sem setor ou fora do formato)."""
+    if not isinstance(d, dict) or not isinstance(d.get("name"), str) or not d["name"].strip():
+        return None
+    ordem = d.get("position")
+    return {"nome": d["name"].strip()[:80], "cor": d.get("color") if d.get("color") in CORES_SETOR else None,
+            "icone": d.get("icon") if d.get("icon") in ICONES_SETOR else None,
+            "ordem": ordem if type(ordem) is int and 0 <= ordem < 1000 else 999}
+
+
+def aparencia_do_agente(a):
+    """A aparência do agentes.chat que o escritório sabe desenhar, ou None. Acessório que ele não tem vira nenhum."""
+    if not isinstance(a, dict) or a.get("color") not in ajustes.CORES or a.get("eyes") not in ajustes.OLHOS:
+        return None
+    acessorio = a.get("accessory")
+    return {"color": a["color"], "eyes": a["eyes"], "accessory": acessorio if acessorio in ajustes.ACESSORIOS else ""}
+
+
 def normalizar(agentes, tarefas):
     """(agentes, tarefas) da leitura bruta: só tarefas de agente conhecido, com rótulo limpo e url conferida.
-    As tarefas completas (com url) ficam no servidor; o que vai ao navegador é escolhido pelo resumir()."""
-    lista = [{"id": a["id"], "nome": a.get("name", "")[:60], "handle": a.get("handle", "")[:40],
-              "funcao": (a.get("role") or "")[:120]} for a in agentes]
+    As tarefas completas (com url) ficam no servidor; o que vai ao navegador é escolhido pelo resumir().
+    "setor" e "aparencia" só existem quando o agentes.chat os manda (sem a chave: versão que ainda não manda)."""
+    lista = []
+    for a in agentes:
+        item = {"id": a["id"], "nome": a.get("name", "")[:60], "handle": a.get("handle", "")[:40],
+                "funcao": (a.get("role") or "")[:120]}
+        if "department" in a:
+            item["setor"] = setor_do_agente(a["department"])
+        if "appearance" in a:
+            item["aparencia"] = aparencia_do_agente(a["appearance"])
+        lista.append(item)
     ids = {a["id"] for a in lista}
     nomes = {a["handle"].lower(): a["nome"] for a in lista}
     itens = []
