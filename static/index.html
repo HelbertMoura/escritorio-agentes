@@ -12,6 +12,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <link rel="stylesheet" href="estilo.css?v=105">
+  <link rel="stylesheet" href="chat_sala.css?v=105">
 </head>
 <body>
   <a class="pular" href="#principal">Ir para o conteúdo</a>
@@ -172,6 +173,32 @@
             <div id="ficha" class="ficha" role="dialog" aria-labelledby="ficha-nome" hidden></div>
             <section id="conversa" class="conversa" role="dialog" aria-labelledby="conversa-titulo" tabindex="-1" hidden></section>
             <p id="social-anuncio" class="oculto" role="status"></p>
+            <!-- chat da sala onde estou (chat_sala.js): só com sala, fora da TV; o servidor decide a sala -->
+            <div id="chat-sala" class="chat-sala" hidden>
+              <button id="chat-sala-abrir" class="chat-sala-abrir" type="button" aria-controls="chat-sala-painel" aria-expanded="false" aria-label="Chat da sala">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"></path></svg>
+                <span class="chat-sala-rot" aria-hidden="true">Chat da sala</span>
+                <span id="chat-sala-n" class="chat-sala-n" aria-hidden="true" hidden></span>
+              </button>
+              <section id="chat-sala-painel" class="chat-sala-painel" aria-labelledby="chat-sala-titulo" hidden>
+                <header class="chat-sala-topo">
+                  <div><p class="chat-sala-sobre">Chat da sala</p><h2 id="chat-sala-titulo"></h2></div>
+                  <button id="chat-sala-fechar" class="chat-sala-fechar" type="button" aria-label="Fechar o chat da sala">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+                  </button>
+                </header>
+                <p id="chat-sala-vazio" class="chat-sala-vazio">Só quem está nesta sala lê. Ao sair, a conversa fica para trás.</p>
+                <ol id="chat-sala-lista" class="chat-sala-lista" aria-live="polite" aria-relevant="additions" aria-label="Mensagens da sala" tabindex="0"></ol>
+                <p id="chat-sala-aviso" class="chat-sala-aviso" role="status" hidden></p>
+                <form id="chat-sala-form" class="chat-sala-form">
+                  <label class="oculto" for="chat-sala-campo">Mensagem para a sala</label>
+                  <input id="chat-sala-campo" type="text" maxlength="500" autocomplete="off" enterkeyhint="send" placeholder="Escreva para a sala…">
+                  <button id="chat-sala-enviar" type="submit" aria-label="Enviar">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 12 20 4l-6 16-3-7z"></path></svg>
+                  </button>
+                </form>
+              </section>
+            </div>
           </div>
         </section>
         <div class="widgets">
@@ -645,5 +672,6 @@
   <script src="personalizar.js?v=105"></script>
   <script src="ajustes.js?v=105"></script>
   <script src="assistente.js?v=105"></script>
+  <script src="chat_sala.js?v=105"></script>
 </body>
 </html>
