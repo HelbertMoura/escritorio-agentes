@@ -1536,12 +1536,13 @@ const Vida = (() => {
     enviarPresenca();
   }
 
-  // "minha-sala" {sala, nome, andar}: só quando o servidor aceitou a sala nova (é ele quem decide a sala do chat).
-  // sala null: o meu boneco saiu (outro andar, TV, "Aparecer" desligado)
-  function avisarSala(sala, nome = null) {
+  // "minha-sala" {sala, nome, andar, seq}: só quando o servidor aceitou a sala nova (é ele quem decide a sala do chat).
+  // sala null: o meu boneco saiu (outro andar, TV, "Aparecer" desligado). seq: o do POST que mudou a sala (sem ele, o da
+  // última leitura); o chat ignora mensagens de seq menor, que só podem ser da sala de antes (um GET atrasado)
+  function avisarSala(sala, nome = null, seq = vivo.seq) {
     if (sala === vivo.avisada) return;
     vivo.avisada = sala;
-    window.dispatchEvent(new CustomEvent("minha-sala", { detail: { sala, nome: sala === null ? null : nome, andar: vivo.andar } }));
+    window.dispatchEvent(new CustomEvent("minha-sala", { detail: { sala, nome: sala === null ? null : nome, andar: vivo.andar, seq } }));
   }
 
   // POST /api/presenca com a posição e o destino do meu boneco: no máximo 1 a cada ENVIO_MIN ms (o que chega no meio
@@ -1557,9 +1558,10 @@ const Vida = (() => {
       if (ger === vivo.ger && vivo.eu && !vivo.envio) vivo.envio = setTimeout(() => { vivo.envio = 0; enviarPresenca(); }, 2000);
     };
     fetch(Andar.com("api/presenca", vivo.andar), { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(corpo) }).then(r => {
+      body: JSON.stringify(corpo) }).then(async r => {
       if (!r.ok) return falhou();
-      if (ger === vivo.ger && vivo.eu === eu) avisarSala(corpo.sala, nome);
+      const d = await r.json().catch(() => null);
+      if (ger === vivo.ger && vivo.eu === eu) avisarSala(corpo.sala, nome, d && Number.isInteger(d.seq) ? d.seq : vivo.seq);
     }).catch(falhou);
   }
 

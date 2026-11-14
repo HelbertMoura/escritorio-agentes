@@ -853,7 +853,7 @@ function montarSalas() {
 }
 function atualizarSalas() {
   if (!mundo) return;
-  const bs = [...mundo.bonecos.values()];
+  const bs = [...mundo.bonecos.values()], gente = Vida.pessoas();   // gente: as pessoas da equipe neste andar e eu (vida.js)
   for (const s of [...predio.salas, ...predio.baixo]) {
     const b = $("salas").querySelector(`[data-sala="${CSS.escape(s.nome)}"]`); if (!b) continue;
     let txt, ativa, espera = false;
@@ -862,8 +862,8 @@ function atualizarSalas() {
       const na = donos.filter(x => x.lugar && x.lugar.tipo === "mesa" && x.trabalho).length;
       txt = `${na}/${donos.length}`; ativa = na > 0; espera = donos.some(x => situacao(x) === "esp");
     } else {
-      const aqui = bs.filter(x => visivel(x) && salaEm(x) === s);   // pela posição de agora (quem está chegando já conta)
-      txt = aqui.length ? `${aqui.length} aqui` : "vazia"; ativa = false;
+      const aqui = bs.filter(x => visivel(x) && salaEm(x) === s).length + gente.filter(p => salaEm(p) === s).length;   // pela posição de agora (quem está chegando já conta)
+      txt = aqui ? `${aqui} aqui` : "vazia"; ativa = false;
     }
     const n = b.querySelector(".sala-n");
     if (n.textContent !== txt) n.textContent = txt;

@@ -25,4 +25,7 @@ const vistos = new Set([2]);
 const ms = [{ seq: 3, texto: "c" }, { seq: 1, texto: "a" }, { seq: 2, texto: "b" }, { seq: "4", texto: "x" }, null, { seq: 5 }];
 assert.deepEqual([...novas(ms, vistos).map(m => m.seq)], [1, 3], "fora as já vistas e as malformadas, em ordem de seq");
 assert.equal(novas(undefined, vistos).length, 0);
+// GET atrasado depois do "minha-sala" (entrei na sala nova no seq 3): a mensagem 1, da sala de antes, fica de fora
+assert.deepEqual([...novas(ms, new Set(), 3).map(m => m.seq)], [3], "só o seq da entrada em diante");
+assert.deepEqual([...novas(ms, new Set(), 0).map(m => m.seq)], [1, 2, 3], "sem seq de entrada, tudo vale");
 console.log("test_chat_sala.js ok");

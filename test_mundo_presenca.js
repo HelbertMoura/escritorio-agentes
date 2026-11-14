@@ -147,7 +147,7 @@ const ANA = { usuario: "ana", nome: "Ana", aparencia: { color: "#e11d48", eyes: 
     assert.deepEqual(Object.keys(corpo0).sort(), ["destino", "olha", "sala", "x", "y"]);
     assert.ok(corpo0.destino[1] < 140 && corpo0.destino[1] > 60, "o destino é dentro da recepção");
     await t.responder("api/presenca", 200, { seq: 1 });
-    assert.deepEqual(salas(), [{ sala: "", nome: "Corredor", andar: ID }]);
+    assert.deepEqual(salas(), [{ sala: "", nome: "Corredor", andar: ID, seq: 1 }], "o seq do POST que mudou a sala vai junto");
     const okPosts = async () => { while (t.pendentes("api/presenca")) await t.responder("api/presenca", 200, { seq: 2 }); };
     // anda até entrar na recepção
     for (let i = 0; i < 400 && eu.sala !== "recepcao"; i++) { t.agora += 50; t.Vida.passo(m, 0.05); await t.andar(0); }
@@ -158,7 +158,7 @@ const ANA = { usuario: "ana", nome: "Ana", aparencia: { color: "#e11d48", eyes: 
     assert.equal(salas().at(-1).sala, "");
     await t.andar(2000);
     await t.responder("api/presenca", 200, { seq: 3 });
-    assert.deepEqual(salas().at(-1), { sala: "recepcao", nome: "Recepção", andar: ID });
+    assert.deepEqual(salas().at(-1), { sala: "recepcao", nome: "Recepção", andar: ID, seq: 3 });
     for (let i = 0; i < 400 && eu.rota.length; i++) { t.agora += 50; t.Vida.passo(m, 0.05); await t.andar(0); await okPosts(); }
     await t.andar(600); await okPosts();
     const chegou = JSON.parse(posts().at(-1).opcoes.body);
@@ -185,7 +185,7 @@ const ANA = { usuario: "ana", nome: "Ana", aparencia: { color: "#e11d48", eyes: 
     t.Andar.definir("principal");
     const velho = t.pedidos.length;
     t.Vida.aoVivo(null);
-    assert.deepEqual(salas().at(-1), { sala: null, nome: null, andar: ID });
+    assert.deepEqual(salas().at(-1), { sala: null, nome: null, andar: ID, seq: 40 });
     assert.equal(t.Vida.pessoas().length, 0);
     t.Vida.aoVivo({ invisivel: () => false });
     assert.ok(t.pedidos.slice(velho).some(p => p.url === "api/ao-vivo?desde=0"));

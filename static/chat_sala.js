@@ -1,7 +1,8 @@
 "use strict";
 // Chat da sala (B2): o painel de texto da sala onde a pessoa está no escritório. Não faz polling: o vida.js dispara no
 // window "aovivo" (detail = resposta do /api/ao-vivo) a cada leitura e "minha-sala" (detail {sala, nome, andar}) quando a
-// minha sala muda; {sala: null, nome: null} ao trocar de andar, ligar a TV ou desligar "Aparecer" (o painel fecha e limpa). O envio vai para POST /api/sala/enviar?andar=<id> {texto}; quem decide a sala é o servidor. Quem chega numa
+// minha sala muda; {sala: null, nome: null} ao trocar de andar, ligar a TV ou desligar "Aparecer" (o painel fecha e limpa).
+// O seq do evento é o da entrada na sala: mensagem de seq menor é da sala de antes (um GET atrasado) e fica de fora. O envio vai para POST /api/sala/enviar?andar=<id> {texto}; quem decide a sala é o servidor. Quem chega numa
 // sala não vê o que foi dito antes: trocar de sala ou de andar limpa o painel. Nome e texto só por textContent.
 const ChatSala = (() => {
   const TEXTO_MAX = 500, GUARDAR = 50;   // o servidor guarda 50 por sala; o painel não precisa de mais
@@ -18,10 +19,11 @@ const ChatSala = (() => {
     if ([...limpo].length > TEXTO_MAX) return `A mensagem passa de ${TEXTO_MAX} caracteres.`;
     return null;
   }
-  // as mensagens que ainda não estão no painel, em ordem de seq (a leitura repete o que já veio e o envio já pôs a minha)
-  function novas(mensagens, vistos) {
+  // as mensagens que ainda não estão no painel, em ordem de seq (a leitura repete o que já veio e o envio já pôs a minha),
+  // a partir do seq em que entrei na sala
+  function novas(mensagens, vistos, desde = 0) {
     if (!Array.isArray(mensagens)) return [];
-    return mensagens.filter(m => m && Number.isInteger(m.seq) && !vistos.has(m.seq) && typeof m.texto === "string")
+    return mensagens.filter(m => m && Number.isInteger(m.seq) && m.seq >= desde && !vistos.has(m.seq) && typeof m.texto === "string")
       .sort((a, b) => a.seq - b.seq);
   }
 
@@ -33,7 +35,7 @@ const ChatSala = (() => {
     campo = $("chat-sala-campo"), enviar = $("chat-sala-enviar"), aviso = $("chat-sala-aviso"), fechar = $("chat-sala-fechar");
   if (!caixa) return { daSala, validar, limpar, novas, TEXTO_MAX };
 
-  let sala = "", nomeSala = "", andar = "", vistos = new Set(), naoLidas = 0, enviando = false, avisoTempo = 0;
+  let sala = "", nomeSala = "", andar = "", desde = 0, vistos = new Set(), naoLidas = 0, enviando = false, avisoTempo = 0;
   const tv = () => !!(window.TV && TV.invisivel) || document.body.classList.contains("tv");
   const eu = () => (typeof estado !== "undefined" && estado && typeof estado.usuario === "string" ? estado.usuario : null);   // app.js
   const aberto = () => !painel.hidden;
@@ -117,13 +119,14 @@ const ChatSala = (() => {
     const d = e.detail || {}, nova = daSala(d), novoAndar = typeof d.andar === "string" ? d.andar : "";
     if (nova.sala === sala && novoAndar === andar) { if (nova.nome !== nomeSala) { nomeSala = nova.nome; atualizar(); } return; }
     const estavaAberto = aberto() && caixa.contains(document.activeElement);
-    sala = nova.sala; nomeSala = nova.nome; andar = novoAndar; esvaziar(); atualizar();
+    sala = nova.sala; nomeSala = nova.nome; andar = novoAndar; desde = Number.isInteger(d.seq) && d.seq > 0 ? d.seq : 0;
+    esvaziar(); atualizar();
     if (estavaAberto && caixa.hidden) $("tela")?.focus();   // o foco não fica perdido num painel que sumiu
   });
   window.addEventListener("aovivo", e => {
     if (!sala || tv()) return;
     const d = e.detail || {};
-    const chegaram = novas(d.mensagens, vistos);
+    const chegaram = novas(d.mensagens, vistos, desde);
     for (const m of chegaram) por(m);
     if (chegaram.length) contar();
   });
