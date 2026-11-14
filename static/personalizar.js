@@ -165,7 +165,7 @@ const Personalizar = (() => {
     esquecerLogo(); configApp = cfg;
     salvo = { empresa: cfg.empresa || "", cor: cfg.cor || "#f5b83d", logo: cfg.logo || LOGO_PADRAO, abre: Expediente.abre, fecha: Expediente.fecha, serio: cfg.serio === true };
     $("m-social").hidden = !temSocial();   // servidor sem a vida social (ou a demonstração): a caixa nem aparece
-    montarConstrucao(); $("m-construcao").querySelector("a").href = window.Brincar && Brincar.demo ? "construir.html?demo=1" : "construir.html";
+    montarConstrucao(); $("m-construcao").querySelector("a").href = window.Brincar && Brincar.demo ? "construir.html?demo=1" : "construir.html" + (Andar.atual === Andar.PRINCIPAL ? "" : `#andar=${Andar.atual}`);   // o editor abre no andar de agora
     $("m-empresa").value = salvo.empresa; $("m-cor").value = salvo.cor; $("m-abre").value = salvo.abre; $("m-fecha").value = salvo.fecha; $("m-serio").checked = salvo.serio;
     mostrarLogo(salvo.logo);
     aviso(""); mudou();

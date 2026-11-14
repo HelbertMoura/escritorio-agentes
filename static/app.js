@@ -20,28 +20,31 @@ let dpr = 1, vw = 0, vh = 0;
 const $ = id => document.getElementById(id);
 
 // ---------- carga --------------------------------------------------------------------
+// O andar atual (expediente.js: Andar) vai na query de todo pedido a api/; no andar principal nada é acrescentado.
+// 404 {"codigo":"andar"}: o andar não existe mais ou perdeu o acesso; quem chamou volta para o principal.
+class AndarInvalido extends Error {}
 async function json(url) {
-  const r = await fetch(url, { cache: "no-store", credentials: "same-origin" });
+  const api = url.startsWith("api/");
+  const r = await fetch(api ? Andar.com(url) : url, { cache: "no-store", credentials: "same-origin" });
   if (r.status === 401) { location.href = "/entrar"; throw new Error("sessão expirou"); }
+  if (r.status === 404 && api && Andar.atual !== Andar.PRINCIPAL) {
+    const d = await r.json().catch(() => null);
+    if (d && d.codigo === "andar") throw new AndarInvalido("andar");
+  }
   if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json();
 }
 function imagem(src) { return new Promise((ok, erro) => { const i = new Image(); i.onload = () => ok(i); i.onerror = erro; i.src = src; }); }
 
 async function iniciar() {
-  config = Brincar.demo ? Brincar.configDemo() : await json("api/config");   // demonstração: nada vem do servidor
+  config = Brincar.demo ? Brincar.configDemo()   // demonstração: nada vem do servidor
+    : await json("api/config").catch(e => { if (!(e instanceof AndarInvalido)) throw e; sairDoAndarInvalido(); return json("api/config"); });
   Expediente.definir(config.expediente);   // sem a chave (demonstração, servidor antigo): 07:00 às 20:00
   const pasta = `tema/`;
   const mapaJson = await json(pasta + "atlas.json");
   const img = await imagem(`${pasta}atlas.png?v=${encodeURIComponent(mapaJson.versao || "")}`);
   atlas = { img, json: mapaJson };
   try { logoImg = await imagem(config.logo || "logo.png"); } catch (e) { logoImg = null; }
-  // o Personalizar grava config.logo assim que o /api/logo responde: o logo do topo e o do mapa trocam na hora
-  // (mesmo se o salvar do nome e da cor falhar depois), sem esperar recarregar
-  let logoAtual = config.logo;
-  Object.defineProperty(config, "logo", { configurable: true, enumerable: true, get: () => logoAtual, set: v => { logoAtual = v; trocarLogo(v); } });
-  Festas.configurar(config.festas, config.cor);   // datas próprias e festas desligadas (Personalizar)
-  festa = Festas.ativa();
-  aplicarMarca();
+  aplicarConfig();
   paginaConversas();
   Brincar.iniciar();
   medirFaixa();
@@ -54,6 +57,18 @@ async function iniciar() {
   Assistente.talvez(config, () => estado);   // nome de exemplo ou sem conexão: o assistente (uma vez por sessão, e na volta do OAuth)
   setInterval(buscar, 10000);
   requestAnimationFrame(quadro);
+}
+
+// o que sai do config de cada andar (a marca, as datas e o expediente são do prédio e vêm iguais em todos)
+function aplicarConfig() {
+  // o Personalizar grava config.logo assim que o /api/logo responde: o logo do topo e o do mapa trocam na hora
+  // (mesmo se o salvar do nome e da cor falhar depois), sem esperar recarregar
+  let logoAtual = config.logo;
+  Object.defineProperty(config, "logo", { configurable: true, enumerable: true, get: () => logoAtual, set: v => { logoAtual = v; trocarLogo(v); } });
+  Festas.configurar(config.festas, config.cor);   // datas próprias e festas desligadas (Personalizar)
+  festa = Festas.ativa();
+  aplicarMarca();
+  mostrarElevador();
 }
 
 function aplicarMarca() {
@@ -122,9 +137,12 @@ function montar(agentes) {
 }
 
 async function buscar() {
-  const pedido = performance.now();
+  if (trocando) return;   // a troca de andar chama de novo quando o config novo chegar
+  const pedido = performance.now(), andar = Andar.atual;
   try {
-    estado = Brincar.demo ? Brincar.estadoDemo() : await json(TV.invisivel || !aparecer ? "api/estado?invisivel=1" : "api/estado");   // a TV e quem desligou não contam como visitante
+    const lido = Brincar.demo ? Brincar.estadoDemo() : await json(TV.invisivel || !aparecer ? "api/estado?invisivel=1" : "api/estado");   // a TV e quem desligou não contam como visitante
+    if (andar !== Andar.atual) return;   // trocou de andar no meio do pedido: esta leitura é do andar de antes
+    estado = lido;
     modoDoServidor(estado.modo_resposta, pedido);
     Clima.definir(estado.clima);
     // "Olá de novo" na tela de entrada: só o nome de quem já entrou com sucesso (o servidor só manda usuario com sessão válida)
@@ -143,6 +161,8 @@ async function buscar() {
     if (!$("ficha").hidden) renderFicha();
     vigiarSocial(); vigiarGreve();
   } catch (e) {
+    if (e instanceof AndarInvalido && andar === Andar.atual) { voltarAoPrincipal(); return; }
+    if (andar !== Andar.atual) return;
     falhou = true; mostrarConexao();
   }
 }
@@ -922,7 +942,7 @@ let amizades = null, pedidoAmizades = 0, cenaVista = null, releitura = 0, releit
 async function carregarAmizades(id) {
   const n = ++pedidoAmizades;
   let r = null, d = null;
-  try { r = await fetch(`api/social?agente=${encodeURIComponent(id)}`, { cache: "no-store", credentials: "same-origin" }); d = await r.json().catch(() => null); }
+  try { r = await fetch(Andar.com(`api/social?agente=${encodeURIComponent(id)}`), { cache: "no-store", credentials: "same-origin" }); d = await r.json().catch(() => null); }
   catch (e) { r = null; }
   if (n !== pedidoAmizades || selecionado !== id) return;   // fechou ou trocou de agente enquanto esperava
   if (r && r.status === 401) { location.href = "/entrar"; return; }
@@ -1052,7 +1072,7 @@ async function carregarPlacar() {
   if (Brincar.demo) { r = { ok: true, status: 200 }; d = Brincar.placarDemo(); }   // demonstração: placar local, nada vai ao servidor
   else {
     aviso.textContent = "Carregando o placar…";
-    try { r = await fetch("api/social/placar", { cache: "no-store", credentials: "same-origin" }); d = await r.json().catch(() => null); } catch (e) { r = null; }
+    try { r = await fetch(Andar.com("api/social/placar"), { cache: "no-store", credentials: "same-origin" }); d = await r.json().catch(() => null); } catch (e) { r = null; }
     if (n !== placarVez || !$("dlg-placar").open) return;
     if (r && r.status === 401) { location.href = "/entrar"; return; }
   }
@@ -1182,7 +1202,7 @@ async function carregarConversa(b) {
   const n = ++pedidoConversa, c = $("conversa"), aviso = c.querySelector(".conversa-estado"), lista = c.querySelector(".conversa-lista"), bt = c.querySelector(".conversa-pe button");
   aviso.className = "conversa-estado"; aviso.textContent = "Carregando a conversa…"; lista.setAttribute("aria-busy", "true"); bt.disabled = true;
   let r = null, d = null;
-  try { r = await fetch(`api/conversa?agente=${encodeURIComponent(b.id)}`, { cache: "no-store", credentials: "same-origin" }); d = await r.json().catch(() => null); }
+  try { r = await fetch(Andar.com(`api/conversa?agente=${encodeURIComponent(b.id)}`), { cache: "no-store", credentials: "same-origin" }); d = await r.json().catch(() => null); }
   catch (e) { r = null; }
   if (n !== pedidoConversa) return;   // fechou ou pediu de novo enquanto esperava
   lista.removeAttribute("aria-busy"); bt.disabled = false;
@@ -1373,7 +1393,7 @@ async function carregarConvPagina(it) {
   est.textContent = "Carregando a conversa…"; lista.setAttribute("aria-busy", "true"); bt.setAttribute("aria-disabled", "true");
   pintarCaixa(it);
   let r = null, d = null;
-  try { r = await fetch(`api/conversa?id=${encodeURIComponent(it.id)}`, { cache: "no-store", credentials: "same-origin" }); d = await r.json().catch(() => null); }
+  try { r = await fetch(Andar.com(`api/conversa?id=${encodeURIComponent(it.id)}`), { cache: "no-store", credentials: "same-origin" }); d = await r.json().catch(() => null); }
   catch (e) { r = null; }
   if (n !== pedidoConv) return;   // fechou ou pediu de novo enquanto esperava
   lista.removeAttribute("aria-busy"); bt.removeAttribute("aria-disabled");
@@ -1446,7 +1466,7 @@ $("modo-fechar").addEventListener("click", async () => {
 
 async function postarResposta(url, corpo) {   // POST same-origin com JSON exato (o navegador manda o Origin); status 0: sem conexão
   try {
-    const r = await fetch(url, { method: "POST", cache: "no-store", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo) });
+    const r = await fetch(Andar.com(url), { method: "POST", cache: "no-store", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo) });
     return { status: r.status, d: await r.json().catch(() => null) };
   } catch (e) { return { status: 0, d: null }; }
 }
@@ -1826,7 +1846,7 @@ const CONEXAO = {
 };
 const capitular = t => t.charAt(0).toUpperCase() + t.slice(1).replace(/\.?$/, ".");
 // o link que o "Copiar o link" leva: o endereço configurado (ESCRITORIO_BASE), para onde o agentes.chat devolve
-const linkConectar = () => (typeof config?.base === "string" && config.base ? config.base : location.origin) + "/oauth/conectar";
+const linkConectar = () => Andar.com((typeof config?.base === "string" && config.base ? config.base : location.origin) + "/oauth/conectar");
 // aberto por um endereço diferente da BASE: o retorno do OAuth cai na BASE, não aqui
 function enderecoTrocado() {
   if (typeof config?.base !== "string" || !config.base) return "";
@@ -2178,6 +2198,95 @@ for (const id of ["t-salas", "t-agentes"]) $(id).addEventListener("click", () =>
 });
 aplicarLateral();
 
+// ---------- andares: o elevador do prédio -----------------------------------------------
+// Cada workspace do agentes.chat é um andar, com a sua conexão e os seus times. O /api/config traz "andares" (o principal
+// primeiro) e "andar" (o atual). Com um andar só, o elevador fica escondido e a tela é a de sempre. Trocar de andar não
+// recarrega a página: relê o config, zera o que era do outro andar e o prédio é refeito na próxima leitura do estado.
+let andares = [], chaveElevador = "", trocando = false;
+function lerAndares(c) {   // só ids e nomes conferidos; texto vem do servidor e entra por textContent
+  const lista = c && Array.isArray(c.andares) ? c.andares : [];
+  return lista.filter(a => a && Andar.valido(a.id) && typeof a.nome === "string" && a.nome && a.nome.length <= 80)
+    .map(a => ({ id: a.id, nome: a.nome, conexao: typeof a.conexao === "string" ? a.conexao : "" })).slice(0, 7);
+}
+const nomeDoAndar = id => (andares.find(a => a.id === id) || { nome: "principal" }).nome;
+const anunciarAndar = t => { $("modo-anuncio").textContent = t; };
+function mostrarElevador() {
+  andares = lerAndares(config);
+  const varios = andares.length >= 2 && !Brincar.demo;
+  // os links do escritório que levam ao OAuth e ao modo construção seguem o andar atual
+  const principal = Andar.atual === Andar.PRINCIPAL;
+  for (const a of document.querySelectorAll("[data-conectar]")) a.setAttribute("href", "/oauth/conectar" + (principal ? "" : `?andar=${Andar.atual}`));
+  if (!Brincar.demo) for (const a of document.querySelectorAll("#as-construcao a, #m-construcao a")) a.setAttribute("href", "construir.html" + (principal ? "" : `#andar=${Andar.atual}`));
+  const chave = JSON.stringify(andares);
+  const atual = andares.find(a => a.id === Andar.atual) || andares[0];
+  for (const caixa of document.querySelectorAll("[data-elevador]")) {
+    caixa.hidden = !varios;
+    if (!varios) continue;
+    const sel = caixa.querySelector("select");
+    if (chave !== chaveElevador || sel.options.length !== andares.length) {   // sem refazer a lista aberta a cada leitura
+      sel.replaceChildren(...andares.map(a => { const o = elem("option", null, a.conexao && a.conexao !== "conectado" ? `${a.nome} · ${Andar.rotuloConexao(a.conexao)}` : a.nome); o.value = a.id; return o; }));
+    }
+    sel.value = atual.id;
+    caixa.querySelector(".elevador-led").dataset.conexao = atual.conexao;
+    const estadoAndar = caixa.querySelector(".elevador-estado"); if (estadoAndar) { textoSe(estadoAndar, Andar.rotuloConexao(atual.conexao)); estadoAndar.dataset.conexao = atual.conexao; }
+    sel.title = `Andar ${atual.nome}: ${Andar.rotuloConexao(atual.conexao)}`;
+  }
+  chaveElevador = chave;
+  document.body.classList.toggle("com-andares", varios);
+}
+for (const sel of document.querySelectorAll("[data-elevador] select")) sel.addEventListener("change", () => trocarAndar(sel.value));
+// só a lista de andares (a conexão de cada um muda sem o config do andar atual mudar)
+async function recarregarAndares() {
+  if (Brincar.demo || trocando) return;
+  try { const c = await json("api/config"); config.andares = c.andares; config.andar = c.andar; mostrarElevador(); }
+  catch (e) { if (e instanceof AndarInvalido) voltarAoPrincipal(); }
+}
+setInterval(() => { if (!document.hidden && andares.length >= 2) recarregarAndares(); }, 60000);
+
+// o endereço leva #andar=<id> enquanto se está no mapa (as outras telas usam o # para a rota; o andar continua guardado)
+function marcarAndarNaUrl() {
+  const h = location.hash, base = location.pathname + location.search;
+  if (Andar.atual !== Andar.PRINCIPAL) { if (!h || h === "#escritorio" || Andar.doHash(h)) history.replaceState(history.state, "", `${base}#andar=${Andar.atual}`); }
+  else if (Andar.doHash(h)) history.replaceState(history.state, "", base);
+}
+function sairDoAndarInvalido() { Andar.limpar(); marcarAndarNaUrl(); }   // 404 {"codigo":"andar"}: o guardado não vale mais
+function voltarAoPrincipal() { trocarAndar(Andar.PRINCIPAL, "Esse andar não está mais disponível. Você voltou para o andar principal."); }
+
+// zera o que era do andar de antes: ficha, conversa aberta, eventos e pedidos deduzidos, social e greve
+function reiniciarAndar() {
+  assinatura = ""; selecionado = null;
+  eventosLocais = []; statusAnterior = null; vistosEvento.clear();
+  resolvidosLocais = []; pedidosAnteriores = null; resolvidosDaLeitura = leituraDosResolvidos = null; chaveAprov = "";
+  convAberta = null; convLida = ""; convDesenho = ""; pedidoConv++; pedidoConversa++; $("conv-aberta").replaceChildren();
+  amizades = null; pedidoAmizades++; cenaVista = null; releitura = releituraPlacar = 0; greveVista = null;
+  if ($("dlg-placar").open) $("dlg-placar").close();
+  Jornal.reiniciar();
+  if (window.Ajustes) Ajustes.esquecerAndar();
+}
+async function trocarAndar(id, aviso) {
+  if (Brincar.demo || trocando || !Andar.valido(id)) { mostrarElevador(); return; }
+  const anterior = Andar.atual;
+  if (id === anterior) { mostrarElevador(); return; }
+  trocando = true;
+  Andar.definir(id);
+  try {
+    const c = await json("api/config");   // com o andar novo; falhando, nada do andar de antes é mexido
+    reiniciarAndar();
+    config = c; Expediente.definir(c.expediente); aplicarConfig();
+    marcarAndarNaUrl();
+    if (!$("v-personalizar").hidden) Ajustes.abrir(config);
+    trocando = false;
+    await buscar();
+    anunciarAndar(aviso || `Você está no andar ${nomeDoAndar(id)}.`);
+  } catch (e) {
+    trocando = false;
+    if (id === Andar.PRINCIPAL) { falhou = true; mostrarConexao(); setTimeout(() => location.reload(), 10000); return; }   // como a carga inicial
+    Andar.definir(anterior); mostrarElevador();
+    anunciarAndar(e instanceof AndarInvalido ? "Esse andar não está mais disponível." : "Não deu para ir para esse andar agora. Tente de novo.");
+    if (e instanceof AndarInvalido) recarregarAndares();
+  }
+}
+
 // ---------- telas (rotas pelo #) ---------------------------------------------------
 function rota() {
   if (gavetaAberta()) { fecharGaveta(); $("principal").focus({ preventScroll: true }); }   // item do menu na gaveta: o foco vai ao conteúdo
@@ -2271,6 +2380,7 @@ Jornal.iniciar({
 Novidades.iniciar();
 
 pintarIcones(document);
+window.addEventListener("hashchange", () => { const id = Andar.doHash(location.hash); if (id && id !== Andar.atual) trocarAndar(id); });
 window.addEventListener("hashchange", rota);
 window.addEventListener("resize", () => { medirFaixa(); ajustarEscala(); });
 rota();
