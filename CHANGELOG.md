@@ -4,6 +4,11 @@
 
 All notable changes to this project are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Since 1.1.0, versions follow [SemVer](https://semver.org/); older entries are dated milestones.
 
+## [Unreleased]
+
+### Added
+- **Pull the departments from agentes.chat:** a button in Settings › Teams copies each agentes.chat department as a team (name, color and icon) and each agent's appearance. It needs an agentes.chat whose `list_agents` sends the `department`. A team with the same name keeps its type, wall and floor, and nothing applies before **Salvar times** (save teams).
+
 ## 1.4.0 · 2026-11-12 · Self-hosting and a bigger world
 
 Release [`v1.4.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.4.0), with the video of what is new attached. Commits: [`v1.3.0...v1.4.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.3.0...v1.4.0).

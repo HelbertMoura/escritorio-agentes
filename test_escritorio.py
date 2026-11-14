@@ -91,6 +91,25 @@ class Resumo(unittest.TestCase):
         self.assertEqual(r["trabalhos"][0]["run_id"], "r2")  # o front segue com uma por agente
         self.assertEqual(set(r["tarefas"][0]), {"agente_id", "run_id", "status", "started_at"})  # sem rótulo nem url
 
+    def test_setor_e_aparencia_do_agentes_chat(self):
+        # o list_agents novo manda o setor e a aparência; só o que está nas listas fechadas passa
+        bruto = [{"id": "a1", "name": "Pixel", "handle": "pixel", "role": "",
+                  "department": {"name": "  Engenharia  ", "color": "teal", "icon": "code", "position": 2},
+                  "appearance": {"color": "rose", "eyes": "happy", "accessory": "scarf"}},
+                 {"id": "a2", "name": "Órbita", "handle": "orbita", "role": "",
+                  "department": {"name": "X", "color": "#ff0000", "icon": "<svg>", "position": True},
+                  "appearance": {"color": "#123456", "eyes": "happy", "accessory": "crown"}},
+                 {"id": "a3", "name": "Sem setor", "handle": "solto", "role": "", "department": None, "appearance": None},
+                 {"id": "a4", "name": "Antigo", "handle": "antigo", "role": ""}]
+        a1, a2, a3, a4 = e.resumir(bruto, [])["agentes"]
+        self.assertEqual(a1["setor"], {"nome": "Engenharia", "cor": "teal", "icone": "code", "ordem": 2})
+        self.assertEqual(a1["aparencia"], {"color": "rose", "eyes": "happy", "accessory": ""})   # cachecol: o escritório não desenha
+        self.assertEqual(a2["setor"], {"nome": "X", "cor": None, "icone": None, "ordem": 999})
+        self.assertIsNone(a2["aparencia"])   # cor própria (#rrggbb) o boneco do escritório não tem
+        self.assertEqual((a3["setor"], a3["aparencia"]), (None, None))
+        self.assertNotIn("setor", a4)   # agentes.chat que ainda não manda: a tela diz para atualizar
+        self.assertNotIn("aparencia", a4)
+
 
 def tarefa(run_id, status, agente="a1"):
     return {"agente_id": agente, "run_id": run_id, "status": status, "rotulo": "conteúdo que não pode vazar"}

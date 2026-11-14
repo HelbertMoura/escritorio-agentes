@@ -264,6 +264,8 @@ const Ajustes = (() => {
   const CORES_TIME = ["#3b82f6", "#22c55e", "#a855f7", "#f97316", "#e8587a", "#14b8a6", "#f5b83d", "#64748b"];
   const NOME_TIME = /^[\p{L}\p{N}_ .'&\-]{1,40}$/u, MAX_TIMES = 12, MAX_POR_TIME = 24;
   const PENDENTE_EQ = "Há mudanças que ainda não valem: clique em Salvar times.";
+  // nome de time sem caixa, perto do casefold() do servidor: maiúscula e depois minúscula leva ß a ss, e o sigma final vira σ
+  const semCaixa = n => n.toUpperCase().toLowerCase().replace(/ς/g, "σ");
   let eqSalvo = null, eq = null, renomeOk = false, agentesVistos = false;
   const mudouEq = () => JSON.stringify(eq) !== JSON.stringify(eqSalvo);
   // aparência por handle num objeto sem protótipo: gravar ou apagar eq.aparencia["__proto__"] mexe só na chave, nunca no protótipo
@@ -362,8 +364,8 @@ const Ajustes = (() => {
     const nomes = new Set();
     for (const [i, t] of eq.times.entries()) {
       if (!NOME_TIME.test(t.nome)) return [`Time ${i + 1}: dê um nome de até 40 caracteres, só com letras, números, espaço e . ' & -`, `eq-t${i}-nome`];
-      if (nomes.has(t.nome.toLowerCase())) return [`Time ${i + 1}: já existe um time com esse nome.`, `eq-t${i}-nome`];
-      nomes.add(t.nome.toLowerCase());
+      if (nomes.has(semCaixa(t.nome))) return [`Time ${i + 1}: já existe um time com esse nome.`, `eq-t${i}-nome`];
+      nomes.add(semCaixa(t.nome));
     }
     return null;
   }
@@ -387,6 +389,45 @@ const Ajustes = (() => {
     mostrarTimes(`eq-t${eq.times.length - 1}-nome`); mostrarAgentes(); estadoEq();
   });
   $("equipe-desfazer").addEventListener("click", () => { eq = copiaEq(eqSalvo); renomeOk = false; mostrarTimes("equipe-novo"); mostrarAgentes(); estadoEq("Mudanças desfeitas."); });
+  // ---------- puxar os setores do agentes.chat ----------------------------------------------
+  // copia para esta tela os setores (nome, cor, ícone) e a aparência de cada agente, da última leitura; nada vale antes do Salvar
+  const ICONE_SETOR = { shield: "coroa", code: "codigo", pullRequest: "codigo", wallet: "grafico", chart: "grafico", mail: "megafone",
+    globe: "megafone", message: "pessoas", person: "pessoas", bolt: "servidor", plug: "servidor", eye: "servidor", flag: "estrela",
+    bulb: "estrela", book: "pincel", calendar: "sino" };
+  // o nome do setor no formato dos times (letras, números, espaço e . ' & -, até 40)
+  const nomeDoSetor = n => n.replace(/[^\p{L}\p{N}_ .'&\-]/gu, " ").replace(/\s+/g, " ").trim().slice(0, 40).trim();
+  function puxarSetores() {
+    const ag = lidos();
+    if (!ag) { aviso("equipe-aviso", "Esperando a primeira leitura do agentes.chat. Tente de novo em alguns segundos.", "ruim"); return; }
+    if (!ag.some(a => Object.hasOwn(a, "setor"))) {
+      aviso("equipe-aviso", "O seu agentes.chat ainda não manda os setores. Atualize-o para a versão em que o list_agents traz o setor de cada agente.", "ruim");
+      return;
+    }
+    const setores = new Map();   // nome -> {setor, handles}, na ordem dos setores do agentes.chat
+    for (const a of [...ag].filter(x => x.setor && typeof x.handle === "string").sort((x, y) => x.setor.ordem - y.setor.ordem)) {
+      const nome = nomeDoSetor(a.setor.nome) || `Setor ${a.setor.ordem + 1}`, chave = semCaixa(nome);
+      if (!setores.has(chave)) setores.set(chave, { nome, setor: a.setor, handles: [] });
+      setores.get(chave).handles.push(a.handle);
+    }
+    if (!setores.size) { aviso("equipe-aviso", "Nenhum agente está em um setor no agentes.chat. Crie os setores lá e tente de novo.", "ruim"); return; }
+    const antes = new Map(eq.times.map(t => [semCaixa(t.nome), t]));   // time de mesmo nome guarda o tipo, a cor sem setor, a parede e o piso
+    const cabem = [...setores.values()].slice(0, MAX_TIMES);
+    const semVaga = cabem.reduce((n, s) => n + Math.max(0, s.handles.length - MAX_POR_TIME), 0);
+    eq.times = cabem.map(({ nome, setor, handles }, i) => {
+      const t = antes.get(semCaixa(nome));
+      return { nome, tipo: t ? t.tipo : "mesas", cor: setor.cor ? Avatar.CORES[setor.cor].base : t ? t.cor : CORES_TIME[i % CORES_TIME.length],
+        icone: ICONE_SETOR[setor.icone] || "pessoas", parede: t ? t.parede : i % 6, piso: t ? t.piso : i % 10,
+        agentes: handles.slice(0, MAX_POR_TIME), de: t ? t.de : undefined };
+    });
+    let looks = 0;
+    for (const a of ag) if (a.aparencia && typeof a.handle === "string") { eq.aparencia[a.handle] = { ...a.aparencia }; looks++; }
+    renomeOk = false; mostrarTimes(); mostrarAgentes();
+    const fora = (setores.size > MAX_TIMES ? ` Só cabem ${MAX_TIMES} times: os setores depois do ${MAX_TIMES}º ficaram de fora.` : "") +
+      (semVaga ? ` Cada time leva até ${MAX_POR_TIME} agentes: ${semVaga} ${semVaga === 1 ? "ficou" : "ficaram"} de fora, na sala “Novos”.` : "");
+    estadoEq(`${eq.times.length} ${eq.times.length === 1 ? "time copiado" : "times copiados"} dos setores` +
+      (looks ? `, com a aparência de ${looks} ${looks === 1 ? "agente" : "agentes"}` : "") + `. Confira e clique em Salvar times.${fora}`, "ok");
+  }
+  $("equipe-puxar").addEventListener("click", puxarSetores);
   async function salvarEq(corpo, botao) {
     botao.disabled = true; aviso("equipe-aviso", "Salvando…");
     try {

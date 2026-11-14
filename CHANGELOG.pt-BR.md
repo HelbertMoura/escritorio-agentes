@@ -4,6 +4,11 @@
 
 As mudanças que importam neste projeto ficam aqui, da mais nova para a mais antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Desde a 1.1.0, as versões seguem o [SemVer](https://semver.org/lang/pt-BR/); as entradas mais antigas são marcos com data.
 
+## [Não lançado]
+
+### Adicionado
+- **Puxar os setores do agentes.chat:** um botão em Configurações › Times copia cada setor do agentes.chat como um time (nome, cor e ícone) e a aparência de cada agente. Exige um agentes.chat cujo `list_agents` mande o `department`. Time de mesmo nome mantém o tipo, a parede e o piso, e nada vale antes do **Salvar times**.
+
 ## 1.4.0 · 2026-11-12 · Self-host e mundo maior
 
 Release [`v1.4.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.4.0), com o vídeo das novidades anexado. Commits: [`v1.3.0...v1.4.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.3.0...v1.4.0).
