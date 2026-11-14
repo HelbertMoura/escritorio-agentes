@@ -11,7 +11,7 @@
   <meta name="theme-color" content="#0f0f0e">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <link rel="stylesheet" href="estilo.css?v=103">
+  <link rel="stylesheet" href="estilo.css?v=104">
 </head>
 <body>
   <a class="pular" href="#principal">Ir para o conteúdo</a>
@@ -22,6 +22,10 @@
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
     </button>
     <a class="marca topo-marca" href="#escritorio"><img id="logo-topo" src="logo.png" alt="" width="24" height="24"><strong id="empresa-topo">Escritório</strong></a>
+    <div id="elevador-topo" class="elevador elevador-topo" data-elevador hidden>
+      <i class="elevador-led" aria-hidden="true"></i>
+      <select aria-label="Andar do prédio"></select>
+    </div>
     <div class="topo-acoes">
       <button id="topo-busca" class="topo-bt" type="button" aria-label="Ir para um agente">
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
@@ -41,6 +45,11 @@
           <button id="fechar-menu" class="lat-bt so-gaveta" type="button" aria-label="Fechar o menu">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg>
           </button>
+        </div>
+        <div id="elevador-lat" class="elevador elevador-lat" data-elevador hidden>
+          <label class="elevador-rot" for="elevador-lat-sel">Andar</label>
+          <div class="elevador-campo"><i class="elevador-led" aria-hidden="true"></i><select id="elevador-lat-sel"></select></div>
+          <p class="elevador-estado" role="status"></p>
         </div>
         <a id="marca-exemplo" class="etiqueta-exemplo" href="#personalizar" hidden>Nome e logo de exemplo · troque no Personalizar</a>
         <div class="org-busca">
@@ -128,7 +137,7 @@
           <div id="faixa-erro" class="faixa-erro" role="alert" hidden>
             <p class="faixa-erro-txt"><strong id="faixa-base" hidden></strong><span id="faixa-erro-txt"></span></p>
             <div class="faixa-acoes">
-              <a id="conectar" class="botao" href="/oauth/conectar" hidden>Conectar ao agentes.chat</a>
+              <a id="conectar" class="botao" href="/oauth/conectar" data-conectar hidden>Conectar ao agentes.chat</a>
               <button id="copiar-link" class="secundario" type="button" hidden>Copiar o link</button>
               <button id="tentar" type="button">Tentar agora</button>
             </div>
@@ -183,7 +192,7 @@
       <section id="v-conversas" class="visao" hidden>
         <div class="cabeca"><h1>Conversas</h1><p id="conv-resumo" class="resumo">Ler e responder os agentes por aqui ainda não está disponível.</p></div>
         <!-- modo "responder" com a conexão só de leitura: o envio fica desligado até reconectar (pode_responder do /api/config) -->
-        <p id="conv-reconectar" class="conv-reconectar" hidden><span>O envio por aqui está desligado: a conexão com o agentes.chat é só de leitura.</span> <a href="/oauth/conectar">Reconecte para liberar o envio</a></p>
+        <p id="conv-reconectar" class="conv-reconectar" hidden><span>O envio por aqui está desligado: a conexão com o agentes.chat é só de leitura.</span> <a href="/oauth/conectar" data-conectar>Reconecte para liberar o envio</a></p>
         <!-- desligada (times.json), na demonstração e na Simulação: o "em breve" de antes -->
         <div id="conv-breve" class="vazio-grande cartao">
           <span class="ic ic-grande" data-icone="balao" aria-hidden="true"></span>
@@ -342,6 +351,26 @@
             <p id="equipe-aviso" class="aviso-form" role="status"></p>
             <div class="acoes"><button id="equipe-salvar" class="botao" type="button">Salvar times</button><button id="equipe-desfazer" class="botao fantasma" type="button">Desfazer</button><button id="equipe-arquivo" class="link-botao" type="button" hidden>Voltar ao times.json</button></div>
           </section>
+          <section id="a-andares" class="cartao ajuste" aria-labelledby="t-andares" hidden>
+            <h2 id="t-andares">Andares</h2>
+            <p class="ajuda">Cada andar é um workspace do agentes.chat, com a sua conexão e os seus times, e aparece no prédio como um andar próprio. O andar principal é o workspace do servidor e não se edita aqui. Remover um andar só desconecta e tira da lista: a pasta de dados dele continua no servidor.</p>
+            <ul id="andares-lista" class="andares-lista"></ul>
+            <p id="andares-vazio" class="ajuda">Nenhum andar extra ainda.</p>
+            <p id="andares-aviso-lista" class="aviso-form" role="status"></p>
+            <p id="andares-cheio" class="ajuda" hidden>O prédio chegou ao limite de 6 andares extras. Remova um para criar outro.</p>
+            <form id="form-andar" class="form-andar" novalidate aria-labelledby="t-form-andar">
+              <h3 id="t-form-andar" class="ajuste-sub">Novo andar</h3>
+              <label for="an-nome">Nome do andar</label>
+              <input id="an-nome" maxlength="40" required autocomplete="off" placeholder="Ex.: Marketing">
+              <label for="an-org">Workspace (código do agentes.chat)</label>
+              <input id="an-org" maxlength="36" required autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000" aria-describedby="an-org-ajuda">
+              <p id="an-org-ajuda" class="ajuda">É o código (uuid) que aparece no endereço do workspace no agentes.chat, depois de <code>/org/</code>. Depois de criar, use “Conectar” e autorize com uma conta daquele workspace.</p>
+              <label for="an-senha">Sua senha</label>
+              <input id="an-senha" type="password" autocomplete="current-password" maxlength="256" required>
+              <p id="an-aviso" class="aviso-form" role="status"></p>
+              <div class="acoes"><button id="an-criar" class="botao" type="submit">Criar andar</button></div>
+            </form>
+          </section>
           <section id="a-acesso" class="cartao ajuste" aria-labelledby="t-acesso">
             <h2 id="t-acesso">Acesso</h2>
             <p id="st-ajuda" class="ajuda">Ficou um aparelho com o escritório aberto, ou a senha pode ter vazado? Encerre todas as sessões de uma vez, inclusive esta. Depois é só entrar de novo com o usuário e a senha.</p>
@@ -412,7 +441,7 @@
             <details><summary>Isso gasta tokens ou usa IA?</summary><p>Não. O servidor só lê o agentes.chat a cada 30 segundos pelo conector de apps externos (MCP), com permissão só de leitura (escrita só no modo <code>"responder"</code>, se ligado). Tudo o que você vê (animações, conversas, sons) é desenhado no seu navegador, sem modelo de IA.</p></details>
             <details><summary>Quem consegue abrir o escritório?</summary><p>Quem chega ao endereço e tem usuário e senha. Instalado com o <code>instalar.sh</code>, o escritório fica só na sua rede Tailscale: no celular, basta ligar o app da Tailscale e abrir o endereço.</p><p>Num endereço público (Docker ou Coolify), qualquer pessoa vê a tela de entrar, com o nome e o logo, e a senha passa a ser a única barreira. Use uma senha longa (14 caracteres ou mais, ou uma frase) e crie o usuário logo depois de instalar. Se puder, ponha uma camada na frente, como Cloudflare Access, Tailscale ou uma lista de IPs no proxy. Os detalhes estão na seção Segurança do README.</p></details>
             <details><summary>Esqueci a senha. E agora?</summary><p>Apague o usuário e as sessões, reinicie o serviço e leia o novo código de primeiro acesso para criar o usuário de novo.</p><p>Instalado com o <code>instalar.sh</code>:</p><p class="comandos"><code class="cmd">sudo rm /var/lib/escritorio/usuarios.json /var/lib/escritorio/sessoes.json</code> <code class="cmd">sudo systemctl restart escritorio</code> <code class="cmd">sudo cat /var/lib/escritorio/codigo-primeiro-acesso.txt</code></p><p>No Docker, troque <code>&lt;container&gt;</code> pelo nome que aparece em <code>docker ps</code> (no Coolify, rode no Terminal do serviço só o que vem depois de <code>&lt;container&gt;</code> e reinicie pelo painel):</p><p class="comandos"><code class="cmd">docker exec &lt;container&gt; rm /dados/usuarios.json /dados/sessoes.json</code> <code class="cmd">docker restart &lt;container&gt;</code> <code class="cmd">docker exec -it &lt;container&gt; python3 -I -B escritorio.py codigo</code></p></details>
-            <details><summary>Como conecto (ou reconecto) ao agentes.chat?</summary><p>Enquanto o escritório não estiver conectado, a faixa acima do mapa traz o botão “Conectar ao agentes.chat”. Ele também está aqui: <a href="/oauth/conectar">Conectar ao agentes.chat</a>. Autorize com uma conta da organização do escritório; na volta, a primeira leitura sai na hora. “Copiar o link” serve para abrir a conexão em outra aba ou navegador.</p><p>Se a faixa disser que o agentes.chat recusou a leitura (HTTP 401, 402 ou 403), confira se a conta conectada é da organização e se o plano permite apps externos, e use “Reconectar”. O endereço que você abre precisa ser o mesmo de <code>ESCRITORIO_BASE</code>, porque é para lá que o agentes.chat devolve você; se não for, a faixa avisa.</p><p>Com as conversas desligadas ou em <code>"ler"</code>, o escritório só pede leitura; se o agentes.chat conceder mais que isso, a conexão é recusada. Com <code>"responder"</code>, ele pede também escrita (“Lê e manda tarefas”, na tela de autorização), para mandar as mensagens que você escrever na página Conversas; permissão de administrar é recusada sempre. Trocar de modo pede uma conexão nova. Os detalhes estão na seção Segurança do README.</p></details>
+            <details><summary>Como conecto (ou reconecto) ao agentes.chat?</summary><p>Enquanto o escritório não estiver conectado, a faixa acima do mapa traz o botão “Conectar ao agentes.chat”. Ele também está aqui: <a href="/oauth/conectar" data-conectar>Conectar ao agentes.chat</a>. Autorize com uma conta da organização do escritório; na volta, a primeira leitura sai na hora. “Copiar o link” serve para abrir a conexão em outra aba ou navegador.</p><p>Se a faixa disser que o agentes.chat recusou a leitura (HTTP 401, 402 ou 403), confira se a conta conectada é da organização e se o plano permite apps externos, e use “Reconectar”. O endereço que você abre precisa ser o mesmo de <code>ESCRITORIO_BASE</code>, porque é para lá que o agentes.chat devolve você; se não for, a faixa avisa.</p><p>Com as conversas desligadas ou em <code>"ler"</code>, o escritório só pede leitura; se o agentes.chat conceder mais que isso, a conexão é recusada. Com <code>"responder"</code>, ele pede também escrita (“Lê e manda tarefas”, na tela de autorização), para mandar as mensagens que você escrever na página Conversas; permissão de administrar é recusada sempre. Trocar de modo pede uma conexão nova. Os detalhes estão na seção Segurança do README.</p></details>
             <details><summary>O que fica guardado no servidor?</summary><p>Na pasta de dados, que só o serviço lê (<code>/var/lib/escritorio</code> com o <code>instalar.sh</code>, o volume <code>/dados</code> no Docker): o token do agentes.chat, o hash da sua senha, as sessões (só o hash), a marca, o logo e a planta. Nenhuma conversa é gravada; o estado dos agentes fica só na memória. No Docker, faça backup cifrado do volume e nunca o deixe público.</p></details>
             <details><summary>É open source? Posso usar na minha empresa?</summary><p>Sim. Cada empresa instala o seu, com a própria marca, times, clima e sons. A arte dos móveis foi gerada para o projeto, os pisos, paredes e avatares são desenhados em código e as fontes são de licença livre. Veja o README para instalar e personalizar.</p></details>
           </div>
@@ -474,7 +503,7 @@
       <p class="ajuda">Conecte ao agentes.chat para os seus agentes aparecerem no mapa. Você autoriza na tela do agentes.chat e volta para cá, neste passo.</p>
       <p id="as-conexao" class="as-status" role="status"></p>
       <p id="as-base" class="as-alerta" hidden></p>
-      <div class="acoes"><a id="as-conectar" class="botao" href="/oauth/conectar">Conectar ao agentes.chat</a><button class="botao fantasma" type="button" data-seguir>Pular</button></div>
+      <div class="acoes"><a id="as-conectar" class="botao" href="/oauth/conectar" data-conectar>Conectar ao agentes.chat</a><button class="botao fantasma" type="button" data-seguir>Pular</button></div>
     </section>
     <section class="form-bv as-passo" data-passo="cidade" hidden>
       <p class="ajuda">O céu, a chuva e a noite lá fora seguem o tempo da cidade do escritório.</p>
@@ -558,25 +587,25 @@
       </div>
     </div>
   </dialog>
-  <script src="avatar.js?v=103"></script>
-  <script src="mapa.js?v=103"></script>
-  <script src="expediente.js?v=103"></script>
-  <script src="vida.js?v=103"></script>
-  <script src="som.js?v=103"></script>
-  <script src="ceu.js?v=103"></script>
-  <script src="clima.js?v=103"></script>
-  <script src="festas.js?v=103"></script>
-  <script src="simular.js?v=103"></script>
-  <script src="efeitos.js?v=103"></script>
-  <script src="brincar.js?v=103"></script>
-  <script src="tv.js?v=103"></script>
-  <script src="jornal.js?v=103"></script>
-  <script src="novidades.js?v=103"></script>
-  <script src="timelapse.js?v=103"></script>
-  <script src="avisar.js?v=103"></script>
-  <script src="app.js?v=103"></script>
-  <script src="personalizar.js?v=103"></script>
-  <script src="ajustes.js?v=103"></script>
-  <script src="assistente.js?v=103"></script>
+  <script src="avatar.js?v=104"></script>
+  <script src="mapa.js?v=104"></script>
+  <script src="expediente.js?v=104"></script>
+  <script src="vida.js?v=104"></script>
+  <script src="som.js?v=104"></script>
+  <script src="ceu.js?v=104"></script>
+  <script src="clima.js?v=104"></script>
+  <script src="festas.js?v=104"></script>
+  <script src="simular.js?v=104"></script>
+  <script src="efeitos.js?v=104"></script>
+  <script src="brincar.js?v=104"></script>
+  <script src="tv.js?v=104"></script>
+  <script src="jornal.js?v=104"></script>
+  <script src="novidades.js?v=104"></script>
+  <script src="timelapse.js?v=104"></script>
+  <script src="avisar.js?v=104"></script>
+  <script src="app.js?v=104"></script>
+  <script src="personalizar.js?v=104"></script>
+  <script src="ajustes.js?v=104"></script>
+  <script src="assistente.js?v=104"></script>
 </body>
 </html>
