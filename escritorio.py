@@ -3124,10 +3124,11 @@ class Pagina(BaseHTTPRequestHandler):
                                                                     renovar=q.get("invisivel") != ["1"]))
             except LimitePresenca as x:
                 return self._json(*erro(429, "limite", str(x)))
-        if rota == "/api/perfil":   # o próprio perfil (nome e boneco), qualquer papel
+        if rota == "/api/perfil":   # o próprio perfil (nome e boneco), qualquer papel; "aparencia": o boneco que os outros veem
             if self._previa():
                 return self._json(*erro(404, "previa", "Na prévia não há conta."))
-            return self._json(200, self.server.acesso.perfil(usuario))
+            perfil = self.server.acesso.perfil(usuario)
+            return self._json(200, {**perfil, "aparencia": aparencia_da_conta(usuario, perfil)})
         if rota == "/api/membros":   # a aba Membros (a guarda já deixou só admin): contas e convites, sem segredo
             if self._previa():
                 return self._json(*erro(404, "previa", "Na prévia não há contas."))
@@ -3571,7 +3572,8 @@ class Pagina(BaseHTTPRequestHandler):
         if dados is None or set(dados) != {"nome", "avatar"}:
             return self._json(*erro(400, "pedido", "Pedido inválido."))
         try:
-            return self._json(200, self.server.acesso.salvar_perfil(usuario, dados["nome"], dados["avatar"]))
+            perfil = self.server.acesso.salvar_perfil(usuario, dados["nome"], dados["avatar"])
+            return self._json(200, {**perfil, "aparencia": aparencia_da_conta(usuario, perfil)})
         except ValueError as x:
             return self._json(*erro(400, "pedido", str(x)[:160]))
         except NaoGravou as x:

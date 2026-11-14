@@ -73,8 +73,9 @@ class Membros(unittest.TestCase):
         cls.base = "http://127.0.0.1:%d" % cls.srv.server_address[1]
         e.BASE = cls.base
         acesso = cls.srv.acesso
-        with open(os.path.join(cls.dados, "contas", "codigo-primeiro-acesso.txt")) as f:
-            acesso.criar_primeiro(f.read().strip(), "dono", SENHA_DONO)
+        with open(os.path.join(cls.dados, "contas", "codigo-primeiro-acesso.txt")) as f:   # fechado antes: no Windows não se apaga aberto
+            codigo = f.read().strip()
+        acesso.criar_primeiro(codigo, "dono", SENHA_DONO)
 
     def setUp(self):
         self.dono = self.cookie(self.srv.acesso.entrar("dono", SENHA_DONO))   # cada teste com a sua sessão de admin
@@ -203,7 +204,7 @@ class Membros(unittest.TestCase):
             self.assertEqual((st, ok), (200, {"ok": True}))
             carla = {"Cookie": h["Set-Cookie"].split(";")[0]}
             self.assertEqual(self.get("/api/perfil", carla)[1],
-                             {"usuario": "carla", "nome": "Carla", "avatar": AVATAR, "papel": "membro"})
+                             {"usuario": "carla", "nome": "Carla", "avatar": AVATAR, "papel": "membro", "aparencia": AVATAR})
             self.assertEqual(self.get(f"/api/estado?andar={self.extra}", carla)[0], 200)
             # uso único: o mesmo link não cria outra conta e responde como um convite qualquer que não vale
             st, r2, _ = self.post("/convite/aceitar", {**pedido, "usuario": "carla2"})
@@ -300,6 +301,14 @@ class Membros(unittest.TestCase):
         self.assertEqual(self.post("/api/perfil", {"nome": "Ana", "avatar": {"color": "ouro"}}, ana)[0], 400)
         self.assertEqual(self.post("/api/perfil", {"nome": "Ana", "avatar": AVATAR}, ana, origem="https://outro.exemplo")[0], 403)
         self.assertEqual(self.get("/api/perfil", self.dono)[1]["usuario"], "dono")   # cada um só o seu
+        self.assertEqual(r["aparencia"], r["avatar"], "com boneco salvo, o efetivo é o salvo")
+
+    def test_perfil_sem_boneco_da_o_padrao_do_servidor(self):
+        # quem não salvou boneco se vê com o mesmo padrão que os outros veem na presença (aparencia_da_conta)
+        p = self.get("/api/perfil", self.dono)[1]
+        self.assertIsNone(p["avatar"])
+        self.assertEqual(p["aparencia"], e.aparencia_da_conta("dono", p))
+        self.assertEqual(set(p["aparencia"]), {"color", "eyes", "accessory"})
 
     def test_sair_de_todos_do_membro_so_derruba_as_dele(self):
         ana = self.membro("ana")

@@ -1,16 +1,14 @@
 "use strict";
 // Chat da sala (B2): o painel de texto da sala onde a pessoa está no escritório. Não faz polling: o vida.js dispara no
-// window "aovivo" (detail = resposta do /api/ao-vivo) a cada leitura e "minha-sala" (detail {sala, andar}) quando a minha
-// sala muda. O envio vai para POST /api/sala/enviar?andar=<id> {texto}; quem decide a sala é o servidor. Quem chega numa
+// window "aovivo" (detail = resposta do /api/ao-vivo) a cada leitura e "minha-sala" (detail {sala, nome, andar}) quando a
+// minha sala muda; {sala: null, nome: null} ao trocar de andar, ligar a TV ou desligar "Aparecer" (o painel fecha e limpa). O envio vai para POST /api/sala/enviar?andar=<id> {texto}; quem decide a sala é o servidor. Quem chega numa
 // sala não vê o que foi dito antes: trocar de sala ou de andar limpa o painel. Nome e texto só por textContent.
 const ChatSala = (() => {
   const TEXTO_MAX = 500, GUARDAR = 50;   // o servidor guarda 50 por sala; o painel não precisa de mais
-  const SALAS = { recepcao: "Recepção", reuniao: "Reunião", cozinha: "Cozinha", lounge: "Sala comunal" };   // mapa.js: chave e nome
-  // a chave da sala (mapa.js) vira o nome que aparece no cabeçalho; o corredor ("") e o que não se conhece, nenhum
-  function nomeDaSala(chave) {
-    if (typeof chave !== "string" || !chave) return "";
-    if (chave.startsWith("time:")) return chave.slice(5);
-    return Object.hasOwn(SALAS, chave) ? SALAS[chave] : "";
+  // o detail do "minha-sala" como o painel usa: com sala e nome, há chat; sem um dos dois (corredor, null), não há
+  function daSala(d) {
+    const sala = d && typeof d.sala === "string" ? d.sala : "", nome = d && typeof d.nome === "string" ? d.nome.trim() : "";
+    return sala && nome ? { sala, nome } : { sala: "", nome: "" };
   }
   // o texto como o servidor vai aceitar (presenca.limpar_texto): sem controle nem invisível, só a quebra de linha
   const limpar = t => String(t).replace(/\r\n/g, "\n").replace(/(?!\n)[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Cn}]/gu, "").trim();
@@ -27,15 +25,15 @@ const ChatSala = (() => {
       .sort((a, b) => a.seq - b.seq);
   }
 
-  if (typeof document === "undefined") return { nomeDaSala, validar, limpar, novas, TEXTO_MAX };
+  if (typeof document === "undefined") return { daSala, validar, limpar, novas, TEXTO_MAX };
 
   const $ = id => document.getElementById(id);
   const caixa = $("chat-sala"), abrir = $("chat-sala-abrir"), painel = $("chat-sala-painel"), titulo = $("chat-sala-titulo"),
     contador = $("chat-sala-n"), lista = $("chat-sala-lista"), vazio = $("chat-sala-vazio"), form = $("chat-sala-form"),
     campo = $("chat-sala-campo"), enviar = $("chat-sala-enviar"), aviso = $("chat-sala-aviso"), fechar = $("chat-sala-fechar");
-  if (!caixa) return { nomeDaSala, validar, limpar, novas, TEXTO_MAX };
+  if (!caixa) return { daSala, validar, limpar, novas, TEXTO_MAX };
 
-  let sala = "", andar = "", vistos = new Set(), naoLidas = 0, enviando = false, avisoTempo = 0;
+  let sala = "", nomeSala = "", andar = "", vistos = new Set(), naoLidas = 0, enviando = false, avisoTempo = 0;
   const tv = () => !!(window.TV && TV.invisivel) || document.body.classList.contains("tv");
   const eu = () => (typeof estado !== "undefined" && estado && typeof estado.usuario === "string" ? estado.usuario : null);   // app.js
   const aberto = () => !painel.hidden;
@@ -48,7 +46,7 @@ const ChatSala = (() => {
   function contar() {
     contador.textContent = naoLidas > 9 ? "9+" : String(naoLidas);
     contador.hidden = !naoLidas || aberto();
-    abrir.setAttribute("aria-label", naoLidas && !aberto() ? `Chat da sala ${nomeDaSala(sala)}, ${naoLidas} mensagens novas` : `Chat da sala ${nomeDaSala(sala)}`);
+    abrir.setAttribute("aria-label", naoLidas && !aberto() ? `Chat da sala ${nomeSala}, ${naoLidas} mensagens novas` : `Chat da sala ${nomeSala}`);
   }
   function esvaziar() {   // quem chega não vê histórico
     vistos = new Set(); naoLidas = 0; lista.replaceChildren(); vazio.hidden = false; mostrarAviso(""); contar();
@@ -76,10 +74,10 @@ const ChatSala = (() => {
     if (!mim && !aberto()) naoLidas++;
   }
   function atualizar() {   // sem sala (corredor), na TV ou no modo foto o painel some
-    const pode = !!nomeDaSala(sala) && !tv();
+    const pode = !!sala && !tv();
     caixa.hidden = !pode;
     if (!pode) { painel.hidden = true; abrir.hidden = false; abrir.setAttribute("aria-expanded", "false"); return; }
-    titulo.textContent = nomeDaSala(sala);
+    titulo.textContent = nomeSala;
     contar();
   }
   function abrirPainel() {
@@ -116,15 +114,14 @@ const ChatSala = (() => {
   }
 
   window.addEventListener("minha-sala", e => {
-    const d = e.detail || {};
-    const novaSala = typeof d.sala === "string" ? d.sala : "", novoAndar = typeof d.andar === "string" ? d.andar : "";
-    if (novaSala === sala && novoAndar === andar) return;
+    const d = e.detail || {}, nova = daSala(d), novoAndar = typeof d.andar === "string" ? d.andar : "";
+    if (nova.sala === sala && novoAndar === andar) { if (nova.nome !== nomeSala) { nomeSala = nova.nome; atualizar(); } return; }
     const estavaAberto = aberto() && caixa.contains(document.activeElement);
-    sala = novaSala; andar = novoAndar; esvaziar(); atualizar();
+    sala = nova.sala; nomeSala = nova.nome; andar = novoAndar; esvaziar(); atualizar();
     if (estavaAberto && caixa.hidden) $("tela")?.focus();   // o foco não fica perdido num painel que sumiu
   });
   window.addEventListener("aovivo", e => {
-    if (!nomeDaSala(sala) || tv()) return;
+    if (!sala || tv()) return;
     const d = e.detail || {};
     const chegaram = novas(d.mensagens, vistos);
     for (const m of chegaram) por(m);
@@ -139,6 +136,6 @@ const ChatSala = (() => {
   new MutationObserver(atualizar).observe(document.body, { attributes: true, attributeFilter: ["class"] });   // entrar e sair da TV
   atualizar();
 
-  return { nomeDaSala, validar, limpar, novas, TEXTO_MAX, abrir: abrirPainel, fechar: fecharPainel };
+  return { daSala, validar, limpar, novas, TEXTO_MAX, abrir: abrirPainel, fechar: fecharPainel };
 })();
 if (typeof window !== "undefined") window.ChatSala = ChatSala;

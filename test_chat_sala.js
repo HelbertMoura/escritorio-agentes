@@ -1,17 +1,17 @@
 "use strict";
-// Chat da sala (static/chat_sala.js): o nome da sala no cabeçalho, o texto que o servidor aceita e a deduplicação por seq.
+// Chat da sala (static/chat_sala.js): o evento minha-sala (sala e nome), o texto que o servidor aceita e a deduplicação por seq.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 
 const contexto = { window: {} };   // sem document: só a parte pura carrega
 vm.runInNewContext(fs.readFileSync("static/chat_sala.js", "utf8"), contexto);
-const { nomeDaSala, validar, limpar, novas, TEXTO_MAX } = contexto.window.ChatSala;
+const { daSala, validar, limpar, novas, TEXTO_MAX } = contexto.window.ChatSala;
 
-assert.equal(nomeDaSala("recepcao"), "Recepção");
-assert.equal(nomeDaSala("lounge"), "Sala comunal");
-assert.equal(nomeDaSala("time:Design"), "Design");
-for (const s of ["", null, undefined, 3, "toString", "__proto__", "desconhecida"]) assert.equal(nomeDaSala(s), "", `sem sala: ${String(s)}`);
+assert.equal(JSON.stringify(daSala({ sala: "cozinha", nome: "Cozinha", andar: "principal" })), '{"sala":"cozinha","nome":"Cozinha"}');
+assert.equal(daSala({ sala: "time:Design", nome: " Design " }).nome, "Design");
+for (const d of [{ sala: null, nome: null }, { sala: "", nome: "" }, { sala: "cozinha", nome: null }, { sala: "cozinha" }, { sala: 3, nome: "x" }, null, undefined])
+  assert.equal(daSala(d).sala, "", `sem chat: ${JSON.stringify(d)}`);
 
 assert.equal(validar("oi"), null);
 assert.equal(validar("   "), "Escreva a mensagem.");
