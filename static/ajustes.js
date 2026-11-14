@@ -7,7 +7,7 @@
 const Ajustes = (() => {
   const $ = id => document.getElementById(id);
   const CHAPEUS = { noel: "gorro de Papai Noel", festa: "chapéu de festa", palha: "chapéu de palha", bruxa: "chapéu de bruxa", coelho: "orelhas de coelho" };
-  const MAX_DATAS = 24, PENDENTE = "Há mudanças que ainda não valem: clique em Salvar datas.";
+  const MAX_ANDARES = 6, MAX_DATAS = 24, PENDENTE = "Há mudanças que ainda não valem: clique em Salvar datas.";
   let cfg = null;
   let clima = null, origemClima = "nenhum";   // o que vale agora e de onde vem ("tela", "arquivo" ou "nenhum")
   let climaArquivo = true;                     // o times.json tem cidade? (ajustes.clima_arquivo; sem o campo, supõe que sim)
@@ -18,15 +18,16 @@ const Ajustes = (() => {
   const copia = d => JSON.parse(JSON.stringify(d));
   const demo = () => !!(window.Brincar && Brincar.demo);
 
-  async function pedir(url, corpo) {
+  // o andar atual vai na query (expediente.js: Andar); as rotas do prédio (clima, datas, andares, sair) a ignoram
+  async function pedir(url, corpo, doPredio) {
     if (demo()) throw new Error("Na demonstração nada é salvo.");   // segunda trava: nenhum pedido na demo
-    const r = await fetch(url, corpo === undefined ? { credentials: "same-origin", cache: "no-store" }
+    const r = await fetch(doPredio ? url : Andar.com(url), corpo === undefined ? { credentials: "same-origin", cache: "no-store" }
       : { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo) });
     if (r.status === 401) { location.href = "/entrar"; throw new Error("A sessão venceu."); }
     const d = await r.json().catch(() => ({}));
     if (!r.ok) {
       const e = new Error(typeof d.mensagem === "string" ? d.mensagem : typeof d.erro === "string" ? d.erro : `O servidor respondeu ${r.status}.`);
-      e.status = r.status; throw e;
+      e.status = r.status; e.codigo = typeof d.codigo === "string" ? d.codigo : ""; throw e;
     }
     return d;
   }
@@ -49,7 +50,7 @@ const Ajustes = (() => {
     botoes.forEach(b => { b.disabled = true; });
     aviso("clima-aviso", "Salvando…");
     try {
-      const d = await pedir("api/clima", corpo);
+      const d = await pedir("api/clima", corpo, true);
       clima = climaOk(d.clima) ? d.clima : null; origemClima = typeof d.origem === "string" ? d.origem : clima ? "tela" : "nenhum";
       cfg.clima = clima;
       mostrarClima(); aviso("clima-aviso", feito(clima), "ok");
@@ -71,7 +72,7 @@ const Ajustes = (() => {
       if (texto.length < 2) { lista.replaceChildren(); status.textContent = texto ? "Digite pelo menos 2 letras." : ""; return; }
       buscando = true; status.textContent = "Buscando…";
       try {
-        const d = await pedir(`api/clima/busca?q=${encodeURIComponent(texto)}`);
+        const d = await pedir(`api/clima/busca?q=${encodeURIComponent(texto)}`, undefined, true);
         if (pendente === null) mostrar(Array.isArray(d.resultados) ? d.resultados : []);
       } catch (e) { if (pendente === null) { lista.replaceChildren(); status.textContent = e.message; } }
       finally {
@@ -97,7 +98,7 @@ const Ajustes = (() => {
   }
   // "Usar esta" do assistente: grava a cidade pelo /api/clima e devolve o clima que passou a valer
   async function usarCidade(r, c) {
-    const d = await pedir("api/clima", { clima: { cidade: r.nome, lat: r.lat, lon: r.lon } });
+    const d = await pedir("api/clima", { clima: { cidade: r.nome, lat: r.lat, lon: r.lon } }, true);
     clima = climaOk(d.clima) ? d.clima : null; origemClima = typeof d.origem === "string" ? d.origem : "tela";
     for (const x of new Set([c, cfg])) if (x) { x.clima = clima; x.ajustes = { ...(x.ajustes || {}), clima: origemClima }; }   // o Personalizar abre já com a cidade nova
     if (cfg) mostrarClima();
@@ -243,7 +244,7 @@ const Ajustes = (() => {
   $("datas-salvar").addEventListener("click", async () => {
     const bt = $("datas-salvar"); bt.disabled = true; aviso("datas-aviso", "Salvando…");
     try {
-      await pedir("api/festas", { rev: edicao.rev, proprias: edicao.proprias, desligadas: edicao.desligadas });
+      await pedir("api/festas", { rev: edicao.rev, proprias: edicao.proprias, desligadas: edicao.desligadas }, true);
       aviso("datas-aviso", "Salvo. Recarregando para o mapa usar as datas novas…", "ok");
       location.reload();
     } catch (e) {
@@ -454,6 +455,122 @@ const Ajustes = (() => {
   });
   $("equipe-arquivo").addEventListener("click", () => salvarEq({ rev: eq.rev, limpar: true }, $("equipe-arquivo")));
 
+  // ---------- andares (GET e POST /api/andares; só admin) -----------------------------------
+  // Cada andar é um workspace do agentes.chat. Criar e remover levam a senha da conta no corpo (o servidor confere no mesmo
+  // balde do login); renomear não pede. O campo da senha é limpo logo depois de ler. Nome e rótulos só por textContent.
+  const ORG_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  let andaresExtras = [];
+  const nomeAndarOk = n => n.length >= 1 && n.length <= 40 && !/[\u0000-\u001f\u007f]/.test(n);
+  async function pedirAndares(corpo) { return pedir("api/andares", corpo, true); }
+  const erroAndar = e => (e.codigo === "senha_incorreta" || e.codigo === "tentativas_demais" || e.status === 400 ? e.message : `Não deu certo: ${e.message}`);
+  async function depoisDosAndares() {   // o seletor do topo e a lista daqui acompanham o servidor
+    await lerAndares();
+    if (typeof recarregarAndares === "function") await recarregarAndares();
+  }
+  function linhaAndar(a) {
+    const li = el("li", "andar-linha"), topo = el("div", "andar-topo"), info = el("div", "andar-info");
+    info.append(el("strong", null, a.nome), el("span", "andar-org", a.org || ""),
+      Object.assign(el("span", "andar-conexao", Andar.rotuloConexao(a.conexao)), { title: "Estado da conexão deste andar" }));
+    const conectar = el("a", "botao secundario", a.conexao === "conectado" ? "Reconectar" : "Conectar");
+    conectar.href = `/oauth/conectar?andar=${encodeURIComponent(a.id)}`;
+    conectar.setAttribute("aria-label", `${conectar.textContent} o andar ${a.nome} ao agentes.chat`);
+    const ren = el("button", "botao fantasma", "Renomear"), rm = el("button", "botao fantasma", "Remover");
+    ren.type = rm.type = "button";
+    ren.setAttribute("aria-label", `Renomear o andar ${a.nome}`); rm.setAttribute("aria-label", `Remover o andar ${a.nome}`);
+    const acoes = el("div", "andar-acoes"); acoes.append(conectar, ren, rm);
+    topo.append(info, acoes);
+    const painel = el("div", "andar-painel"); painel.hidden = true;
+    li.append(topo, painel);
+    ren.addEventListener("click", () => formRenomear(a, painel, ren));
+    rm.addEventListener("click", () => formRemover(a, painel, rm));
+    return li;
+  }
+  function abrirPainel(painel, botao, montar) {   // um painel por vez na linha; clicar de novo fecha
+    const abrir = painel.hidden || painel.dataset.de !== botao.textContent;
+    painel.replaceChildren(); painel.hidden = !abrir; painel.dataset.de = botao.textContent;
+    if (abrir) montar();
+    return abrir;
+  }
+  function formRenomear(a, painel, botao) {
+    abrirPainel(painel, botao, () => {
+      const f = el("form", "andar-form"), campo = el("input"), ok = el("button", "botao", "Salvar nome"), nao = el("button", "botao fantasma", "Cancelar"), av = el("p", "aviso-form");
+      campo.maxLength = 40; campo.value = a.nome; campo.autocomplete = "off"; campo.required = true; campo.setAttribute("aria-label", `Novo nome do andar ${a.nome}`);
+      ok.type = "submit"; nao.type = "button"; av.setAttribute("role", "status");
+      f.append(campo, el("div", "acoes"), av); f.querySelector(".acoes").append(ok, nao);
+      nao.addEventListener("click", () => { painel.hidden = true; painel.replaceChildren(); botao.focus(); });
+      f.addEventListener("submit", async ev => {
+        ev.preventDefault();
+        const nome = campo.value.trim();
+        if (!nomeAndarOk(nome)) { av.textContent = "Dê um nome de 1 a 40 caracteres."; av.className = "aviso-form ruim"; campo.focus(); return; }
+        ok.disabled = true; av.textContent = "Salvando…"; av.className = "aviso-form";
+        try { await pedirAndares({ acao: "renomear", id: a.id, nome }); await depoisDosAndares(); aviso("andares-aviso-lista", `Andar renomeado para ${nome}.`, "ok"); }
+        catch (e) { av.textContent = erroAndar(e); av.className = "aviso-form ruim"; ok.disabled = false; campo.focus(); }
+      });
+      painel.append(f); campo.focus(); campo.select();
+    });
+  }
+  function formRemover(a, painel, botao) {
+    abrirPainel(painel, botao, () => {
+      const f = el("form", "andar-form"), senha = el("input"), ok = el("button", "botao perigo", "Remover o andar"), nao = el("button", "botao fantasma", "Cancelar"), av = el("p", "aviso-form");
+      f.append(el("p", "ajuda", `Remover o andar “${a.nome}”? Ele é desconectado e sai da lista; a pasta de dados dele continua no servidor. Digite a sua senha para confirmar.`));
+      senha.type = "password"; senha.autocomplete = "current-password"; senha.maxLength = 256; senha.required = true; senha.setAttribute("aria-label", "Sua senha");
+      ok.type = "submit"; nao.type = "button"; av.setAttribute("role", "status");
+      const acoes = el("div", "acoes"); acoes.append(ok, nao);
+      f.append(senha, acoes, av);
+      nao.addEventListener("click", () => { senha.value = ""; painel.hidden = true; painel.replaceChildren(); botao.focus(); });
+      f.addEventListener("submit", async ev => {
+        ev.preventDefault();
+        const valor = senha.value; senha.value = "";
+        if (!valor) { av.textContent = "Digite a sua senha."; av.className = "aviso-form ruim"; senha.focus(); return; }
+        ok.disabled = true; av.textContent = "Removendo…"; av.className = "aviso-form";
+        try {
+          await pedirAndares({ acao: "remover", id: a.id, senha: valor });
+          if (Andar.atual === a.id && typeof trocarAndar === "function") await trocarAndar(Andar.PRINCIPAL);   // estava neste andar: volta para o principal
+          await depoisDosAndares();
+          aviso("andares-aviso-lista", `Andar ${a.nome} removido.`, "ok");
+        } catch (e) { av.textContent = erroAndar(e); av.className = "aviso-form ruim"; ok.disabled = false; senha.focus(); }
+      });
+      painel.append(f); senha.focus();
+    });
+  }
+  function mostrarAndares() {
+    $("andares-vazio").hidden = andaresExtras.length > 0;
+    $("andares-lista").replaceChildren(...andaresExtras.map(linhaAndar));
+    const cheio = andaresExtras.length >= MAX_ANDARES;
+    $("form-andar").hidden = cheio;
+    $("andares-cheio").hidden = !cheio;
+  }
+  async function lerAndares() {   // não admin (403/404) ou prévia: a seção continua escondida
+    if (demo()) return;
+    try {
+      const d = await pedirAndares();
+      andaresExtras = (Array.isArray(d.andares) ? d.andares : []).filter(a => a && Andar.valido(a.id) && a.id !== Andar.PRINCIPAL && typeof a.nome === "string")
+        .map(a => ({ id: a.id, nome: a.nome, org: typeof a.org === "string" ? a.org : "", conexao: typeof a.conexao === "string" ? a.conexao : "" }));
+      $("a-andares").hidden = false;
+      mostrarAndares();
+    } catch (e) { if (e.status === 401) return; $("a-andares").hidden = true; }
+  }
+  $("form-andar").addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const nome = $("an-nome").value.trim(), org = $("an-org").value.trim().toLowerCase(), senha = $("an-senha").value, bt = $("an-criar");
+    $("an-senha").value = "";
+    const erro = !nomeAndarOk(nome) ? ["Dê um nome de 1 a 40 caracteres.", "an-nome"] : !ORG_UUID.test(org) ? ["O código do workspace é um uuid, como 3f2a9c1e-5b7d-4e8a-9c0b-1d2e3f4a5b6c.", "an-org"]
+      : !senha ? ["Digite a sua senha.", "an-senha"] : null;
+    if (erro) { aviso("an-aviso", erro[0], "ruim"); $(erro[1]).focus(); return; }
+    bt.disabled = true; aviso("an-aviso", "Criando o andar…");
+    try {
+      const d = await pedirAndares({ acao: "criar", nome, org, senha });
+      $("an-nome").value = $("an-org").value = "";
+      await depoisDosAndares();
+      const novo = d && d.andar && Andar.valido(d.andar.id) ? d.andar.id : "";
+      aviso("an-aviso", `Andar ${nome} criado. Use “Conectar” na lista para ligar ele ao agentes.chat.`, "ok");
+      if (novo) { const bt2 = document.querySelector(`#andares-lista a[href$="andar=${novo}"]`); if (bt2) bt2.focus(); }
+    } catch (e) {
+      aviso("an-aviso", erroAndar(e), "ruim");
+      $(e.codigo === "senha_incorreta" || e.codigo === "tentativas_demais" ? "an-senha" : "an-nome").focus();
+    } finally { bt.disabled = false; }
+  });
+
   // ---------- sair de todos os aparelhos (POST /api/sair-todos) -------------------------------
   // confere a senha no mesmo balde do login (8 erros em 15 min dão 429), zera as sessões e apaga os cookies; a senha não fica no campo
   $("form-sair-todos").addEventListener("submit", async ev => {
@@ -462,7 +579,7 @@ const Ajustes = (() => {
     if (!senha) { aviso("st-aviso", "Digite a sua senha.", "ruim"); campo.focus(); return; }
     bt.disabled = true; aviso("st-aviso", "Encerrando as sessões…");
     try {
-      await pedir("api/sair-todos", { senha });
+      await pedir("api/sair-todos", { senha }, true);
       campo.value = "";
       aviso("st-aviso", "Pronto: todas as sessões foram encerradas. Indo para a tela de entrar…", "ok");
       location.href = "/entrar";
@@ -482,6 +599,7 @@ const Ajustes = (() => {
     origemClima = ["tela", "arquivo", "nenhum"].includes(aj.clima) ? aj.clima : clima ? "arquivo" : "nenhum";
     climaArquivo = aj.clima_arquivo !== false;
     mostrarClima();
+    lerAndares();
     if (primeira) {   // as datas em edição ficam enquanto a página estiver aberta, mesmo saindo e voltando
       const f = c.festas && typeof c.festas === "object" ? c.festas : {};
       const rev = aj.rev && Number.isInteger(aj.rev.festas) ? aj.rev.festas : 0;
@@ -506,6 +624,8 @@ const Ajustes = (() => {
   }
   // a lista de agentes chega com a primeira leitura: monta quando ela vier, com o Personalizar aberto
   setInterval(() => { if (eq && !agentesVistos && !$("v-personalizar").hidden && lidos()) mostrarAgentes(); }, 2000);
-  return { abrir, ligarBusca, usarCidade, pedir };
+  // trocou de andar: os times e a aparência em edição eram do outro; a próxima abertura refaz a partir do config novo
+  function esquecerAndar() { eqSalvo = eq = null; agentesVistos = false; cfg = null; }
+  return { abrir, ligarBusca, usarCidade, pedir, esquecerAndar };
 })();
 window.Ajustes = Ajustes;
