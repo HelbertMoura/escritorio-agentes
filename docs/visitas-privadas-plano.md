@@ -63,6 +63,10 @@ Isto vale para as contas de membro e de admin, não para visitantes: as rotas de
 
 **Conversas dos agentes.** O membro não lê as conversas dos agentes: para ele, o `/api/estado` sai sem conversas e sem o modo resposta, e as rotas de conversa ficam barradas (`test_membros.py`: `test_membro_ve_o_escritorio_sem_conversas_nem_modo_resposta`, `test_matriz_membro_so_passa_na_lista`).
 
+**Ver sem aparecer.** O `GET /api/ao-vivo?invisivel=1` lê o andar sem renovar a presença, e não é só da TV: qualquer membro com acesso ao andar pode usá-lo para ver quem está lá e onde, sem aparecer no mapa dos outros (para ler o chat de uma sala, a pessoa precisa estar nela). A sala não é fronteira entre pessoas da equipe; o andar é.
+
+**Limite do convite.** A página `/convite` não usa o balde de tentativas do login. Ela usa o limite por origem da recepção pública (a mesma tabela, com o IP em HMAC). Com 256 bits no token, adivinhar um convite por força bruta é inviável; o limite só segura o volume de pedidos.
+
 **O que os testes não provam.** O que o navegador, o proxy e a CDN guardam dos pedidos de presença e de chat fica fora dos testes, como nas visitas. Quem está na sala lê a mensagem e pode copiá-la; o escritório não impede isso.
 
 ## Limites encontrados

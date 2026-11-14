@@ -569,7 +569,7 @@ const Ajustes = (() => {
   });
 
   // ---------- membros (GET e POST /api/membros; só admin) -------------------------------------
-  // Contas da equipe e convites pendentes. Convidar e remover levam a senha da conta no corpo (como criar e remover andar).
+  // Contas da equipe e convites pendentes. Convidar, mudar papel ou andares e remover levam a senha da conta no corpo (como criar e remover andar).
   // O link do convite só aparece uma vez, no #cv-link, e não é guardado em lugar nenhum. Mensagens do servidor, só por textContent.
   let contas = [], convites = [], euUsuario = "", lerCaixasConvite = () => [Andar.PRINCIPAL];
   const pedirMembros = corpo => pedir("api/membros", corpo, true);
@@ -594,7 +594,7 @@ const Ajustes = (() => {
   }
   // pede confirmação dentro da linha (com a senha, se o servidor a exige); `enviar(senha)` lança em caso de erro
   function painelConfirmar(painel, voltar, o) {
-    const f = el("form", "andar-form"), ok = el("button", "botao perigo", o.rotulo), nao = el("button", "botao fantasma", "Cancelar"), av = el("p", "aviso-form"), acoes = el("div", "acoes");
+    const f = el("form", "andar-form"), ok = el("button", o.perigo === false ? "botao" : "botao perigo", o.rotulo), nao = el("button", "botao fantasma", "Cancelar"), av = el("p", "aviso-form"), acoes = el("div", "acoes");
     ok.type = "submit"; nao.type = "button"; av.setAttribute("role", "status");
     f.append(el("p", "ajuda", o.texto));
     let campo = null;
@@ -630,32 +630,41 @@ const Ajustes = (() => {
     topo.append(info, acoes);
     const painel = el("div", "andar-painel"); painel.hidden = true;
     li.append(topo, painel);
-    const trocarPapel = async novo => {
-      sel.disabled = true; aviso("membros-aviso-lista", "Salvando…");
-      try {
-        await pedirMembros({ acao: "papel", usuario: c.usuario, papel: novo });
-        if (eu) { location.reload(); return; }   // mudou o próprio papel: a tela refaz com o que ele pode ver agora
-        await lerMembros(); aviso("membros-aviso-lista", `${quem} agora é ${novo === "admin" ? "admin" : "membro"}.`, "ok");
-      } catch (e) { sel.value = c.papel; sel.disabled = false; aviso("membros-aviso-lista", erroMembro(e), "ruim"); sel.focus(); }
+    // mudar o papel pede a senha da conta (o servidor confere); o erro aparece no painel, e Cancelar volta o seletor
+    const trocarPapel = async (novo, senha) => {
+      await pedirMembros({ acao: "papel", usuario: c.usuario, papel: novo, senha });
+      if (eu) { location.reload(); return; }   // mudou o próprio papel: a tela refaz com o que ele pode ver agora
+      await lerMembros(); aviso("membros-aviso-lista", `${quem} agora é ${novo === "admin" ? "admin" : "membro"}.`, "ok");
     };
+    const fecharPapel = () => { if (painel.dataset.de === "papel") { painel.hidden = true; painel.replaceChildren(); } };
     sel.addEventListener("change", () => {
-      if (sel.value === c.papel) return;
-      if (eu && sel.value === "membro") {   // rebaixar a si mesmo tira esta aba e o resto da administração: pede confirmação
-        painel.dataset.de = "papel";
-        painelConfirmar(painel, () => { sel.value = c.papel; sel.focus(); }, { texto: "Rebaixar a sua própria conta? Você deixa de ser admin e perde acesso a Membros, marca e andares. Outro admin precisa devolver o acesso.",
-          rotulo: "Rebaixar para membro", enviar: () => trocarPapel("membro") });
-      } else trocarPapel(sel.value);
+      const novo = sel.value;
+      if (novo === c.papel) { fecharPapel(); return; }
+      const rebaixarEu = eu && novo === "membro";   // rebaixar a si mesmo tira esta aba e o resto da administração
+      painel.dataset.de = "papel";
+      painelConfirmar(painel, () => { sel.value = c.papel; sel.focus(); }, {
+        texto: rebaixarEu ? "Rebaixar a sua própria conta? Você deixa de ser admin e perde acesso a Membros, marca e andares. Outro admin precisa devolver o acesso. Digite a sua senha para confirmar."
+          : `Mudar ${quem} para ${novo === "admin" ? "admin" : "membro"}? Digite a sua senha para confirmar.`,
+        rotulo: rebaixarEu ? "Rebaixar para membro" : "Mudar o papel", senha: true, perigo: rebaixarEu,
+        enviar: senha => trocarPapel(novo, senha) });
     });
+    for (const b of [ed, rm]) b.addEventListener("click", () => { sel.value = c.papel; });   // outro painel desiste da troca não confirmada
     ed.addEventListener("click", () => abrirPainel(painel, ed, () => {
       const f = el("form", "andar-form"), caixas = el("div", "membro-andares"), ok = el("button", "botao", "Salvar andares"), nao = el("button", "botao fantasma", "Cancelar"), av = el("p", "aviso-form"), ac = el("div", "acoes");
       const ler = caixasAndares(caixas, c.andares, `mb-${i}`);
       ok.type = "submit"; nao.type = "button"; av.setAttribute("role", "status"); ac.append(ok, nao);
       f.append(el("p", "ajuda", `Andares que ${quem} vê. O principal vai sempre.`), caixas, ac, av);
       nao.addEventListener("click", () => { painel.hidden = true; painel.replaceChildren(); ed.focus(); });
-      f.addEventListener("submit", async ev => {
-        ev.preventDefault(); ok.disabled = true; av.textContent = "Salvando…"; av.className = "aviso-form";
-        try { await pedirMembros({ acao: "andares", usuario: c.usuario, andares: ler() }); await lerMembros(); aviso("membros-aviso-lista", `Andares de ${quem} salvos.`, "ok"); }
-        catch (e) { av.textContent = erroMembro(e); av.className = "aviso-form ruim"; ok.disabled = false; }
+      f.addEventListener("submit", ev => {   // a senha vem num segundo passo, no mesmo painel
+        ev.preventDefault();
+        const escolhidos = ler();
+        painelConfirmar(painel, () => ed.focus(), {
+          texto: `Salvar os andares de ${quem} (${escolhidos.map(nomeDoAndar).join(", ")})? Digite a sua senha para confirmar.`,
+          rotulo: "Salvar andares", senha: true, perigo: false,
+          enviar: async senha => {
+            await pedirMembros({ acao: "andares", usuario: c.usuario, andares: escolhidos, senha });
+            await lerMembros(); aviso("membros-aviso-lista", `Andares de ${quem} salvos.`, "ok");
+          } });
       });
       painel.append(f); const primeira = f.querySelector("input:not(:disabled)"); (primeira || ok).focus();
     }));

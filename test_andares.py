@@ -44,8 +44,9 @@ class Registro(unittest.TestCase):
         self.assertRegex(a["id"], r"^[0-9a-f]{8}$")
         self.assertEqual((a["nome"], a["org"]), ("Marketing", ORG_B))
         self.assertTrue(os.path.isdir(andares.pasta(self.dados, a["id"])))
-        modo = stat.S_IMODE(os.stat(os.path.join(self.dados, andares.ARQ)).st_mode)
-        self.assertEqual(modo, 0o600)
+        if os.name != "nt":   # o Windows não tem os bits de permissão do Unix
+            modo = stat.S_IMODE(os.stat(os.path.join(self.dados, andares.ARQ)).st_mode)
+            self.assertEqual(modo, 0o600)
         r.renomear(a["id"], "Vendas")
         self.assertEqual(andares.Andares(self.dados, e.ORG).lista, [{**a, "nome": "Vendas"}])
         r.remover(a["id"])
@@ -155,7 +156,8 @@ class Http(unittest.TestCase):
         cls.base = "http://127.0.0.1:%d" % cls.srv.server_address[1]
         e.BASE = cls.base
         with open(os.path.join(cls.dados, "contas", "codigo-primeiro-acesso.txt")) as f:
-            cls.srv.acesso.criar_primeiro(f.read().strip(), "dono", "senha-bem-grande")
+            codigo = f.read().strip()
+        cls.srv.acesso.criar_primeiro(codigo, "dono", "senha-bem-grande")   # com o arquivo fechado (unlink no Windows)
         corpo = urllib.parse.urlencode({"usuario": "dono", "senha": "senha-bem-grande"}).encode()
         st, _, h = cls.req("/entrar", {"Origin": cls.base, "Content-Type": "application/x-www-form-urlencoded"}, corpo)
         assert st == 303, st

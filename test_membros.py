@@ -74,7 +74,8 @@ class Membros(unittest.TestCase):
         e.BASE = cls.base
         acesso = cls.srv.acesso
         with open(os.path.join(cls.dados, "contas", "codigo-primeiro-acesso.txt")) as f:
-            acesso.criar_primeiro(f.read().strip(), "dono", SENHA_DONO)
+            codigo = f.read().strip()
+        acesso.criar_primeiro(codigo, "dono", SENHA_DONO)   # com o arquivo fechado: no Windows o unlink falha se aberto
 
     def setUp(self):
         self.dono = self.cookie(self.srv.acesso.entrar("dono", SENHA_DONO))   # cada teste com a sua sessão de admin
@@ -233,16 +234,22 @@ class Membros(unittest.TestCase):
             st, lista = self.get("/api/membros", self.dono)
             self.assertEqual(st, 200)
             self.assertNotIn("hash", json.dumps(lista))
-            st, r, _ = self.post("/api/membros", {"acao": "andares", "usuario": "ana", "andares": [self.extra]}, self.dono)
+            st, r, _ = self.post("/api/membros", {"acao": "andares", "usuario": "ana", "andares": [self.extra],
+                                                  "senha": SENHA_DONO}, self.dono)
             self.assertEqual({c["usuario"]: c["andares"] for c in r["contas"]}["ana"], ["principal", self.extra])
             self.assertEqual(self.get(f"/api/estado?andar={self.extra}", ana)[0], 200)   # vale no pedido seguinte
-            self.assertEqual(self.post("/api/membros", {"acao": "andares", "usuario": "ana", "andares": ["ffffffff"]},
-                                       self.dono)[0], 400)   # andar que não existe
+            self.assertEqual(self.post("/api/membros", {"acao": "andares", "usuario": "ana", "andares": ["ffffffff"],
+                                                        "senha": SENHA_DONO}, self.dono)[0], 400)   # andar que não existe
             # promovida, ela passa pela guarda; rebaixar o último admin não dá
-            self.post("/api/membros", {"acao": "papel", "usuario": "ana", "papel": "admin"}, self.dono)
+            st, _, _ = self.post("/api/membros", {"acao": "papel", "usuario": "ana", "papel": "admin", "senha": SENHA_DONO},
+                                 self.dono)
+            self.assertEqual(st, 200)
             self.assertEqual(self.get("/api/membros", ana)[0], 200)
-            self.post("/api/membros", {"acao": "papel", "usuario": "ana", "papel": "membro"}, self.dono)
-            st, r, _ = self.post("/api/membros", {"acao": "papel", "usuario": "dono", "papel": "membro"}, self.dono)
+            st, _, _ = self.post("/api/membros", {"acao": "papel", "usuario": "ana", "papel": "membro", "senha": SENHA_DONO},
+                                 self.dono)
+            self.assertEqual(st, 200)
+            st, r, _ = self.post("/api/membros", {"acao": "papel", "usuario": "dono", "papel": "membro", "senha": SENHA_DONO},
+                                 self.dono)
             self.assertEqual((st, r["erro"]), (409, "ultimo_admin"))
             # remover pede a senha e derruba a sessão dela na hora
             st, r, _ = self.post("/api/membros", {"acao": "remover", "usuario": "ana", "senha": "errada-errada"}, self.dono)
@@ -262,6 +269,30 @@ class Membros(unittest.TestCase):
             st, r, _ = self.post("/api/membros", {"acao": "revogar", "id": id_}, self.dono)
             self.assertNotIn(id_, [c["id"] for c in r["convites"]])
             self.assertEqual(self.post("/api/membros", {"acao": "revogar", "id": id_}, self.dono)[0], 404)
+
+    def test_papel_e_andares_exigem_a_senha(self):
+        """Mudar papel ou andares de uma conta pede a senha de quem administra, como convidar e remover."""
+        self.membro("ana")
+        pedidos = {"papel": {"acao": "papel", "usuario": "ana", "papel": "admin"},
+                   "andares": {"acao": "andares", "usuario": "ana", "andares": [self.extra]}}
+        with contextlib.redirect_stdout(io.StringIO()):
+            for acao, pedido in pedidos.items():
+                st, r, _ = self.post("/api/membros", pedido, self.dono)
+                self.assertEqual((st, r["erro"]), (400, "pedido"), acao)   # sem senha
+                st, r, _ = self.post("/api/membros", {**pedido, "senha": "errada-errada"}, self.dono)
+                self.assertEqual((st, r["erro"]), (403, "senha_incorreta"), acao)
+        ana = next(c for c in self.srv.acesso.contas() if c["usuario"] == "ana")
+        self.assertEqual((ana["papel"], ana["andares"]), ("membro", ["principal"]))   # nada mudou sem a senha certa
+
+    def test_remover_pelo_nome_sem_normalizar_tira_do_mapa(self):
+        ana, bia = self.membro("ana"), self.membro("bia")
+        pos = {"x": 40, "y": 80, "destino": None, "sala": "lounge", "olha": "dir"}
+        self.assertEqual(self.post("/api/presenca", pos, ana)[0], 200)
+        self.assertIn("ana", [p["usuario"] for p in self.get("/api/ao-vivo", bia)[1]["pessoas"]])
+        with contextlib.redirect_stdout(io.StringIO()):
+            st, _, _ = self.post("/api/membros", {"acao": "remover", "usuario": " ANA ", "senha": SENHA_DONO}, self.dono)
+        self.assertEqual(st, 200)
+        self.assertNotIn("ana", [p["usuario"] for p in self.get("/api/ao-vivo", bia)[1]["pessoas"]])
 
     # ------------------------------------------------------------------ presença e chat da sala
     def test_presenca_e_chat_por_sala_e_andar(self):
