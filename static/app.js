@@ -54,7 +54,7 @@ async function iniciar() {
   await buscar();
   irAoAgentePedido();
   ligarTV();
-  Assistente.talvez(config, () => estado);   // nome de exemplo ou sem conexão: o assistente (uma vez por sessão, e na volta do OAuth)
+  if (!souMembro()) Assistente.talvez(config, () => estado);   // nome de exemplo ou sem conexão: o assistente (uma vez por sessão, e na volta do OAuth)
   setInterval(buscar, 10000);
   requestAnimationFrame(quadro);
 }
@@ -69,6 +69,16 @@ function aplicarConfig() {
   festa = Festas.ativa();
   aplicarMarca();
   mostrarElevador();
+  aplicarPapel();
+}
+
+// O papel da conta ("admin" | "membro") vem no /api/config; sem o campo (servidor antigo) vale admin, a tela de sempre.
+// A regra mora aqui: o body ganha data-papel e o CSS esconde tudo que tem class "so-admin" (estilo.css). O servidor também
+// barra no back (403); isto só evita mostrar botões que não funcionam. Conversas e o assistente de instalação dependem daqui.
+const souMembro = () => !!config && config.papel === "membro";
+function aplicarPapel() {
+  document.body.dataset.papel = souMembro() ? "membro" : "admin";
+  if (souMembro() && location.hash === "#conversas") rota();   // abriu direto numa tela de admin: o rota() manda para o mapa
 }
 
 function aplicarMarca() {
@@ -926,7 +936,7 @@ function renderFicha() {
   }
   const fim = [];
   if (social) { // o motivo fica à vista embaixo do botão desabilitado (o servidor confere tudo de novo no envio)
-    const rg = elem("button", "botao fantasma ringue", "Mandar pro ringue"); rg.type = "button"; rg.setAttribute("aria-haspopup", "dialog");
+    const rg = elem("button", "botao fantasma ringue so-admin", "Mandar pro ringue"); rg.type = "button"; rg.setAttribute("aria-haspopup", "dialog");
     if (motivo) { rg.disabled = true; rg.setAttribute("aria-describedby", "ficha-motivo"); const p = elem("p", "ficha-motivo", motivo); p.id = "ficha-motivo"; fim.push(p); }
     rg.addEventListener("click", () => abrirRingue(b, rg)); acoes.append(rg);
   }
@@ -1167,7 +1177,7 @@ $("dlg-ringue").addEventListener("close", () => { // o foco volta ao botão; a f
 
 // ---------- conversa do trabalho atual (contrato L, fase 1): só leitura pelo GET /api/conversa; texto puro, sem markdown
 // nem autolink. Aparece no lugar da ficha; o nome de pessoas nunca vem do servidor, então quem não é agente aparece como "Pessoa".
-const conversaLigada = () => !!config && (config.conversas === "ler" || config.conversas === "responder") && !Brincar.demo
+const conversaLigada = () => !!config && !souMembro() && (config.conversas === "ler" || config.conversas === "responder") && !Brincar.demo
   && !["data", "hora", "clima"].some(k => new URLSearchParams(location.search).has(k));   // escondida na demonstração e na Simulação
 const ERROS_CONVERSA = { 404: "Esta conversa não está disponível agora: a tarefa pode ter terminado.", 429: "Muitas leituras de conversa agora. Tente de novo em um minuto.",
   503: "O agentes.chat pediu uma pausa nas leituras. Tente de novo daqui a pouco.", 502: "O agentes.chat não respondeu agora. Tente de novo daqui a pouco." };
@@ -2295,7 +2305,7 @@ function rota() {
   const r = (location.hash || "#escritorio").slice(1);
   const TELAS = ["escritorio", "conversas", "aprovacoes", "jornal", "personalizar", "novidades", "ajuda"];
   // na demonstração o Personalizar não existe: ele grava a marca no servidor de verdade
-  const valida = TELAS.includes(r) && !(r === "personalizar" && Brincar.demo) ? r : "escritorio";
+  const valida = TELAS.includes(r) && !(r === "personalizar" && Brincar.demo) && !(r === "conversas" && souMembro()) ? r : "escritorio";
   for (const v of TELAS) $(`v-${v}`).hidden = v !== valida;
   if (valida === "personalizar" && window.Personalizar) { Personalizar.abrir(config); if (window.Ajustes) Ajustes.abrir(config); }
   if (valida === "conversas") paginaConversas();
