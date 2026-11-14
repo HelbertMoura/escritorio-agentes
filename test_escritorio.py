@@ -2871,7 +2871,7 @@ class Docker(unittest.TestCase):
                     [no.module] if isinstance(no, ast.ImportFrom) and no.module else []
                 pendentes += [n for n in nomes if os.path.isfile(os.path.join(raiz, n + ".py"))]
         esperados = {n + ".py" for n in locais}
-        self.assertEqual(esperados, {"escritorio.py", "acesso.py", "andares.py", "social.py", "planta.py", "ajustes.py", "jornal.py",
+        self.assertEqual(esperados, {"escritorio.py", "acesso.py", "andares.py", "presenca.py", "social.py", "planta.py", "ajustes.py", "jornal.py",
                                  "avisos.py", "vapid.py", "novidades.py", "visitas_sala.py"})
         self.assertLessEqual(esperados, copiados)
         self.assertLessEqual(esperados, liberados)

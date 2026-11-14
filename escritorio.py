@@ -43,8 +43,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import andares as mod_andares  # noqa: E402
 from andares import PRINCIPAL as ANDAR_PRINCIPAL, Andares, AndaresIlegiveis  # noqa: E402
-from acesso import (ARQ_CODIGO, ARQ_USUARIOS, Acesso, NaoGravou, TentativasDemais, UsuariosIlegiveis, gravar,  # noqa: E402
-                    ler_codigo, ler_usuarios)
+from acesso import (ARQ_CODIGO, ARQ_USUARIOS, Acesso, ContaExiste, ConviteInvalido, ConvitesDemais, NaoGravou,  # noqa: E402
+                    TentativasDemais, UltimoAdmin, UsuariosIlegiveis, gravar, ler_codigo, ler_usuarios)
 import ajustes  # noqa: E402
 import vapid  # noqa: E402
 from ajustes import (ACESSORIOS, CLIMA_BYTES, CORES, EQUIPE_BYTES, FESTAS_BYTES, HANDLE_OK, ICONES_OK, OLHOS,  # noqa: E402
@@ -56,6 +56,7 @@ from novidades import Novidades  # noqa: E402
 from planta import PLANTA_BYTES, Planta, validar_planta  # noqa: E402
 from social import PLACAR_BYTES, PLACAR_MAX, PLACAR_TETO, Social  # noqa: E402
 from visitas_sala import Salas, LimiteRequisicoes  # noqa: E402
+from presenca import Limite as LimitePresenca, Presenca  # noqa: E402
 
 VERSAO = "1.4.0"
 AGENTES_PADRAO = "https://app.agentes.chat"
@@ -160,6 +161,8 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "logo.png": "image/png", "fontes/figtree.ttf": "font/ttf", "fontes/silkscreen.ttf": "font/ttf",
     "fontes/source-sans-3.woff2": "font/woff2", "fontes/doto.woff2": "font/woff2",
     "entrar.css": "text/css; charset=utf-8", "entrar.js": "text/javascript; charset=utf-8",
+    "convite.html": "text/html; charset=utf-8", "convite.js": "text/javascript; charset=utf-8",
+    "convite.css": "text/css; charset=utf-8",
     "personalizar.js": "text/javascript; charset=utf-8", "brincar.js": "text/javascript; charset=utf-8",
     "simular.js": "text/javascript; charset=utf-8", "expediente.js": "text/javascript; charset=utf-8",
     "planta.js": "text/javascript; charset=utf-8", "construir.html": "text/html; charset=utf-8",
@@ -2447,7 +2450,7 @@ def geometria_visita(config, foto, planta):
     return {"grupos": grupos, "planta": {"rev": 0, "salas": pinturas, "moveis": moveis, "novos": novos}}
 
 
-PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "fontes/figtree.ttf", "fontes/silkscreen.ttf", "fontes/source-sans-3.woff2",
+PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "convite.html", "convite.js", "convite.css", "fontes/figtree.ttf", "fontes/silkscreen.ttf", "fontes/source-sans-3.woff2",
             "visita.html", "visita.js", "visita.css", "mapa.js", "tema/atlas.png", "tema/atlas.json",
             "mundo.html", "mundo.js", "ceu.js", "clima.js", "som.js",  # bairro público: só código de desenho e som, sem dados
             # mapa do mundo: imagens, cidades e código de desenho, sem dados do escritório
@@ -2458,6 +2461,31 @@ PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "fontes/figtree.ttf", "fonte
             "fontes/doto.woff2", "logo.png",  # liberados na tela de login
             # PWA: o navegador busca o manifesto sem cookie; nenhum deles tem segredo. O sw.js fica na raiz (escopo /)
             "manifest.webmanifest", "sw.js", "icone-180.png", "icone-192.png", "icone-512.png", "icone-mascara-512.png"}
+
+# Contas de membro: o que uma sessão de membro pode pedir, além dos estáticos. Todo o resto é só de quem administra o
+# prédio (negar por padrão, conferido num lugar só: Pagina._permitido). Rota nova entra aqui só de propósito.
+MEMBRO_GET = frozenset({"/", "", "/api/estado", "/api/config", "/api/social", "/api/social/placar", "/api/jornal",
+                        "/api/novidades", "/api/avisos", "/api/push/chave", "/api/perfil", "/api/ao-vivo"})
+MEMBRO_POST = frozenset({"/sair", "/api/sair-todos", "/api/push/assinar", "/api/push/sair", "/api/perfil",
+                         "/api/presenca", "/api/sala/enviar"})
+SALAS_FIXAS = frozenset({"", "recepcao", "reuniao", "cozinha", "lounge"})   # "": o corredor (mapa.js: chave de cada sala)
+
+
+def salas_do_andar(andar):
+    """As chaves de sala que o mapa.js monta para este andar: as fixas e uma por time ("time:<nome>")."""
+    return SALAS_FIXAS | {"time:" + t["nome"] for t in carregar_times(andar.times)["times"]}
+
+
+def aparencia_da_conta(usuario, perfil):
+    """O boneco da conta; quem ainda não escolheu ganha um fixo, tirado do nome de usuário (o mesmo em toda tela)."""
+    if perfil.get("avatar"):
+        return perfil["avatar"]
+    n = int(hashlib.sha256(usuario.encode()).hexdigest()[:8], 16)
+    return {"color": sorted(CORES)[n % len(CORES)], "eyes": sorted(OLHOS)[n // 7 % len(OLHOS)], "accessory": ""}
+# POST sem sessão (cada um confere o que precisa): login, convite e as visitas de fora
+POST_PUBLICOS = frozenset({"/entrar", "/primeiro-acesso", "/convite/ver", "/convite/aceitar", "/api/visitas/entrar",
+                           "/api/visitas/enviar", "/api/visitas/receber", "/api/visitas/sair", "/api/visitas/mapa",
+                           "/api/visitas/recepcao", "/api/mundo/clima"})
 
 
 def pagina_login(erro="", primeiro=False):
@@ -2828,6 +2856,31 @@ class Pagina(BaseHTTPRequestHandler):
                 "nomes": [limpa_texto(lidos[h].get("nome") or h, 60)[0] for h in sorted(handles) if h in lidos],
                 "faltam": faltam}
 
+    def _papel(self):
+        """O papel da sessão no prédio (o do andar principal): "admin", "membro" ou None. Sem papéis no acesso, e na
+        prévia, todo logado é admin (o escritório de antes das contas de membro)."""
+        papel = getattr(self.server.acesso, "papel", None)
+        if papel is None or self._previa():
+            return "admin"
+        usuario = self._usuario()
+        return papel(usuario, ANDAR_PRINCIPAL) if usuario else None
+
+    def _permitido(self, metodo, rota, nome=""):
+        """A guarda de papéis, num lugar só e antes de qualquer rota com sessão: admin pode tudo; membro, só o que
+        está no MEMBRO_GET/MEMBRO_POST (e os estáticos); papel desconhecido, nada (falha fechada)."""
+        papel = self._papel()
+        if papel == "admin":
+            return True
+        if papel != "membro":
+            return False
+        return rota in MEMBRO_POST if metodo == "POST" else rota in MEMBRO_GET or nome in ARQUIVOS
+
+    def _proibido(self, rota):
+        log(evento="http", rota=rota[:40], resultado="papel_recusado")
+        if rota.startswith("/api/"):
+            return self._json(*erro(403, "papel", "Só quem administra o escritório faz isso."))
+        return self._envia(403, "Só quem administra o escritório abre esta página.".encode())
+
     def _admin_do_predio(self):
         """Admin do andar principal (sem papéis no acesso.py, todo logado é admin)."""
         papel = getattr(self.server.acesso, "papel", None)
@@ -3001,6 +3054,8 @@ class Pagina(BaseHTTPRequestHandler):
             return self._envia(200, pagina_login(primeiro=primeiro), "text/html; charset=utf-8")
         if nome in PUBLICOS:
             return self._estatico(nome)
+        if rota == "/convite":   # o link do convite: a página lê o token do fragmento, que nunca chega ao servidor
+            return self._estatico("convite.html")
         if rota == "/logo":   # público: a tela de entrar mostra a marca. Só PNG, JPEG ou WEBP pelos bytes; o resto vira o padrão
             if os.path.exists(ARQ_LOGO):
                 with open(ARQ_LOGO, "rb") as f:
@@ -3014,17 +3069,21 @@ class Pagina(BaseHTTPRequestHandler):
             if rota.startswith("/api/"):
                 return self._json(401, {"erro": "entre de novo"})
             return self._envia(302, b"", extra={"Location": "/entrar"})
+        if not self._permitido("GET", rota, nome):
+            return self._proibido(rota)
+        membro = self._papel() != "admin"   # membro não lê as conversas dos agentes nem abre o modo resposta
         por_andar = ("/api/estado", "/api/config", "/api/social", "/api/social/placar", "/api/jornal", "/api/conversa",
-                     "/oauth/conectar")
+                     "/oauth/conectar", "/api/ao-vivo")
         andar = self._andar() if rota in por_andar else None
         if rota in por_andar and andar is None:
             return self._sem_andar()
         if rota == "/api/estado":
             clima, leitor = getattr(self.server, "clima", None), andar.leitor
             do_dia = getattr(leitor, "conversas_do_dia", None)   # modo e meia-noite conferidos aqui, a cada pedido
-            agora, pode = time.time(), self._pode_responder(andar)
+            agora, pode = time.time(), not membro and self._pode_responder(andar)
             aceita = (lambda it: andar.respostas.aceita(it, agora)) if pode else None
-            conversas = conversas_publicas(do_dia(), agora, aceita) if do_dia and carregar_times(andar.times)["conversas"] in MODOS_CONVERSA else []
+            conversas = conversas_publicas(do_dia(), agora, aceita) if not membro and do_dia \
+                and carregar_times(andar.times)["conversas"] in MODOS_CONVERSA else []
             modo = self._modo_resposta() if pode else None   # só o da própria sessão, neste navegador
             estado = {**leitor.foto(), "conversas": conversas, "clima": clima.foto() if clima else None,
                       "usuario": usuario, "modo_resposta": {"resta_s": modo[0], "teto_s": modo[1]} if modo else None,
@@ -3046,13 +3105,33 @@ class Pagina(BaseHTTPRequestHandler):
             cfg = config_publica(None if andar.id == ANDAR_PRINCIPAL else andar)
             if self._previa():  # o front mostra a faixa "Prévia de desenvolvimento · dados fixos"
                 cfg["previa"] = True
-            cfg["pode_responder"] = self._pode_responder()
+            cfg["pode_responder"] = not membro and self._pode_responder()
+            cfg["papel"] = self._papel()   # a tela esconde o que é de admin; quem barra é a guarda
             cfg["base"] = BASE   # o endereço configurado (não é segredo): o link de conectar e o aviso de endereço trocado
             planta = andar.planta
             if planta:   # só aqui, e não no config_publica() que o diretor social chama a cada minuto
                 cfg["planta"] = planta.publica()
             cfg["andar"], cfg["andares"] = andar.id, andares_publicos(self.server, self._pode_andar)
             return self._json(200, cfg)
+        if rota == "/api/ao-vivo":   # quem mais está neste andar e o chat da sala; ?invisivel=1 (a TV) só lê
+            if self._previa():
+                return self._json(200, {"seq": 0, "pessoas": [], "mensagens": []})
+            q = urllib.parse.parse_qs(caminho.query)
+            desde = q.get("desde", ["0"])[0]
+            try:
+                return self._json(200, self.server.presenca.ao_vivo(andar.id, usuario, int(desde) if desde.isdigit() else 0,
+                                                                    renovar=q.get("invisivel") != ["1"]))
+            except LimitePresenca as x:
+                return self._json(*erro(429, "limite", str(x)))
+        if rota == "/api/perfil":   # o próprio perfil (nome e boneco), qualquer papel
+            if self._previa():
+                return self._json(*erro(404, "previa", "Na prévia não há conta."))
+            return self._json(200, self.server.acesso.perfil(usuario))
+        if rota == "/api/membros":   # a aba Membros (a guarda já deixou só admin): contas e convites, sem segredo
+            if self._previa():
+                return self._json(*erro(404, "previa", "Na prévia não há contas."))
+            acesso = self.server.acesso
+            return self._json(200, {"contas": acesso.contas(), "convites": acesso.convites_pendentes()})
         if rota == "/api/andares":   # a aba Andares: os extras com o workspace de cada um (o principal é o AGENTES_ORG)
             if not self._admin_do_predio():
                 return self._json(*erro(403, "papel", "Só quem administra o escritório mexe nos andares."))
@@ -3388,6 +3467,178 @@ class Pagina(BaseHTTPRequestHandler):
         log(evento="andares", resultado=acao, usuario=usuario, andar=resposta.get("andar", {}).get("id", dados.get("id")))
         return self._json(200, resposta)
 
+    def _papel_de(self, usuario):
+        papel = getattr(self.server.acesso, "papel", None)
+        return "admin" if papel is None else papel(usuario, ANDAR_PRINCIPAL)
+
+    def _json_pedido(self, limite):
+        """O corpo JSON de uma rota nova: Content-Type JSON e objeto exato, ou None (quem chama responde 400/415)."""
+        if (self.headers.get("Content-Type") or "").split(";")[0].strip().lower() != "application/json":
+            return False
+        try:
+            dados = ajustes.json_estrito(self._corpo(limite))
+        except (ValueError, RecursionError):
+            return None
+        return dados if isinstance(dados, dict) else None
+
+    def _post_convite(self, rota):
+        """Página pública do convite: ver o nome sugerido e aceitar (cria a conta de membro e já entra). Origin igual à
+        BASE, JSON, limite por origem (o das visitas). O token nunca vai ao log; erro de convite é sempre o mesmo 404."""
+        if self.headers.get("Origin") != BASE:
+            log(evento="http", rota=rota[:40], resultado="origem_recusada")
+            return self._json(*erro(403, "origem", "Origem não permitida."))
+        try:
+            origem = origem_visita(self.client_address[0], self.headers, self.server.proxy_visitas,
+                                   getattr(self.server, "cabecalho_visitas", "X-Real-IP"))
+            self.server.salas_visitas.limitar_origem(origem, publica=True)
+        except LimiteRequisicoes:
+            return self._json(*erro(429, "limite", "Tentativas demais; espere um pouco."))
+        except ValueError:
+            return self._json(*erro(403, "origem", "Origem não permitida."))
+        dados = self._json_pedido(2048)
+        if dados is False:
+            return self._json(*erro(415, "formato", "Envie JSON (application/json)."))
+        campos = {"convite"} if rota == "/convite/ver" else {"convite", "usuario", "senha", "nome", "avatar"}
+        if dados is None or set(dados) != campos or not all(isinstance(dados[k], str) for k in campos - {"avatar"}):
+            return self._json(*erro(400, "pedido", "Pedido inválido."))
+        acesso = self.server.acesso
+        try:
+            if rota == "/convite/ver":
+                return self._json(200, acesso.ver_convite(dados["convite"]))
+            token = acesso.aceitar_convite(dados["convite"], dados["usuario"], dados["senha"], dados["nome"], dados["avatar"])
+        except ConviteInvalido:
+            log(evento="convite", resultado="invalido", rota=rota)
+            return self._json(*erro(404, "convite", "Esse convite não vale mais: peça um novo a quem administra o escritório."))
+        except ContaExiste:
+            return self._json(*erro(409, "usuario_existe", "Esse usuário já existe; escolha outro."))
+        except ValueError as x:
+            return self._json(*erro(400, "pedido", str(x)[:160]))
+        except NaoGravou as x:
+            log(evento="convite", resultado="nao_gravou", detalhe=str(x))
+            return self._json(*erro(500, "gravar", "Não deu para criar a conta agora; tente de novo."))
+        log(evento="convite", resultado="aceito", usuario=acesso.sessao(token))
+        return self._json(200, {"ok": True}, {"Set-Cookie": self._cookie(token, 30 * 86400)})
+
+    def _post_presenca(self, rota):
+        """A posição de quem pediu e o chat da sala, por andar (?andar=). Origin igual à BASE, sessão e JSON exato de até
+        1 KB (posição) ou 2 KB (mensagem). Nome e boneco saem da conta, nunca do pedido; a sala é conferida contra as
+        do andar. Nada daqui vai ao log: nem posição, nem texto."""
+        if self.headers.get("Origin") != BASE:
+            log(evento="http", rota=rota[:40], resultado="origem_recusada")
+            return self._json(*erro(403, "origem", "Origem não permitida."))
+        if self._previa():
+            return self._json(*erro(403, "previa", "Na prévia não há presença."))
+        usuario = self._usuario()
+        if not usuario:
+            return self._json(401, {"erro": "entre de novo"})
+        andar = self._andar()
+        if andar is None:
+            return self._sem_andar()
+        dados = self._json_pedido(1024 if rota == "/api/presenca" else 2048)
+        if dados is False:
+            return self._json(*erro(415, "formato", "Envie JSON (application/json)."))
+        presenca = self.server.presenca
+        try:
+            if rota == "/api/sala/enviar":
+                if dados is None or set(dados) != {"texto"}:
+                    return self._json(*erro(400, "pedido", "Pedido inválido."))
+                return self._json(200, {"seq": presenca.enviar(andar.id, usuario, dados["texto"])})
+            if dados is None or set(dados) != {"x", "y", "destino", "sala", "olha"} or dados["sala"] not in salas_do_andar(andar):
+                return self._json(*erro(400, "pedido", "Pedido inválido."))
+            perfil = self.server.acesso.perfil(usuario)
+            seq = presenca.marcar(andar.id, usuario, perfil["nome"], aparencia_da_conta(usuario, perfil), dados["x"], dados["y"],
+                                  dados["destino"], dados["sala"], dados["olha"])
+            return self._json(200, {"seq": seq})
+        except LimitePresenca as x:
+            return self._json(*erro(429, "limite", str(x)))
+        except (ValueError, TypeError) as x:
+            return self._json(*erro(400, "pedido", str(x)[:120]))
+
+    def _post_perfil(self, rota):
+        """O próprio nome e boneco (qualquer papel): Origin igual à BASE, sessão e JSON {nome, avatar} de até 1 KB."""
+        if self.headers.get("Origin") != BASE:
+            log(evento="http", rota=rota[:40], resultado="origem_recusada")
+            return self._json(*erro(403, "origem", "Origem não permitida."))
+        if self._previa():
+            return self._json(*erro(403, "previa", "Na prévia não há conta."))
+        usuario = self._usuario()
+        if not usuario:
+            return self._json(401, {"erro": "entre de novo"})
+        dados = self._json_pedido(1024)
+        if dados is False:
+            return self._json(*erro(415, "formato", "Envie JSON (application/json)."))
+        if dados is None or set(dados) != {"nome", "avatar"}:
+            return self._json(*erro(400, "pedido", "Pedido inválido."))
+        try:
+            return self._json(200, self.server.acesso.salvar_perfil(usuario, dados["nome"], dados["avatar"]))
+        except ValueError as x:
+            return self._json(*erro(400, "pedido", str(x)[:160]))
+        except NaoGravou as x:
+            log(evento="perfil", resultado="nao_gravou", detalhe=str(x))
+            return self._json(*erro(500, "gravar", "Não deu para salvar agora."))
+
+    def _post_membros(self, rota):
+        """Convidar, revogar, papel, andares e remover (a guarda já deixou só admin). Origin igual à BASE e JSON exato de
+        até 2 KB; convidar e remover pedem a senha da conta (balde do login): criam e apagam acesso ao prédio."""
+        acesso = self.server.acesso
+        if self.headers.get("Origin") != BASE:
+            log(evento="http", rota=rota[:40], resultado="origem_recusada")
+            return self._json(*erro(403, "origem", "Origem não permitida."))
+        if self._previa():
+            return self._json(*erro(403, "previa", "Na prévia não há contas."))
+        usuario = self._usuario()
+        if not usuario:
+            return self._json(401, {"erro": "entre de novo"})
+        dados = self._json_pedido(2048)
+        if dados is False:
+            return self._json(*erro(415, "formato", "Envie JSON (application/json)."))
+        formatos = {"convidar": {"acao", "nome", "andares", "senha"}, "revogar": {"acao", "id"},
+                    "papel": {"acao", "usuario", "papel"}, "andares": {"acao", "usuario", "andares"},
+                    "remover": {"acao", "usuario", "senha"}}
+        acao = dados.get("acao") if isinstance(dados, dict) else None
+        textos_ok = lambda: all(isinstance(v, str) and len(v) <= 256 for k, v in dados.items() if k != "andares")
+        if acao not in formatos or set(dados) != formatos[acao] or not textos_ok():
+            return self._json(*erro(400, "pedido", "Pedido inválido."))
+        if "andares" in dados:   # só andares que existem (o principal sempre existe)
+            existentes = {ANDAR_PRINCIPAL, *getattr(self.server, "andares", {})}
+            if not isinstance(dados["andares"], list) or not all(isinstance(a, str) and a in existentes for a in dados["andares"]):
+                return self._json(*erro(400, "andar", "Algum desses andares não existe mais; recarregue a página."))
+        if "senha" in dados:
+            try:
+                acesso.conferir(usuario, dados["senha"])
+            except PermissionError as x:
+                log(evento="membros", resultado="senha_recusada", usuario=usuario)
+                if isinstance(x, TentativasDemais):
+                    return self._json(*erro(429, "tentativas_demais", "Tentativas demais; espere alguns minutos."))
+                return self._json(*erro(403, "senha_incorreta", "Senha incorreta."))
+        try:
+            if acao == "convidar":
+                token, convite = acesso.convidar(dados["nome"], dados["andares"])
+                log(evento="membros", resultado="convidou", usuario=usuario, convite=convite["id"])
+                return self._json(200, {"link": f"{BASE}/convite#{token}", "convite": convite})
+            if acao == "revogar":
+                acesso.revogar_convite(dados["id"])
+            elif acao == "papel":
+                acesso.mudar_papel(dados["usuario"], dados["papel"])
+            elif acao == "andares":
+                acesso.definir_andares(dados["usuario"], dados["andares"])
+            else:
+                acesso.remover(dados["usuario"])
+                self.server.presenca.sair(dados["usuario"])   # some do mapa dos outros na hora
+        except UltimoAdmin:
+            return self._json(*erro(409, "ultimo_admin", "O escritório precisa de pelo menos uma pessoa que administra."))
+        except ConvitesDemais as x:
+            return self._json(*erro(409, "convites_demais", str(x)))
+        except KeyError:
+            return self._json(*erro(404, "nao_existe", "Essa conta ou esse convite não existe mais; recarregue a página."))
+        except ValueError as x:
+            return self._json(*erro(400, "pedido", str(x)[:160]))
+        except NaoGravou as x:
+            log(evento="membros", resultado="nao_gravou", detalhe=str(x))
+            return self._json(*erro(500, "gravar", "Não deu para salvar agora."))
+        log(evento="membros", resultado=acao, usuario=usuario)
+        return self._json(200, {"contas": acesso.contas(), "convites": acesso.convites_pendentes()})
+
     def _post_sair_todos(self, rota):
         """"Sair de todos os aparelhos": Origin obrigatório e igual à BASE (sem a volta para o Referer), sessão, JSON
         {"senha"} de até 1 KB. A senha conta no balde do login (8 erros em 15 min travam também o login). Zera todas as
@@ -3422,7 +3673,9 @@ class Pagina(BaseHTTPRequestHandler):
             log(evento="acesso", resultado="sair_todos_nao_gravou", detalhe=str(x))
             return self._json(*erro(500, "gravar", "Não deu para encerrar as sessões agora."))
         log(evento="acesso", resultado="sair_todos", usuario=usuario, sessoes=n)
-        if getattr(self.server, "avisos", None):   # um aparelho perdido também para de receber os avisos
+        # um aparelho perdido também para de receber os avisos. A lista de aparelhos é do prédio (não guarda de quem é
+        # cada um): só quem administra a zera, e o membro sair dos aparelhos dele não desliga o aviso de ninguém
+        if getattr(self.server, "avisos", None) and self._papel_de(usuario) == "admin":
             self.server.avisos.limpar()
         return self._json(200, {"ok": True}, {"Set-Cookie": [self._cookie("", 0), self._cookie_modo("")]})
 
@@ -3434,6 +3687,16 @@ class Pagina(BaseHTTPRequestHandler):
         self.lido = self.rfile.read(int(tam)) if re.fullmatch(r"[0-9]{1,7}", tam) and int(tam) <= CORPO_ANTES else None
         rota = urllib.parse.urlsplit(self.path).path
         acesso = self.server.acesso
+        if rota not in POST_PUBLICOS and self._usuario() and not self._permitido("POST", rota):
+            return self._proibido(rota)
+        if rota in ("/convite/ver", "/convite/aceitar"):
+            return self._post_convite(rota)
+        if rota == "/api/perfil":
+            return self._post_perfil(rota)
+        if rota in ("/api/presenca", "/api/sala/enviar"):
+            return self._post_presenca(rota)
+        if rota == "/api/membros":
+            return self._post_membros(rota)
         if rota in ROTAS_ADMIN_VISITAS or rota in ("/api/visitas/entrar", "/api/visitas/enviar", "/api/visitas/receber",
                                                    "/api/visitas/sair", "/api/visitas/mapa", "/api/visitas/recepcao",
                                                    "/api/mundo/clima"):
@@ -3477,6 +3740,9 @@ class Pagina(BaseHTTPRequestHandler):
             log(evento="acesso", resultado="entrou")
             return self._envia(303, b"", extra={"Location": "/", "Set-Cookie": self._cookie(token, 30 * 86400)})
         if rota == "/sair":   # fecha também o modo resposta e apaga os dois cookies
+            usuario = self._usuario()
+            if usuario and not self._previa():   # sai do mapa dos outros na hora, sem esperar o TTL
+                self.server.presenca.sair(usuario)
             acesso.sair(self._token())
             return self._envia(303, b"", extra={"Location": "/entrar", "Set-Cookie": [self._cookie("", 0), self._cookie_modo("")]})
         if not self._usuario():
@@ -3514,6 +3780,7 @@ class Servidor(ThreadingHTTPServer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.salas_visitas = Salas()
+        self.presenca = Presenca()   # as pessoas da equipe no mapa e o chat das salas (só na memória)
         self.andares, self.registro_andares = {}, None   # o main() põe os andares extras (andares.py)
         self.proxy_visitas = proxy_visitas(PROXY_VISITAS)
         self.cabecalho_visitas = CABECALHO_VISITAS
