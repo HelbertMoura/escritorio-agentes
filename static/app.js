@@ -2245,7 +2245,7 @@ function mostrarElevador() {
     }
     sel.value = atual.id;
     caixa.querySelector(".elevador-led").dataset.conexao = atual.conexao;
-    const estadoAndar = caixa.querySelector(".elevador-estado"); if (estadoAndar) { textoSe(estadoAndar, Andar.rotuloConexao(atual.conexao)); estadoAndar.dataset.conexao = atual.conexao; }
+    const estadoAndar = caixa.querySelector(".elevador-estado"); if (estadoAndar) { textoSe(estadoAndar, atual.conexao === "conectado" ? "" : `Este andar: ${Andar.rotuloConexao(atual.conexao)}`); estadoAndar.dataset.conexao = atual.conexao; }
     sel.title = `Andar ${atual.nome}: ${Andar.rotuloConexao(atual.conexao)}`;
   }
   chaveElevador = chave;
@@ -2307,6 +2307,7 @@ async function trocarAndar(id, aviso) {
 }
 
 // ---------- telas (rotas pelo #) ---------------------------------------------------
+let telaAtual = "";
 function rota() {
   if (gavetaAberta()) { fecharGaveta(); $("principal").focus({ preventScroll: true }); }   // item do menu na gaveta: o foco vai ao conteúdo
   const r = (location.hash || "#escritorio").slice(1);
@@ -2314,6 +2315,10 @@ function rota() {
   // na demonstração o Personalizar não existe: ele grava a marca no servidor de verdade
   const valida = TELAS.includes(r) && !(r === "personalizar" && Brincar.demo) && !(r === "conversas" && souMembro()) ? r : "escritorio";
   for (const v of TELAS) $(`v-${v}`).hidden = v !== valida;
+  // outra tela começa no topo (sem isso, voltar do Personalizar ao Escritório deixava o mapa fora de vista); o pulo para
+  // uma âncora da mesma tela (#principal, #aviso-greve) não troca de tela e fica como está
+  if (telaAtual && valida !== telaAtual) scrollTo({ top: 0, behavior: "instant" });
+  telaAtual = valida;
   if (valida === "personalizar" && window.Personalizar) { Personalizar.abrir(config); if (window.Ajustes) Ajustes.abrir(config); }
   if (valida === "conversas") paginaConversas();
   if (valida === "jornal") Jornal.abrir();
