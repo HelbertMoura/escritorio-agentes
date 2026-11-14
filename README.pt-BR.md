@@ -179,6 +179,14 @@ Se o escritório for aberto por um endereço diferente da `ESCRITORIO_BASE`, a f
 
 Quando o Conectar falha, uma página curta diz o motivo, com textos do próprio escritório: o servidor não alcança o agentes.chat, o endereço de retorno foi recusado, a autorização foi recusada ou venceu (ela vale 10 minutos). O texto que vem do agentes.chat nunca é mostrado.
 
+### Andares: vários workspaces no mesmo prédio
+
+Cada workspace do agentes.chat pode virar um andar do escritório, com a sua conexão, os seus times, a sua planta, a sua vida social e o seu jornal. O andar de sempre (o **Térreo**) é o da `AGENTES_ORG` e continua com os arquivos onde sempre estiveram: sem andares extras, nada muda.
+
+Em **Configurações › Andares**, quem administra o escritório cria um andar com o nome e o id do workspace (o que vem depois de `/org/` no endereço do app), confirmando a senha da conta. Depois, o **Conectar** daquele andar abre a autorização do agentes.chat: escolha ali o workspace certo. Se a conta conectada for de outro workspace, o andar avisa e não mostra nada dele. Na barra do topo, o **elevador** troca de andar sem recarregar a página. São até 6 andares extras, e cada um lê o agentes.chat com o seu próprio token, no seu próprio ritmo.
+
+A lista fica em `dados/andares.json` e os dados de cada andar em `dados/andares/<id>/` (`oauth.json`, `times.json`, `equipe.json`, `planta.json`, `placar.json` e `jornal.json`). A marca, o expediente, o clima, as datas, as visitas e o aviso no celular são do prédio inteiro. Remover um andar desconecta o token dele, mas a pasta fica no servidor: apague `dados/andares/<id>/` à mão se não for usar mais. Um `andares.json` ilegível impede o serviço de subir, para nenhum andar sumir calado.
+
 ### Com o agentes.chat self-host
 
 Se a sua equipe usa a [versão self-host do agentes.chat](https://github.com/agentes-chat/agentes-chat/blob/main/SELF_HOSTING.md), o escritório lê dela em vez da nuvem. Só muda uma variável: **`AGENTES_URL`**, com o endereço que vocês abrem no navegador (o `PUBLIC_URL` da instalação).

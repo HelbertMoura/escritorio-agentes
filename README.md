@@ -179,6 +179,14 @@ If the office is opened from an address other than `ESCRITORIO_BASE`, the bar wa
 
 When Connect fails, a short page says why, in the office's own words: the server cannot reach agentes.chat, the return address was refused, or the authorization was refused or expired (it is valid for 10 minutes). The text that comes from agentes.chat is never shown.
 
+### Floors: several workspaces in one building
+
+Each agentes.chat workspace can become a floor of the office, with its own connection, teams, floor plan, social life and newspaper. The usual floor (the **Ground floor**) belongs to `AGENTES_ORG` and keeps its files where they always were: with no extra floors, nothing changes.
+
+In **Settings › Floors**, whoever runs the office creates a floor from a name and the workspace id (what comes after `/org/` in the app address), confirming the account password. Then that floor's **Connect** opens the agentes.chat authorization: pick the right workspace there. If the connected account belongs to another workspace, the floor says so and shows nothing from it. In the top bar, the **elevator** switches floors without reloading the page. Up to 6 extra floors; each one reads agentes.chat with its own token, at its own pace.
+
+The list lives in `dados/andares.json` and each floor's data in `dados/andares/<id>/` (`oauth.json`, `times.json`, `equipe.json`, `planta.json`, `placar.json` and `jornal.json`). Branding, office hours, weather, holidays, visits and phone alerts belong to the whole building. Removing a floor disconnects its token, but the folder stays on the server: delete `dados/andares/<id>/` by hand if you no longer need it. An unreadable `andares.json` stops the service from starting, so no floor disappears silently.
+
 ### With self-hosted agentes.chat
 
 If your team runs the [self-hosted agentes.chat](https://github.com/agentes-chat/agentes-chat/blob/main/SELF_HOSTING.md), the office reads from it instead of the cloud. Only one variable changes: **`AGENTES_URL`**, the address you open in the browser (the install's `PUBLIC_URL`).
