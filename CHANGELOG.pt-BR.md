@@ -6,8 +6,7 @@ As mudanças que importam neste projeto ficam aqui, da mais nova para a mais ant
 
 ## 1.5.0 · 2026-11-14 · Andares e equipe
 
-Release [`v1.5.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.5.0). Commits: [`v1.4.0...v1.5.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.4.0...v1.5.0).
-<!-- PENDENTE (Helbert): com o vídeo anexado à release, trocar "Release [`v1.5.0`](...)." por "Release [`v1.5.0`](...), com o vídeo das novidades anexado." aqui e no CHANGELOG.md, como no commit 046b5fb da 1.4.0. -->
+Release [`v1.5.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.5.0), com o vídeo das novidades anexado. Commits: [`v1.4.0...v1.5.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.4.0...v1.5.0).
 
 ### Adicionado
 - **Andares:** cada workspace do agentes.chat pode virar um andar do prédio, com a sua conexão, os seus times, a sua planta, a sua vida social e o seu jornal. Configurações › Andares cria, renomeia e remove (até 6 extras, com a senha da conta), e o elevador da barra troca de andar sem recarregar. Sem andares extras, tudo fica como antes. Veja [Andares](./README.pt-BR.md#andares-vários-workspaces-no-mesmo-prédio).
