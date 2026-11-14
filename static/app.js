@@ -52,6 +52,7 @@ async function iniciar() {
   try { await document.fonts.load(Mapa.PLACA_FONTE); } catch (e) { /* sem a fonte, a placa usa a reserva monoespaçada */ }
   if (!$("v-personalizar").hidden) { Personalizar.abrir(config); Ajustes.abrir(config); }   // abriu direto em #personalizar
   await buscar();
+  ligarAoVivo();
   irAoAgentePedido();
   ligarTV();
   if (!souMembro()) Assistente.talvez(config, () => estado);   // nome de exemplo ou sem conexão: o assistente (uma vez por sessão, e na volta do OAuth)
@@ -162,7 +163,6 @@ async function buscar() {
     for (const s of predio.salas) for (const m of s.mesas || []) if (m.handle) mesas.set(m.handle, m);
     Vida.sincronizar(mundo, estado.agentes || [], estado.trabalhos || [], mesas, aparencia, novo);
     Vida.social(mundo, !naSimulacao() && estado.social && typeof estado.social === "object" ? estado.social : null);   // null desliga a camada
-    Vida.visitantes(mundo, TV.invisivel ? [] : estado.visitantes);   // na TV (também na 1ª leitura do /?tv=1), sem visitantes
     mostrarOlhando();
     falhou = false;
     desenharPainel(); desenharEventos(); mostrarConexao(); paginaConversas();
@@ -282,7 +282,7 @@ function desenharCena(t) {
   }
   const cs = mundo.cenaSocial, naNuvem = b => !!cs && cs.fase === "luta" && (b.id === cs.a || b.id === cs.b);   // na luta, a nuvem cobre os dois (Efeitos.cena)
   for (const b of mundo.bonecos.values()) if (visivel(b) && !naNuvem(b)) cena.push({ chave: b.chave ?? b.y + 0.5, desenha: () => desenharBoneco(b, t) });
-  const visitas = [...mundo.visitas.values()].filter(v => v.x > -20);   // visitantes (vida.js): figurantes com crachá
+  const visitas = Vida.pessoas();   // as pessoas da equipe neste andar e o meu boneco (vida.js: /api/ao-vivo)
   for (const v of visitas) cena.push({ chave: v.chave ?? v.y + 0.5, desenha: () => Avatar.boneco(ctx, v, t, escala) });
   cena.sort((a, b) => a.chave - b.chave).forEach(c => c.desenha());
   desenharPortas(t);
@@ -2008,6 +2008,7 @@ tela.addEventListener("pointerup", ev => {
   if (s) { focarSala(s); return; }
   if (Brincar.tocar(p, ev.pointerType)) return;   // objeto do mapa (TV, café, sino…)
   fecharFicha();
+  Vida.irAte(mundo, p);   // o chão: o meu boneco anda até lá (na TV e com "Aparecer" desligado não há boneco)
 });
 // cartão rápido ao passar o mouse (no toque, a ficha faz esse papel)
 tela.addEventListener("pointermove", ev => {
@@ -2072,6 +2073,8 @@ $("aparecer").addEventListener("change", () => {
   try { localStorage.setItem("escritorio:aparecer", aparecer ? "sim" : "nao"); } catch (e) { /* fica só nesta visita */ }
   mostrarOlhando(); buscar();   // o servidor fica sabendo já na próxima leitura (quem desliga some em até 45 s)
 });
+// as pessoas da equipe no mapa (vida.js); a TV e quem desligou "Aparecer" leem sem marcar presença. Na prévia não há conta
+function ligarAoVivo() { if (!Brincar.demo && !config.previa) Vida.aoVivo({ invisivel: () => TV.invisivel || !aparecer }); }
 function mostrarOlhando() {
   const lista = estado && Array.isArray(estado.visitantes) ? estado.visitantes : null;
   $("olhando").hidden = !lista || Brincar.demo;   // servidor antigo ou demonstração: sem a linha
@@ -2266,6 +2269,7 @@ function voltarAoPrincipal() { trocarAndar(Andar.PRINCIPAL, "Esse andar não est
 
 // zera o que era do andar de antes: ficha, conversa aberta, eventos e pedidos deduzidos, social e greve
 function reiniciarAndar() {
+  Vida.aoVivo(null);   // as pessoas e o seq são do andar de antes
   assinatura = ""; selecionado = null;
   eventosLocais = []; statusAnterior = null; vistosEvento.clear();
   resolvidosLocais = []; pedidosAnteriores = null; resolvidosDaLeitura = leituraDosResolvidos = null; chaveAprov = "";
@@ -2289,6 +2293,7 @@ async function trocarAndar(id, aviso) {
     if (!$("v-personalizar").hidden) Ajustes.abrir(config);
     trocando = false;
     await buscar();
+    ligarAoVivo();
     anunciarAndar(aviso || `Você está no andar ${nomeDoAndar(id)}.`);
   } catch (e) {
     trocando = false;
