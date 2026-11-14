@@ -1427,7 +1427,8 @@ async function carregarConvPagina(it) {
   lista.scrollTop = lista.scrollHeight;   // a mais nova fica embaixo, à vista
 }
 // a aba voltou a ficar visível: se o item aberto mudou enquanto ela estava escondida, relê agora
-document.addEventListener("visibilitychange", () => { if (!document.hidden) paginaConversas(); });
+// a aba voltou (o navegador segura o setInterval de aba escondida): relê já, e um pedido respondido em outro aparelho sai
+document.addEventListener("visibilitychange", () => { if (!document.hidden) buscar(); });
 
 // ---------- resposta pela página Conversas (fase R) -------------------------------------
 // O modo resposta vive no servidor (1 h renovada a cada envio, teto de 8 h, só nesta sessão do navegador): o navegador só
@@ -1612,6 +1613,7 @@ async function enviarResposta() {
     if (r.d) { modoMudou = performance.now(); modoDoServidor(r.d, modoMudou); }
     ta.value = ""; crescerTexto(ta); contarResposta();
     avisoEnvio("ok", `Mensagem enviada às ${horaDe(new Date().toISOString())}. Para ver a resposta, use Atualizar (ou abra no agentes.chat).`);
+    buscar();   // o servidor já tirou o pedido de "Esperando você": o painel e o mapa acompanham sem esperar os 10 s
     ta.focus({ preventScroll: true });
     const reler = () => { const atual = itensConv().find(x => x.id === it.id); if (atual && convAberta === it.id) carregarConvPagina(atual); };
     reler();

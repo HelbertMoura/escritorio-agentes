@@ -10,6 +10,9 @@ As mudanças que importam neste projeto ficam aqui, da mais nova para a mais ant
 - **Puxar os setores do agentes.chat:** um botão em Configurações › Times copia cada setor do agentes.chat como um time (nome, cor e ícone) e a aparência de cada agente. Exige um agentes.chat cujo `list_agents` mande o `department`. Time de mesmo nome mantém o tipo, a parede e o piso, e nada vale antes do **Salvar times**.
 - **Andares:** cada workspace do agentes.chat pode virar um andar do prédio, com a sua conexão, os seus times, a sua planta, a sua vida social e o seu jornal. Configurações › Andares cria, renomeia e remove (até 6 extras, com a senha da conta), e o elevador da barra troca de andar sem recarregar. Sem andares extras, tudo fica como antes. Veja [Andares](./README.pt-BR.md#andares-vários-workspaces-no-mesmo-prédio).
 
+### Corrigido
+- **Resposta em outro aparelho:** respondeu a pergunta de um agente pelo celular com o escritório aberto no PC? O agente sai de **Esperando você** nas duas telas sem esperar a próxima leitura do agentes.chat (no aparelho que respondeu, na hora; no outro, em até 10 s), e o pedido já respondido não aceita a mesma resposta de novo. A aba que volta do segundo plano relê o estado na hora.
+
 ## 1.4.0 · 2026-11-12 · Self-host e mundo maior
 
 Release [`v1.4.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.4.0), com o vídeo das novidades anexado. Commits: [`v1.3.0...v1.4.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.3.0...v1.4.0).

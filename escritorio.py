@@ -112,6 +112,7 @@ INTERVALO = max(30, int(os.environ.get("ESCRITORIO_INTERVALO", "30")))
 # Orçamento do agentes.chat: 5.000 pedidos/dia por conexão. A leitura de fundo fica em até 3.000; o resto é folga.
 ORCAMENTO_DIA = 3000
 AGENTES_A_CADA, RECARGA_MINIMA = 600, 120   # list_agents a cada 10 min; agente desconhecido recarrega, no máximo a cada 2 min
+ATENDIDO_CARENCIA = 20   # s: depois de uma resposta enviada, a leitura que ainda traz o pedido esperando vale como trabalhando
 PAUSA_429 = "O agentes.chat pediu uma pausa nas leituras; mostrando a última leitura"
 SEM_CONEXAO = "o escritório ainda não está conectado ao agentes.chat (abra /oauth/conectar)"
 FALHA_LEITURA = "agentes.chat não respondeu; mostrando a última leitura"
@@ -825,6 +826,7 @@ class Leitor(threading.Thread):
         self.relogio = time.monotonic   # mede quanto o ciclo levou até publicar
         self.canais = None   # fase R: (ids do list_channels, completa, em), para saber o que é conversa direta
         self.respondidos = {}   # fase R (M2): id do item -> meia-noite do dia em que o escritório mandou mensagem nele
+        self.atendidos = {}   # run_id -> instante em que o escritório respondeu o pedido dele (atender())
 
     def pausado(self, agora=None):
         return (time.time() if agora is None else agora) < self.pausa_ate
@@ -865,6 +867,7 @@ class Leitor(threading.Thread):
         if self.agentes is None or agora - self.agentes_em >= AGENTES_A_CADA:
             self._carregar_agentes(token, agora)
         tarefas, ok = self._paginas("list_recent_tasks", {"scope": "working"}, "tasks", token)
+        tarefas = self._sem_pedidos_atendidos(tarefas, agora)
         desconhecidos = {(t.get("agent") or {}).get("id") for t in tarefas} - {a["id"] for a in self.agentes} - {None, ""}
         if desconhecidos and agora - self.agentes_em >= RECARGA_MINIMA:
             self._carregar_agentes(token, agora)
@@ -873,6 +876,18 @@ class Leitor(threading.Thread):
             raise OutraOrg()
         return (resumir(self.agentes, tarefas, self.url_app), self.agentes_ok and ok,
                 normalizar(self.agentes, tarefas, self.url_app)[1])
+
+    def _sem_pedidos_atendidos(self, tarefas, agora):
+        """A leitura que começou até ATENDIDO_CARENCIA depois de uma resposta enviada pode trazer o run ainda esperando
+        (o agentes.chat não o retomou): ele vale como trabalhando, e o pedido respondido não volta a nenhuma tela.
+        Passada a carência, vale o que o agentes.chat disser (o agente pode perguntar de novo no mesmo run)."""
+        with self.trava:
+            self.atendidos = {r: t for r, t in self.atendidos.items() if agora - t < ATENDIDO_CARENCIA}
+            atendidos = set(self.atendidos)
+        if not atendidos:
+            return tarefas
+        return [{**t, "status": "still_running"} if isinstance(t, dict) and t.get("status") == "waiting_input"
+                and str(t.get("run_id") or "") in atendidos else t for t in tarefas]
 
     def _carregar_canais(self, token, agora):
         """Fase R (T1): os ids do list_channels, só no modo "responder" e no máximo 1 vez por hora (até ~24 pedidos
@@ -987,6 +1002,7 @@ class Leitor(threading.Thread):
     def zerar_memoria(self):
         with self.trava:
             self.conversas, self.zerar_conversas, self.respondidos = {"por_id": {}, "mudou": {}}, True, {}
+            self.atendidos = {}
             self.diario_novo = True
 
     def marcar_respondido(self, id_conversa, agora):
@@ -997,6 +1013,21 @@ class Leitor(threading.Thread):
         with self.trava:
             self.respondidos = {k: v for k, v in self.respondidos.items() if v == hoje}
             self.respondidos[id_conversa] = hoje
+
+    def atender(self, run_id, agora):
+        """Resposta enviada pelo escritório a um pedido (waiting_input): ele sai de "Esperando você" já, em todas as
+        telas (o /api/estado de cada uma lê esta foto), sem esperar a leitura de fundo, e o mesmo pedido não aceita a
+        mesma resposta de novo (o Respostas recusa quem trabalha). A próxima leitura sai agora; até ATENDIDO_CARENCIA,
+        o run que ela ainda trouxer esperando vale como trabalhando (_sem_pedidos_atendidos)."""
+        em = _iso(agora)
+        trabalhando = lambda t: {**t, "status": "still_running", "desde": em} \
+            if t.get("run_id") == run_id and t.get("status") == "waiting_input" else t
+        with self.trava:
+            self.atendidos[run_id] = agora
+            self.estado = {**self.estado, "trabalhos": [trabalhando(t) for t in self.estado.get("trabalhos", [])],
+                           "tarefas": [trabalhando(t) for t in self.estado.get("tarefas", [])]}
+            self.conversas = {**self.conversas, "por_id": {k: trabalhando(it) for k, it in self.conversas["por_id"].items()}}
+        self.acordar()
 
     def respondido(self, id_conversa, agora):
         with self.trava:
@@ -1317,6 +1348,7 @@ class Respostas:
         self.seguidos_429 = 0
         self.conversas.esquecer_canal(item["canal"])
         self.leitor.marcar_respondido(item["id"], agora)
+        self.leitor.atender(item["run_id"], agora)
         res = res if isinstance(res, dict) else {}
         task_id = limpa_texto(res.get("task_id") or "", 64)[0] or None
         return 200, {"status": limpa_texto(res.get("status") or "", 30)[0]}, {"tipo": "dm", "task_id": task_id}

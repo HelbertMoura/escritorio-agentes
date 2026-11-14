@@ -10,6 +10,9 @@ All notable changes to this project are listed here, newest first. The format fo
 - **Pull the departments from agentes.chat:** a button in Settings › Teams copies each agentes.chat department as a team (name, color and icon) and each agent's appearance. It needs an agentes.chat whose `list_agents` sends the `department`. A team with the same name keeps its type, wall and floor, and nothing applies before **Salvar times** (save teams).
 - **Floors:** each agentes.chat workspace can become a floor of the building, with its own connection, teams, floor plan, social life and newspaper. Settings › Floors creates, renames and removes them (up to 6 extra, with the account password), and the elevator in the top bar switches floors without reloading. With no extra floors, everything stays as before. See [Floors](./README.md#floors-several-workspaces-in-one-building).
 
+### Fixed
+- **Reply from another device:** answered an agent's question on your phone with the office open on your computer? The agent leaves **Waiting for you** on both screens without waiting for the next agentes.chat read (on the device that replied, right away; on the other, within 10 s), and the request you already answered no longer takes the same answer again. A tab coming back from the background reads the state at once.
+
 ## 1.4.0 · 2026-11-12 · Self-hosting and a bigger world
 
 Release [`v1.4.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.4.0), with the video of what is new attached. Commits: [`v1.3.0...v1.4.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.3.0...v1.4.0).
