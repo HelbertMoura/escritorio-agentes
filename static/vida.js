@@ -1408,26 +1408,37 @@ const Vida = (() => {
   // (o chat da sala lê as mensagens dele) e, quando a minha sala muda, o "minha-sala". O meu boneco anda pelo clique e
   // manda ao servidor só o destino (POST /api/presenca, no máximo 2 por segundo); os outros andam até o destino deles
   // com o mesmo caminho dos agentes. Fica fora do mundo (m) porque o app.js remonta o mundo quando os times mudam.
-  const AO_VIVO_VISIVEL = 1500, AO_VIVO_ESCONDIDO = 10000, ENVIO_MIN = 500, RENOVAR = 20000, COORD_MAX = 8192;
-  const vivo = { ger: 0, ligado: false, andar: null, seq: 0, falhas: 0, timer: 0, envio: 0, enviado: -1e9, invisivel: () => true,
-    perfil: null, m: null, eu: null, avisada: null, pessoas: new Map() };   // avisada: a última sala do evento "minha-sala"   // pessoas: os outros, por usuário
+  // O meu nome e boneco são os do servidor (fonte única, os mesmos que os outros veem): o /api/perfil, relido a cada
+  // PERFIL_A_CADA ms (mudou no "Meu perfil", o mapa acompanha), ou a minha entrada no /api/ao-vivo, se vier.
+  const AO_VIVO_VISIVEL = 1500, AO_VIVO_ESCONDIDO = 10000, ENVIO_MIN = 500, RENOVAR = 20000, PERFIL_A_CADA = 15000, COORD_MAX = 8192;
+  const vivo = { ger: 0, ligado: false, lido: false, andar: null, seq: 0, falhas: 0, timer: 0, envio: 0, enviado: -1e9, perfilEm: -1e9,
+    invisivel: () => true, perfil: null, m: null, eu: null, avisada: null,   // avisada: a última sala do evento "minha-sala"
+    pessoas: new Map() };   // pessoas: os outros, por usuário
 
   // liga (ou religa, ao trocar de andar) o polling; null desliga. invisivel(): a TV e quem desligou "Aparecer" só leem
   function aoVivo(opcoes) {
     vivo.ger++; clearTimeout(vivo.timer); clearTimeout(vivo.envio); vivo.envio = 0;
     if (vivo.eu) { vivo.eu = null; avisarSala(null); }
-    vivo.pessoas.clear(); vivo.seq = 0; vivo.falhas = 0; vivo.avisada = null; vivo.ligado = !!opcoes;
+    vivo.pessoas.clear(); vivo.seq = 0; vivo.falhas = 0; vivo.avisada = null; vivo.lido = false; vivo.ligado = !!opcoes;
     if (!opcoes) return;
     vivo.andar = Andar.atual; vivo.invisivel = opcoes.invisivel || (() => false);
-    const ger = vivo.ger;
-    fetch(Andar.com("api/perfil", vivo.andar), { cache: "no-store", credentials: "same-origin" })   // nome e boneco da conta
+    lerPerfil(vivo.ger);
+    lerAoVivo(vivo.ger);
+  }
+  function lerPerfil(ger) {
+    vivo.perfilEm = performance.now();
+    fetch(Andar.com("api/perfil", vivo.andar), { cache: "no-store", credentials: "same-origin" })
       .then(r => (r.ok ? r.json() : null)).then(p => {
         if (ger !== vivo.ger || !p || typeof p.usuario !== "string") return;   // prévia (sem conta) ou outro andar: sem o meu boneco
-        vivo.perfil = { nome: nomeDe(p.nome, p.usuario), ap: apDe(p.avatar, p.usuario) };
+        meuPerfil(p.usuario, p.nome, p.aparencia || p.avatar);   // aparencia: a efetiva (a salva ou o padrão do servidor)
       }).catch(() => {});
-    lerAoVivo(ger);
+  }
+  function meuPerfil(usuario, nome, ap) {
+    vivo.perfil = { usuario, nome: nomeDe(nome, usuario), ap: apDe(ap, usuario) };
+    if (vivo.eu) { vivo.eu.nome = `${vivo.perfil.nome} (você)`; vivo.eu.ap = vivo.perfil.ap; }
   }
   const nomeDe = (nome, usuario) => String(typeof nome === "string" && nome.trim() ? nome : usuario).slice(0, 40);
+  // servidor antigo, sem a aparência efetiva: o padrão do front (o mesmo do "Meu perfil")
   const apDe = (ap, usuario) => (ap && typeof ap === "object" && typeof ap.color === "string" ? ap : Avatar.padrao(usuario));
   const coord = v => Math.max(0, Math.min(COORD_MAX, Math.round(v)));
 
@@ -1440,8 +1451,9 @@ const Vida = (() => {
       const d = await r.json();
       if (ger !== vivo.ger) return;
       if (!d || !Number.isInteger(d.seq) || !Array.isArray(d.pessoas)) throw new Error("resposta inválida");
-      vivo.falhas = 0; vivo.seq = d.seq;
+      vivo.falhas = 0; vivo.seq = d.seq; vivo.lido = true;
       receber(d.pessoas);
+      if (performance.now() - vivo.perfilEm >= PERFIL_A_CADA) lerPerfil(ger);
       window.dispatchEvent(new CustomEvent("aovivo", { detail: d }));
     } catch (e) {
       if (ger !== vivo.ger) return;
@@ -1460,6 +1472,7 @@ const Vida = (() => {
     for (const it of lista.slice(0, 64)) {
       if (!it || typeof it.usuario !== "string" || !Number.isFinite(it.x) || !Number.isFinite(it.y)) continue;
       const alvo = Array.isArray(it.destino) && it.destino.length === 2 && it.destino.every(Number.isFinite) ? it.destino : [it.x, it.y];
+      if (vivo.perfil && it.usuario === vivo.perfil.usuario) { meuPerfil(it.usuario, it.nome, it.aparencia); continue; }   // eu (outra aba)
       vistos.add(it.usuario);
       let p = vivo.pessoas.get(it.usuario);
       if (!p) { p = novaPessoa(it.usuario, it.x, it.y); vivo.pessoas.set(it.usuario, p); }
@@ -1578,6 +1591,8 @@ const Vida = (() => {
   }
   // quem desenhar (app.js): os outros e eu, fora quem ainda está na rua, fora da tela
   const pessoas = () => [...vivo.pessoas.values(), ...(vivo.eu ? [vivo.eu] : [])].filter(p => p.x > -20);
+  // quantos outros estão neste andar agora (a linha "N pessoas olhando"); null antes da 1ª leitura ou desligado
+  const olhando = () => (vivo.ligado && vivo.lido ? vivo.pessoas.size : null);
 
   // um ponto de chão livre na sala, longe das vagas dos agentes e com caminho até a porta
   function pontoDeVisita(m, s) {
@@ -1600,7 +1615,7 @@ const Vida = (() => {
     return n;
   }
 
-  return { criarMundo, sincronizar, passo, digitando, momento, objetoClicado, festaGeral, social, aoVivo, irAte, pessoas, textoGreve, FRASES };
+  return { criarMundo, sincronizar, passo, digitando, momento, objetoClicado, festaGeral, social, aoVivo, irAte, pessoas, olhando, textoGreve, FRASES };
 })();
 
 window.Vida = Vida;

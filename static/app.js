@@ -2074,12 +2074,14 @@ $("aparecer").addEventListener("change", () => {
   mostrarOlhando(); buscar();   // o servidor fica sabendo já na próxima leitura (quem desliga some em até 45 s)
 });
 // as pessoas da equipe no mapa (vida.js); a TV e quem desligou "Aparecer" leem sem marcar presença. Na prévia não há conta
+addEventListener("aovivo", mostrarOlhando);   // a cada leitura das pessoas do andar
 function ligarAoVivo() { if (!Brincar.demo && !config.previa) Vida.aoVivo({ invisivel: () => TV.invisivel || !aparecer }); }
+// os outros vêm das pessoas deste andar no mapa (vida.js); antes da 1ª leitura e na prévia, do /api/estado
 function mostrarOlhando() {
-  const lista = estado && Array.isArray(estado.visitantes) ? estado.visitantes : null;
-  $("olhando").hidden = !lista || Brincar.demo;   // servidor antigo ou demonstração: sem a linha
-  if (!lista) return;
-  const outros = Math.min(lista.length, 50), n = outros + (aparecer ? 1 : 0);
+  const lista = estado && Array.isArray(estado.visitantes) ? estado.visitantes : null, noMapa = Vida.olhando();
+  $("olhando").hidden = (noMapa === null && !lista) || Brincar.demo;   // servidor antigo ou demonstração: sem a linha
+  if ($("olhando").hidden) return;
+  const outros = Math.min(noMapa ?? lista.length, 50), n = outros + (aparecer ? 1 : 0);
   textoSe($("olhando-txt"), aparecer && n === 1 ? "Só você está olhando" : !n ? "Ninguém mais olhando" : `${n} ${n === 1 ? "pessoa olhando" : "pessoas olhando"}`);
 }
 

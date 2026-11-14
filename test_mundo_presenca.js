@@ -216,5 +216,30 @@ const ANA = { usuario: "ana", nome: "Ana", aparencia: { color: "#e11d48", eyes: 
     await t.responder("api/ao-vivo", 200, AO_VIVO(2, []));
     assert.equal(t.Vida.pessoas().length, 0);
   }
+  // o meu nome e boneco vêm do servidor (a aparência efetiva do /api/perfil, a mesma que os outros veem), relidos a cada
+  // ~15 s; a minha entrada no /api/ao-vivo, se vier, também vale e não vira outra pessoa. Vida.olhando conta os outros
+  {
+    const t = carregar();
+    t.Vida.aoVivo({ invisivel: () => false });
+    assert.equal(t.Vida.olhando(), null, "antes da 1ª leitura");
+    await t.responder("api/perfil", 200, { usuario: "eu", nome: "Eu", avatar: null, papel: "membro", aparencia: { color: "teal", eyes: "dots", accessory: "" } });
+    const m = t.Vida.criarMundo(predio());
+    t.Vida.passo(m, 0.05);
+    const eu = t.Vida.pessoas().find(p => p.eu);
+    assert.equal(eu.ap.color, "teal", "sem boneco salvo: o padrão do servidor, não o do front");
+    await t.responder("api/ao-vivo", 200, AO_VIVO(1, [ANA]));
+    assert.equal(t.Vida.olhando(), 1);
+    for (let i = 0; i < 10; i++) { await t.andar(1500); await t.responder("api/ao-vivo", 200, AO_VIVO(1, [ANA])); }
+    assert.equal(t.pendentes("api/perfil"), 1, "relê o perfil a cada ~15 s");
+    await t.responder("api/perfil", 200, { usuario: "eu", nome: "Eu Novo", avatar: { color: "rose", eyes: "happy", accessory: "cap" }, aparencia: { color: "rose", eyes: "happy", accessory: "cap" } });
+    assert.equal(eu.nome, "Eu Novo (você)"); assert.equal(eu.ap.color, "rose");
+    await t.andar(1500);
+    await t.responder("api/ao-vivo", 200, AO_VIVO(2, [ANA, { ...ANA, usuario: "eu", nome: "Eu De Novo", aparencia: { color: "amber", eyes: "round", accessory: "" } }]));
+    assert.equal(t.Vida.olhando(), 1, "eu não conto como outro");
+    assert.equal(t.Vida.pessoas().filter(p => !p.eu).length, 1);
+    assert.equal(eu.nome, "Eu De Novo (você)"); assert.equal(eu.ap.color, "amber");
+    t.Vida.aoVivo(null);
+    assert.equal(t.Vida.olhando(), null);
+  }
   console.log("test_mundo_presenca: ok");
 })().catch(e => { console.error(e); process.exit(1); });
