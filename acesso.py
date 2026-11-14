@@ -29,6 +29,9 @@ import secrets
 import tempfile
 import threading
 import time
+import unicodedata
+
+import ajustes
 
 DURACAO = 30 * 86400
 USUARIO_OK = re.compile(r"[a-z0-9][a-z0-9._-]{2,31}")
@@ -40,6 +43,9 @@ MODO_INATIVO, MODO_TETO = 3600, 8 * 3600   # modo resposta: 1 h sem envio que de
 INEXISTENTES, PRIMEIRO = "*inexistentes", "*primeiro-acesso"  # baldes que não colidem com nome válido
 CALCULOS = threading.BoundedSemaphore(2)  # scrypt usa 32 MiB; dois juntos cabem folgados no MemoryMax
 ARQ_USUARIOS, ARQ_CODIGO = "usuarios.json", "codigo-primeiro-acesso.txt"   # dentro da pasta de dados
+PAPEIS = ("admin", "membro")
+ANDAR_PRINCIPAL = "principal"
+NOME_MAX = 40
 
 
 class TentativasDemais(PermissionError):
@@ -52,6 +58,14 @@ class UsuariosIlegiveis(Exception):
 
 class NaoGravou(Exception):
     """A gravação no disco falhou e nada mudou. Não herda de OSError: um PermissionError do disco não vira senha errada."""
+
+
+class UltimoAdmin(PermissionError):
+    """Não pode remover nem rebaixar o único admin do andar principal."""
+
+
+class ContaExiste(ValueError):
+    """Já existe uma conta com esse usuário."""
 
 
 def _hash(senha, sal, n=N, r=R, p=P):
@@ -178,22 +192,195 @@ class Acesso:
             time.sleep(ATRASO)  # fora da trava: não segura login nem saída de ninguém
             raise PermissionError("código de primeiro acesso incorreto")
 
+    def _gravar_usuarios(self, novos):
+        try:
+            _gravar(self.arq_usuarios, novos)
+        except OSError as x:
+            raise NaoGravou(type(x).__name__) from x
+        self.usuarios = novos
+
+    def _gravar_sessoes(self, novas):
+        try:
+            _gravar(self.arq_sessoes, novas)
+        except OSError as x:
+            raise NaoGravou(type(x).__name__) from x
+        self.sessoes = novas
+
+    def _derrubar_sessoes(self, derrubadas):
+        novas = {k: v for k, v in self.sessoes.items() if k not in derrubadas}
+        self._gravar_sessoes(novas)
+        self.modos = {k: v for k, v in self.modos.items() if k in novas}
+        return len(derrubadas)
+
+    def _exige_nao_ultimo_admin(self, usuario):
+        if _papel_de(self.usuarios.get(usuario), ANDAR_PRINCIPAL) == "admin":
+            admins = sum(1 for u in self.usuarios.values() if _papel_de(u, ANDAR_PRINCIPAL) == "admin")
+            if admins <= 1:
+                raise UltimoAdmin("o escritório precisa ter pelo menos um administrador")
+
     def _criar(self, usuario, senha):
-        usuario = usuario.strip().lower()
+        usuario = _normalizar_usuario(usuario)
         if not USUARIO_OK.fullmatch(usuario):
             raise ValueError("usuário: 3 a 32 caracteres, letras minúsculas, números, ponto, hífen ou sublinhado")
-        if len(senha) < SENHA_MIN or len(senha) > 256:
-            raise ValueError(f"a senha precisa ter pelo menos {SENHA_MIN} caracteres")
+        _validar_senha(senha)
         sal = secrets.token_bytes(16)
-        self.usuarios[usuario] = {"sal": sal.hex(), "hash": _hash(senha, sal).hex(), "n": N, "r": R, "p": P,
-                                  "criado": int(time.time())}
-        _gravar(self.arq_usuarios, self.usuarios)
+        novos = {**self.usuarios, usuario: {
+            "sal": sal.hex(), "hash": _hash(senha, sal).hex(), "n": N, "r": R, "p": P,
+            "criado": int(time.time()), "andares": {ANDAR_PRINCIPAL: "admin"},
+        }}
+        self._gravar_usuarios(novos)
+
+    # --- contas, papéis e perfil
+    def papel(self, usuario, andar=ANDAR_PRINCIPAL):
+        """Papel do usuário no andar ("admin", "membro" ou None). Falha fechada para papel desconhecido."""
+        return _papel_de(self.usuarios.get(_normalizar_usuario(usuario)), andar)
+
+    def perfil(self, usuario):
+        """Perfil público da própria conta (nunca sal/hash)."""
+        nome_u = _normalizar_usuario(usuario)
+        u = self.usuarios.get(nome_u)
+        if not u:
+            raise KeyError(usuario)
+        return {
+            "usuario": nome_u,
+            "nome": u.get("nome") or nome_u,
+            "avatar": _avatar_se_valido(u.get("avatar")),
+            "papel": _papel_de(u, ANDAR_PRINCIPAL),
+            "trocar_senha": bool(u.get("trocar_senha", False)),
+        }
+
+    def contas(self):
+        """Lista das contas para a tela de administração, sem sal nem hash."""
+        itens = sorted(self.usuarios.items(), key=lambda par: (par[1].get("criado", 0), par[0]))
+        return [
+            {
+                "usuario": nome_u,
+                "nome": u.get("nome") or nome_u,
+                "papel": _papel_de(u, ANDAR_PRINCIPAL),
+                "criado": u.get("criado", 0),
+                "trocar_senha": bool(u.get("trocar_senha", False)),
+            }
+            for nome_u, u in itens
+        ]
+
+    def criar_conta(self, usuario, nome, papel):
+        """Cria uma conta com senha provisória (trocar_senha=True) e devolve a senha uma vez só."""
+        nome_u = _normalizar_usuario(usuario)
+        if not USUARIO_OK.fullmatch(nome_u):
+            raise ValueError("usuário: 3 a 32 caracteres, letras minúsculas, números, ponto, hífen ou sublinhado")
+        nome_limpo = _validar_nome(nome)
+        if papel not in PAPEIS:
+            raise ValueError("papel inválido (use admin ou membro)")
+        with self.trava:
+            if nome_u in self.usuarios:
+                raise ContaExiste("já existe uma conta com esse usuário")
+        senha = secrets.token_urlsafe(12)
+        sal = secrets.token_bytes(16)
+        h = _hash(senha, sal)
+        with self.trava:
+            if nome_u in self.usuarios:
+                raise ContaExiste("já existe uma conta com esse usuário")
+            novos = {**self.usuarios, nome_u: {
+                "sal": sal.hex(), "hash": h.hex(), "n": N, "r": R, "p": P,
+                "criado": int(time.time()), "nome": nome_limpo,
+                "andares": {ANDAR_PRINCIPAL: papel}, "trocar_senha": True,
+            }}
+            self._gravar_usuarios(novos)
+        return senha
+
+    def mudar_papel(self, usuario, papel):
+        """Altera o papel do usuário no andar principal (vale na hora). Protege o último admin."""
+        if papel not in PAPEIS:
+            raise ValueError("papel inválido (use admin ou membro)")
+        nome_u = _normalizar_usuario(usuario)
+        with self.trava:
+            u = self.usuarios.get(nome_u)
+            if not u:
+                raise KeyError(usuario)
+            if papel != "admin":
+                self._exige_nao_ultimo_admin(nome_u)
+            andares = dict(u["andares"]) if isinstance(u.get("andares"), dict) else {}
+            andares[ANDAR_PRINCIPAL] = papel
+            novos = {**self.usuarios, nome_u: {**u, "andares": andares}}
+            self._gravar_usuarios(novos)
+
+    def remover(self, usuario):
+        """Remove a conta, suas sessões e modos resposta. Protege o último admin."""
+        nome_u = _normalizar_usuario(usuario)
+        with self.trava:
+            if nome_u not in self.usuarios:
+                raise KeyError(usuario)
+            self._exige_nao_ultimo_admin(nome_u)
+            novos = {k: v for k, v in self.usuarios.items() if k != nome_u}
+            derrubadas = {k for k, v in self.sessoes.items() if v.get("usuario") == nome_u}
+            self._gravar_usuarios(novos)
+            if derrubadas:
+                self._derrubar_sessoes(derrubadas)
+            self.falhas.pop(nome_u, None)
+
+    def redefinir_senha(self, usuario):
+        """Gera nova senha provisória (trocar_senha=True) e derruba todas as sessões da conta."""
+        nome_u = _normalizar_usuario(usuario)
+        with self.trava:
+            if nome_u not in self.usuarios:
+                raise KeyError(usuario)
+        senha = secrets.token_urlsafe(12)
+        sal = secrets.token_bytes(16)
+        h = _hash(senha, sal)
+        with self.trava:
+            u = self.usuarios.get(nome_u)
+            if not u:
+                raise KeyError(usuario)
+            novos = {**self.usuarios, nome_u: {
+                **u, "sal": sal.hex(), "hash": h.hex(), "n": N, "r": R, "p": P, "trocar_senha": True,
+            }}
+            derrubadas = {k for k, v in self.sessoes.items() if v.get("usuario") == nome_u}
+            self._gravar_usuarios(novos)
+            if derrubadas:
+                self._derrubar_sessoes(derrubadas)
+            self.falhas.pop(nome_u, None)
+        return senha
+
+    def trocar_senha(self, token, atual, nova):
+        """Confere a senha atual no balde do login, grava a nova (trocar_senha=False) e derruba as outras sessões."""
+        usuario = self.sessao(token)
+        if not usuario:
+            raise PermissionError("entre de novo")
+        self.conferir(usuario, atual)
+        _validar_senha(nova)
+        sal = secrets.token_bytes(16)
+        h = _hash(nova, sal)
+        atual_sha = _sha(token)
+        with self.trava:
+            u = self.usuarios.get(usuario)
+            if not u or atual_sha not in self.sessoes:
+                raise PermissionError("entre de novo")
+            novos = {**self.usuarios, usuario: {
+                **u, "sal": sal.hex(), "hash": h.hex(), "n": N, "r": R, "p": P, "trocar_senha": False,
+            }}
+            outras = {k for k, v in self.sessoes.items() if v.get("usuario") == usuario and k != atual_sha}
+            self._gravar_usuarios(novos)
+            if outras:
+                self._derrubar_sessoes(outras)
+
+    def salvar_perfil(self, usuario, nome, avatar):
+        """Salva nome e avatar da conta e devolve o perfil atualizado."""
+        nome_limpo = _validar_nome(nome)
+        avatar_limpo = _validar_avatar(avatar)
+        nome_u = _normalizar_usuario(usuario)
+        with self.trava:
+            u = self.usuarios.get(nome_u)
+            if not u:
+                raise KeyError(usuario)
+            novos = {**self.usuarios, nome_u: {**u, "nome": nome_limpo, "avatar": avatar_limpo}}
+            self._gravar_usuarios(novos)
+        return self.perfil(nome_u)
 
     # --- login
     def conferir(self, usuario, senha):
         """Confere a senha no balde de tentativas do login, sem criar sessão. Devolve o nome normalizado ou levanta
         PermissionError (errar conta no mesmo balde: 8 erros travam também o login)."""
-        nome = (usuario or "").strip().lower()
+        nome = _normalizar_usuario(usuario)
         with self.trava:
             u = self.usuarios.get(nome)
             balde = nome if u else INEXISTENTES
@@ -228,21 +415,16 @@ class Acesso:
         return s["usuario"]
 
     def sair_todos(self, token, senha):
-        """"Sair de todos os aparelhos": confere a senha do usuário da sessão no balde do login e zera todas as sessões
-        e modos resposta (só existe uma conta). Devolve quantas sessões saíram; senão levanta PermissionError (sessão ou
+        """"Sair de todos os aparelhos": confere a senha do usuário da sessão no balde do login e derruba só as
+        sessões e modos resposta desse usuário. Devolve quantas sessões saíram; senão levanta PermissionError (sessão ou
         senha) ou NaoGravou (disco)."""
         usuario = self.sessao(token)
         if not usuario:
             raise PermissionError("entre de novo")
         self.conferir(usuario, senha)
         with self.trava:   # grava antes de trocar a memória: se o disco falhar, nada muda
-            n = len(self.sessoes)
-            try:
-                _gravar(self.arq_sessoes, {})
-            except OSError as x:
-                raise NaoGravou(type(x).__name__) from x
-            self.sessoes, self.modos = {}, {}
-        return n
+            derrubadas = {k for k, v in self.sessoes.items() if v.get("usuario") == usuario}
+            return self._derrubar_sessoes(derrubadas)
 
     def sair(self, token):
         with self.trava:
@@ -292,6 +474,56 @@ class Acesso:
     def fechar_modo(self, token):
         with self.trava:
             return bool(token) and self.modos.pop(_sha(token), None) is not None
+
+
+def _normalizar_usuario(usuario):
+    return usuario.strip().lower() if isinstance(usuario, str) else ""
+
+
+def _validar_senha(senha):
+    if not isinstance(senha, str) or len(senha) < SENHA_MIN or len(senha) > 256:
+        raise ValueError(f"a senha precisa ter pelo menos {SENHA_MIN} caracteres")
+
+
+def _validar_nome(nome):
+    if not isinstance(nome, str):
+        raise ValueError("nome inválido")
+    if any(unicodedata.category(c) in ("Cc", "Cf", "Cs") for c in nome):
+        raise ValueError("nome não pode conter caractere de controle")
+    limpo, cortado = ajustes.limpa_texto(nome, NOME_MAX)
+    limpo = limpo.strip()
+    if cortado or not limpo:
+        raise ValueError(f"nome: de 1 a {NOME_MAX} caracteres")
+    return limpo
+
+
+def _validar_avatar(avatar):
+    if not isinstance(avatar, dict) or set(avatar) != {"color", "eyes", "accessory"} \
+            or not all(isinstance(v, str) for v in avatar.values()) \
+            or avatar["color"] not in ajustes.CORES \
+            or avatar["eyes"] not in ajustes.OLHOS \
+            or avatar["accessory"] not in ajustes.ACESSORIOS:
+        raise ValueError("avatar: escolha cor, olhos e acessório da lista")
+    return {"color": avatar["color"], "eyes": avatar["eyes"], "accessory": avatar["accessory"]}
+
+
+def _avatar_se_valido(avatar):
+    try:
+        return _validar_avatar(avatar)
+    except ValueError:
+        return None
+
+
+def _papel_de(u, andar=ANDAR_PRINCIPAL):
+    if not u:
+        return None
+    if "andares" not in u:
+        return "admin" if andar == ANDAR_PRINCIPAL else None
+    andares = u["andares"]
+    if not isinstance(andares, dict):
+        return None
+    p = andares.get(andar)
+    return p if p in PAPEIS else None
 
 
 def _segundos(x):
