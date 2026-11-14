@@ -6,8 +6,7 @@ All notable changes to this project are listed here, newest first. The format fo
 
 ## 1.5.0 · 2026-11-14 · Floors and team
 
-Release [`v1.5.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.5.0). Commits: [`v1.4.0...v1.5.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.4.0...v1.5.0).
-<!-- PENDING (Helbert): once the video is attached to the release, change "Release [`v1.5.0`](...)." to "Release [`v1.5.0`](...), with the video of what is new attached." here and in CHANGELOG.pt-BR.md, as in commit 046b5fb for 1.4.0. -->
+Release [`v1.5.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.5.0), with the video of what is new attached. Commits: [`v1.4.0...v1.5.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.4.0...v1.5.0).
 
 ### Added
 - **Floors:** each agentes.chat workspace can become a floor of the building, with its own connection, teams, floor plan, social life and newspaper. Settings › Floors creates, renames and removes them (up to 6 extra, with the account password), and the elevator in the top bar switches floors without reloading. With no extra floors, everything stays as before. See [Floors](./README.md#floors-several-workspaces-in-one-building).
