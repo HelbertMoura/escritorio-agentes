@@ -3596,7 +3596,7 @@ class Pagina(BaseHTTPRequestHandler):
         if dados is False:
             return self._json(*erro(415, "formato", "Envie JSON (application/json)."))
         formatos = {"convidar": {"acao", "nome", "andares", "senha"}, "revogar": {"acao", "id"},
-                    "papel": {"acao", "usuario", "papel"}, "andares": {"acao", "usuario", "andares"},
+                    "papel": {"acao", "usuario", "papel", "senha"}, "andares": {"acao", "usuario", "andares", "senha"},
                     "remover": {"acao", "usuario", "senha"}}
         acao = dados.get("acao") if isinstance(dados, dict) else None
         textos_ok = lambda: all(isinstance(v, str) and len(v) <= 256 for k, v in dados.items() if k != "andares")
@@ -3626,8 +3626,8 @@ class Pagina(BaseHTTPRequestHandler):
             elif acao == "andares":
                 acesso.definir_andares(dados["usuario"], dados["andares"])
             else:
-                acesso.remover(dados["usuario"])
-                self.server.presenca.sair(dados["usuario"])   # some do mapa dos outros na hora
+                # some do mapa dos outros na hora, pelo nome normalizado ("Ana " e "ANA" são a conta "ana")
+                self.server.presenca.sair(acesso.remover(dados["usuario"]))
         except UltimoAdmin:
             return self._json(*erro(409, "ultimo_admin", "O escritório precisa de pelo menos uma pessoa que administra."))
         except ConvitesDemais as x:
@@ -3644,9 +3644,9 @@ class Pagina(BaseHTTPRequestHandler):
 
     def _post_sair_todos(self, rota):
         """"Sair de todos os aparelhos": Origin obrigatório e igual à BASE (sem a volta para o Referer), sessão, JSON
-        {"senha"} de até 1 KB. A senha conta no balde do login (8 erros em 15 min travam também o login). Zera todas as
-        sessões e modos resposta, desliga o aviso no celular de todos os aparelhos e apaga os dois cookies deste
-        navegador."""
+        {"senha"} de até 1 KB. A senha conta no balde do login (8 erros em 15 min travam também o login). Zera só as
+        sessões e modos resposta de quem pediu (admin ou membro) e apaga os dois cookies deste navegador. Só o admin
+        desliga também o aviso no celular de todos os aparelhos (a lista é do prédio)."""
         acesso, token = self.server.acesso, self._token()
         if self.headers.get("Origin") != BASE:
             log(evento="http", rota=rota[:40], resultado="origem_recusada")

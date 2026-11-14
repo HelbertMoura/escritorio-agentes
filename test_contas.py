@@ -280,6 +280,36 @@ class ContasUnidade(unittest.TestCase):
         with self.assertRaises(KeyError):
             self.a.remover("nao_existe")
 
+    def test_remover_derruba_as_sessoes_antes_de_gravar_a_conta(self):
+        """Se a gravação da conta falhar no remover, o cookie dela já não vale (falha fechada)."""
+        self.criar_dono()
+        tok_ana = self.conta("ana")
+        antes = acesso._gravar
+
+        def falha_nos_usuarios(caminho, dados):
+            if caminho == self.a.arq_usuarios:
+                raise OSError("disco cheio")
+            antes(caminho, dados)
+
+        acesso._gravar = falha_nos_usuarios
+        self.addCleanup(setattr, acesso, "_gravar", antes)
+        with self.assertRaises(NaoGravou):
+            self.a.remover("ana")
+        self.assertIn("ana", self.a.usuarios)
+        self.assertIsNone(self.a.sessao(tok_ana))
+
+    def test_conta_nova_com_o_nome_de_uma_antiga_nao_herda_sessoes(self):
+        """Convidada de novo com o mesmo usuário, a pessoa não ganha de volta o cookie de um aparelho perdido."""
+        self.criar_dono()
+        tok_velho = self.conta("ana")
+        self.a.remover("ana")
+        # uma sessão velha que sobrou (sessoes.json restaurado de backup, por exemplo)
+        self.a.sessoes[acesso._sha(tok_velho)] = {"usuario": "ana", "expira": time.time() + 3600}
+        tok_novo = self.conta("ana")
+        self.assertIsNone(self.a.sessao(tok_velho))
+        self.assertEqual(self.a.sessao(tok_novo), "ana")
+        self.assertIsNone(Acesso(self.pasta).sessao(tok_velho))   # nem no disco
+
     def test_falha_no_disco_nao_altera_memoria(self):
         self.criar_dono()
         antes = acesso._gravar

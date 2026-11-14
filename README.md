@@ -187,6 +187,14 @@ In **Settings › Floors**, whoever runs the office creates a floor from a name 
 
 The list lives in `dados/andares.json` and each floor's data in `dados/andares/<id>/` (`oauth.json`, `times.json`, `equipe.json`, `planta.json`, `placar.json` and `jornal.json`). Branding, office hours, weather, holidays, visits and phone alerts belong to the whole building. Removing a floor disconnects its token, but the folder stays on the server: delete `dados/andares/<id>/` by hand if you no longer need it. An unreadable `andares.json` stops the service from starting, so no floor disappears silently.
 
+### Team
+
+Besides whoever runs the office, it can have member accounts for the rest of the team. In **Settings › Members** (Membros), an admin types the person's name, ticks the floors they will see and confirms the account password. The office shows the invitation link (`/convite#...`) only once: send it to the person over a channel you trust. The invitation is personal, creates a single account, lasts 48 hours and can be revoked while it waits (up to 20 pending). Whoever opens the link picks a username, a password (at least 10 characters), a name and a character, and is signed in. In the same tab, an admin changes each account's role (admin or member) and the floors it sees, and removes accounts. Each of these changes asks for the admin's own password. Removing signs the person out everywhere at once. The office never runs out of admins.
+
+A member sees the office on the floors they were given, the social life, the newspaper and what is new, can turn on phone alerts and changes their own name and character in **Settings › My profile** (Meu perfil). They cannot read the agents' conversations or reply as them, and cannot touch branding, floor plan, teams, weather, floors, members or visits. A member's **Sign out of all devices** only ends their own sessions.
+
+On the map, each signed-in person shows up with their own name and character, and each room has a text chat for whoever is in it. The chat lives only in the server's memory: each room keeps the last 50 messages for up to 10 minutes, newcomers do not see what was said before, and nothing goes to disk or to the log. Restarting the office wipes it all. Outside visitors do not see the team. Details in [where each piece of data goes](./docs/visitas-privadas-plano.md#equipe-presença-no-mapa-e-chat-por-sala) (in Portuguese).
+
 ### With self-hosted agentes.chat
 
 If your team runs the [self-hosted agentes.chat](https://github.com/agentes-chat/agentes-chat/blob/main/SELF_HOSTING.md), the office reads from it instead of the cloud. Only one variable changes: **`AGENTES_URL`**, the address you open in the browser (the install's `PUBLIC_URL`).

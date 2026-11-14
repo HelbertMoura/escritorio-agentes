@@ -226,6 +226,12 @@ class Acesso:
         self.modos = {k: v for k, v in self.modos.items() if k in novas}
         return len(derrubadas)
 
+    def _derrubar_sessoes_de(self, nome_u):
+        """Derruba as sessões (e modos resposta) com esse nome de usuário, chamar com a trava. Também serve para a conta
+        nova de um nome que já existiu: o cookie de um aparelho perdido não volta a valer."""
+        derrubadas = {k for k, v in self.sessoes.items() if v.get("usuario") == nome_u}
+        return self._derrubar_sessoes(derrubadas) if derrubadas else 0
+
     def _exige_nao_ultimo_admin(self, usuario):
         if _papel_de(self.usuarios.get(usuario), ANDAR_PRINCIPAL) == "admin":
             admins = sum(1 for u in self.usuarios.values() if _papel_de(u, ANDAR_PRINCIPAL) == "admin")
@@ -237,6 +243,7 @@ class Acesso:
         if not USUARIO_OK.fullmatch(usuario):
             raise ValueError("usuário: 3 a 32 caracteres, letras minúsculas, números, ponto, hífen ou sublinhado")
         _validar_senha(senha)
+        self._derrubar_sessoes_de(usuario)
         sal = secrets.token_bytes(16)
         novos = {**self.usuarios, usuario: {
             "sal": sal.hex(), "hash": _hash(senha, sal).hex(), "n": N, "r": R, "p": P,
@@ -295,18 +302,17 @@ class Acesso:
             self._gravar_usuarios(novos)
 
     def remover(self, usuario):
-        """Remove a conta, suas sessões e modos resposta. Protege o último admin."""
+        """Remove a conta, suas sessões e modos resposta. Protege o último admin. Devolve o nome normalizado da conta.
+        As sessões caem antes da conta sair do disco: se a gravação da conta falhar, nenhum cookie dela fica valendo."""
         nome_u = _normalizar_usuario(usuario)
         with self.trava:
             if nome_u not in self.usuarios:
                 raise KeyError(usuario)
             self._exige_nao_ultimo_admin(nome_u)
-            novos = {k: v for k, v in self.usuarios.items() if k != nome_u}
-            derrubadas = {k for k, v in self.sessoes.items() if v.get("usuario") == nome_u}
-            self._gravar_usuarios(novos)
-            if derrubadas:
-                self._derrubar_sessoes(derrubadas)
+            self._derrubar_sessoes_de(nome_u)
+            self._gravar_usuarios({k: v for k, v in self.usuarios.items() if k != nome_u})
             self.falhas.pop(nome_u, None)
+        return nome_u
 
     def salvar_perfil(self, usuario, nome, avatar):
         """Salva nome e avatar da conta e devolve o perfil atualizado."""
@@ -389,6 +395,7 @@ class Acesso:
             id_convite, c = self._achar_convite(token, agora)
             if nome_u in self.usuarios:
                 raise ContaExiste("esse usuário já existe; escolha outro")
+            self._derrubar_sessoes_de(nome_u)   # sessões de uma conta antiga com o mesmo nome não passam para a nova
             self._gravar_convites({k: v for k, v in self.convites.items() if k != id_convite})
             self._gravar_usuarios({**self.usuarios, nome_u: {
                 "sal": sal.hex(), "hash": h.hex(), "n": N, "r": R, "p": P, "criado": int(agora), "nome": nome_limpo,
