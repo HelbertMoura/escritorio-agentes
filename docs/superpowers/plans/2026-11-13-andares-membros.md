@@ -4,14 +4,18 @@ Estado em 13/11/2026. Pedidos do Helbert e da equipe: (A) puxar os times dos set
 
 ## Situação
 - **A: pronto no escritório** (botão "Puxar os setores do agentes.chat" em Configurações › Times; CHANGELOG "Não lançado"). Depende do agentes.chat mandar `department` e `appearance` no `list_agents`: PR https://github.com/agentes-chat/agentes-chat/pull/406 (commit f1b39c8c3, 27 testes OK), aguardando os mantenedores. Sem o servidor novo, a tela avisa para atualizar.
-- **B e C: desenho aprovado pelo Arquiteto** (texto abaixo). Nada implementado ainda.
+- **C: implementado** (andares.py, elevador, aba Andares; README "Andares" e CHANGELOG "Não lançado").
+- **B1: implementado** (contas de membro por convite, guarda de papéis, aba Membros, Meu perfil; commits d49d94e e 08f19c4).
+- **B2: back pronto** (presenca.py, `/api/presenca`, `/api/ao-vivo`, `/api/sala/enviar`; commit 08f19c4). **Front em andamento** (Tron: mapa; Flynn: painel do chat). Doc de privacidade em docs/visitas-privadas-plano.md, seção "Equipe: presença no mapa e chat por sala"; README "Equipe" e CHANGELOG "Não lançado" descrevem o contrato.
+- Atualizado em 14/11/2026.
 
 ## Decisões do Helbert (13/11)
 - B: convite pessoal que vira conta fixa, com nome e boneco próprios; presença no mapa e chat de texto por sala. Voz e vídeo na fase 2.
 - C: cada workspace do agentes.chat é um andar do mesmo prédio, com a sua conexão e os seus times.
+- Decisão 1 (resolvida): o membro **não** lê as conversas dos agentes (`/api/estado` sem conversas e sem modo resposta; `GET /api/conversa` barrado pela guarda).
 
 ## Pendente de decisão do Helbert
-1. O membro da equipe pode ler as conversas dos agentes? Proposta: não.
+1. ~~O membro da equipe pode ler as conversas dos agentes?~~ Resolvida: não (ver acima).
 2. De qual agentes.chat o Escritório lê, agora que a self-host foi removida (13/11): nuvem oficial ou self-host reinstalada?
 3. Onde o Escritório volta a ficar no ar (o /opt/escritorio também saiu da VPS em 13/11): VPS ou só local por enquanto.
 

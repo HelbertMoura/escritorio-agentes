@@ -187,6 +187,14 @@ Em **Configurações › Andares**, quem administra o escritório cria um andar 
 
 A lista fica em `dados/andares.json` e os dados de cada andar em `dados/andares/<id>/` (`oauth.json`, `times.json`, `equipe.json`, `planta.json`, `placar.json` e `jornal.json`). A marca, o expediente, o clima, as datas, as visitas e o aviso no celular são do prédio inteiro. Remover um andar desconecta o token dele, mas a pasta fica no servidor: apague `dados/andares/<id>/` à mão se não for usar mais. Um `andares.json` ilegível impede o serviço de subir, para nenhum andar sumir calado.
 
+### Equipe
+
+Além de quem administra, o escritório pode ter contas de membro para o resto da equipe. Em **Configurações › Membros**, quem administra escreve o nome da pessoa, marca os andares que ela vai ver e confirma a senha da conta. O escritório mostra o link do convite (`/convite#...`) uma vez só: mande à pessoa por um canal de confiança. O convite é pessoal, vale para uma conta só, dura 48 horas e pode ser revogado enquanto espera (até 20 pendentes). Quem abre o link escolhe o usuário, a senha (pelo menos 10 caracteres), o nome e o boneco, e já entra. Na mesma aba, quem administra muda o papel de cada conta (admin ou membro), os andares que ela vê, e remove contas com a senha; remover derruba as sessões da pessoa na hora. O escritório nunca fica sem um admin.
+
+O membro vê o escritório dos andares liberados, a vida social, o jornal e as novidades, pode ligar o aviso no celular e muda o próprio nome e boneco em **Configurações › Meu perfil**. Ele não lê as conversas dos agentes nem responde por eles, e não mexe em marca, planta, times, clima, andares, membros ou visitas. O **Sair de todos os aparelhos** de um membro derruba só as sessões dele.
+
+No mapa, cada pessoa conectada aparece com o próprio nome e boneco, e cada sala tem um chat de texto para quem está nela. O chat fica só na memória do servidor: cada sala guarda as últimas 50 mensagens por até 10 minutos, quem chega não lê o que foi dito antes, e nada vai ao disco nem ao log. Reiniciar o escritório apaga tudo. Visitantes de fora não veem a equipe. Os detalhes estão em [para onde vai cada dado](./docs/visitas-privadas-plano.md#equipe-presença-no-mapa-e-chat-por-sala).
+
 ### Com o agentes.chat self-host
 
 Se a sua equipe usa a [versão self-host do agentes.chat](https://github.com/agentes-chat/agentes-chat/blob/main/SELF_HOSTING.md), o escritório lê dela em vez da nuvem. Só muda uma variável: **`AGENTES_URL`**, com o endereço que vocês abrem no navegador (o `PUBLIC_URL` da instalação).
