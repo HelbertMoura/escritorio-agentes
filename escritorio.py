@@ -50,7 +50,7 @@ import vapid  # noqa: E402
 from ajustes import (ACESSORIOS, CLIMA_BYTES, CORES, EQUIPE_BYTES, FESTAS_BYTES, HANDLE_OK, ICONES_OK, OLHOS,  # noqa: E402
                      ROTULO_OK, limpa_texto)
 from avisos import (CORPO_MAX as PUSH_CORPO, PUSH_BYTES, Avisos, EndpointInvalido, validar_arquivo as validar_push,  # noqa: E402
-                    validar_assinatura, validar_saida)
+                    validar_assinatura, validar_preferencia, validar_saida)
 from jornal import JORNAL_BYTES, Jornal, validar as validar_jornal  # noqa: E402
 from novidades import Novidades  # noqa: E402
 from planta import PLANTA_BYTES, Planta, validar_planta  # noqa: E402
@@ -171,7 +171,8 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "ajustes.js": "text/javascript; charset=utf-8", "assistente.js": "text/javascript; charset=utf-8",
     "tv.js": "text/javascript; charset=utf-8", "sw.js": "text/javascript; charset=utf-8",
     "jornal.js": "text/javascript; charset=utf-8", "timelapse.js": "text/javascript; charset=utf-8",
-    "avisar.js": "text/javascript; charset=utf-8", "novidades.js": "text/javascript; charset=utf-8",
+    "avisar.js": "text/javascript; charset=utf-8", "resposta_rapida.js": "text/javascript; charset=utf-8",
+    "novidades.js": "text/javascript; charset=utf-8",
     "manifest.webmanifest": "application/manifest+json", "icone-180.png": "image/png", "icone-192.png": "image/png",
     "icone-512.png": "image/png", "icone-mascara-512.png": "image/png",
 }
@@ -3156,8 +3157,7 @@ class Pagina(BaseHTTPRequestHandler):
         if rota == "/api/perfil":   # o próprio perfil (nome e boneco), qualquer papel; "aparencia": o boneco que os outros veem
             if self._previa():
                 return self._json(*erro(404, "previa", "Na prévia não há conta."))
-            perfil = self.server.acesso.perfil(usuario)
-            return self._json(200, {**perfil, "aparencia": aparencia_da_conta(usuario, perfil)})
+            return self._json(200, self._perfil_publico(usuario))
         if rota == "/api/membros":   # a aba Membros (a guarda já deixou só admin): contas e convites, sem segredo
             if self._previa():
                 return self._json(*erro(404, "previa", "Na prévia não há contas."))
@@ -3436,7 +3436,7 @@ class Pagina(BaseHTTPRequestHandler):
             return self._json(*erro(400, "endpoint_invalido", "Esse serviço de aviso não é aceito."))
         except (ValueError, TypeError, RecursionError):   # tamanho, UTF-8, JSON, NaN ou formato; sem ecoar nada
             return self._json(*erro(400, "pedido", "Pedido inválido."))
-        return self._json(*avisos.assinar(endpoint, time.time()))
+        return self._json(*avisos.assinar(endpoint, time.time(), None if self._previa() else self._usuario()))
 
     def _post_andares(self, rota):
         """Criar, renomear e remover andares: Origin igual à BASE, sessão de admin do prédio e JSON exato de até 1 KB.
@@ -3592,8 +3592,15 @@ class Pagina(BaseHTTPRequestHandler):
         except (ValueError, TypeError) as x:
             return self._json(*erro(400, "pedido", str(x)[:120]))
 
+    def _perfil_publico(self, usuario):
+        """GET e POST /api/perfil: o perfil, o boneco efetivo e o "Não perturbe" do aviso no celular."""
+        perfil = self.server.acesso.perfil(usuario)
+        return {**perfil, "aparencia": aparencia_da_conta(usuario, perfil),
+                "avisos": self.server.acesso.avisos_de(usuario) or {"modo": "sempre"}}
+
     def _post_perfil(self, rota):
-        """O próprio nome e boneco (qualquer papel): Origin igual à BASE, sessão e JSON {nome, avatar} de até 1 KB."""
+        """O próprio nome e boneco, ou o "Não perturbe" (qualquer papel): Origin igual à BASE, sessão e JSON {nome, avatar}
+        ou {avisos} de até 1 KB. "Avisar sempre" é o padrão e não fica gravado."""
         if self.headers.get("Origin") != BASE:
             log(evento="http", rota=rota[:40], resultado="origem_recusada")
             return self._json(*erro(403, "origem", "Origem não permitida."))
@@ -3605,11 +3612,15 @@ class Pagina(BaseHTTPRequestHandler):
         dados = self._json_pedido(1024)
         if dados is False:
             return self._json(*erro(415, "formato", "Envie JSON (application/json)."))
-        if dados is None or set(dados) != {"nome", "avatar"}:
+        if dados is None or set(dados) not in ({"nome", "avatar"}, {"avisos"}):
             return self._json(*erro(400, "pedido", "Pedido inválido."))
         try:
-            perfil = self.server.acesso.salvar_perfil(usuario, dados["nome"], dados["avatar"])
-            return self._json(200, {**perfil, "aparencia": aparencia_da_conta(usuario, perfil)})
+            if "avisos" in dados:
+                pref = validar_preferencia(dados["avisos"])
+                self.server.acesso.salvar_avisos(usuario, None if pref["modo"] == "sempre" else pref)
+            else:
+                self.server.acesso.salvar_perfil(usuario, dados["nome"], dados["avatar"])
+            return self._json(200, self._perfil_publico(usuario))
         except ValueError as x:
             return self._json(*erro(400, "pedido", str(x)[:160]))
         except NaoGravou as x:
@@ -3954,7 +3965,8 @@ def main():
     leitor.jornal = Jornal(log, FUSO, lambda dados: gravar(ARQ_JORNAL, dados), ler_jornal(),
                            lambda: (clima.foto() or {}).get("tipo"), lambda: config_publica()["expediente"])
     leitor.avisos = criar_avisos()   # aviso no celular: a thread dele fala com os serviços de push, nunca com o agentes.chat
-    if leitor.avisos:
+    if leitor.avisos:   # o "Não perturbe" de cada conta e o expediente do escritório (o do Personalizar, lido na hora)
+        leitor.avisos.preferencia, leitor.avisos.expediente = contas.avisos_de, lambda: config_publica()["expediente"]
         leitor.avisos.start()
     leitor.start()
     srv = Servidor((BIND, PORTA), Pagina)  # 127.0.0.1: a Tailscale (serve) publica só na rede privada

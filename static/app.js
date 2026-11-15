@@ -1394,7 +1394,7 @@ function montarConvAberta(it) {
 }
 function remontarConvAberta(it) { // o foco que estava dentro da conversa volta para a peça equivalente (ou para a conversa)
   const sec = $("conv-aberta"), ativo = sec.contains(document.activeElement) ? document.activeElement : null;
-  const classe = ativo && ["cp-atualizar", "cp-externo", "cp-voltar", "conversa-lista", "cp-texto", "cp-enviar"].find(c => ativo.classList.contains(c));
+  const classe = ativo && ["cp-atualizar", "cp-externo", "cp-voltar", "conversa-lista", "cp-texto", "cp-enviar", "cp-rapida"].find(c => ativo.classList.contains(c));
   const ta = sec.querySelector(".cp-texto"), rascunho = ta ? ta.value : "";   // o texto que estava sendo escrito não se perde
   montarConvAberta(it);
   if (rascunho) { sec.querySelector(".cp-texto").value = rascunho; contarResposta(); }
@@ -1555,7 +1555,10 @@ function caixaResposta(it) {
     if (ev.ctrlKey || ev.metaKey || !toqueConv()) { ev.preventDefault(); enviarResposta(); }   // no toque, Enter quebra a linha
   });
   env.addEventListener("click", enviarResposta);
-  c.append(envio, aviso, r, linha, motivo);
+  const rapidas = RespostaRapida.montar(ta, campo => {   // só preenche: o envio segue pelo Enviar
+    contarResposta(); crescerTexto(campo); campo.focus(); campo.setSelectionRange(campo.value.length, campo.value.length);
+  });
+  c.append(envio, aviso, rapidas, r, linha, motivo);
   return c;
 }
 const toqueConv = () => matchMedia("(pointer: coarse)").matches;
@@ -1585,7 +1588,7 @@ function pintarCaixa(it) {
   if (!enviando) { ta.disabled = !pode; env.disabled = !pode; }
   ta.placeholder = pode ? `Escreva para ${nomeConv(it)}…` : "Indisponível nesta conversa";   // o motivo inteiro fica logo abaixo
   textoSe(sec.querySelector(".cp-motivo"), motivo); sec.querySelector(".cp-motivo").hidden = pode;
-  sec.querySelector(".cp-aviso-envio").hidden = sec.querySelector(".cp-linha").hidden = !pode;
+  sec.querySelector(".cp-aviso-envio").hidden = sec.querySelector(".cp-linha").hidden = sec.querySelector(".cp-rapidas").hidden = !pode;
   textoSe(dica, toqueConv() ? "Toque em Enviar para mandar" : "Enter envia · Shift+Enter quebra a linha");
   contarResposta();
   if (ext) textoSe(ext, pode ? "Mandar imagem ou arquivo no agentes.chat" : it.status === "waiting_approval" ? "Revisar no agentes.chat" : it.status === "terminou" ? "Abrir no agentes.chat" : "Responder no agentes.chat");
