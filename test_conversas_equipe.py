@@ -398,6 +398,16 @@ class Anexos(Base):
         self.eq.liberar(token)
         self.assertFalse(os.path.exists(self.eq.temporario(token)))
 
+    def test_canal_recusado_nao_perde_o_arquivo(self):
+        dm = self.eq.abrir_dm("bia", "caio")
+        token = self.eq.reservar("ana", 2)
+        self.escreve(self.eq, token, b"ok")
+        with self.assertRaises(SemAcesso):
+            self.eq.anexar(token, "ana", "Ana", dm, "x.txt", "text/plain", 2, "00" * 32)   # a DM não é da ana
+        self.assertTrue(os.path.exists(self.eq.temporario(token)))
+        self.assertFalse(os.path.exists(os.path.join(self.eq.pasta_anexos, token)))
+        self.assertEqual(self.eq.anexar(token, "ana", "Ana", "geral", "x.txt", "text/plain", 2, "00" * 32)["anexo"]["tamanho"], 2)
+
     def test_reserva_vence(self):
         eq = self.abrir("vence", cota_anexos=10)
         eq.reservar("ana", 10)

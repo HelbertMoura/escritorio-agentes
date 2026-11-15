@@ -369,6 +369,9 @@ def migrar(dados, *, times, org, desfazer=False, relogio=time.time):
      "contas": {login: papel no andar novo}, "pendentes": [logins], "diario"}.
     Recusa com MigracaoRecusada (ServicoRodando se o serviço estiver no ar); erro de disco no meio sobe como OSError,
     depois de desfazer o que já tinha feito."""
+    if hasattr(os, "geteuid") and os.path.isdir(dados) and os.stat(dados).st_uid != os.geteuid():
+        raise MigracaoRecusada("rode como o dono da pasta de dados, o usuário do serviço (sudo -u escritorio ...); "
+                               "como outro usuário, os arquivos novos ficariam fora do alcance do serviço")
     fd = travar(dados)
     try:
         caminho = os.path.join(dados, ARQ_DIARIO)

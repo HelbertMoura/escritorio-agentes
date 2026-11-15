@@ -295,9 +295,10 @@ class Equipe:
             agora = self.relogio()
             with self.con:
                 id_m = self._inserir(self._escrever_canal(canal, usuario), usuario, nome, limpo, agora)
+            msg = self._mensagens("m.id = ?", (id_m,), usuario)[0]
             if self._uso_banco() > self.teto_banco:
                 self._cortar_pelo_teto()
-            return self._mensagens("m.id = ?", (id_m,), usuario)[0]
+            return msg
 
     def historico(self, usuario, canal, antes=None, limite=LIMITE_PADRAO):
         """As mensagens mais novas do canal (antes do id dado), em ordem."""
@@ -610,14 +611,15 @@ class Equipe:
             if os.path.getsize(temporario) != tamanho:
                 raise ValueError("tamanho inválido")
             final = os.path.join(self.pasta_anexos, token)
-            os.replace(temporario, final)
             try:
-                with self.con:
+                with self.con:   # o arquivo vai para o lugar por último: canal recusado ou banco com erro não o perdem
                     id_m = self._inserir(self._escrever_canal(canal, usuario), usuario, nome, limpo, agora)
                     self.con.execute("INSERT INTO anexo (mensagem, token, nome, tipo, tamanho, sha256) VALUES (?, ?, ?, ?, ?, ?)",
                                      (id_m, token, arquivo, tipo, tamanho, sha256))
+                    os.replace(temporario, final)
             except BaseException:
-                os.unlink(final)
+                if os.path.exists(final):   # o commit falhou depois de mover: sem linha, sem arquivo
+                    os.unlink(final)
                 raise
             del self.reservas[token]
             return self._mensagens("m.id = ?", (id_m,), usuario)[0]

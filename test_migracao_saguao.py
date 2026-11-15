@@ -317,6 +317,17 @@ class Recusas(Base):
                 self.assertEqual(foto(self.dados, self.codigo), antes)
                 self.assertFalse(os.path.exists(os.path.join(self.dados, ms.ARQ_DIARIO)))
 
+    def test_outro_usuario_que_nao_o_dono_dos_dados(self):
+        """Rodar como root (sudo sem -u) deixaria arquivos que o serviço não grava mais."""
+        dono = os.stat(self.dados).st_uid
+        with mock.patch.object(ms.os, "geteuid", create=True, return_value=dono + 1):
+            with self.assertRaises(MigracaoRecusada) as cx:
+                self.migrar()
+        self.assertIn("dono", str(cx.exception))
+        self.assertFalse(os.path.exists(os.path.join(self.dados, ms.ARQ_TRAVA)))   # recusou antes de criar a trava
+        with mock.patch.object(ms.os, "geteuid", create=True, return_value=dono):
+            self.assertEqual(self.migrar()["resultado"], "migrado")
+
     def test_predio_cheio(self):
         lista = [{"id": f"{i:08x}", "nome": f"E{i}", "org": f"{i:08x}-bbbb-cccc-dddd-eeeeeeeeeeee"}
                  for i in range(andares.MAX_EXTRAS)]
