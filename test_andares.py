@@ -1,3 +1,4 @@
+import atexit
 import json
 import os
 import shutil
@@ -11,6 +12,8 @@ import urllib.parse
 import urllib.request
 
 PASTA = tempfile.mkdtemp(prefix="escritorio-teste-andares-")
+# no fim do processo, e não do módulo: rodando a suíte inteira, ela pode ser o ESCRITORIO_DADOS dos módulos seguintes
+atexit.register(shutil.rmtree, PASTA, ignore_errors=True)
 os.environ.setdefault("ESCRITORIO_DADOS", PASTA)   # rodando junto com o test_escritorio, vale a pasta dele
 if "ESCRITORIO_TIMES" not in os.environ:
     os.environ["ESCRITORIO_TIMES"] = os.path.join(PASTA, "times.json")
@@ -80,6 +83,34 @@ class Registro(unittest.TestCase):
                 f.write(conteudo)
             with self.assertRaises(andares.AndaresIlegiveis, msg=conteudo):
                 andares.Andares(self.dados, e.ORG)
+
+    def test_v2_do_saguao(self):
+        """O v2 (gravado pela migração): o térreo é o saguão, e a org do principal pode ser a de um andar extra."""
+        v2 = {"v": 2, "terreo": "saguao", "andares": [{"id": "aaaaaaaa", "nome": "Dev Maniac's", "org": e.ORG}]}
+        with open(os.path.join(self.dados, andares.ARQ), "w", encoding="utf-8") as f:
+            json.dump(v2, f)
+        r = andares.Andares(self.dados, e.ORG)
+        self.assertTrue(r.saguao)
+        self.assertEqual(r.lista, v2["andares"])
+        b = r.criar("B", ORG_B)
+        with self.assertRaisesRegex(ValueError, "já é um andar"):
+            r.criar("De novo", e.ORG)
+        with open(os.path.join(self.dados, andares.ARQ), encoding="utf-8") as f:
+            self.assertEqual(json.load(f), {**v2, "andares": [*v2["andares"], b]})   # grava o v2 que leu
+        self.assertFalse(andares.Andares(tempfile.mkdtemp(dir=self.dados), e.ORG).saguao)   # sem arquivo: clássico
+        for ruim in ({**v2, "terreo": "outro"}, {"v": 2, "andares": []}, {**v2, "extra": 1},
+                     {"v": 1, "terreo": "saguao", "andares": []}):
+            with open(os.path.join(self.dados, andares.ARQ), "w", encoding="utf-8") as f:
+                json.dump(ruim, f)
+            with self.assertRaises(andares.AndaresIlegiveis, msg=ruim):
+                andares.Andares(self.dados, e.ORG)
+
+    def test_v1_continua_classico(self):
+        r = andares.Andares(self.dados, e.ORG)
+        r.criar("B", ORG_B)
+        self.assertFalse(andares.Andares(self.dados, e.ORG).saguao)
+        with open(os.path.join(self.dados, andares.ARQ), encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["v"], 1)
 
     def test_pasta_so_sai_do_id(self):
         for ruim in ("../x", "AAAAAAAA", "aaaaaaa", "aaaaaaaa/..", None):
