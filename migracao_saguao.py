@@ -132,7 +132,7 @@ def _ler_v2(dados):
         return None
     try:
         if bruto.get("terreo") != "saguao" or not isinstance(bruto.get("andares"), list) \
-                or len(bruto["andares"]) > andares.MAX_EXTRAS + 1:
+                or len(bruto["andares"]) > andares.MAX_EXTRAS:   # o teto do v2 é o mesmo do v1 (o andares.py do Neo)
             raise ValueError("formato")
         lista, ids, orgs = [], set(), set()
         for a in bruto["andares"]:
