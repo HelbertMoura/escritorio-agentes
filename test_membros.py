@@ -49,11 +49,15 @@ class Membros(unittest.TestCase):
             def conversas_do_dia(self):
                 return {"por_id": {}, "mudou": {}}
 
-        class Avisos:   # o push do prédio: conta quantas vezes zerou a lista de aparelhos
-            zerou = 0
+        class Avisos:   # o push do prédio: anota o que apagou da lista de aparelhos
+            def __init__(self):
+                self.apagou = []
 
-            def limpar(self):
-                Avisos.zerou += 1
+            def limpar(self, conta=None):
+                self.apagou.append(("limpar", conta))
+
+            def esquecer(self, conta):
+                self.apagou.append(("esquecer", conta))
 
         cls.Avisos = Avisos
         cls.srv = e.Servidor(("127.0.0.1", 0), e.Pagina)
@@ -361,12 +365,20 @@ class Membros(unittest.TestCase):
         ana = self.membro("ana")
         self.srv.avisos = self.Avisos()
         self.addCleanup(delattr, self.srv, "avisos")
-        antes = self.Avisos.zerou
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(self.post("/api/sair-todos", {"senha": SENHA}, ana)[0], 200)
         self.assertEqual(self.get("/api/estado", ana)[0], 401)
         self.assertEqual(self.get("/api/estado", self.dono)[0], 200)
-        self.assertEqual(self.Avisos.zerou, antes)   # a lista de aparelhos do prédio fica
+        self.assertEqual(self.srv.avisos.apagou, [("limpar", "ana")])   # só os aparelhos que a Ana assinou
+
+    def test_remover_conta_apaga_os_aparelhos_dela(self):
+        self.membro("ana")
+        self.srv.avisos = self.Avisos()
+        self.addCleanup(delattr, self.srv, "avisos")
+        with contextlib.redirect_stdout(io.StringIO()):
+            st, _, _ = self.post("/api/membros", {"acao": "remover", "usuario": " ANA ", "senha": SENHA_DONO}, self.dono)
+        self.assertEqual(st, 200)
+        self.assertEqual(self.srv.avisos.apagou, [("esquecer", "ana")])   # pelo nome normalizado da conta
 
 
 if __name__ == "__main__":

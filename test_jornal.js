@@ -17,6 +17,8 @@ const F = {
   aprovacoes: par("Aprovações"), respostas: par("Perguntas"), minutos: par("Tempo"), ringue: par("Ringue"),
   chuva: ["Chuva", "{qtd}"], sol: ["Sol", "{qtd}"], neve: ["Neve", "{qtd}"], variado: ["Tempo variado", "{lista}"],
   agito: ["Agito", "{lista}"], paz: ["Paz", "Nada."],
+  extra: ["Hora extra", "{nome} fez {qtd} de hora extra"], extraVarios: "{qtd} ficaram depois do expediente",
+  extraQuem: "Quem mais ficou: {nome}, cerca de {qtd}.",   // as de verdade (vida.js): o teste confere o texto montado
 };
 
 // DOM mínimo: elementos com filhos e texto, e as três peças da tela do jornal
@@ -67,16 +69,19 @@ const notas = pecas => achar(pecas.jornal, e => e.className === "jn-nota").map(e
     assert.equal(cabecalho(pecas), "Minha empresa · Marketing");
   }
 
-  // andar sem conexão: o aviso diz por que o jornal não conta nada (a edição que houver continua embaixo)
-  for (const conexao of ["sem_conexao", "recusada", "outra_org", "carregando"]) {
+  // o aviso diz por que o jornal não conta nada, conforme a leitura do andar (a edição que houver continua embaixo)
+  const SEM = "Este andar não está conectado: o jornal só conta o trabalho que o escritório lê do agentes.chat.";
+  const PROBLEMA = "A leitura do agentes.chat está com problema agora: o jornal pode atrasar.";
+  const avisos = { sem_conexao: SEM, recusada: SEM, outra_org: "Este andar está ligado a outro workspace do agentes.chat.", pausa: PROBLEMA, falha: PROBLEMA };
+  for (const [conexao, texto] of Object.entries(avisos)) {
     const { pecas } = await abrir({ conexao });
     assert.equal(pecas["jornal-aviso"].hidden, false, conexao);
-    assert.equal(pecas["jornal-aviso"].textContent, "Este andar não está conectado: o jornal só conta o trabalho que o escritório lê do agentes.chat.");
+    assert.equal(pecas["jornal-aviso"].textContent, texto, conexao);
     assert.equal(pecas.jornal.hidden, false);
   }
-  {
-    const { pecas } = await abrir({});
-    assert.equal(pecas["jornal-aviso"].hidden, true);   // conectado: sem aviso
+  for (const conexao of [undefined, "carregando"]) {   // conectado (o padrão do teste) e carregando: sem aviso
+    const { pecas } = await abrir(conexao ? { conexao } : {});
+    assert.equal(pecas["jornal-aviso"].hidden, true, conexao);
   }
 
   // conectado, semana sem ninguém trabalhando (só o clima anotado): uma linha no lugar da tabela vazia
@@ -91,14 +96,14 @@ const notas = pecas => achar(pecas.jornal, e => e.className === "jn-nota").map(e
     assert.ok(!textos(pecas.jornal).includes("Ainda sem atividade neste andar nesta semana."));
   }
 
-  // hora extra: um agente diz quanto; vários, quantos viraram a noite (e quem ficou mais)
+  // hora extra: um agente diz quanto; vários, quantos ficaram depois do expediente (e quem ficou mais)
   {
     const { pecas } = await abrir({ semana: semana([agente("a1", 120), agente("a2")], DIA) });
     assert.ok(notas(pecas).includes("Hora extra | Atlas fez 2 h de hora extra"), notas(pecas).join("\n"));
   }
   {
     const { pecas } = await abrir({ semana: semana([agente("a1", 30), agente("a2", 95), agente("a3", 5)], DIA) });
-    assert.ok(notas(pecas).includes("Hora extra | 3 agentes viraram a noite | Quem mais ficou: Bento, cerca de 1 h 40."), notas(pecas).join("\n"));
+    assert.ok(notas(pecas).includes("Hora extra | 3 agentes ficaram depois do expediente | Quem mais ficou: Bento, cerca de 1 h 40."), notas(pecas).join("\n"));
   }
   {
     const { pecas } = await abrir({ semana: semana([agente("a1"), agente("a2")], DIA) });

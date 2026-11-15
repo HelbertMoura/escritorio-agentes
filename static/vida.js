@@ -128,6 +128,10 @@ const Vida = (() => {
       variado: ["Tempo variado", "Teve de tudo um pouco: {lista}."],
       agito: ["Agitação na sala comunal", "{lista} na semana."],
       paz: ["Semana em paz", "Nenhuma greve e nenhuma briga."],
+      // hora extra: minutos trabalhando fora do expediente do andar (um agente usa a 2ª frase; vários, extraVarios e extraQuem)
+      extra: ["Hora extra", "{nome} fez {qtd} de hora extra"],
+      extraVarios: "{qtd} ficaram depois do expediente",
+      extraQuem: "Quem mais ficou: {nome}, cerca de {qtd}.",
     },
   };
   // função do agente (texto livre do agentes.chat) -> grupo de balões de trabalho
@@ -156,8 +160,9 @@ const Vida = (() => {
   const entre = (a, b) => a + Math.random() * (b - a);
   const esperando = b => !!b.trabalho && /^waiting/.test(b.trabalho.status);
   const trabalhando = b => !!b.trabalho && !esperando(b);
-  // hora extra: fora do expediente, quem tem tarefa fica na mesa com a luminária acesa (app.js e mapa.js desenham; a ficha avisa)
-  const horaExtra = (b, fora = foraDoExpediente()) => !!fora && !!b.trabalho && !!b.mesa;
+  // hora extra: fora do expediente, quem está trabalhando (como no jornal: esperando aprovação ou resposta não conta) fica na
+  // mesa com a luminária acesa (app.js e mapa.js desenham; a ficha avisa)
+  const horaExtra = (b, fora = foraDoExpediente()) => !!fora && trabalhando(b) && !!b.mesa;
   const rumo = (dx, dy) => (Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? "esq" : "dir") : (dy < 0 ? "cima" : "baixo"));
 
   function criarMundo(predio) {

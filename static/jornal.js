@@ -10,9 +10,11 @@ const Jornal = (() => {
   const CHUVA = new Set(["garoa", "chuva", "tempestade"]);
   const NOME_CLIMA = { limpo: "céu limpo", nublado: "nublado", neblina: "neblina", garoa: "garoa", chuva: "chuva", neve: "neve", tempestade: "tempestade" };
 
-  // a hora extra (minutos trabalhando fora do expediente do andar); até chegar ao Vida.FRASES.jornal, as frases moram aqui
-  const EXTRA = { titulo: "Hora extra", um: "{nome} fez {qtd} de hora extra", varios: "{qtd} viraram a noite", quem: "Quem mais ficou: {nome}, cerca de {qtd}." };
+  // o aviso por estado da leitura do agentes.chat (o "conexao" do /api/jornal); conectado e carregando não avisam
   const SEM_CONEXAO = "Este andar não está conectado: o jornal só conta o trabalho que o escritório lê do agentes.chat.";
+  const PROBLEMA = "A leitura do agentes.chat está com problema agora: o jornal pode atrasar.";
+  const AVISO_CONEXAO = { sem_conexao: SEM_CONEXAO, recusada: SEM_CONEXAO, outra_org: "Este andar está ligado a outro workspace do agentes.chat.",
+    pausa: PROBLEMA, falha: PROBLEMA };
 
   let api = null, dados = null, placar = null, qual = "semana", pedido = 0, lido = 0, nomeCasa = "";
   let desenhado = "";   // o que está na tela: sem mudança, nada é recriado (a rolagem da tabela e o leitor de tela ficam onde estão)
@@ -89,7 +91,7 @@ const Jornal = (() => {
     if (chave === desenhado && !j.hidden) return;
     desenhado = chave;
     j.hidden = false; $("jornal-semanas").hidden = false;
-    aviso(dados.conexao === "conectado" ? "" : SEM_CONEXAO);   // sem leitura, nada entra na edição: diz por quê
+    aviso(AVISO_CONEXAO[dados.conexao] || "");   // sem leitura, nada entra na edição: diz por quê
     if (!gente.length && !s.dias.length) {
       j.replaceChildren(topo(F, ini), el("p", "jn-vazio", qual === "anterior" ? "Sem edição da semana passada: o escritório ainda não anotava." : "A edição desta semana ainda está em branco. Volte mais tarde."));
       return;
@@ -134,8 +136,8 @@ const Jornal = (() => {
     if (rs) nota(F.respostas, { nome: rs.ag.nome, qtd: qtd(rs.respostas, "pergunta", "perguntas") });
     if (mn) nota(F.minutos, { nome: mn.ag.nome, qtd: horas(mn.minutos) }, "Aproximado: o escritório confere a cada 30 segundos.");
     const ficaram = gente.filter(a => a.extra), ex = maior("extra");
-    if (ficaram.length === 1) nota([EXTRA.titulo, EXTRA.um], { nome: ex.ag.nome, qtd: horas(ex.extra) });
-    else if (ficaram.length) nota([EXTRA.titulo, EXTRA.varios], { qtd: qtd(ficaram.length, "agente", "agentes") }, preencher(EXTRA.quem, { nome: ex.ag.nome, qtd: horas(ex.extra) }));
+    if (ficaram.length === 1) nota(F.extra, { nome: ex.ag.nome, qtd: horas(ex.extra) });
+    else if (ficaram.length) nota([F.extra[0], F.extraVarios], { qtd: qtd(ficaram.length, "agente", "agentes") }, preencher(F.extraQuem, { nome: ex.ag.nome, qtd: horas(ex.extra) }));
     const campeao = placar && (qual === "semana" ? placar.ranking[0] : placar.anterior);
     const quem = campeao && typeof campeao.id === "string" && num(campeao.v) > 0 && api.agente(campeao.id);
     if (quem) nota(F.ringue, { nome: quem.nome, qtd: qtd(num(campeao.v), "vitória", "vitórias") });

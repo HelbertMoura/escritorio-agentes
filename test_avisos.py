@@ -244,6 +244,21 @@ class Disparo(unittest.TestCase):
         self.assertEqual((a.assinaturas, avisos.validar_arquivo(json.loads(gravados[-1]))), ([], []))
         self.assertEqual(logs[-1], {"evento": "push", "resultado": "limpou", "aparelhos": 2})
 
+    def test_limpar_e_esquecer_por_conta_tiram_so_os_aparelhos_dela(self):
+        a, logs, _, gravados = novo()
+        outro = "https://web.push.apple.com/QGuNnN8u0R8n2LzR3A"
+        a.assinar(FCM, T0, "ana")
+        a.assinar(APPLE, T0, "bia")
+        a.assinar(outro, T0)   # de antes do Não perturbe: sem conta, só o admin apaga
+        n = len(gravados)
+        a.esquecer("caio")   # sem aparelho dele: nem grava
+        self.assertEqual(len(gravados), n)
+        a.esquecer("ana")   # a conta removida
+        self.assertEqual([x["endpoint"] for x in a.assinaturas], [APPLE, outro])
+        self.assertEqual(logs[-1], {"evento": "push", "resultado": "limpou", "aparelhos": 1})
+        a.limpar("bia")   # o "sair de todos" do membro
+        self.assertEqual([x["endpoint"] for x in json.loads(gravados[-1])["assinaturas"]], [outro])
+
     def test_fora_da_previa_so_manda_para_host_da_lista(self):
         a, _, envios, _ = novo()
         a.assinaturas = [{"endpoint": "https://evil.example/push", "desde": 1}, {"endpoint": "http://127.0.0.1:9/push", "desde": 1}]

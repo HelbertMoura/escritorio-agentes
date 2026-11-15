@@ -1420,10 +1420,13 @@ function montarConvAberta(it) {
 function remontarConvAberta(it) { // o foco que estava dentro da conversa volta para a peça equivalente (ou para a conversa)
   const sec = $("conv-aberta"), ativo = sec.contains(document.activeElement) ? document.activeElement : null;
   const classe = ativo && ["cp-atualizar", "cp-externo", "cp-voltar", "conversa-lista", "cp-texto", "cp-enviar", "cp-rapida"].find(c => ativo.classList.contains(c));
+  const rapida = classe === "cp-rapida" ? [...sec.querySelectorAll(".cp-rapida")].indexOf(ativo) : -1;   // qual resposta pronta foi tocada
   const ta = sec.querySelector(".cp-texto"), rascunho = ta ? ta.value : "";   // o texto que estava sendo escrito não se perde
   montarConvAberta(it);
   if (rascunho) { sec.querySelector(".cp-texto").value = rascunho; contarResposta(); }
-  if (ativo) (classe && sec.querySelector(`.${classe}:not([hidden]):not(:disabled)`) || sec).focus({ preventScroll: true });
+  const mesma = rapida >= 0 && sec.querySelectorAll(".cp-rapida")[rapida];
+  const alvo = mesma && !mesma.closest("[hidden]") ? mesma : classe && sec.querySelector(`.${classe}:not([hidden]):not(:disabled)`);
+  if (ativo) (alvo || sec).focus({ preventScroll: true });
 }
 function ajustarConvAberta(it) { // mesma estrutura: só o título, o status, a caixa e o rótulo do link
   const sec = $("conv-aberta"), h = sec.querySelector("#conv-aberta-titulo");

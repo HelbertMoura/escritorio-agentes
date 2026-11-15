@@ -200,6 +200,7 @@ const Personalizar = (() => {
       await enviar("/api/marca", JSON.stringify({ empresa: $("m-empresa").value.trim(), cor: $("m-cor").value,
         expediente: { abre: $("m-abre").value, fecha: $("m-fecha").value }, ...(temSocial() ? { serio: $("m-serio").checked } : {}) }), "application/json");
       esquecerLogo();
+      Expediente.definir({ abre: $("m-abre").value, fecha: $("m-fecha").value }); pintarAvisos();   // o "Só no expediente (…)" já com o novo
       aviso("Salvo. Recarregando para aplicar no mapa…", "ok"); setTimeout(() => location.reload(), 700);
     } catch (e) {
       if (logoFoi) { esquecerLogo(); mostrarLogo(salvo.logo); }   // o logo já foi; só o nome e a cor ficaram para trás

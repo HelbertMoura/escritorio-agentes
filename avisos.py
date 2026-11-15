@@ -252,17 +252,23 @@ class Avisos(threading.Thread):
         self.log(evento="push", resultado="saiu", aparelhos=total)
         return 200, {"ok": True}
 
-    def limpar(self):
-        """"Sair de todos os aparelhos": nenhum aparelho segue recebendo aviso (um celular perdido, por exemplo)."""
+    def limpar(self, conta=None):
+        """"Sair de todos os aparelhos" (um celular perdido, por exemplo): sem conta, nenhum aparelho segue recebendo
+        aviso (o admin); com conta, só os aparelhos que ela assinou (o membro, ou a conta removida)."""
         with self.trava:
-            if not self.assinaturas:
+            antes = self.assinaturas
+            self.assinaturas = [a for a in antes if conta is not None and a.get("conta") != conta]
+            if len(self.assinaturas) == len(antes):
                 return
-            antes, self.assinaturas = self.assinaturas, []
             try:
                 self._gravar()
-            except OSError as x:   # a memória já está vazia; o arquivo é regravado na próxima mudança
+            except OSError as x:   # a memória já está sem eles; o arquivo é regravado na próxima mudança
                 self.log(evento="push", resultado="nao_gravou", detalhe=type(x).__name__)
-        self.log(evento="push", resultado="limpou", aparelhos=len(antes))
+        self.log(evento="push", resultado="limpou", aparelhos=len(antes) - len(self.assinaturas))
+
+    def esquecer(self, conta):
+        """A conta foi removida do prédio: os aparelhos que ela assinou param de receber aviso."""
+        self.limpar(conta)
 
     def publico(self):
         """GET /api/avisos: o último aviso (agente, nome, tipo e quando), nunca o rótulo da tarefa."""

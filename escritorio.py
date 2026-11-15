@@ -58,7 +58,7 @@ from social import PLACAR_BYTES, PLACAR_MAX, PLACAR_TETO, Social  # noqa: E402
 from visitas_sala import Salas, LimiteRequisicoes  # noqa: E402
 from presenca import Limite as LimitePresenca, Presenca  # noqa: E402
 
-VERSAO = "1.5.1"
+VERSAO = "1.5.2"
 AGENTES_PADRAO = "https://app.agentes.chat"
 # a nuvem ou a sua instalação self-host (o PUBLIC_URL dela): o main() confere (erro_agentes)
 AGENTES = os.environ.get("AGENTES_URL", "").strip().rstrip("/") or AGENTES_PADRAO
@@ -3674,7 +3674,10 @@ class Pagina(BaseHTTPRequestHandler):
                 acesso.definir_andares(dados["usuario"], dados["andares"])
             else:
                 # some do mapa dos outros na hora, pelo nome normalizado ("Ana " e "ANA" são a conta "ana")
-                self.server.presenca.sair(acesso.remover(dados["usuario"]))
+                removida = acesso.remover(dados["usuario"])
+                self.server.presenca.sair(removida)
+                if getattr(self.server, "avisos", None):   # e o celular dela para de receber os avisos do prédio
+                    self.server.avisos.esquecer(removida)
         except UltimoAdmin:
             return self._json(*erro(409, "ultimo_admin", "O escritório precisa de pelo menos uma pessoa que administra."))
         except ConvitesDemais as x:
@@ -3692,8 +3695,8 @@ class Pagina(BaseHTTPRequestHandler):
     def _post_sair_todos(self, rota):
         """"Sair de todos os aparelhos": Origin obrigatório e igual à BASE (sem a volta para o Referer), sessão, JSON
         {"senha"} de até 1 KB. A senha conta no balde do login (8 erros em 15 min travam também o login). Zera só as
-        sessões e modos resposta de quem pediu (admin ou membro) e apaga os dois cookies deste navegador. Só o admin
-        desliga também o aviso no celular de todos os aparelhos (a lista é do prédio)."""
+        sessões e modos resposta de quem pediu (admin ou membro) e apaga os dois cookies deste navegador. O admin desliga
+        também o aviso no celular de todos os aparelhos (a lista é do prédio); o membro, só o dos aparelhos que ele assinou."""
         acesso, token = self.server.acesso, self._token()
         if self.headers.get("Origin") != BASE:
             log(evento="http", rota=rota[:40], resultado="origem_recusada")
@@ -3723,10 +3726,10 @@ class Pagina(BaseHTTPRequestHandler):
             log(evento="acesso", resultado="sair_todos_nao_gravou", detalhe=str(x))
             return self._json(*erro(500, "gravar", "Não deu para encerrar as sessões agora."))
         log(evento="acesso", resultado="sair_todos", usuario=usuario, sessoes=n)
-        # um aparelho perdido também para de receber os avisos. A lista de aparelhos é do prédio (não guarda de quem é
-        # cada um): só quem administra a zera, e o membro sair dos aparelhos dele não desliga o aviso de ninguém
-        if getattr(self.server, "avisos", None) and self._papel_de(usuario) == "admin":
-            self.server.avisos.limpar()
+        # um aparelho perdido também para de receber os avisos. A lista de aparelhos é do prédio: quem administra a zera,
+        # e o membro apaga só os aparelhos que ele assinou (a assinatura guarda a conta; a de antes, sem conta, fica)
+        if getattr(self.server, "avisos", None):
+            self.server.avisos.limpar(None if self._papel_de(usuario) == "admin" else usuario)
         return self._json(200, {"ok": True}, {"Set-Cookie": [self._cookie("", 0), self._cookie_modo("")]})
 
     def do_POST(self):

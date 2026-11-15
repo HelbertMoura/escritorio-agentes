@@ -29,11 +29,13 @@ const semTarefa = () => ({ trabalho: null, mesa: MESA });
   assert.equal(Vida.horaExtra(semTarefa()), false);
 }
 
-// fora do expediente: só quem tem tarefa (rodando ou esperando você na mesa) faz hora extra
+// fora do expediente: só quem está trabalhando faz hora extra (esperando aprovação ou resposta não, como no jornal)
 {
   const Vida = carregar(22);
   assert.equal(Vida.horaExtra(comTarefa()), true);
-  assert.equal(Vida.horaExtra(comTarefa("waiting_approval")), true);
+  assert.equal(Vida.horaExtra(comTarefa("still_running")), true);
+  assert.equal(Vida.horaExtra(comTarefa("waiting_approval")), false);
+  assert.equal(Vida.horaExtra(comTarefa("waiting_response")), false);
   assert.equal(Vida.horaExtra(semTarefa()), false);
   assert.equal(Vida.horaExtra({ trabalho: { status: "running" }, mesa: null }), false, "sem mesa não há mesa de hora extra");
 }
