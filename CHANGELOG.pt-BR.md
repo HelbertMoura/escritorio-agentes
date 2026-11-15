@@ -4,6 +4,11 @@
 
 As mudanças que importam neste projeto ficam aqui, da mais nova para a mais antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Desde a 1.1.0, as versões seguem o [SemVer](https://semver.org/lang/pt-BR/); as entradas mais antigas são marcos com data.
 
+## Não lançado
+
+### Corrigido
+- **Jornal de um andar extra:** embaixo do título da Gazeta aparecia o nome da empresa do andar principal. Agora cada andar mostra o próprio nome. Os números já eram de cada andar.
+
 ## 1.5.1 · 2026-11-14 · Chat à direita e ajustes
 
 Release [`v1.5.1`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.5.1). Commits: [`v1.5.0...v1.5.1`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.5.0...v1.5.1).

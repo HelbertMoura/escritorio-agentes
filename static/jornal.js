@@ -13,6 +13,11 @@ const Jornal = (() => {
   let api = null, dados = null, placar = null, qual = "semana", pedido = 0, lido = 0;
   let desenhado = "";   // o que está na tela: sem mudança, nada é recriado (a rolagem da tabela e o leitor de tela ficam onde estão)
 
+  // o nome embaixo do título: num andar extra, o nome do andar (cada andar é um workspace, com o seu jornal); no
+  // principal, a empresa do Personalizar. Sem o nome do andar (lista ainda não lida), fica a empresa
+  const nomeDaCasa = (empresa, andar) => (typeof andar === "string" && andar.trim() ? andar.trim() : typeof empresa === "string" ? empresa : "");
+  const casa = () => nomeDaCasa(api.empresa(), api.andar ? api.andar() : "");
+
   function iniciar(a) {
     api = a;
     for (const b of document.querySelectorAll("#jornal-semanas button")) b.addEventListener("click", () => { qual = b.dataset.semana; desenhar(); });
@@ -81,7 +86,7 @@ const Jornal = (() => {
       .filter(a => typeof a.id === "string" && a.ag);
     const j = $("jornal");
     // a leitura de 10 s chama aqui também: só recria quando mudaram os dados, a aba, o placar ou os nomes e aparências
-    const chave = JSON.stringify([qual, s, placar, api.empresa(), gente.map(a => [a.id, a.ag.nome, a.ag.ap])]);
+    const chave = JSON.stringify([qual, s, placar, casa(), gente.map(a => [a.id, a.ag.nome, a.ag.ap])]);
     if (chave === desenhado && !j.hidden) return;
     desenhado = chave;
     j.hidden = false; $("jornal-semanas").hidden = false; aviso("");
@@ -96,7 +101,7 @@ const Jornal = (() => {
   function topo(F, ini) {
     const h = el("header", "jn-topo");
     const titulo = el("h2", "jn-titulo", F.nome); titulo.id = "t-jornal";
-    h.append(el("p", "jn-ed", `Edição nº ${edicao(ini)} · ${periodo(ini)}`), titulo, el("p", "jn-casa", api.empresa()));
+    h.append(el("p", "jn-ed", `Edição nº ${edicao(ini)} · ${periodo(ini)}`), titulo, el("p", "jn-casa", casa()));
     return h;
   }
 
@@ -161,7 +166,7 @@ const Jornal = (() => {
   // trocou de andar: o jornal e o placar lidos eram do outro
   function reiniciar() { dados = null; placar = null; lido = 0; pedido++; desenhado = ""; }
 
-  return { iniciar, abrir, reiniciar };
+  return { iniciar, abrir, reiniciar, nomeDaCasa };
 })();
 
 window.Jornal = Jornal;

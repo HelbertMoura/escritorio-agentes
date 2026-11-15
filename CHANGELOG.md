@@ -4,6 +4,11 @@
 
 All notable changes to this project are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Since 1.1.0, versions follow [SemVer](https://semver.org/); older entries are dated milestones.
 
+## Unreleased
+
+### Fixed
+- **Newspaper on an extra floor:** the Gazette showed the main floor's company name under its title. Each floor now shows its own name. The numbers were already per floor.
+
 ## 1.5.1 · 2026-11-14 · Chat on the right and tweaks
 
 Release [`v1.5.1`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.5.1). Commits: [`v1.5.0...v1.5.1`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.5.0...v1.5.1).
