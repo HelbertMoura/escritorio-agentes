@@ -401,6 +401,8 @@ const Brincar = (() => {
     });
   }
 
-  return { demo, iniciar, montar, desenhar, sobre, tocar, configDemo, estadoDemo, brigaDemo, atenderDemo, placarDemo, surpresa, modoFoto };
+  // ritmo do desenho (app.js): uma reação de objeto ou a festa do Konami no ar pedem um desenho a cada passo
+  const emMovimento = () => reacoes.length > 0 || festaAte > agora();
+  return { demo, iniciar, montar, desenhar, emMovimento, sobre, tocar, configDemo, estadoDemo, brigaDemo, atenderDemo, placarDemo, surpresa, modoFoto };
 })();
 window.Brincar = Brincar;

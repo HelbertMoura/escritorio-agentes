@@ -790,8 +790,10 @@ const Efeitos = (() => {
 
   // H) onde está o robô aspirador agora (null de dia ou fora da sala comunal)
   const posAspirador = () => (aspirador ? { x: aspirador.x, y: aspirador.y } : null);
+  // ritmo do desenho (app.js): partículas e fogos à vista (aVista(x, y, margem)) e os voos pedem um desenho a cada passo
+  const emMovimento = aVista => voos.length > 0 || part.some(p => aVista(p.x, p.y, 8)) || fogos.some(f => aVista(f.x, f.y, 30));
 
-  return { lancar, aspirador: posAspirador, tela, objeto, animado, iniciar, exterior, luzesNoite, depoisObjeto, chapeu, emote, particulas, robo, painelLogo, festaChao, festaAr, cena, placas, entrega, itemNaMao, uniforme, moto, entregaAr, faixaVencedor, placar };
+  return { lancar, aspirador: posAspirador, emMovimento, tela, objeto, animado, iniciar, exterior, luzesNoite, depoisObjeto, chapeu, emote, particulas, robo, painelLogo, festaChao, festaAr, cena, placas, entrega, itemNaMao, uniforme, moto, entregaAr, faixaVencedor, placar };
 })();
 
 window.Efeitos = Efeitos;

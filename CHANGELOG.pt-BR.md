@@ -6,6 +6,9 @@ As mudanças que importam neste projeto ficam aqui, da mais nova para a mais ant
 
 ## Não lançado
 
+### Mudado
+- **Mapa mais leve:** o mapa desenha no máximo 30 quadros por segundo com a aba em foco, 10 sem foco e 15 no modo TV (`?fps=` de 10 a 60 troca o da TV). As animações dos objetos trocam de quadro juntas, 10 vezes por segundo, e uma cena parada não é redesenhada entre uma troca e outra. Com o mapa fora de vista, nada é desenhado. Na TV, o navegador gasta bem menos CPU, sem mudar o que aparece na tela.
+
 ### Corrigido
 - **Jornal de um andar extra:** embaixo do título da Gazeta aparecia o nome da empresa do andar principal. Agora cada andar mostra o próprio nome. Os números já eram de cada andar.
 

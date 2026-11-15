@@ -172,6 +172,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "tv.js": "text/javascript; charset=utf-8", "sw.js": "text/javascript; charset=utf-8",
     "jornal.js": "text/javascript; charset=utf-8", "timelapse.js": "text/javascript; charset=utf-8",
     "avisar.js": "text/javascript; charset=utf-8", "novidades.js": "text/javascript; charset=utf-8",
+    "ritmo.js": "text/javascript; charset=utf-8",
     "manifest.webmanifest": "application/manifest+json", "icone-180.png": "image/png", "icone-192.png": "image/png",
     "icone-512.png": "image/png", "icone-mascara-512.png": "image/png",
 }

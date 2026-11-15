@@ -199,6 +199,7 @@ function ajustarEscala() {
   tela.width = Math.round(vw * dpr); tela.height = Math.round(vh * dpr);
   tela.style.width = `${vw}px`; tela.style.height = `${vh}px`;
   if (!cam.ajustada) { verTudo(true); cam.ajustada = true; }
+  pedirDesenho();   // trocar o tamanho apaga o canvas: o próximo passo redesenha
 }
 
 // O zoom mínimo cobre o quadro inteiro (nunca sobra área vazia) e a câmera não sai do mundo.
@@ -240,18 +241,58 @@ function combina(b) {
   return filtro === "todos" || situacao(b) === filtro;
 }
 
-let antes = performance.now();
+// O laço dá passos no ritmo de ritmo.js (30 por segundo com foco, 10 sem foco, 15 na TV): a vida anda em todo passo,
+// e o prédio só é redesenhado quando algo se mexe sem parar ou quando o relógio comum das animações bate.
+const fpsDaTV = Ritmo.fpsPedido(location.search);
+let antes = performance.now(), ultimoPasso = -Infinity, ultimoDesenho = 0, relogioDesenhado = -1, camDesenhada = "";
+let sujo = true, animandoNoDesenho = false, telaNaVista = true;
+const pedirDesenho = () => { sujo = true; };
+const fpsAlvo = () => Ritmo.fps({ tv: TV.ligada, foco: document.hasFocus(), pedido: fpsDaTV });
 function quadro(t) {
   requestAnimationFrame(quadro);   // no topo: um erro neste quadro não para o laço
-  const dt = Math.min(0.1, (t - antes) / 1000); antes = t; dtQuadro = dt;
+  const alvo = fpsAlvo();
+  if (!Ritmo.ehPasso(t, ultimoPasso, alvo)) return;
+  ultimoPasso = t;
+  const dt = Math.min(Ritmo.dtMax(alvo), (t - antes) / 1000); antes = t;
   if (predio && mundo) {
     Vida.passo(mundo, dt);
     for (const e of mundo.eventos.splice(0)) Som.evento(e.nome || e, e);
     Som.teclado(Vida.digitando(mundo), t);
     Som.ambiente(true);
-    desenharCena(t);
+    const oculto = mapaForaDeVista();
+    if (oculto) sujo = true;   // ao voltar à vista, desenha no primeiro passo
+    if (Ritmo.precisaDesenhar({ oculto, sujo, movimento: !oculto && emMovimento(), camera: !oculto && cameraDesenhada() !== camDesenhada,
+      relogioAgora: Ritmo.relogio(t), relogioDesenhado })) desenharNoPasso(t, alvo);
     Timelapse.quadro();   // na vez do quadro do time-lapse, fotografa logo depois de desenhar
   }
+}
+function desenharNoPasso(t, alvo) {
+  dtQuadro = Math.min(Ritmo.dtMax(alvo), (t - ultimoDesenho) / 1000); ultimoDesenho = t;   // efeitos com dt andam o tempo desde o último desenho
+  desenharCena(t);
+  sujo = false; relogioDesenhado = Ritmo.relogio(t); camDesenhada = cameraDesenhada();
+}
+const cameraDesenhada = () => `${cam.x.toFixed(2)},${cam.y.toFixed(2)},${cam.k.toFixed(4)},${tela.width},${tela.height}`;
+// mapa fora de vista: outra tela do menu, o mundo cobrindo o mapa na TV ou o canvas rolado para fora da janela
+function mapaForaDeVista() { return $("v-escritorio").hidden || !!$("tv-mundo") || !telaNaVista; }
+if ("IntersectionObserver" in window) new IntersectionObserver(es => { telaNaVista = es[es.length - 1].isIntersecting; }).observe(tela);
+
+// o que se mexe sem parar e precisa de um desenho a cada passo (o resto anda no relógio comum das animações)
+function emMovimento() {
+  if (cam.alvo || animandoNoDesenho || festa || mundo.cenaSocial || mundo.entrega) return true;   // câmera indo, portas e luzes trocando, festa, briga, greve e entrega
+  const v = vistaMundo(), aVista = (x, y, m) => x > v.l - m && x < v.r + m && y > v.t - m && y < v.b + m;
+  if (Efeitos.emMovimento(aVista) || Brincar.emMovimento() || Clima.raio > 0) return true;   // partículas, voos, reações, Konami e o clarão
+  for (const b of mundo.bonecos.values()) if (b.rota.length && visivel(b) && aVista(b.x, b.y, 40)) return true;   // andando (com nome e balão acima)
+  for (const p of Vida.pessoas()) if (p.rota && p.rota.length && aVista(p.x, p.y, 40)) return true;
+  const robo = Efeitos.aspirador();   // o robô aspirador da noite, quando a sala comunal está à vista
+  if (robo && aVista(robo.x, robo.y, 12)) return true;
+  return exteriorAnimadoNaVista(v);
+}
+// os carros da rua (sempre andando) e, com tempo que não é céu limpo, nuvens, chuva, neve e folhas lá fora
+function exteriorAnimadoNaVista(v) {
+  const e = predio.externos, r = predio.predioRet;
+  if (e && e.carros.length && v.b > e.ruaY - 24 && v.t < e.ruaY + e.ruaAlt + 4) return true;
+  if (Clima.tipo() === "limpo" || !r) return false;
+  return v.l < r.x || v.r > r.x + r.w || v.t < r.y || v.b > r.y + r.h;
 }
 
 // handle → boneco, refeito a cada quadro: as telas das mesas consultam sem varrer a lista
@@ -260,8 +301,8 @@ function desenharCena(t) {
   bonecoDaMesa.clear(); for (const b of mundo.bonecos.values()) bonecoDaMesa.set(b.handle, b);
   const seguido = seguir && boneco(seguir);
   if (seguido && visivel(seguido)) { const a = { x: seguido.x, y: seguido.y - 10, k: cam.alvo ? cam.alvo.k : cam.k }; prenderCamera(a); cam.alvo = a; }
-  if (cam.alvo) { // anima a câmera até o alvo
-    const f = 0.14;
+  if (cam.alvo) { // anima a câmera até o alvo; 14% do caminho a cada 1/60 s, em qualquer ritmo de desenho
+    const f = 1 - Math.pow(0.86, Math.min(dtQuadro, 0.25) * 60);
     cam.x += (cam.alvo.x - cam.x) * f; cam.y += (cam.alvo.y - cam.y) * f; cam.k += (cam.alvo.k - cam.k) * f;
     if (Math.abs(cam.alvo.k - cam.k) < 0.002 && Math.abs(cam.alvo.x - cam.x) < 0.3) cam.alvo = null;
   }
@@ -295,9 +336,9 @@ function desenharCena(t) {
   const visitas = Vida.pessoas();   // as pessoas da equipe neste andar e o meu boneco (vida.js: /api/ao-vivo)
   for (const v of visitas) cena.push({ chave: v.chave ?? v.y + 0.5, desenha: () => Avatar.boneco(ctx, v, t, escala) });
   cena.sort((a, b) => a.chave - b.chave).forEach(c => c.desenha());
-  desenharPortas(t);
+  const portasAndando = desenharPortas(t);
   Clima.desenhar(ctx, predio, dtQuadro, t, Som.ligado ? Som : null);
-  desenharLuzes(dt0(t), ceu);
+  animandoNoDesenho = desenharLuzes(dt0(t), ceu) || portasAndando;   // no meio da troca: o próximo passo desenha também
   Efeitos.luzesNoite(ctx, ceu);
   Efeitos.festaAr(ctx, festa, t, dtQuadro, ceu);
   Efeitos.particulas(ctx, dtQuadro, mundo, t);
@@ -337,8 +378,10 @@ function vaiPassar(z, b) {
 }
 
 // Portas: abrem antes de o agente chegar, ficam abertas enquanto ele atravessa e fecham logo depois
+// devolve true com alguma folha no meio do caminho (abrindo ou fechando)
 function desenharPortas(t) {
   const bonecos = [...mundo.bonecos.values()].filter(visivel);
+  let andando = false;
   for (const p of predio.portas) {
     const z = p.zona || (p.zona = zonaPorta(p));
     if (bonecos.some(b => vaiPassar(z, b))) p.ate = t + 250;
@@ -346,6 +389,7 @@ function desenharPortas(t) {
     if (aberta && !p.abrindo) Som.evento("porta", p);
     p.abrindo = aberta;
     p.abre = menosMovimento.matches ? +aberta : Math.max(0, Math.min(1, p.abre + (aberta ? dtQuadro * 5 : -dtQuadro * 3)));
+    if (p.abre > 0 && p.abre < 1 || (aberta && p.abre < 1)) andando = true;
     const A = p.abre * p.abre * (3 - 2 * p.abre);   // suaviza o começo e o fim do movimento
     const meia = p.w / 2, des = Math.round(A * (meia - 2));
     ctx.save(); ctx.beginPath(); ctx.rect(p.x, p.y - 2, p.w, (p.h || 4) + 4); ctx.clip();   // a folha some dentro da parede
@@ -390,6 +434,7 @@ function desenharPortas(t) {
     }
     ctx.restore();
   }
+  return andando;
 }
 
 let ultimoLuz = 0;
@@ -462,12 +507,14 @@ function desenharLuzes(dt, ceu) {
   const noite = ceu.escuro; // 0 = dia claro, 1 = noite
   if (noite > 0.02) { ctx.fillStyle = `rgba(8,10,34,${noite * 0.5})`; ctx.fillRect(0, 0, predio.W, predio.H); }
   const agora = performance.now();
+  let mudando = false;   // alguma sala acendendo, apagando ou piscando: devolve true
   for (const s of [...predio.salas, ...predio.baixo]) {
     const acesa = s.tipo === "recepcao" || ocupadas.has(s);
     if (acesa && s.acesa === false && !menosMovimento.matches) s.pisca = agora + 450;   // lâmpada piscando ao acender
     s.acesa = acesa;
     const piscando = s.pisca > agora;
     s.luz += ((acesa ? (piscando && Math.floor(agora / 70) % 3 === 0 ? 0.2 : 1) : 0) - s.luz) * Math.min(1, dt * (piscando ? 20 : 2.5));
+    if (piscando || Math.abs((acesa ? 1 : 0) - s.luz) > 0.01) mudando = true;
     const escuroSala = (1 - s.luz) * (0.35 + noite * 0.4);
     if (escuroSala > 0.01) { ctx.fillStyle = `rgba(6,8,26,${escuroSala})`; ctx.fillRect(s.px, s.py, s.pw, s.ph); }
     if (noite > 0.05 && s.luz > 0.05) { // luz quente das salas acesas à noite
@@ -496,6 +543,7 @@ function desenharLuzes(dt, ceu) {
     }
     ctx.globalCompositeOperation = "source-over";
   }
+  return mudando;
 }
 
 function brilho(x, y, r, cor) {
@@ -2026,6 +2074,7 @@ tela.addEventListener("pointermove", ev => {
   if (ev.pointerType !== "mouse" || !mundo || (arrasto && arrasto.moveu)) { card.hidden = true; return; }
   const p = paraMundo(ev.clientX, ev.clientY);
   const perto = seloEm(p) || agenteEm(p, 11), objeto = Brincar.sobre(p);
+  pedirDesenho();   // o contorno do objeto sob o mouse aparece no próximo passo, sem esperar o relógio
   tela.style.cursor = perto || objeto ? "pointer" : "";
   mostrarCartao(perto, ev.clientX, ev.clientY);
 });
@@ -2040,7 +2089,7 @@ function mostrarCartao(perto, cx, cy) {
   card.style.left = `${Math.min(cx - r.left + 14, r.width - 254)}px`; card.style.top = `${Math.max(8, cy - r.top - 20)}px`;
   card.hidden = false;
 }
-tela.addEventListener("pointerleave", () => { $("cartao-agente").hidden = true; Brincar.sobre({ x: -1e9, y: -1e9 }); });
+tela.addEventListener("pointerleave", () => { $("cartao-agente").hidden = true; Brincar.sobre({ x: -1e9, y: -1e9 }); pedirDesenho(); });
 tela.addEventListener("dblclick", ev => { const s = predio && salaEm(paraMundo(ev.clientX, ev.clientY)); if (s) { fecharFicha(); focarSala(s); } });
 $("zoom-mais").addEventListener("click", () => moverCamera({ x: cam.x, y: cam.y, k: cam.k * 1.4 }));
 $("zoom-menos").addEventListener("click", () => { seguir = null; moverCamera({ x: cam.x, y: cam.y, k: cam.k / 1.4 }); });

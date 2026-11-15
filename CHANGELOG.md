@@ -6,6 +6,9 @@ All notable changes to this project are listed here, newest first. The format fo
 
 ## Unreleased
 
+### Changed
+- **Lighter map:** the map draws at most 30 frames per second with the tab focused, 10 without focus and 15 in TV mode (`?fps=` from 10 to 60 changes the TV's). Object animations change frame together, 10 times per second, and a still scene is not redrawn between two changes. With the map out of view, nothing is drawn. On the TV, the browser uses much less CPU, with no change to what shows on screen.
+
 ### Fixed
 - **Newspaper on an extra floor:** the Gazette showed the main floor's company name under its title. Each floor now shows its own name. The numbers were already per floor.
 
