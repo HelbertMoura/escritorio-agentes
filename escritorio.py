@@ -820,6 +820,8 @@ class Leitor(threading.Thread):
         self.acordado = threading.Event()   # acordar(): a volta do OAuth não espera o resto do intervalo
         self.diario = Diario()
         self.diario_novo = False   # conta nova no OAuth: o próximo ciclo recomeça o Diario
+        # volta do OAuth: (agentes da conta de antes, zerar). A primeira leitura que der certo decide se é outra conta
+        self.conferir, self.conferindo = None, None
         self.jornal = None   # o Jornal da semana, posto pelo main(); conta a cada leitura que deu certo
         self.avisos = None   # o push (avisos.py), posto pelo main(): os pedidos novos vão para a fila dele
         self.agentes, self.agentes_ok, self.agentes_em = None, True, 0.0   # list_agents guardado entre as recargas
@@ -918,9 +920,14 @@ class Leitor(threading.Thread):
         with self.trava:
             if self.diario_novo:   # sem os "terminou" da conta velha nem os pedidos da nova contados como novos
                 self.diario, self.diario_novo = Diario(), False
+            if self.conferir:   # a lista de agentes vem de novo nesta leitura: a guardada pode ser da conta velha
+                vistos = self.conferindo[0] if self.conferindo else {a.get("id") for a in self.agentes or []}
+                self.conferindo, self.conferir, self.agentes = (vistos, self.conferir), None, None
         antes, inicio = self.mcp.pedidos, self.relogio()
         try:
             novo, completa, itens = self.ler(agora)
+            if self.conferindo:
+                self._conferir_conta()
             self.diario.aplicar(novo, completa)
             if self.jornal:   # nunca levanta: o jornal não derruba a leitura
                 self.jornal.ler(self.diario.novos, novo, agora)
@@ -1008,6 +1015,19 @@ class Leitor(threading.Thread):
         """Foto da memória da página Conversas (com canal e url: fica no servidor; o público sai do conversas_publicas)."""
         with self.trava:
             return self.conversas
+
+    def conferir_conta(self, zerar):
+        """Volta do OAuth: zerar() (o jornal e a vida social do andar) roda na primeira leitura que der certo, só se ela
+        vier de outra conta, sem nenhum agente em comum com a de antes. O token não diz de quem é: reconectar a mesma
+        conta (o token venceu) mantém a semana. Sem leitura de antes (o serviço subiu sem conexão), zera."""
+        with self.trava:
+            self.conferir = zerar
+
+    def _conferir_conta(self):
+        antes, zerar = self.conferindo
+        self.conferindo = None
+        if not antes & {a.get("id") for a in self.agentes or []}:
+            zerar()
 
     def zerar_memoria(self):
         with self.trava:
@@ -2619,7 +2639,8 @@ class Andar:
         self.cred = Credenciais(caminho(mod_andares.OAUTH), self.times)
         self.leitor = Leitor(self.cred, url_app(AGENTES, self.org), self.times, atraso, self.org)
         self.jornal = self.leitor.jornal = Jornal(log, FUSO, lambda dados: gravar(arq_jornal, dados), ler_jornal(arq_jornal),
-                                                  lambda: ((clima.foto() if clima else None) or {}).get("tipo"))
+                                                  lambda: ((clima.foto() if clima else None) or {}).get("tipo"),
+                                                  lambda: config_publica(self)["expediente"])
         self.conversas = Conversas(self.leitor)
         self.respostas = Respostas(self.leitor, self.conversas)
         self.social = Social(self.leitor, lambda: config_publica(self), log, FUSO, guardar=lambda dados: gravar(arq_placar, dados),
@@ -3171,8 +3192,9 @@ class Pagina(BaseHTTPRequestHandler):
             jornal = andar.jornal
             if not jornal:
                 return self._json(*erro(404, "jornal_desligado", "O jornal está desligado neste escritório."))
-            presentes = {a["id"] for a in andar.leitor.foto().get("agentes", [])}
-            return self._json(200, jornal.publico(time.time(), presentes))
+            foto = andar.leitor.foto()   # a conexão vai junto: sem leitura, a página diz por que a edição está vazia
+            presentes = {a["id"] for a in foto.get("agentes", [])}
+            return self._json(200, {**jornal.publico(time.time(), presentes), "conexao": foto.get("conexao") or "carregando"})
         if rota == "/api/novidades":   # do disco, sem chamar o agentes.chat; ausente ou ilegível sai com entradas: []
             return self._json(200, {"versao": VERSAO, "entradas": NOVIDADES.publico()})
         if rota in ("/api/push/chave", "/api/avisos"):   # o aviso no celular (avisos.py); o rótulo da tarefa nunca sai
@@ -3215,10 +3237,16 @@ class Pagina(BaseHTTPRequestHandler):
                 andar.leitor.zerar_memoria()
             if andar.conversas:   # as conversas lidas (cache de 60 s)
                 andar.conversas.esquecer()
-            if andar.social:   # as amizades da vida social
-                andar.social.zerar()
-            if andar.jornal:   # os números da semana
-                andar.jornal.zerar()
+            social, jornal = andar.social, andar.jornal
+
+            def zerar():   # as amizades e o placar da vida social e os números da semana, se a conta for outra
+                for x in (social, jornal):
+                    if x:
+                        x.zerar()
+            if hasattr(andar.leitor, "conferir_conta"):
+                andar.leitor.conferir_conta(zerar)
+            else:
+                zerar()
             if andar.id == ANDAR_PRINCIPAL and getattr(self.server, "avisos", None):   # o último aviso (o push lê o principal)
                 self.server.avisos.zerar()
             if hasattr(andar.leitor, "acordar"):   # a primeira leitura com a conexão nova sai agora
@@ -3924,7 +3952,7 @@ def main():
     clima = Clima(lambda: clima_vigente()[0])   # nasce sempre: a cidade pode chegar pela tela depois
     # jornal da semana: só ids e números, gravado de forma atômica; o clima do meio-dia sai do mesmo Clima da página
     leitor.jornal = Jornal(log, FUSO, lambda dados: gravar(ARQ_JORNAL, dados), ler_jornal(),
-                           lambda: (clima.foto() or {}).get("tipo"))
+                           lambda: (clima.foto() or {}).get("tipo"), lambda: config_publica()["expediente"])
     leitor.avisos = criar_avisos()   # aviso no celular: a thread dele fala com os serviços de push, nunca com o agentes.chat
     if leitor.avisos:
         leitor.avisos.start()

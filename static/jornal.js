@@ -10,7 +10,11 @@ const Jornal = (() => {
   const CHUVA = new Set(["garoa", "chuva", "tempestade"]);
   const NOME_CLIMA = { limpo: "céu limpo", nublado: "nublado", neblina: "neblina", garoa: "garoa", chuva: "chuva", neve: "neve", tempestade: "tempestade" };
 
-  let api = null, dados = null, placar = null, qual = "semana", pedido = 0, lido = 0;
+  // a hora extra (minutos trabalhando fora do expediente do andar); até chegar ao Vida.FRASES.jornal, as frases moram aqui
+  const EXTRA = { titulo: "Hora extra", um: "{nome} fez {qtd} de hora extra", varios: "{qtd} viraram a noite", quem: "Quem mais ficou: {nome}, cerca de {qtd}." };
+  const SEM_CONEXAO = "Este andar não está conectado: o jornal só conta o trabalho que o escritório lê do agentes.chat.";
+
+  let api = null, dados = null, placar = null, qual = "semana", pedido = 0, lido = 0, nomeCasa = "";
   let desenhado = "";   // o que está na tela: sem mudança, nada é recriado (a rolagem da tabela e o leitor de tela ficam onde estão)
 
   function iniciar(a) {
@@ -22,7 +26,7 @@ const Jornal = (() => {
   async function abrir() {
     if (api.demo()) return esconder("Na demonstração não há jornal: ele junta as tarefas da semana do escritório de verdade.");
     if (dados && performance.now() - lido < 60000) { desenhar(); return; }   // voltou para a página logo depois: sem pedir de novo
-    const n = ++pedido;
+    const n = ++pedido, nome = casa();   // o nome do andar de quando a edição foi pedida, junto com ela
     if (!dados) aviso("Carregando o jornal…");
     let r = null, d = null;
     try { r = await fetch(Andar.com("api/jornal"), { cache: "no-store", credentials: "same-origin" }); d = await r.json().catch(() => null); } catch (e) { r = null; }
@@ -30,7 +34,7 @@ const Jornal = (() => {
     if (r && r.status === 401) { location.href = "/entrar"; return; }
     if (r && r.status === 404 && d && d.erro === "jornal_desligado") { dados = null; return esconder("O jornal está desligado neste escritório."); }
     if (!r || !r.ok || !valido(d)) { if (!dados) esconder("Não deu para ler o jornal agora. Tente de novo daqui a pouco."); return; }
-    dados = d; lido = performance.now();
+    dados = d; lido = performance.now(); nomeCasa = nome;
     placar = api.socialLigada() ? await lerPlacar() : null;   // o "Campeão do ringue" vem do placar da vida social
     if (n === pedido) desenhar();
   }
@@ -77,20 +81,23 @@ const Jornal = (() => {
     if (!dados) return;
     const F = Vida.FRASES.jornal, s = dados[qual], ini = s.inicio;
     // só quem está no escritório agora (o servidor já filtra; o app confere com a leitura dele)
-    const gente = s.agentes.map(a => ({ id: a.id, tarefas: num(a.tarefas), aprovacoes: num(a.aprovacoes), respostas: num(a.respostas), minutos: num(a.minutos), ag: api.agente(a.id) }))
+    const gente = s.agentes.map(a => ({ id: a.id, tarefas: num(a.tarefas), aprovacoes: num(a.aprovacoes), respostas: num(a.respostas), minutos: num(a.minutos), extra: num(a.extra), ag: api.agente(a.id) }))
       .filter(a => typeof a.id === "string" && a.ag);
     const j = $("jornal");
     // a leitura de 10 s chama aqui também: só recria quando mudaram os dados, a aba, o placar ou os nomes e aparências
-    const chave = JSON.stringify([qual, s, placar, casa(), gente.map(a => [a.id, a.ag.nome, a.ag.ap])]);
+    const chave = JSON.stringify([qual, s, placar, nomeCasa, dados.conexao, gente.map(a => [a.id, a.ag.nome, a.ag.ap])]);
     if (chave === desenhado && !j.hidden) return;
     desenhado = chave;
-    j.hidden = false; $("jornal-semanas").hidden = false; aviso("");
+    j.hidden = false; $("jornal-semanas").hidden = false;
+    aviso(dados.conexao === "conectado" ? "" : SEM_CONEXAO);   // sem leitura, nada entra na edição: diz por quê
     if (!gente.length && !s.dias.length) {
       j.replaceChildren(topo(F, ini), el("p", "jn-vazio", qual === "anterior" ? "Sem edição da semana passada: o escritório ainda não anotava." : "A edição desta semana ainda está em branco. Volte mais tarde."));
       return;
     }
     const rank = [...gente].sort((a, b) => b.tarefas - a.tarefas || b.minutos - a.minutos);
-    j.replaceChildren(topo(F, ini), manchete(F, ini, rank), notas(F, ini, gente, s.dias), tabela(rank));
+    const corpo = gente.length ? tabela(rank)
+      : el("p", "jn-vazio", qual === "anterior" ? "Sem atividade neste andar na semana passada." : "Ainda sem atividade neste andar nesta semana.");
+    j.replaceChildren(topo(F, ini), manchete(F, ini, rank), notas(F, ini, gente, s.dias), corpo);
   }
 
   // a marca é do prédio: num andar extra, a edição leva o nome dele (o térreo segue só com a empresa)
@@ -98,7 +105,7 @@ const Jornal = (() => {
   function topo(F, ini) {
     const h = el("header", "jn-topo");
     const titulo = el("h2", "jn-titulo", F.nome); titulo.id = "t-jornal";
-    h.append(el("p", "jn-ed", `Edição nº ${edicao(ini)} · ${periodo(ini)}`), titulo, el("p", "jn-casa", casa()));
+    h.append(el("p", "jn-ed", `Edição nº ${edicao(ini)} · ${periodo(ini)}`), titulo, el("p", "jn-casa", nomeCasa));
     return h;
   }
 
@@ -126,6 +133,9 @@ const Jornal = (() => {
     if (ap) nota(F.aprovacoes, { nome: ap.ag.nome, qtd: qtd(ap.aprovacoes, "pedido", "pedidos") });
     if (rs) nota(F.respostas, { nome: rs.ag.nome, qtd: qtd(rs.respostas, "pergunta", "perguntas") });
     if (mn) nota(F.minutos, { nome: mn.ag.nome, qtd: horas(mn.minutos) }, "Aproximado: o escritório confere a cada 30 segundos.");
+    const ficaram = gente.filter(a => a.extra), ex = maior("extra");
+    if (ficaram.length === 1) nota([EXTRA.titulo, EXTRA.um], { nome: ex.ag.nome, qtd: horas(ex.extra) });
+    else if (ficaram.length) nota([EXTRA.titulo, EXTRA.varios], { qtd: qtd(ficaram.length, "agente", "agentes") }, preencher(EXTRA.quem, { nome: ex.ag.nome, qtd: horas(ex.extra) }));
     const campeao = placar && (qual === "semana" ? placar.ranking[0] : placar.anterior);
     const quem = campeao && typeof campeao.id === "string" && num(campeao.v) > 0 && api.agente(campeao.id);
     if (quem) nota(F.ringue, { nome: quem.nome, qtd: qtd(num(campeao.v), "vitória", "vitórias") });
@@ -161,7 +171,7 @@ const Jornal = (() => {
   function el(tag, classe, texto) { const e = document.createElement(tag); if (classe) e.className = classe; if (texto != null) e.textContent = texto; return e; }
 
   // trocou de andar: o jornal e o placar lidos eram do outro
-  function reiniciar() { dados = null; placar = null; lido = 0; pedido++; desenhado = ""; }
+  function reiniciar() { dados = null; placar = null; lido = 0; pedido++; desenhado = ""; nomeCasa = ""; }
 
   return { iniciar, abrir, reiniciar };
 })();
