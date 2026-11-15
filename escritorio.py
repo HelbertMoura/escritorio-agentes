@@ -48,7 +48,7 @@ from acesso import (ARQ_CODIGO, ARQ_USUARIOS, Acesso, ContaExiste, ConviteInvali
 import ajustes  # noqa: E402
 import vapid  # noqa: E402
 from ajustes import (ACESSORIOS, CLIMA_BYTES, CORES, EQUIPE_BYTES, FESTAS_BYTES, HANDLE_OK, ICONES_OK, OLHOS,  # noqa: E402
-                     ROTULO_OK, limpa_texto)
+                     ROTULO_OK, limpa_texto, texto_do_chat)
 from avisos import (CORPO_MAX as PUSH_CORPO, PUSH_BYTES, Avisos, EndpointInvalido, validar_arquivo as validar_push,  # noqa: E402
                     validar_assinatura, validar_saida)
 from jornal import JORNAL_BYTES, Jornal, validar as validar_jornal  # noqa: E402
@@ -555,15 +555,16 @@ def _resposta_jsonrpc(dados):
 
 def limpa_rotulo(txt, nomes=None):
     """Texto curto e legível da tarefa. Resposta de outro agente vem como
-    "handle: <external_data ...>", às vezes cortada no meio da marcação."""
-    txt = (txt or "")[:500]
+    "handle: <external_data ...>", às vezes cortada no meio da marcação. Segredos viram "•••" antes de cada corte,
+    e de novo depois do html.unescape (uma entidade como &#95; não esconde um token)."""
+    txt = texto_do_chat(txt or "", 500)[0]
     m = re.match(r"\s*([\w.\-]+):\s*<external_data", txt)
     if m:
         quem = (nomes or {}).get(m.group(1).lower(), "@" + m.group(1))
         return f"Lendo a resposta de {quem}"
     txt = re.sub(r"<[^>]{0,400}>", " ", txt)
     txt = re.sub(r"<[^>]*$", " ", txt)  # marcação cortada no fim
-    txt = re.sub(r"\s+", " ", html.unescape(txt)).strip()
+    txt = re.sub(r"\s+", " ", texto_do_chat(html.unescape(txt), 1000)[0]).strip()
     return (txt[:110] + "…") if len(txt) > 110 else txt
 
 
@@ -579,7 +580,7 @@ def setor_do_agente(d):
     if not isinstance(d, dict) or not isinstance(d.get("name"), str) or not d["name"].strip():
         return None
     ordem = d.get("position")
-    return {"nome": d["name"].strip()[:80], "cor": d.get("color") if d.get("color") in CORES_SETOR else None,
+    return {"nome": texto_do_chat(d["name"].strip(), 80)[0], "cor": d.get("color") if d.get("color") in CORES_SETOR else None,
             "icone": d.get("icon") if d.get("icon") in ICONES_SETOR else None,
             "ordem": ordem if type(ordem) is int and 0 <= ordem < 1000 else 999}
 
@@ -598,8 +599,8 @@ def normalizar(agentes, tarefas, url_app=None):
     "setor" e "aparencia" só existem quando o agentes.chat os manda (sem a chave: versão que ainda não manda)."""
     lista = []
     for a in agentes:
-        item = {"id": a["id"], "nome": a.get("name", "")[:60], "handle": a.get("handle", "")[:40],
-                "funcao": (a.get("role") or "")[:120]}
+        item = {"id": a["id"], "nome": texto_do_chat(a.get("name", ""), 60)[0], "handle": a.get("handle", "")[:40],
+                "funcao": texto_do_chat(a.get("role") or "", 120)[0]}
         if "department" in a:
             item["setor"] = setor_do_agente(a["department"])
         if "appearance" in a:
@@ -1063,13 +1064,13 @@ def resumir_conversa(bruto, url, agora):
         if not isinstance(m, dict):
             raise ValueError("mensagem fora do formato")
         autor = m.get("author") if isinstance(m.get("author"), dict) else {}
-        texto, cortado = limpa_texto(m.get("untrusted_text") or "", TEXTO_MAX)
+        texto, cortado = texto_do_chat(m.get("untrusted_text") or "", TEXTO_MAX)
         hora = str(m.get("sent_at") or "")
         item = {"autor": "agente" if autor.get("kind") == "agent" else "pessoa", "hora": hora if HORA_OK.fullmatch(hora) else None,
                 "texto": texto, "cortado": cortado or m.get("truncated") is True,
                 "anexos": len(m["attachments"]) if isinstance(m.get("attachments"), list) else 0}
         if item["autor"] == "agente":
-            item["nome"] = limpa_texto(autor.get("name") or "", 60)[0]
+            item["nome"] = texto_do_chat(autor.get("name") or "", 60)[0]
         mensagens.append(item)
     resposta = {"mensagens": mensagens, "url": url, "atualizado": _iso(agora)}
     while mensagens and len(json.dumps(resposta, ensure_ascii=False).encode("utf-8", "replace")) > CONVERSA_BYTES_MAX:
@@ -1545,8 +1546,9 @@ class PonteVisitas(threading.Thread):
             return False
         if "id" in autor:
             return autor["id"] == agente["id"]
-        nome = limpa_texto(autor.get("name") or "", 60)[0].strip().casefold()
-        return bool(nome) and nome == limpa_texto(agente.get("nome") or "", 60)[0].strip().casefold()
+        # o nome do agente lido já vem mascarado (normalizar): o do autor passa pela mesma máscara para comparar igual
+        nome = texto_do_chat(autor.get("name") or "", 60)[0].strip().casefold()
+        return bool(nome) and nome == texto_do_chat(agente.get("nome") or "", 60)[0].strip().casefold()
 
     def _canal_so_desta_sala(self, chave, agente, agora):
         """O canal de visitas é um só: a resposta solta nele só vai a esta sala se nenhuma outra mandou ao mesmo agente
@@ -1638,7 +1640,7 @@ class PonteVisitas(threading.Thread):
         for m in msgs:
             if not self.do_anfitriao(m, agente):
                 continue
-            texto = limpa_texto(m.get("untrusted_text") or "", 1800)[0].strip()
+            texto = texto_do_chat(m.get("untrusted_text") or "", 1800)[0].strip()
             marca = hashlib.sha256(f"{m.get('id')}|{m.get('sent_at')}|{texto}".encode()).hexdigest()[:16]
             if not texto or marca in vistas:
                 continue
@@ -2743,7 +2745,7 @@ class Pagina(BaseHTTPRequestHandler):
         handles, canal, _ = recepcao_vigente()
         if not handles or not UUID_MCP.fullmatch(canal) or not self._pode_responder():
             return []
-        return [{"id": a["id"], "nome": limpa_texto(a.get("nome") or a.get("handle") or "Agente", 60)[0]}
+        return [{"id": a["id"], "nome": texto_do_chat(a.get("nome") or a.get("handle") or "Agente", 60)[0]}
                 for a in self._agentes_lidos() if str(a.get("handle", "")).lower() in handles]
 
     def _agentes_lidos(self):
@@ -2838,7 +2840,7 @@ class Pagina(BaseHTTPRequestHandler):
             return 400, {"erro": "Esse canal não aparece para a conta conectada ao escritório. Confira o link e se a "
                                  "conta participa dele."}
         def linha(texto, maximo):
-            return " ".join(limpa_texto(texto, maximo)[0].split()) if isinstance(texto, str) else ""
+            return " ".join(texto_do_chat(texto, maximo)[0].split()) if isinstance(texto, str) else ""
         return 200, {"anfitriao": handle, "canal": canal, "nome": linha(lido.get("nome"), 60) or handle,
                      "canal_nome": linha(nomes.get(canal), 80)}
 
@@ -2860,7 +2862,7 @@ class Pagina(BaseHTTPRequestHandler):
             faltam.append("Conecte o escritório de novo com o acesso de mandar tarefas aos agentes.")
         return {"origem": origem, "tela": tela, "liberados": sorted(ANFITRIOES_VISITAS), "anfitrioes": sorted(handles),
                 "canal": canal,
-                "nomes": [limpa_texto(lidos[h].get("nome") or h, 60)[0] for h in sorted(handles) if h in lidos],
+                "nomes": [texto_do_chat(lidos[h].get("nome") or h, 60)[0] for h in sorted(handles) if h in lidos],
                 "faltam": faltam}
 
     def _papel(self):
@@ -2986,7 +2988,7 @@ class Pagina(BaseHTTPRequestHandler):
                         return self._json(403, {"erro": "Para pôr um agente na sala, confirme a senha do escritório. "
                                                         "Ela abre o modo resposta por 1 hora neste navegador.",
                                                 "codigo": "modo_fechado"})
-                    nome = limpa_texto(escolhido.get("nome") or escolhido.get("handle") or "Agente", 60)[0]
+                    nome = texto_do_chat(escolhido.get("nome") or escolhido.get("handle") or "Agente", 60)[0]
                     return self._json(200, {"convite": salas.criar({"id": escolhido["id"], "nome": nome})})
                 if rota.endswith("/recepcionista"):
                     return self._recepcionista(dados)

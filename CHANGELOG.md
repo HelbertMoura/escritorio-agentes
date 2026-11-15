@@ -6,6 +6,9 @@ All notable changes to this project are listed here, newest first. The format fo
 
 ## Unreleased
 
+### Security
+- **Secrets hidden on screen:** tokens, passwords and keys in a conversation, a task label or an agent's name and role from agentes.chat become "•••" before they reach the map, the TV, the phone and the visitors' room. It covers known tokens (OpenAI, GitHub, GitLab, Google, Slack), JWTs, private keys, `Bearer`, `password: ...` and `"token": "..."`, and long random base64 text. File paths and names still show. The masking happens before the text is cut, so no piece of a token is left.
+
 ### Fixed
 - **Newspaper on an extra floor:** the Gazette showed the main floor's company name under its title. Each floor now shows its own name. The numbers were already per floor.
 
