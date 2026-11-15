@@ -2407,6 +2407,7 @@ Jornal.iniciar({
     return a ? { nome: a.nome, ap: aparencia(a.handle) } : null;
   },
   empresa: () => (config && config.empresa) || "",
+  andar: () => (Andar.atual === Andar.PRINCIPAL ? "" : (andares.find(a => a.id === Andar.atual) || {}).nome || ""),
   demo: () => Brincar.demo,
   socialLigada, mini,
 });

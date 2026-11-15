@@ -81,7 +81,7 @@ const Jornal = (() => {
       .filter(a => typeof a.id === "string" && a.ag);
     const j = $("jornal");
     // a leitura de 10 s chama aqui também: só recria quando mudaram os dados, a aba, o placar ou os nomes e aparências
-    const chave = JSON.stringify([qual, s, placar, api.empresa(), gente.map(a => [a.id, a.ag.nome, a.ag.ap])]);
+    const chave = JSON.stringify([qual, s, placar, casa(), gente.map(a => [a.id, a.ag.nome, a.ag.ap])]);
     if (chave === desenhado && !j.hidden) return;
     desenhado = chave;
     j.hidden = false; $("jornal-semanas").hidden = false; aviso("");
@@ -93,10 +93,12 @@ const Jornal = (() => {
     j.replaceChildren(topo(F, ini), manchete(F, ini, rank), notas(F, ini, gente, s.dias), tabela(rank));
   }
 
+  // a marca é do prédio: num andar extra, a edição leva o nome dele (o térreo segue só com a empresa)
+  const casa = () => [api.empresa(), api.andar()].filter(Boolean).join(" · ");
   function topo(F, ini) {
     const h = el("header", "jn-topo");
     const titulo = el("h2", "jn-titulo", F.nome); titulo.id = "t-jornal";
-    h.append(el("p", "jn-ed", `Edição nº ${edicao(ini)} · ${periodo(ini)}`), titulo, el("p", "jn-casa", api.empresa()));
+    h.append(el("p", "jn-ed", `Edição nº ${edicao(ini)} · ${periodo(ini)}`), titulo, el("p", "jn-casa", casa()));
     return h;
   }
 
