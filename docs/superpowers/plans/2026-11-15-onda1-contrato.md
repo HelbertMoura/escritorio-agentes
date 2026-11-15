@@ -114,8 +114,20 @@ Base: andares @ 9080bab. Vale o plano 2026-11-15-escritorio-da-equipe.md (ONDA 1
   andar X só vai para os aparelhos de contas com papel em X, conferido na hora do envio (perdeu o papel, parou de
   receber).
 - `GET /api/avisos` (o sw.js, sem `?andar`): o aviso mais recente **destinado a esta conta**, de qualquer andar em que
-  ela tem papel: `{"aviso": {agente, nome, tipo, quando, andar}}` ou `{"aviso": null}`. No saguão não há avisos de
-  agente.
+  ela tem papel: `{"aviso": {agente, nome, tipo, quando}}` (o formato de hoje) ou `{"aviso": null}`. No saguão não há
+  avisos de agente.
+
+## 7. Com a migração (Trinity, migracao_saguao.py)
+
+- Despacho: `escritorio.py saguao [--desfazer]` chama `migracao_saguao.principal(argv, dados, times, org) -> int`, com
+  `argv` = os argumentos depois de `saguao`; o código de saída é o que ela devolve (0 deu certo, 1 recusada, 2 uso).
+- Trava do serviço: o `main()` chama `migracao_saguao.travar(DADOS)` depois de ler contas e andares e antes de abrir a
+  porta, e guarda o retorno pela vida do processo; `ServicoRodando` encerra a subida com a mensagem.
+- O v2 gravado: `{"v": 2, "terreo": "saguao", "andares": [...]}`, a Dev Maniac's primeiro, com `org` = AGENTES_ORG.
+- No andar: `oauth.json`, `equipe.json`, `planta.json`, `placar.json`, `jornal.json` (movidos) e `times.json`,
+  `marca.json`, `logo.img` (copiados, com o nome da raiz). O escritório lê a marca, o logo e os times do andar com esses
+  nomes.
+- Recepção no v2: o andar que atende é o de `org` = AGENTES_ORG (o `recepcao.json` não muda). Clássico: o principal.
 
 ## Pendências do back (não mudam este contrato)
 

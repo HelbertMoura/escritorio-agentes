@@ -474,6 +474,65 @@ class NaoPerturbe(unittest.TestCase):
         self.assertEqual(len(envios), 1)
 
 
+class PorAndar(unittest.TestCase):
+    """1.6: o Avisos do prédio é um só (a fila e a VAPID); cada andar põe os seus pedidos, e o aviso só vai para as
+    contas com papel no andar, conferido na hora do envio."""
+    B = "b1b2c3d4"
+    APARELHOS = {"ana": "https://fcm.googleapis.com/fcm/send/ana", "dono": "https://fcm.googleapis.com/fcm/send/dono"}
+
+    def montar(self, papeis, **k):
+        a, logs, envios, gravados = novo(pode=lambda conta, andar: (conta, andar) in papeis, **k)
+        for conta, endpoint in self.APARELHOS.items():
+            a.assinar(endpoint, T0, conta)
+        a.assinar(FCM, T0)   # assinatura de antes, sem conta
+        return a, envios
+
+    def test_so_quem_tem_papel_no_andar_recebe(self):
+        a, envios = self.montar({("ana", self.B), ("dono", "principal")})
+        a.do_andar(self.B).transicoes([pedido("r1")], RESUMO, T0)
+        agora, aviso, andar = a.fila.get_nowait()
+        self.assertEqual((aviso["agente"], andar), ("a1", self.B))
+        a.disparar(agora, andar)
+        self.assertEqual([r.full_url for r in envios], [self.APARELHOS["ana"]])   # nem o dono nem a sem conta
+
+    def test_quem_perde_o_papel_para_de_receber_na_hora(self):
+        papeis = {("ana", self.B)}
+        a, envios = self.montar(papeis)
+        a.transicoes([pedido("r1")], RESUMO, T0, andar=self.B)
+        papeis.clear()   # tirada do andar entre o pedido e o envio
+        a.disparar(T0, self.B)
+        self.assertEqual(envios, [])
+        self.assertEqual(a.publico("ana"), {"aviso": None})
+
+    def test_o_esperando_voce_e_de_cada_conta(self):
+        a, _ = self.montar({("ana", self.B), ("dono", "principal")})
+        a.transicoes([pedido("r1", "a1")], RESUMO, T0, andar=self.B)
+        a.transicoes([pedido("r2", "a2")], RESUMO, T0 + 5)
+        self.assertEqual(a.publico("ana")["aviso"]["agente"], "a1")
+        self.assertEqual(a.publico("dono")["aviso"]["agente"], "a2")
+        self.assertEqual(a.publico("caio"), {"aviso": None})
+        a.zerar(self.B)   # troca de conta no OAuth de B: só os avisos de B saem
+        self.assertEqual((a.publico("ana"), a.publico("dono")["aviso"]["agente"]), ({"aviso": None}, "a2"))
+        a.transicoes([pedido("r1", "a1")], RESUMO, T0 + 9, andar=self.B)   # depois do zerar, avisa de novo
+        self.assertEqual(a.publico("ana")["aviso"]["quando"], int(T0 + 9))
+
+    def test_o_mesmo_run_em_dois_andares_sao_dois_avisos(self):
+        a, _ = self.montar({("ana", self.B), ("dono", "principal")})
+        a.transicoes([pedido("r1")], RESUMO, T0)
+        a.transicoes([pedido("r1")], RESUMO, T0, andar=self.B)
+        self.assertEqual(a.fila.qsize(), 2)
+
+    def test_so_no_expediente_usa_o_do_andar(self):
+        pedidos = []
+
+        def expediente(*andar):
+            pedidos.append(andar)
+            return {"abre": "07:00", "fecha": "08:00"}
+        a, envios = self.montar({("ana", self.B)}, preferencia={"ana": {"modo": "expediente"}}.get, expediente=expediente)
+        a.disparar(local(12), self.B)
+        self.assertEqual((envios, pedidos), ([], [(self.B,)]))   # fora do expediente de B: calado
+
+
 class Rotas(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
