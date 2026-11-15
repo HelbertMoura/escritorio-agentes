@@ -60,6 +60,13 @@ const notas = pecas => achar(pecas.jornal, e => e.className === "jn-nota").map(e
   assert.equal(cabecalho((await abrir({})).pecas), "Minha empresa");
   // andar extra: a edição leva o nome dele
   assert.equal(cabecalho((await abrir({}, "Marketing")).pecas), "Minha empresa · Marketing");
+  // lista de andares ainda não lida (caso do PR #30): fica só a empresa
+  {
+    const { pecas, api, Jornal } = await abrir({});
+    api.andar = () => undefined;
+    Jornal.reiniciar(); await Jornal.abrir();
+    assert.equal(cabecalho(pecas), "Minha empresa");
+  }
 
   // trocou de andar com a edição do anterior ainda na mão: o nome é o de quando ela foi lida
   {

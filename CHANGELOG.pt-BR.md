@@ -18,7 +18,7 @@ Release [`v1.5.2`](https://github.com/HelbertMoura/escritorio-agentes/releases/t
 - **Modo econômico:** o mapa desenha menos quadros quando nada se mexe. Medido em 1280 px por 60 s: parado, de 154% para 49% de CPU; com chuva, de 166% para 119%; com agentes andando, de 128% para 100%.
 
 ### Corrigido
-- **Jornal por andar:** a edição leva o nome da empresa e do andar, e avisa quando o andar está sem conexão, ligado a outro workspace, com a leitura atrasada ou ainda sem atividade.
+- **Jornal por andar:** a edição leva o nome da empresa e do andar, e avisa quando o andar está sem conexão, ligado a outro workspace, com a leitura atrasada ou ainda sem atividade. O Morpheus achou o nome errado no 2º andar (tarefa #14 do quadro) e mandou a primeira correção no PR [#30](https://github.com/HelbertMoura/escritorio-agentes/pull/30), juntada a esta.
 - **Reconectar a mesma conta:** conectar de novo a mesma conta do agentes.chat não zera mais o jornal nem os avisos; só uma conta diferente zera. Se o serviço reiniciar antes da primeira leitura que confere a conta, esse zerar se perde.
 - **Aviso de conta removida:** remover uma conta desliga o aviso no celular dos aparelhos que ela ligou, e o **Sair de todos os aparelhos** de um membro desliga o aviso só nos aparelhos dele.
 

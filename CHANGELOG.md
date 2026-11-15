@@ -18,7 +18,7 @@ Release [`v1.5.2`](https://github.com/HelbertMoura/escritorio-agentes/releases/t
 - **Economy mode:** the map draws fewer frames when nothing moves. Measured at 1280 px over 60 s: idle, from 154% to 49% CPU; with rain, from 166% to 119%; with agents walking, from 128% to 100%.
 
 ### Fixed
-- **Newspaper per floor:** the issue carries the company and floor name, and says when the floor is not connected, linked to another workspace, reading late or still without activity.
+- **Newspaper per floor:** the issue carries the company and floor name, and says when the floor is not connected, linked to another workspace, reading late or still without activity. Morpheus spotted the wrong name on the 2nd floor (board task #14) and sent the first fix in PR [#30](https://github.com/HelbertMoura/escritorio-agentes/pull/30), merged into this one.
 - **Reconnecting the same account:** connecting the same agentes.chat account again no longer clears the newspaper or the alerts; only a different account does. If the service restarts before the first read that checks the account, that clearing is lost.
 - **Alerts of a removed account:** removing an account turns off phone alerts on the devices it turned them on, and a member's **Sign out of all devices** turns off alerts only on their own devices.
 
