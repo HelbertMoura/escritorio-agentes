@@ -156,6 +156,8 @@ const Vida = (() => {
   const entre = (a, b) => a + Math.random() * (b - a);
   const esperando = b => !!b.trabalho && /^waiting/.test(b.trabalho.status);
   const trabalhando = b => !!b.trabalho && !esperando(b);
+  // hora extra: fora do expediente, quem tem tarefa fica na mesa com a luminária acesa (app.js e mapa.js desenham; a ficha avisa)
+  const horaExtra = (b, fora = foraDoExpediente()) => !!fora && !!b.trabalho && !!b.mesa;
   const rumo = (dx, dy) => (Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? "esq" : "dir") : (dy < 0 ? "cima" : "baixo"));
 
   function criarMundo(predio) {
@@ -1591,6 +1593,18 @@ const Vida = (() => {
     if (!p.rota.length && !p.eu) p.olha = p.parado;   // parado: olha para onde a pessoa olha na tela dela
     p.pose = p.rota.length ? "andando" : "parado"; p.chave = p.y + 0.5;
   }
+  // modo econômico (laço do app.js): alguém andando, comemorando, acenando ou arremessando, ou uma cena social ou entrega no ar
+  function mexendo(m) {
+    const agora = performance.now() / 1000;
+    if (m.cenaSocial || m.entrega) return true;
+    for (const b of m.lista) if (b.rota.length || b.festa > agora || b.aceno > agora || b.arremesso > agora) return true;
+    return pessoas().some(p => p.rota.length);
+  }
+  // intervalo mínimo entre quadros, em ms (0: a cada requestAnimationFrame). Só chuva, neve ou festa (animando): até 60 quadros/s.
+  // Parado, 30 com foco e 20 sem foco (segundo monitor, TV): acima das animações paradas (monitores, digitando e café, até
+  // ~8 quadros/s) e dos carros da rua
+  const intervaloQuadro = ({ mexendo: mexe, animando, foco }) => (mexe ? 0 : animando ? 1000 / 60 : foco ? 1000 / 30 : 1000 / 20);
+
   // quem desenhar (app.js): os outros e eu, fora quem ainda está na rua, fora da tela
   const pessoas = () => [...vivo.pessoas.values(), ...(vivo.eu ? [vivo.eu] : [])].filter(p => p.x > -20);
   // quantos outros estão neste andar agora (a linha "N pessoas olhando"); null antes da 1ª leitura ou desligado
@@ -1617,7 +1631,7 @@ const Vida = (() => {
     return n;
   }
 
-  return { criarMundo, sincronizar, passo, digitando, momento, objetoClicado, festaGeral, social, aoVivo, irAte, pessoas, olhando, textoGreve, FRASES };
+  return { criarMundo, sincronizar, passo, digitando, momento, objetoClicado, festaGeral, social, aoVivo, irAte, pessoas, olhando, textoGreve, horaExtra, mexendo, intervaloQuadro, FRASES };
 })();
 
 window.Vida = Vida;
