@@ -158,6 +158,13 @@ class Equipe:
             if "fts5" in str(x):
                 raise RuntimeError("o SQLite deste Python não tem FTS5") from None
             raise
+        try:   # SQLite 3.42+: o FTS5 tira a entrada do índice na hora; antes disso, o índice é otimizado a cada apagar
+            if self.con.execute("SELECT v FROM fts_config WHERE k = 'secure-delete'").fetchone() != (1,):
+                with self.con:   # só na primeira vez: abrir para ler não muda o arquivo
+                    self.con.execute("INSERT INTO fts (fts, rank) VALUES ('secure-delete', 1)")
+            self.otimizar = False
+        except sqlite3.OperationalError:
+            self.otimizar = True
 
     def fechar(self):
         with self.trava:
@@ -244,8 +251,9 @@ class Equipe:
 
     def _limpar_disco(self):
         """Depois de apagar: o índice da busca sem as entradas velhas e o WAL zerado (o texto não fica no diário)."""
-        with self.con:
-            self.con.execute("INSERT INTO fts (fts) VALUES ('optimize')")
+        if self.otimizar:
+            with self.con:
+                self.con.execute("INSERT INTO fts (fts) VALUES ('optimize')")
         self.con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
     def _uso_banco(self):

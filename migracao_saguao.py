@@ -16,7 +16,8 @@ O que a ida faz, tudo ou nada (E.1 do plano):
     principal e outros andares não ganha (o principal dela pode ser o forçado de antes): sai na lista de pendentes, só o
     login, para o admin dar o andar pela tela de Membros;
  5. o papel no principal fica como está: passa a ser o papel no prédio;
- 6. grava o diário dados/migracao-saguao.json antes de mexer em qualquer coisa e o marca como feito no fim.
+ 6. grava o diário dados/migracao-saguao.json (0600, com a cópia de antes do usuarios.json e do andares.json, os dois
+    que são reescritos) antes de mexer em qualquer coisa e o marca como feito no fim.
 Falhou no meio: desfaz o que fez e apaga o diário. Caiu no meio (o processo morreu): rodar de novo termina a ida, e
 --desfazer volta. Rodar de novo depois de feita não muda nada.
 
@@ -103,8 +104,19 @@ def _gravar_andares(dados, conteudo):
 
 
 def _sha(caminho):
+    h = hashlib.sha256()
     with open(caminho, "rb") as f:
-        return hashlib.file_digest(f, "sha256").hexdigest()
+        for bloco in iter(lambda: f.read(64 * 1024), b""):
+            h.update(bloco)
+    return h.hexdigest()
+
+
+def _texto(caminho):
+    try:
+        with open(caminho, encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return None
 
 
 def _ler_v2(dados):
@@ -191,7 +203,10 @@ def _planejar(dados, times, org, relogio):
             "pasta_andares_existia": os.path.isdir(os.path.join(dados, "andares")),
             "movidos": [n for n in MOVER if os.path.exists(os.path.join(dados, n))],
             "copiados": [{"nome": n, "origem": os.path.abspath(o), "sha256": _sha(o)} for n, o in copias],
-            "contas": contas, "pendentes": sorted(pendentes)}
+            "contas": contas, "pendentes": sorted(pendentes),
+            # para voltar à mão se o desfazer for recusado (o desfazer em si só tira o que a ida pôs)
+            "copia_de_antes": {ARQ_USUARIOS: _texto(os.path.join(dados, ARQ_USUARIOS)),
+                               andares.ARQ: _texto(os.path.join(dados, andares.ARQ))}}
 
 
 def _aplicar(dados, plano):
