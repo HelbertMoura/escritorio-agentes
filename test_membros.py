@@ -204,7 +204,8 @@ class Membros(unittest.TestCase):
             self.assertEqual((st, ok), (200, {"ok": True}))
             carla = {"Cookie": h["Set-Cookie"].split(";")[0]}
             self.assertEqual(self.get("/api/perfil", carla)[1],
-                             {"usuario": "carla", "nome": "Carla", "avatar": AVATAR, "papel": "membro", "aparencia": AVATAR})
+                             {"usuario": "carla", "nome": "Carla", "avatar": AVATAR, "papel": "membro", "aparencia": AVATAR,
+                              "avisos": {"modo": "sempre"}})
             self.assertEqual(self.get(f"/api/estado?andar={self.extra}", carla)[0], 200)
             # uso único: o mesmo link não cria outra conta e responde como um convite qualquer que não vale
             st, r2, _ = self.post("/convite/aceitar", {**pedido, "usuario": "carla2"})
@@ -332,6 +333,22 @@ class Membros(unittest.TestCase):
         self.assertEqual(self.post("/api/perfil", {"nome": "Ana", "avatar": AVATAR}, ana, origem="https://outro.exemplo")[0], 403)
         self.assertEqual(self.get("/api/perfil", self.dono)[1]["usuario"], "dono")   # cada um só o seu
         self.assertEqual(r["aparencia"], r["avatar"], "com boneco salvo, o efetivo é o salvo")
+
+    def test_nao_perturbe_por_conta(self):
+        ana = self.membro("ana")
+        self.assertEqual(self.get("/api/perfil", ana)[1]["avisos"], {"modo": "sempre"})   # sem preferência: como hoje
+        st, r, _ = self.post("/api/perfil", {"avisos": {"modo": "silencio", "de": "22:00", "ate": "7:00"}}, ana)
+        self.assertEqual((st, r["avisos"]), (200, {"modo": "silencio", "de": "22:00", "ate": "07:00"}))
+        self.assertEqual(r["nome"], self.get("/api/perfil", ana)[1]["nome"])   # o resto do perfil fica como estava
+        self.assertEqual(self.srv.acesso.avisos_de("ana"), {"modo": "silencio", "de": "22:00", "ate": "07:00"})
+        self.assertEqual(self.get("/api/perfil", self.dono)[1]["avisos"], {"modo": "sempre"})   # é de cada conta
+        for ruim in ({"avisos": {"modo": "nunca"}}, {"avisos": {"modo": "silencio", "de": "22:00", "ate": "22:00"}},
+                     {"avisos": {"modo": "sempre"}, "nome": "Ana"}, {"avisos": "sempre"}):
+            self.assertEqual(self.post("/api/perfil", ruim, ana)[0], 400, ruim)
+        self.assertEqual(self.post("/api/perfil", {"avisos": {"modo": "sempre"}}, ana, origem="https://outro.exemplo")[0], 403)
+        self.assertEqual(self.post("/api/perfil", {"avisos": {"modo": "expediente"}}, ana)[1]["avisos"], {"modo": "expediente"})
+        self.post("/api/perfil", {"avisos": {"modo": "sempre"}}, ana)
+        self.assertIsNone(self.srv.acesso.avisos_de("ana"))   # avisar sempre é o padrão: não fica nada gravado
 
     def test_perfil_sem_boneco_da_o_padrao_do_servidor(self):
         # quem não salvou boneco se vê com o mesmo padrão que os outros veem na presença (aparencia_da_conta)
