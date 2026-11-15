@@ -626,7 +626,7 @@ const Ajustes = (() => {
     const ed = el("button", "botao fantasma", "Andares"), rm = el("button", "botao fantasma", "Remover");
     ed.type = rm.type = "button"; ed.hidden = c.papel !== "membro";
     ed.setAttribute("aria-label", `Editar os andares de ${quem}`); rm.setAttribute("aria-label", `Remover a conta de ${quem}`);
-    if (eu) { rm.disabled = true; rm.title = "A sua própria conta só sai pelas mãos de outro admin"; rm.setAttribute("aria-label", "Remover a sua conta: só outro admin pode"); }
+    if (eu) { rm.disabled = true; rm.title = "Para sair, peça a outro admin para remover a sua conta"; rm.setAttribute("aria-label", "Remover a sua conta: para sair, peça a outro admin"); }
     const acoes = el("div", "andar-acoes"); acoes.append(papel, ed, rm);
     topo.append(info, acoes);
     const painel = el("div", "andar-painel"); painel.hidden = true;

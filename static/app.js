@@ -150,7 +150,7 @@ function montar(agentes) {
 // o servidor ainda sem a 1ª leitura do andar ("carregando": recém-iniciado ou na vez escalonada do andar) responde sem
 // agentes; relê a cada 1 s até ela chegar, em vez de deixar o mapa vazio até a leitura de 10 s. Quando ela chega, o elevador
 // (a conexão de cada andar vem do config, relido a cada minuto) deixa de mostrar "conectando…" na hora
-let releCedo = 0, eraCarregando = false;
+let releCedo = 0, eraCarregando = false, vezesCedo = 0;   // teto: 60 releituras de 1 s, depois só a de 10 s
 async function buscar() {
   clearTimeout(releCedo);
   if (trocando) return;   // a troca de andar chama de novo quando o config novo chegar
@@ -176,7 +176,8 @@ async function buscar() {
     if (!$("ficha").hidden) renderFicha();
     vigiarSocial(); vigiarGreve();
     const carregando = estado.conexao === "carregando";
-    if (carregando) releCedo = setTimeout(buscar, 1000);
+    vezesCedo = carregando ? vezesCedo + 1 : 0;
+    if (carregando && vezesCedo <= 60) releCedo = setTimeout(buscar, 1000);
     else if (eraCarregando && andares.length >= 2) recarregarAndares();
     eraCarregando = carregando;
   } catch (e) {
