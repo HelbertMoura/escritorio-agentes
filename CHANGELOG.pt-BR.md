@@ -6,6 +6,9 @@ As mudanças que importam neste projeto ficam aqui, da mais nova para a mais ant
 
 ## Não lançado
 
+### Segurança
+- **Segredos escondidos na tela:** tokens, senhas e chaves que aparecem numa conversa, no rótulo de uma tarefa ou no nome e na função de um agente do agentes.chat viram "•••" antes de chegar ao mapa, à TV, ao celular e à sala de visitas. Entram os tokens conhecidos (OpenAI, GitHub, GitLab, Google, Slack), JWT, chave privada, `Bearer`, `senha: ...` e `"token": "..."`, e textos longos e aleatórios em base64. Caminhos e nomes de arquivo continuam aparecendo. A troca acontece antes do corte do texto, então nenhum pedaço de token sobra.
+
 ### Corrigido
 - **Jornal de um andar extra:** embaixo do título da Gazeta aparecia o nome da empresa do andar principal. Agora cada andar mostra o próprio nome. Os números já eram de cada andar.
 
