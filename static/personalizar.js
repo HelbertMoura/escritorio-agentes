@@ -13,9 +13,10 @@ const Personalizar = (() => {
   let configApp = null;      // a config da página (app.js), para o logo salvo valer ao reabrir sem recarregar
   let placa = null, painel = null;
 
+  // a marca e o logo são do andar atual (expediente.js: Andar); no principal o pedido sai como sempre
   async function enviar(url, corpo, tipo) {
     if (window.Brincar && Brincar.demo) throw new Error("na demonstração nada é salvo");   // segunda trava: nenhum POST na demo
-    const r = await fetch(url, { method: "POST", credentials: "same-origin", headers: { "Content-Type": tipo }, body: corpo });
+    const r = await fetch(Andar.com(url), { method: "POST", credentials: "same-origin", headers: { "Content-Type": tipo }, body: corpo });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.erro || `HTTP ${r.status}`);
     return d;

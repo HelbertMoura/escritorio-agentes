@@ -405,6 +405,17 @@
             <p id="equipe-aviso" class="aviso-form" role="status"></p>
             <div class="acoes"><button id="equipe-salvar" class="botao" type="button">Salvar times</button><button id="equipe-desfazer" class="botao fantasma" type="button">Desfazer</button><button id="equipe-arquivo" class="link-botao" type="button" hidden>Voltar ao times.json</button></div>
           </section>
+          <section id="a-conexao" class="cartao ajuste so-admin" aria-labelledby="t-conexao" hidden>
+            <h2 id="t-conexao">Conexão deste andar</h2>
+            <p class="ajuda">Este andar mostra os agentes do workspace dele no agentes.chat. Conecte com uma conta desse workspace; ao desconectar, o escritório esquece a autorização e os agentes saem do mapa.</p>
+            <p class="cx-linha">Estado: <strong id="cx-estado">—</strong></p>
+            <div class="acoes"><a id="cx-conectar" class="botao secundario" href="/oauth/conectar">Conectar</a></div>
+            <form id="form-desconectar" class="sair-todos" novalidate>
+              <label for="cx-senha">Sua senha, para desconectar</label>
+              <div class="st-linha"><input id="cx-senha" type="password" autocomplete="current-password" maxlength="256" required aria-describedby="cx-aviso"><button id="cx-desconectar" class="botao perigo" type="submit">Desconectar o andar</button></div>
+              <p id="cx-aviso" class="aviso-form" role="status"></p>
+            </form>
+          </section>
           <section id="a-andares" class="cartao ajuste so-admin" aria-labelledby="t-andares" hidden>
             <h2 id="t-andares">Andares</h2>
             <p class="ajuda">Cada andar é um workspace do agentes.chat, com a sua conexão e os seus times, e aparece no prédio como um andar próprio. O andar principal é o workspace do servidor e não se edita aqui. Remover um andar só desconecta e tira da lista: a pasta de dados dele continua no servidor.</p>
@@ -438,7 +449,7 @@
               <h3 id="t-form-convite" class="ajuste-sub">Convidar alguém</h3>
               <label for="cv-nome">Nome sugerido</label>
               <input id="cv-nome" maxlength="40" required autocomplete="off" placeholder="Ex.: Ana">
-              <fieldset class="cv-andares"><legend>Andares que a pessoa vê</legend><div id="cv-andares"></div></fieldset>
+              <fieldset id="cv-andares-campo" class="cv-andares"><legend>Andares que a pessoa vê</legend><div id="cv-andares"></div></fieldset>
               <label for="cv-senha">Sua senha</label>
               <input id="cv-senha" type="password" autocomplete="current-password" maxlength="256" required>
               <p id="cv-aviso" class="aviso-form" role="status"></p>

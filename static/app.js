@@ -38,6 +38,7 @@ function imagem(src) { return new Promise((ok, erro) => { const i = new Image();
 async function iniciar() {
   config = Brincar.demo ? Brincar.configDemo()   // demonstração: nada vem do servidor
     : await json("api/config").catch(e => { if (!(e instanceof AndarInvalido)) throw e; sairDoAndarInvalido(); return json("api/config"); });
+  if (!Brincar.demo && Andar.seguir(config)) marcarAndarNaUrl();
   Expediente.definir(config.expediente);   // sem a chave (demonstração, servidor antigo): 07:00 às 20:00
   const pasta = `tema/`;
   const mapaJson = await json(pasta + "atlas.json");
@@ -55,12 +56,12 @@ async function iniciar() {
   ligarAoVivo();
   irAoAgentePedido();
   ligarTV();
-  if (!souMembro()) Assistente.talvez(config, () => estado);   // nome de exemplo ou sem conexão: o assistente (uma vez por sessão, e na volta do OAuth)
+  if (!souMembro() && !Andar.perfil(config).noSaguao) Assistente.talvez(config, () => estado);   // nome de exemplo ou sem conexão: o assistente (uma vez por sessão, e na volta do OAuth)
   setInterval(buscar, 10000);
   requestAnimationFrame(quadro);
 }
 
-// o que sai do config de cada andar (a marca, as datas e o expediente são do prédio e vêm iguais em todos)
+// o que sai do config de cada andar: a marca (nome, cor, logo), o expediente e os times são do andar; as datas, do prédio
 function aplicarConfig() {
   // o Personalizar grava config.logo assim que o /api/logo responde: o logo do topo e o do mapa trocam na hora
   // (mesmo se o salvar do nome e da cor falhar depois), sem esperar recarregar
@@ -73,13 +74,16 @@ function aplicarConfig() {
   aplicarPapel();
 }
 
-// O papel da conta ("admin" | "membro") vem no /api/config; sem o campo (servidor antigo) vale admin, a tela de sempre.
-// A regra mora aqui: o body ganha data-papel e o CSS esconde tudo que tem class "so-admin" (estilo.css). O servidor também
-// barra no back (403); isto só evita mostrar botões que não funcionam. Conversas e o assistente de instalação dependem daqui.
-const souMembro = () => !!config && config.papel === "membro";
+// O papel da conta NO ANDAR ("admin" | "membro" | "pessoa", a pessoa do prédio no saguão) vem no /api/config; sem o campo
+// (servidor antigo) vale admin, a tela de sempre (expediente.js: Andar.perfil). A regra mora aqui: o body ganha data-papel e
+// o CSS esconde tudo que tem class "so-admin" (estilo.css); quem não é admin do andar fica com a tela do membro. O servidor
+// também barra no back (403); isto só evita mostrar botões que não funcionam. Conversas e o assistente dependem daqui.
+// No saguão (data-saguao) não há agentes nem conexão: o CSS esconde o que leva ao OAuth e às conversas.
+const souMembro = () => !!config && !Andar.perfil(config).admin;
 function aplicarPapel() {
   document.body.dataset.papel = souMembro() ? "membro" : "admin";
-  if (souMembro() && location.hash === "#conversas") rota();   // abriu direto numa tela de admin: o rota() manda para o mapa
+  document.body.toggleAttribute("data-saguao", Andar.perfil(config).noSaguao);
+  if ((souMembro() || Andar.perfil(config).noSaguao) && location.hash === "#conversas") rota();   // abriu direto numa tela de admin: o rota() manda para o mapa
 }
 
 function aplicarMarca() {
@@ -1896,6 +1900,7 @@ const CONEXAO = {
   recusada:    { rotulo: "Conexão recusada", texto: "O agentes.chat recusou a leitura: confira se a conta conectada é da organização e se o plano permite apps externos.", doServidor: true, conectar: "Reconectar" },
   pausa:       { rotulo: "Em pausa", texto: "O agentes.chat pediu uma pausa. Mostrando a última leitura.", doServidor: true, tentar: true },
   falha:       { rotulo: "agentes.chat sem resposta", texto: "O agentes.chat não respondeu agora. Mostrando a última leitura.", tentar: true },
+  conferindo:  { rotulo: "Conferindo o workspace", texto: "Conectado. Conferindo se a conta é do workspace deste andar; os agentes aparecem depois disso." },
 };
 const capitular = t => t.charAt(0).toUpperCase() + t.slice(1).replace(/\.?$/, ".");
 // o link que o "Copiar o link" leva: o endereço configurado (ESCRITORIO_BASE), para onde o agentes.chat devolve
@@ -2310,7 +2315,7 @@ function marcarAndarNaUrl() {
   else if (Andar.doHash(h)) history.replaceState(history.state, "", base);
 }
 function sairDoAndarInvalido() { Andar.limpar(); marcarAndarNaUrl(); }   // 404 {"codigo":"andar"}: o guardado não vale mais
-function voltarAoPrincipal() { trocarAndar(Andar.PRINCIPAL, "Esse andar não está mais disponível. Você voltou para o andar principal."); }
+function voltarAoPrincipal() { trocarAndar(Andar.PRINCIPAL, `Esse andar não está mais disponível. Você voltou para ${config && Andar.perfil(config).saguao ? "o saguão" : "o andar principal"}.`); }
 
 // zera o que era do andar de antes: ficha, conversa aberta, eventos e pedidos deduzidos, social e greve
 function reiniciarAndar() {
@@ -2333,13 +2338,15 @@ async function trocarAndar(id, aviso) {
   try {
     const c = await json("api/config");   // com o andar novo; falhando, nada do andar de antes é mexido
     reiniciarAndar();
+    Andar.seguir(c);   // pediu o principal sem ter acesso: o servidor respondeu pelo primeiro andar da conta
     config = c; Expediente.definir(c.expediente); aplicarConfig();
+    await trocarLogo(config.logo);   // o logo do mapa é o do andar novo (o do topo já trocou no aplicarMarca)
     marcarAndarNaUrl();
     if (!$("v-personalizar").hidden) Ajustes.abrir(config);
     trocando = false;
     await buscar();
     ligarAoVivo();
-    anunciarAndar(aviso || `Você está no andar ${nomeDoAndar(id)}.`);
+    anunciarAndar(aviso || `Você está no andar ${nomeDoAndar(Andar.atual)}.`);
   } catch (e) {
     trocando = false;
     if (id === Andar.PRINCIPAL) { falhou = true; mostrarConexao(); setTimeout(() => location.reload(), 10000); return; }   // como a carga inicial
@@ -2356,7 +2363,7 @@ function rota() {
   const r = (location.hash || "#escritorio").slice(1);
   const TELAS = ["escritorio", "conversas", "aprovacoes", "jornal", "personalizar", "novidades", "ajuda"];
   // na demonstração o Personalizar não existe: ele grava a marca no servidor de verdade
-  const valida = TELAS.includes(r) && !(r === "personalizar" && Brincar.demo) && !(r === "conversas" && souMembro()) ? r : "escritorio";
+  const valida = TELAS.includes(r) && !(r === "personalizar" && Brincar.demo) && !(r === "conversas" && (souMembro() || Andar.perfil(config).noSaguao)) ? r : "escritorio";
   for (const v of TELAS) $(`v-${v}`).hidden = v !== valida;
   // outra tela começa no topo (sem isso, voltar do Personalizar ao Escritório deixava o mapa fora de vista); o pulo para
   // uma âncora da mesma tela (#principal, #aviso-greve) não troca de tela e fica como está

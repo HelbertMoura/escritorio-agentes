@@ -50,9 +50,19 @@ const Andar = (() => {
   }
   // como a conexão de cada andar aparece na tela; valor que o servidor ainda não conhece vira "sem leitura"
   const CONEXAO = { conectado: "conectado", sem_conexao: "sem conexão", outra_org: "conectado no workspace errado, reconecte", recusada: "conexão recusada",
-    pausa: "em pausa", falha: "sem resposta", carregando: "conectando…" };
+    pausa: "em pausa", falha: "sem resposta", carregando: "conectando…", conferindo: "conectado, conferindo o workspace" };
   const rotuloConexao = c => (typeof c === "string" && Object.hasOwn(CONEXAO, c) ? CONEXAO[c] : "sem leitura");
+  // o perfil da conta no andar do /api/config: papel neste andar, admin do prédio (admin_predio) e o modo do térreo.
+  // Sem o campo papel (servidor antigo) vale admin do prédio, a tela de sempre; papel desconhecido vira o mais fechado.
+  function perfil(c) {
+    const cfg = c && typeof c === "object" ? c : {};
+    const papel = cfg.papel === undefined ? "admin" : ["admin", "membro", "pessoa"].includes(cfg.papel) ? cfg.papel : "pessoa";
+    const admin = papel === "admin", saguao = cfg.terreo === "saguao";
+    return { papel, admin, predio: admin && cfg.admin_predio !== false, saguao, noSaguao: saguao && (cfg.andar === undefined || cfg.andar === PRINCIPAL) };
+  }
+  // o andar que o /api/config respondeu (conta sem acesso ao principal recebe o primeiro andar dela): passa a valer daqui em diante
+  const seguir = c => !!c && valido(c.andar) && definir(c.andar);
   ler();
-  return { PRINCIPAL, valido, rotuloConexao, doHash, ler, definir, com, limpar: () => definir(PRINCIPAL), get atual() { return atual; } };
+  return { PRINCIPAL, valido, rotuloConexao, perfil, seguir, doHash, ler, definir, com, limpar: () => definir(PRINCIPAL), get atual() { return atual; } };
 })();
 window.Andar = Andar;

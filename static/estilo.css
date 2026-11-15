@@ -1110,6 +1110,8 @@ body:has(.sim-aviso) main { padding-bottom: calc(96px + env(safe-area-inset-bott
 /* Papel da conta (app.js: aplicarPapel põe data-papel no body). Quem é membro não vê o que só o admin usa; o servidor barra no back */
 body[data-papel="membro"] .so-admin { display: none !important; }
 body:not([data-papel="membro"]) .so-membro { display: none !important; }
+/* Saguão (app.js: aplicarPapel põe data-saguao): sem agentes nem conexão, nada leva ao OAuth nem às conversas */
+body[data-saguao] [data-conectar], body[data-saguao] #copiar-link, body[data-saguao] #faixa-link, body[data-saguao] a[data-rota="conversas"], body[data-saguao] #modo-resposta { display: none !important; }
 
 /* Meu perfil (personalizar.js) e Membros (ajustes.js) */
 .form-perfil, .cv-link { display: flex; flex-direction: column; gap: 10px; max-width: 560px; }
