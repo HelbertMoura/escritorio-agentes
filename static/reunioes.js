@@ -192,12 +192,14 @@ const Reunioes = (() => {
     if (r.link) { const a = pintarLink(criar("a", "botao reuniao-entrar-bt", "Entrar na reunião"), r.link, nomeSala(r.sala)); if (!a.hidden) acoes.append(a); }
     const ics = criar("a", "botao secundario", "Baixar .ics");
     ics.setAttribute("href", Andar.com(urlIcs(r.id))); ics.setAttribute("download", "");
-    ics.setAttribute("aria-label", `Baixar o convite de ${r.titulo} para a sua agenda (.ics)`);
+    // os rótulos dizem a hora e a sala, nunca o título: o modo apresentação esconde o texto, não o aria-label
+    const qual = `das ${faixa(r)} na ${nomeSala(r.sala)}`;
+    ics.setAttribute("aria-label", `Baixar o convite da reunião ${qual} para a sua agenda (.ics)`);
     acoes.append(ics);
     if (r.pode_mudar) {
       const editar = criar("button", "botao fantasma", "Editar"), cancelar = criar("button", "botao fantasma", "Cancelar");
       editar.type = cancelar.type = "button";
-      editar.setAttribute("aria-label", `Editar ${r.titulo}`); cancelar.setAttribute("aria-label", `Cancelar ${r.titulo}`);
+      editar.setAttribute("aria-label", `Editar a reunião ${qual}`); cancelar.setAttribute("aria-label", `Cancelar a reunião ${qual}`);
       editar.addEventListener("click", () => abrirForm(r, editar));
       cancelar.addEventListener("click", () => cancelarReuniao(r, cancelar));
       acoes.append(editar, cancelar);

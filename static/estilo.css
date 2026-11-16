@@ -1182,7 +1182,7 @@ html.apresentacao #cartao-agente, html.apresentacao #ficha, html.apresentacao #c
 html.apresentacao #greve-motivo, html.apresentacao #tv-legenda, html.apresentacao #social-anuncio, html.apresentacao #equipe, html.apresentacao #equipe-lista,
 html.apresentacao #meu-status, html.apresentacao #equipe-mural, html.apresentacao #equipe-aviso, html.apresentacao #aceno-aviso,
 html.apresentacao #mural-lista, html.apresentacao #placar-tabela, html.apresentacao #ringue-lista, html.apresentacao #ringue-texto,
-html.apresentacao .widgets, html.apresentacao .agora, html.apresentacao #v-conversas > *, html.apresentacao #v-aprovacoes > *,
+html.apresentacao .widgets, html.apresentacao section.agora, html.apresentacao #v-conversas > *, html.apresentacao #v-aprovacoes > *,
 html.apresentacao #v-jornal > *, html.apresentacao [data-sensivel] { display: none !important; }
 html.apresentacao :is(#v-conversas, #v-aprovacoes, #v-jornal)::before { content: "Modo apresentação ligado: esta página fica escondida."; display: block; padding: 24px 0; color: var(--suave); }
 .controles .apresentacao-bt svg { display: block; }

@@ -145,10 +145,11 @@ function carregar({ guardado = null, semStorage = false, semControles = false } 
   const SENSIVEIS = [
     "#lista", "#busca-lista", "#usuario-nome", "#usuario-ini", "#cartao-agente", "#ficha", "#conversa", "#chat-sala",
     "#greve-motivo", "#tv-legenda", "#social-anuncio", "#equipe", "#equipe-lista", "#meu-status", "#equipe-mural", "#equipe-aviso",
-    "#aceno-aviso", "#mural-lista", "#placar-tabela", "#ringue-lista", "#ringue-texto", ".widgets", ".agora", "#v-conversas > *", "#v-aprovacoes > *", "#v-jornal > *",
+    "#aceno-aviso", "#mural-lista", "#placar-tabela", "#ringue-lista", "#ringue-texto", ".widgets", "section.agora", "#v-conversas > *", "#v-aprovacoes > *", "#v-jornal > *",
     "[data-sensivel]",
   ];
   for (const s of SENSIVEIS) assert.ok(cobertos.has(s), `escondido no modo apresentação: ${s}`);
+  assert.ok(!cobertos.has(".agora"), "o cartão da reunião em andamento (li.reuniao.agora) não some inteiro, só o título e os nomes");
   for (const s of SENSIVEIS) if (s.startsWith("#")) assert.ok(html.includes(`id="${s.slice(1).split(" ")[0]}"`), `${s} existe no index.html`);
 }
 

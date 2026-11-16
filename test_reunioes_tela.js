@@ -153,6 +153,9 @@ function carregar({ config = CONFIG, respostas = RESP, agora = AGORA } = {}) {
     // a minha: sem link na sala, sem "Entrar"; com Editar e Cancelar
     assert.equal(botaoTexto(cartoes[1], "Entrar na reunião"), undefined);
     assert.ok(botaoTexto(cartoes[1], "Editar") && botaoTexto(cartoes[1], "Cancelar"));
+    // os rótulos dos botões dizem hora e sala, nunca o título (o modo apresentação não esconde aria-label)
+    for (const b of [ics, botaoTexto(cartoes[1], "Editar"), botaoTexto(cartoes[1], "Cancelar")]) assert.doesNotMatch(b.attrs["aria-label"], /Planejamento|Daily/);
+    assert.match(ics.attrs["aria-label"], /14:00 – 14:30 na Sala de reunião/);
     assert.equal(ids["reunioes-marcar"].hidden, false, "pode_marcar");
     assert.equal(ids["reunioes-geral"].hidden, true, "membro não convoca");
     // a próxima semana
