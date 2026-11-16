@@ -107,4 +107,13 @@ for (const tipo of ["application/pdf", "application/zip", "image/svg+xml"]) {
   assert.equal(achar(li, "chat-sala-arquivo-tam")[0].textContent, "1,5 KB");
   assert.equal(achar(li, "chat-sala-baixar")[0].href, "api/anexo?id=5&baixar=1&andar=a1b2c3d4");
 }
+// modo apresentação (o mapa esconde html.apresentacao [data-sensivel]): o nome, o texto e o anexo
+{
+  const li = elMensagem({ ...base, anexo: { id: 4, nome: "foto.png", tipo: "image/png", tamanho: 2048 } }, ctx);
+  assert.ok("data-sensivel" in achar(li, "chat-sala-cabeca")[0].filhos[0].attrs, "nome");
+  assert.ok("data-sensivel" in achar(li, "chat-sala-texto")[0].attrs, "texto");
+  assert.ok("data-sensivel" in achar(li, "chat-sala-anexo")[0].attrs, "anexo");
+  const apagada = elMensagem({ ...base, apagada: true, texto: null }, ctx);
+  assert.ok("data-sensivel" in achar(apagada, "chat-sala-cabeca")[0].filhos[0].attrs, "nome da apagada");
+}
 console.log("test_painel_conversa.js ok");

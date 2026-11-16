@@ -275,6 +275,9 @@ function carregar({ config = CONFIG, respostas = RESP, agora = AGORA } = {}) {
     assert.equal(lateral.rel, "noopener noreferrer");
     assert.equal(lateral.attrs["aria-label"], "Entrar na reunião da Sala de reunião (abre em outra aba)");
     assert.equal(outra.hidden, true, "sala sem link, sem botão");
+    outra.dataset.sala = "reuniao"; outra.dataset.nome = "Sala de reunião"; R.pintar();   // o painel trocou de sala
+    assert.equal(outra.hidden, false);
+    assert.equal(outra.href, "https://meet.google.com/abc-defg-hij");
     evento("minha-sala", { sala: "reuniao", nome: "Sala de reunião", andar: ID }); await espera();
     assert.equal(ids["reuniao-entrar"].hidden, false);
     assert.equal(ids["reuniao-entrar"].href, "https://meet.google.com/abc-defg-hij");

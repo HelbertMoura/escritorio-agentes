@@ -137,6 +137,7 @@ const ChatSala = (() => {
     if (texto != null) e.textContent = texto;
     return e;
   };
+  const sensivel = e => { e.setAttribute("data-sensivel", ""); return e; };   // nome e texto: o modo apresentação (apresentacao.js) esconde
   const urlAnexo = (andar, id, baixar, auditoria) => Andar.com(`api/anexo?id=${id}${baixar ? "&baixar=1" : ""}${auditoria ? "&auditoria=1" : ""}`, andar);
   // uma mensagem do store na tela. ctx: {eu, logins (Set do andar), andar, moderar (admin do andar: apaga em canal, nunca em DM),
   // ler (sem reagir nem apagar: a auditoria e o admin do prédio no andar de uma empresa), auditoria (o anexo da DM lido pela administração)}
@@ -145,11 +146,11 @@ const ChatSala = (() => {
     li.dataset.id = String(m.id);
     const cabeca = criar("p", "chat-sala-cabeca"), quando = criar("time", null, hora(m.em));
     if (typeof m.em === "string") quando.dateTime = m.em;
-    cabeca.append(criar("strong", null, mim ? "Você" : (typeof m.nome === "string" && m.nome ? m.nome : "Alguém")), quando);
+    cabeca.append(sensivel(criar("strong", null, mim ? "Você" : (typeof m.nome === "string" && m.nome ? m.nome : "Alguém"))), quando);
     li.append(cabeca);
     if (m.apagada) { li.append(criar("p", "chat-sala-texto", "Mensagem apagada.")); return li; }
     if (typeof m.texto === "string" && m.texto) {
-      const p = criar("p", "chat-sala-texto");
+      const p = sensivel(criar("p", "chat-sala-texto"));
       for (const parte of partes(m.texto, ctx.eu ? new Set([...ctx.logins, ctx.eu]) : ctx.logins))   // a lista do andar vem sem mim
         p.append(parte.mencao ? criar("span", "chat-sala-mencao" + (parte.mencao === ctx.eu ? " a-mim" : ""), parte.texto) : parte.texto);
       li.append(p);
@@ -178,7 +179,7 @@ const ChatSala = (() => {
   // imagem (só os 4 tipos) aparece; todo o resto é nome, tamanho e "Baixar" (o servidor manda como attachment). Na
   // auditoria, só o "Baixar": cada carga do anexo grava uma linha no registro, e a lista é redesenhada a cada leitura
   function elAnexo(a, andar, auditoria) {
-    const caixa = criar("div", "chat-sala-anexo"), nome = typeof a.nome === "string" ? a.nome : "arquivo";
+    const caixa = sensivel(criar("div", "chat-sala-anexo")), nome = typeof a.nome === "string" ? a.nome : "arquivo";
     if (ehImagem(a.tipo) && !auditoria) {
       const img = criar("img", "chat-sala-previa"), src = urlAnexo(andar, a.id);
       img.src = src; img.alt = nome; img.loading = "lazy"; img.decoding = "async";
@@ -239,6 +240,7 @@ const ChatSala = (() => {
       quem.textContent = mim ? "Você" : (typeof m.nome === "string" && m.nome ? m.nome : "Alguém");
       quando.textContent = hora(m.em); if (typeof m.em === "string") quando.dateTime = m.em;
       texto.textContent = m.texto;
+      quem.setAttribute("data-sensivel", ""); texto.setAttribute("data-sensivel", "");
       cabeca.append(quem, quando); li.append(cabeca, texto);
       const noFim = lista.scrollHeight - lista.scrollTop - lista.clientHeight < 40;
       lista.append(li);
@@ -343,11 +345,13 @@ const ChatSala = (() => {
     const ui = {};
     ui.voltar = botao("chat-sala-icone", "Voltar", ICONE.voltar); ui.voltar.hidden = true;
     ui.sobre = criar("p", "chat-sala-sobre", "Conversas da equipe");
-    ui.titulo = criar("h2", null, "Geral"); ui.titulo.id = "chat-sala-titulo";
+    ui.titulo = sensivel(criar("h2", null, "Geral")); ui.titulo.id = "chat-sala-titulo";   // na DM, o nome da pessoa
     const nomes = criar("div"); nomes.append(ui.sobre, ui.titulo);
     ui.buscar = botao("chat-sala-icone", "Buscar nas conversas", ICONE.buscar);
     ui.fechar = botao("chat-sala-icone", "Fechar as conversas", ICONE.fechar);
-    const topo = criar("header", "chat-sala-topo"); topo.append(ui.voltar, nomes, ui.buscar, ui.fechar);
+    // o "Entrar na reunião" da sala aberta (reunioes.js decide se aparece, pelo link da sala); sem o reunioes.js, nada
+    ui.entrar = window.Reunioes ? window.Reunioes.entrar("", "") : null;
+    const topo = criar("header", "chat-sala-topo"); topo.append(ui.voltar, nomes, ...(ui.entrar ? [ui.entrar] : []), ui.buscar, ui.fechar);
     ui.abas = atributos(criar("nav", "chat-sala-abas"), { "aria-label": "Canais" });
     ui.busca = atributos(criar("form", "chat-sala-busca"), { role: "search" }); ui.busca.hidden = true;
     const rotBusca = criar("label", "oculto", "Buscar nas conversas"); rotBusca.htmlFor = "chat-sala-termo";
@@ -359,8 +363,8 @@ const ChatSala = (() => {
     ui.auditar = botao("chat-sala-auditar", null, null, "Auditoria das diretas"); ui.auditar.hidden = true;
     ui.antes = botao("chat-sala-antes", null, null, "Ver mensagens anteriores"); ui.antes.hidden = true;
     ui.vazio = criar("p", "chat-sala-vazio"); ui.vazio.hidden = true;
-    ui.lista = atributos(criar("ol", "chat-sala-lista"), { "aria-label": "Mensagens" }); ui.lista.tabIndex = 0;
-    ui.itens = criar("ul", "chat-sala-itens"); ui.itens.hidden = true;
+    ui.lista = sensivel(atributos(criar("ol", "chat-sala-lista"), { "aria-label": "Mensagens" })); ui.lista.tabIndex = 0;
+    ui.itens = sensivel(criar("ul", "chat-sala-itens")); ui.itens.hidden = true;
     ui.corpo = criar("div", "chat-sala-corpo"); ui.corpo.append(ui.auditar, ui.antes, ui.vazio, ui.lista, ui.itens);
     ui.retencao = criar("p", "chat-sala-retencao");
     ui.anuncio = atributos(criar("p", "oculto"), { role: "status" });   // a mensagem que chegou, para o leitor de tela
@@ -370,13 +374,13 @@ const ChatSala = (() => {
     ui.barra = criar("progress"); ui.barra.id = "chat-sala-barra"; ui.barra.max = 100; ui.barra.value = 0;
     ui.cancelar = botao("chat-sala-cancelar", null, null, "Cancelar");
     ui.progresso.append(ui.barraRot, ui.barra, ui.cancelar);
-    ui.sugestoes = atributos(criar("ul", "chat-sala-sugestoes"), { role: "listbox", "aria-label": "Pessoas do andar" });
+    ui.sugestoes = sensivel(atributos(criar("ul", "chat-sala-sugestoes"), { role: "listbox", "aria-label": "Pessoas do andar" }));
     ui.sugestoes.id = "chat-sala-sugestoes"; ui.sugestoes.hidden = true;
     ui.form = criar("form", "chat-sala-form");
     ui.anexar = botao("chat-sala-anexar", "Anexar um arquivo (até 25 MB)", ICONE.anexar);
     ui.arquivo = criar("input"); ui.arquivo.type = "file"; ui.arquivo.hidden = true; ui.arquivo.tabIndex = -1;
     const rotCampo = criar("label", "oculto", "Mensagem"); rotCampo.htmlFor = "chat-sala-campo";
-    ui.campo = atributos(criar("input"), { enterkeyhint: "send", role: "combobox", "aria-autocomplete": "list", "aria-controls": "chat-sala-sugestoes", "aria-expanded": "false" });
+    ui.campo = sensivel(atributos(criar("input"), { enterkeyhint: "send", role: "combobox", "aria-autocomplete": "list", "aria-controls": "chat-sala-sugestoes", "aria-expanded": "false" }));
     Object.assign(ui.campo, { id: "chat-sala-campo", type: "text", maxLength: TEXTO_MAX, autocomplete: "off" });
     ui.enviar = botao("chat-sala-enviar", "Enviar", ICONE.enviar); ui.enviar.type = "submit";
     ui.form.append(ui.anexar, ui.arquivo, rotCampo, ui.campo, ui.enviar);
@@ -463,6 +467,11 @@ const ChatSala = (() => {
       fecharEmojis(); fecharSugestoes();
       const dm = vista.startsWith("dm:"), ler = vista.startsWith("auditoria:"), c = controles(eq(), ler ? "auditoria" : vista), mensagens = ehCanal(vista) || ler;
       ui.titulo.textContent = tituloDa(vista);
+      if (ui.entrar) {
+        const sala = vista.startsWith("sala:") ? vista.slice(5) : "";
+        ui.entrar.dataset.sala = sala; ui.entrar.dataset.nome = sala ? s.onde.nome || sala : "";
+        window.Reunioes.pintar();
+      }
       ui.sobre.textContent = dm ? "Mensagem direta" : vista.startsWith("auditoria") ? "Administração da empresa" : "Conversas da equipe";
       ui.voltar.hidden = !(dm || vista === "busca" || vista.startsWith("auditoria"));
       ui.busca.hidden = vista !== "busca"; ui.buscar.setAttribute("aria-expanded", String(vista === "busca"));

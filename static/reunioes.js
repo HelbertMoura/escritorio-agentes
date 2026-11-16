@@ -395,6 +395,6 @@ const Reunioes = (() => {
     });
     setInterval(verificar, 20000);
   }
-  return { ...puro, iniciar, configurar, ligado, abrir, ajustes, entrar, recarregar };
+  return { ...puro, iniciar, configurar, ligado, abrir, ajustes, entrar, pintar: pintarTodos, recarregar };
 })();
 if (typeof window !== "undefined") window.Reunioes = Reunioes;
