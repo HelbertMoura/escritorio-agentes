@@ -314,6 +314,7 @@ function desenharCena(t) {
   for (const v of visitas) cena.push({ chave: v.chave ?? v.y + 0.5, desenha: () => Avatar.boneco(ctx, v, t, escala) });
   cena.sort((a, b) => a.chave - b.chave).forEach(c => c.desenha());
   desenharPortas(t);
+  for (const s of [...predio.salas, ...predio.baixo]) if (Vida.emReuniao(s.chave)) Mapa.desenharPlacaReuniao(ctx, s);   // a placa "em reunião" na porta (mapa.js)
   Clima.desenhar(ctx, predio, dtQuadro, t, Som.ligado ? Som : null);
   desenharLuzes(dt0(t), ceu);
   Efeitos.luzesNoite(ctx, ceu);
@@ -2254,12 +2255,19 @@ $("status-salvar").addEventListener("click", async () => {
 $("status-txt").addEventListener("keydown", ev => { if (ev.key === "Enter") { ev.preventDefault(); $("status-salvar").click(); } });
 $("equipe-mural").addEventListener("click", () => { const m = muralDaMinhaSala(); abrirMural(m.canal, m.nome); });
 
-// aceno recebido (vida.js): uma faixa curta, lida pelo leitor de tela (role=status)
+// aceno recebido e convocação para a reunião geral (vida.js): uma faixa curta, lida pelo leitor de tela (role=status)
 let acenoTimer = 0;
+function faixaAviso(texto) {
+  const el = $("aceno-aviso");
+  el.textContent = texto; el.hidden = false; clearTimeout(acenoTimer); acenoTimer = setTimeout(() => { el.hidden = true; }, 6000);
+}
 addEventListener("aceno", ev => {
-  const d = ev.detail || {}, el = $("aceno-aviso");
-  el.textContent = d.tipo === "porta" ? `${d.nome} bateu na porta` : `${d.nome} acenou para você`;
-  el.hidden = false; clearTimeout(acenoTimer); acenoTimer = setTimeout(() => { el.hidden = true; }, 6000);
+  const d = ev.detail || {};
+  faixaAviso(d.tipo === "porta" ? `${d.nome} bateu na porta` : `${d.nome} acenou para você`);
+});
+addEventListener("convocacao", ev => {
+  const d = ev.detail || {};
+  faixaAviso(`${d.nome} chamou a equipe para ${d.sala ? `a ${d.sala}` : "uma reunião"}`);
 });
 
 // o mural (GET /api/mural; fixar e tirar): só texto (textContent); relê quando o mural_v do canal no /api/ao-vivo muda
