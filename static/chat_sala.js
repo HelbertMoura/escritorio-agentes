@@ -19,6 +19,10 @@ const ChatSala = (() => {
     if ([...limpo].length > TEXTO_MAX) return `A mensagem passa de ${TEXTO_MAX} caracteres.`;
     return null;
   }
+  // quem sou eu nas mensagens: o "eu" do /api/ao-vivo (no saguão, um id opaco no lugar do login); servidor sem o "eu", o
+  // login da sessão. O "usuario" das mensagens é só chave: nunca vai para a tela
+  const euDe = (d, login) => (d && typeof d.eu === "string" && d.eu ? d.eu : typeof login === "string" ? login : null);
+  const deMim = (m, eu) => !!m && typeof m.usuario === "string" && eu != null && m.usuario === eu;
   // as mensagens que ainda não estão no painel, em ordem de seq (a leitura repete o que já veio e o envio já pôs a minha),
   // a partir do seq em que entrei na sala
   function novas(mensagens, vistos, desde = 0) {
@@ -27,17 +31,19 @@ const ChatSala = (() => {
       .sort((a, b) => a.seq - b.seq);
   }
 
-  if (typeof document === "undefined") return { daSala, validar, limpar, novas, TEXTO_MAX };
+  if (typeof document === "undefined") return { daSala, validar, limpar, novas, euDe, deMim, TEXTO_MAX };
 
   const $ = id => document.getElementById(id);
   const caixa = $("chat-sala"), abrir = $("chat-sala-abrir"), painel = $("chat-sala-painel"), titulo = $("chat-sala-titulo"),
     contador = $("chat-sala-n"), lista = $("chat-sala-lista"), vazio = $("chat-sala-vazio"), form = $("chat-sala-form"),
     campo = $("chat-sala-campo"), enviar = $("chat-sala-enviar"), aviso = $("chat-sala-aviso"), fechar = $("chat-sala-fechar");
-  if (!caixa) return { daSala, validar, limpar, novas, TEXTO_MAX };
+  if (!caixa) return { daSala, validar, limpar, novas, euDe, deMim, TEXTO_MAX };
 
   let sala = "", nomeSala = "", andar = "", desde = 0, vistos = new Set(), naoLidas = 0, enviando = false, avisoTempo = 0;
   const tv = () => !!(window.TV && TV.invisivel) || document.body.classList.contains("tv");
-  const eu = () => (typeof estado !== "undefined" && estado && typeof estado.usuario === "string" ? estado.usuario : null);   // app.js
+  const login = () => (typeof estado !== "undefined" && estado && typeof estado.usuario === "string" ? estado.usuario : null);   // app.js
+  let euAoVivo = null;   // o "eu" da última leitura do /api/ao-vivo
+  const eu = () => euDe({ eu: euAoVivo }, login());
   const aberto = () => !painel.hidden;
 
   function mostrarAviso(texto, ruim = true) {
@@ -59,7 +65,7 @@ const ChatSala = (() => {
   }
   function por(m, minha = false) {
     vistos.add(m.seq);
-    const mim = minha || (m.usuario != null && m.usuario === eu());
+    const mim = minha || deMim(m, eu());
     const li = document.createElement("li"), cabeca = document.createElement("p"), quem = document.createElement("strong"),
       quando = document.createElement("time"), texto = document.createElement("p");
     li.className = "chat-sala-msg" + (mim ? " de-mim" : "");
@@ -126,6 +132,7 @@ const ChatSala = (() => {
   window.addEventListener("aovivo", e => {
     if (!sala || tv()) return;
     const d = e.detail || {};
+    euAoVivo = typeof d.eu === "string" ? d.eu : null;
     const chegaram = novas(d.mensagens, vistos, desde);
     for (const m of chegaram) por(m);
     if (chegaram.length) contar();

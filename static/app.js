@@ -772,7 +772,7 @@ function atualizarEstados() {
   }
   const partes = [[n.esp, "esperando você", "esperando você"], [n.trab, "trabalhando", "trabalhando"], [n.livres, "livre", "livres"], [n.fora, "fora", "fora"]]
     .filter(([q], i) => q || i < 3).map(([q, um, varios]) => `${q} ${q === 1 ? um : varios}`);
-  const resumo = n.todos ? partes.join(" · ") : "Nenhum agente nesta organização ainda";
+  const resumo = Andar.perfil(config).noSaguao ? "Saguão do prédio" : n.todos ? partes.join(" · ") : "Nenhum agente nesta organização ainda";
   if ($("resumo-esc").textContent !== resumo) $("resumo-esc").textContent = resumo;
 }
 function filtrar(qual) {
@@ -830,7 +830,8 @@ function desenharPainel() {
   if (!bs.length) $("lista").append(elem("p", "vazio", "Nenhum agente nesta organização ainda."));
   $("contagem").textContent = filtro === "todos" ? `${bs.length}` : `${visiveis} de ${bs.length}`;
   const nSalas = predio.salas.length + predio.baixo.length;
-  $("org-resumo").textContent = `${bs.length} ${bs.length === 1 ? "agente" : "agentes"} · ${nSalas} ${nSalas === 1 ? "sala" : "salas"}`;
+  const salasTxt = `${nSalas} ${nSalas === 1 ? "sala" : "salas"}`;   // o saguão não tem agentes: só as salas
+  $("org-resumo").textContent = Andar.perfil(config).noSaguao ? salasTxt : `${bs.length} ${bs.length === 1 ? "agente" : "agentes"} · ${salasTxt}`;
   atualizarEstados();
 }
 

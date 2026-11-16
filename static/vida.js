@@ -1420,7 +1420,7 @@ const Vida = (() => {
   const AO_VIVO_VISIVEL = 1500, AO_VIVO_ESCONDIDO = 10000, ENVIO_MIN = 500, RENOVAR = 20000, PERFIL_A_CADA = 15000, COORD_MAX = 8192;
   const vivo = { ger: 0, ligado: false, lido: false, andar: null, seq: 0, falhas: 0, timer: 0, envio: 0, enviado: -1e9, perfilEm: -1e9,
     invisivel: () => true, perfil: null, m: null, eu: null, avisada: null,   // avisada: a última sala do evento "minha-sala"
-    pessoas: new Map() };   // pessoas: os outros, por usuário
+    pessoas: new Map() };   // pessoas: os outros, pelo "usuario" da lista (só chave: no saguão é um id opaco, nunca vai para a tela)
 
   // liga (ou religa, ao trocar de andar) o polling; null desliga. invisivel(): a TV e quem desligou "Aparecer" só leem
   function aoVivo(opcoes) {
@@ -1444,7 +1444,7 @@ const Vida = (() => {
     vivo.perfil = { usuario, nome: nomeDe(nome, usuario), ap: apDe(ap, usuario) };
     if (vivo.eu) { vivo.eu.nome = `${vivo.perfil.nome} (você)`; vivo.eu.ap = vivo.perfil.ap; }
   }
-  const nomeDe = (nome, usuario) => String(typeof nome === "string" && nome.trim() ? nome : usuario).slice(0, 40);
+  const nomeDe = (nome, reserva) => String(typeof nome === "string" && nome.trim() ? nome : reserva).slice(0, 40);
   // servidor antigo, sem a aparência efetiva: o padrão do front (o mesmo do "Meu perfil")
   const apDe = (ap, usuario) => (ap && typeof ap === "object" && typeof ap.color === "string" ? ap : Avatar.padrao(usuario));
   const coord = v => Math.max(0, Math.min(COORD_MAX, Math.round(v)));
@@ -1459,7 +1459,7 @@ const Vida = (() => {
       if (ger !== vivo.ger) return;
       if (!d || !Number.isInteger(d.seq) || !Array.isArray(d.pessoas)) throw new Error("resposta inválida");
       vivo.falhas = 0; vivo.seq = d.seq; vivo.lido = true;
-      receber(d.pessoas);
+      receber(d.pessoas, typeof d.eu === "string" && d.eu ? d.eu : vivo.perfil && vivo.perfil.usuario);   // "eu": o id da sessão na lista
       if (performance.now() - vivo.perfilEm >= PERFIL_A_CADA) lerPerfil(ger);
       window.dispatchEvent(new CustomEvent("aovivo", { detail: d }));
     } catch (e) {
@@ -1474,16 +1474,16 @@ const Vida = (() => {
     clearTimeout(vivo.timer); lerAoVivo(vivo.ger);
   });
 
-  function receber(lista) {
+  function receber(lista, eu) {
     const vistos = new Set(), m = vivo.m;
     for (const it of lista.slice(0, 64)) {
       if (!it || typeof it.usuario !== "string" || !Number.isFinite(it.x) || !Number.isFinite(it.y)) continue;
       const alvo = Array.isArray(it.destino) && it.destino.length === 2 && it.destino.every(Number.isFinite) ? it.destino : [it.x, it.y];
-      if (vivo.perfil && it.usuario === vivo.perfil.usuario) { meuPerfil(it.usuario, it.nome, it.aparencia); continue; }   // eu (outra aba)
+      if (vivo.perfil && eu && it.usuario === eu) { meuPerfil(vivo.perfil.usuario, it.nome, it.aparencia); continue; }   // eu (outra aba)
       vistos.add(it.usuario);
       let p = vivo.pessoas.get(it.usuario);
       if (!p) { p = novaPessoa(it.usuario, it.x, it.y); vivo.pessoas.set(it.usuario, p); }
-      p.nome = nomeDe(it.nome, it.usuario); p.ap = apDe(it.aparencia, it.usuario);
+      p.nome = nomeDe(it.nome, "Alguém"); p.ap = apDe(it.aparencia, it.usuario);   // sem nome: "Alguém", nunca o usuario
       p.parado = DIRECOES.has(it.olha) ? it.olha : "baixo";
       if (p.alvo && p.alvo[0] === alvo[0] && p.alvo[1] === alvo[1]) continue;
       p.alvo = alvo;   // destino novo: anda até lá (sem caminho, aparece direto)

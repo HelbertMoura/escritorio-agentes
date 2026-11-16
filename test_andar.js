@@ -98,6 +98,9 @@ function carregar({ hash = "", guardado = null, quebrado = false } = {}) {
     assert.equal(Andar.telaLiberada("conversas", c), false);
     assert.equal(Andar.telaLiberada("personalizar", c), true);
   }
+  for (const c of [saguao, { ...saguao, papel: "admin", admin_predio: true }]) assert.equal(Andar.telaLiberada("aprovacoes", c), false);
+  assert.equal(Andar.telaLiberada("aprovacoes", { ...classico, papel: "membro", admin_predio: false }), true);
+  assert.equal(Andar.telaLiberada("aprovacoes", { ...saguao, andar: ID, papel: "membro" }), true);
   // no andar extra do modo saguão o jornal volta
   assert.equal(Andar.telaLiberada("jornal", { ...saguao, andar: ID, papel: "membro" }), true);
   assert.equal(Andar.telaLiberada("jornal", null), true);   // servidor antigo: a tela de sempre
@@ -109,6 +112,11 @@ function carregar({ hash = "", guardado = null, quebrado = false } = {}) {
   assert.match(html, /<a class="[^"]*\bso-predio\b[^"]*" href="\/visitas-admin\.html">/);
   assert.match(css, /body:not\(\[data-predio\]\) \.so-predio\b[^{]*\{ display: none !important; \}/);
   assert.match(css, /body\[data-saguao\] a\[data-rota="jornal"\]/);
+  // o saguão não tem agentes: some tudo o que é deles (estados, painéis, lista da lateral, aprovações)
+  for (const s of ['a[data-rota="aprovacoes"]', "#estados", ".widgets", "#lat-agentes", ".lat-externos", "section.agora", ".dica-mapa"])
+    assert.ok(css.includes(`body[data-saguao] ${s}`), s);
+  assert.match(html, /<section id="lat-agentes" class="lat-secao">/);
+  assert.match(fs.readFileSync("static/app.js", "utf8"), /noSaguao \? "Saguão do prédio"/);
   const { Andar } = carregar();
   assert.equal(Andar.perfil({ papel: "admin", admin_predio: false, andar: ID }).predio, false);   // admin da empresa
   assert.equal(Andar.perfil({ papel: "admin", admin_predio: true }).predio, true);

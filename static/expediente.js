@@ -62,10 +62,12 @@ const Andar = (() => {
   }
   // a linha "Este andar: …" do elevador: conectado e sem conexão nenhuma (o saguão, conexao null) não dizem nada
   const estadoDoAndar = c => (!c || c === "conectado" ? "" : `Este andar: ${rotuloConexao(c)}`);
-  // as telas pelo # que o perfil abre: Conversas só o admin do andar, e o saguão não tem conversas nem jornal
+  // as telas pelo # que o perfil abre: Conversas só o admin do andar, e o saguão (sem agentes) não tem conversas,
+  // aprovações nem jornal
+  const SEM_SAGUAO = ["conversas", "aprovacoes", "jornal"];
   function telaLiberada(rota, c) {
     const p = perfil(c);
-    return !(rota === "conversas" && (!p.admin || p.noSaguao)) && !(rota === "jornal" && p.noSaguao);
+    return !(rota === "conversas" && !p.admin) && !(p.noSaguao && SEM_SAGUAO.includes(rota));
   }
   // o andar que o /api/config respondeu (conta sem acesso ao principal recebe o primeiro andar dela): passa a valer daqui em diante
   const seguir = c => !!c && valido(c.andar) && definir(c.andar);

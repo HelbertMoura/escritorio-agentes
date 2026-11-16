@@ -28,4 +28,16 @@ assert.equal(novas(undefined, vistos).length, 0);
 // GET atrasado depois do "minha-sala" (entrei na sala nova no seq 3): a mensagem 1, da sala de antes, fica de fora
 assert.deepEqual([...novas(ms, new Set(), 3).map(m => m.seq)], [3], "só o seq da entrada em diante");
 assert.deepEqual([...novas(ms, new Set(), 0).map(m => m.seq)], [1, 2, 3], "sem seq de entrada, tudo vale");
+// M2: quem sou eu nas mensagens. O "eu" do /api/ao-vivo vale (no saguão, id opaco); sem ele, o login da sessão
+const { euDe, deMim } = contexto.window.ChatSala;
+assert.equal(euDe({ eu: "p_0123456789abcdef" }, "carla"), "p_0123456789abcdef");
+for (const d of [{}, { eu: "" }, { eu: 3 }, null]) assert.equal(euDe(d, "carla"), "carla", JSON.stringify(d));
+assert.equal(euDe({}, null), null);
+assert.equal(deMim({ usuario: "p_0123456789abcdef" }, "p_0123456789abcdef"), true);
+assert.equal(deMim({ usuario: "carla" }, "p_0123456789abcdef"), false, "no saguão o login não casa com o id");
+assert.equal(deMim({ usuario: null }, null), false);
+assert.equal(deMim({}, null), false);
+// o "usuario" nunca é texto: o nome da mensagem vem do "nome" ou "Alguém"/"Você"
+const fonte = fs.readFileSync("static/chat_sala.js", "utf8");
+assert.match(fonte, /quem\.textContent = mim \? "Você" : \(typeof m\.nome === "string" && m\.nome \? m\.nome : "Alguém"\)/);
 console.log("test_chat_sala.js ok");
