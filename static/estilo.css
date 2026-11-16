@@ -1179,7 +1179,7 @@ body[data-saguao] .lat-externos, body[data-saguao] section.agora, body[data-sagu
    Os nomes do mapa viram "Agente 1"/"Pessoa 2" no vida.js e os balões somem no app.js. Painel novo com dado assim: data-sensivel */
 html.apresentacao #lista, html.apresentacao #busca-lista, html.apresentacao #usuario-nome, html.apresentacao #usuario-ini,
 html.apresentacao #cartao-agente, html.apresentacao #ficha, html.apresentacao #conversa, html.apresentacao #chat-sala,
-html.apresentacao #greve-motivo, html.apresentacao #tv-legenda, html.apresentacao #social-anuncio, html.apresentacao #equipe-lista,
+html.apresentacao #greve-motivo, html.apresentacao #tv-legenda, html.apresentacao #social-anuncio, html.apresentacao #equipe, html.apresentacao #equipe-lista,
 html.apresentacao #meu-status, html.apresentacao #equipe-mural, html.apresentacao #equipe-aviso, html.apresentacao #aceno-aviso,
 html.apresentacao #mural-lista, html.apresentacao #placar-tabela, html.apresentacao #ringue-lista, html.apresentacao #ringue-texto,
 html.apresentacao .widgets, html.apresentacao .agora, html.apresentacao #v-conversas > *, html.apresentacao #v-aprovacoes > *,

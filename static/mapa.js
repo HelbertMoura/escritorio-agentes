@@ -1316,7 +1316,7 @@ function desenharStatus(c, st, x, y, px) {
 // Placa "Em reunião" (1.6 Onda 3) na porta da sala com reunião acontecendo (Vida.emReuniao): vermelha, ao lado da porta,
 // do lado de fora. Sala de cima (porta embaixo): pendurada no corredor; sala de baixo (porta em cima): na parede. Em
 // coordenadas do mundo, desenhada depois das portas
-const PLACA_REUNIAO = { w: 48, h: 10, folga: 16 };
+const PLACA_REUNIAO = { w: 66, h: 12, folga: 16 };   // o texto na fonte das placas (8 px: a Silkscreen só fica nítida assim)
 function placaReuniao(s) {
   const { w, h, folga } = PLACA_REUNIAO, px = s.portas ? s.portas[0] : s.porta.x;
   const y = s.portas ? s.py + 4 : s.py + s.ph + 2;
@@ -1330,9 +1330,9 @@ function desenharPlacaReuniao(c, s) {
   c.fillStyle = "#141320"; c.fillRect(x - 1, y - 1, w + 2, h + 2);                       // moldura
   c.fillStyle = "#b91c1c"; c.fillRect(x, y, w, h);                                       // branco sobre ele: 6,5:1
   c.fillStyle = "#ef4444"; c.fillRect(x, y, w, 1);
-  c.fillStyle = "#fecaca"; c.fillRect(x + 2, y + 4, 2, 2);                               // a luzinha de "no ar"
-  c.font = "5px Silkscreen, monospace"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = "#ffffff";
-  c.fillText("EM REUNIÃO", x + w / 2 + 2, y + h / 2 + 0.5, w - 8);
+  c.fillStyle = "#fecaca"; c.fillRect(x + 3, y + 5, 2, 2);                               // a luzinha de "no ar"
+  c.font = PLACA_FONTE; c.textAlign = "left"; c.textBaseline = "middle"; c.fillStyle = "#ffffff";
+  c.fillText("EM REUNIÃO", x + 8, y + h / 2 + 1, w - 10);
   c.restore();
 }
 

@@ -144,7 +144,7 @@ function carregar({ guardado = null, semStorage = false, semControles = false } 
   const cobertos = new Set(seletores.map(s => s.slice("html.apresentacao ".length)));
   const SENSIVEIS = [
     "#lista", "#busca-lista", "#usuario-nome", "#usuario-ini", "#cartao-agente", "#ficha", "#conversa", "#chat-sala",
-    "#greve-motivo", "#tv-legenda", "#social-anuncio", "#equipe-lista", "#meu-status", "#equipe-mural", "#equipe-aviso",
+    "#greve-motivo", "#tv-legenda", "#social-anuncio", "#equipe", "#equipe-lista", "#meu-status", "#equipe-mural", "#equipe-aviso",
     "#aceno-aviso", "#mural-lista", "#placar-tabela", "#ringue-lista", "#ringue-texto", ".widgets", ".agora", "#v-conversas > *", "#v-aprovacoes > *", "#v-jornal > *",
     "[data-sensivel]",
   ];
