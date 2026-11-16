@@ -501,6 +501,100 @@ class Concorrencia(Base):
         self.assertEqual(len(feitos), 20)
 
 
+class Onda2(Base):
+    """O que as rotas da Onda 2 pedem ao store: menções, contadores do ao-vivo, mensagens novas do canal aberto, versão
+    do canal e do mural, status por conta e o "Entendi" da DM."""
+
+    def test_mencao_conta_ate_ler_e_contadores_com_dm(self):
+        self.r.t += 1
+        m = self.eq.enviar("geral", "ana", "Ana", "oi @bia", mencoes=["bia"])
+        self.manda(self.eq, "sala:cozinha", "ana", "café")
+        dm = self.eq.abrir_dm("ana", "bia")
+        self.manda(self.eq, dm, "ana", "particular")
+        nao_lidas, mencoes = self.eq.contadores("bia")
+        self.assertEqual(nao_lidas, {"geral": 1, "sala:cozinha": 1, dm: 1})
+        self.assertEqual(mencoes, {"geral": 1})
+        self.assertEqual(self.eq.contadores("cid")[0], {"geral": 1, "sala:cozinha": 1})   # DM alheia não entra
+        self.eq.marcar_lida("bia", "geral", m["id"])
+        self.assertEqual(self.eq.contadores("bia"), ({"sala:cozinha": 1, dm: 1}, {}))
+        self.assertEqual(self.eq.contadores("ana"), ({}, {}))   # as próprias não contam
+
+    def test_mencao_some_ao_apagar(self):
+        self.r.t += 1
+        m = self.eq.enviar("geral", "ana", "Ana", "@bia olha", mencoes=["bia"])
+        self.eq.apagar(m["id"], "ana")
+        self.assertEqual(self.eq.contadores("bia"), ({}, {}))
+        self.assertEqual(self.eq.con.execute("SELECT COUNT(*) FROM mencao").fetchone()[0], 0)
+
+    def test_novas_depois_do_id_e_versao_do_canal(self):
+        a = self.manda(self.eq, "geral", "ana", "um")
+        b = self.manda(self.eq, "geral", "ana", "dois")
+        self.assertEqual([x["id"] for x in self.eq.novas("bia", "geral", a["id"])], [b["id"]])
+        self.assertEqual(self.eq.novas("bia", "sala:vazia", 0), [])
+        v = self.eq.versao("geral")
+        self.eq.reagir("bia", a["id"], "👍", True)
+        v2 = self.eq.versao("geral")
+        self.assertNotEqual(v, v2)
+        self.eq.apagar(a["id"], "ana")
+        self.assertNotEqual(self.eq.versao("geral"), v2)
+        dm = self.eq.abrir_dm("ana", "bia")
+        with self.assertRaises(SemAcesso):
+            self.eq.novas("cid", dm, 0)
+
+    def test_versao_do_mural_muda_a_cada_mudanca(self):
+        self.assertEqual(self.eq.versoes_mural(), {})
+        a = self.eq.fixar("geral", "ana", "Ana", "aviso 1")
+        v1 = self.eq.versoes_mural()["geral"]
+        self.eq.fixar("geral", "ana", "Ana", "aviso 2")
+        v2 = self.eq.versoes_mural()["geral"]
+        self.eq.desafixar(a["id"], "ana")
+        v3 = self.eq.versoes_mural()["geral"]
+        self.assertEqual(len({v1, v2, v3}), 3)
+
+    def test_status_por_conta_valida_e_sai_com_a_conta(self):
+        self.assertEqual(self.eq.status_de("ana"), {"status": "disponivel", "texto": ""})
+        self.eq.definir_status("ana", "ocupado", " foco ")
+        self.assertEqual(self.eq.status_de("ana"), {"status": "ocupado", "texto": "foco"})
+        self.assertEqual(self.abrir("a2").status_de("ana")["status"], "disponivel")   # outro andar, outro arquivo
+        for st, txt in (("dormindo", ""), ("ocupado", "x" * 41), ("ocupado", "a\u202eb"), ("ocupado", 3)):
+            with self.assertRaises(ValueError):
+                self.eq.definir_status("ana", st, txt)
+        self.eq.remover_conta("ana")
+        self.assertEqual(self.eq.status_de("ana")["status"], "disponivel")
+
+    def test_status_sobrevive_a_reabrir(self):
+        self.eq.definir_status("ana", "reuniao", "")
+        self.eq.fechar()
+        self.assertEqual(Equipe(os.path.join(self.raiz, "a"), relogio=self.r).status_de("ana")["status"], "reuniao")
+
+    def test_entendi_da_dm_por_conta_e_sai_com_a_conta(self):
+        self.assertFalse(self.eq.entendeu_dm("ana"))
+        self.eq.marcar_entendeu_dm("ana")
+        self.assertTrue(self.eq.entendeu_dm("ana"))
+        self.assertFalse(self.eq.entendeu_dm("bia"))
+        self.eq.remover_conta("ana")
+        self.assertFalse(self.eq.entendeu_dm("ana"))
+
+    def test_pode_escrever_sem_criar_canal(self):
+        self.eq.pode_escrever("sala:nova", "ana")
+        self.assertEqual(self.eq.con.execute("SELECT COUNT(*) FROM canal").fetchone()[0], 0)
+        dm = self.eq.abrir_dm("ana", "bia")
+        with self.assertRaises(SemAcesso):
+            self.eq.pode_escrever(dm, "cid")
+        self.eq.remover_conta("bia")
+        with self.assertRaises(ValueError):
+            self.eq.pode_escrever(dm, "ana")
+
+    def test_aviso_da_mensagem_para_o_push(self):
+        self.r.t += 1
+        m = self.eq.enviar("geral", "ana", "Ana", "linha 1\nlinha 2")
+        self.assertEqual(self.eq.para_aviso(m["id"]), {"nome": "Ana", "canal": "geral", "texto": "linha 1\nlinha 2",
+                                                        "anexo": False})
+        self.eq.apagar(m["id"], "ana")
+        self.assertEqual(self.eq.para_aviso(m["id"])["texto"], None)
+        self.assertIsNone(self.eq.para_aviso(999))
+
+
 class SemTextoNoLog(unittest.TestCase):
     def test_modulo_nao_imprime_nem_loga(self):
         """O texto das conversas só vai para o banco: nada de print, log nem logging no módulo."""

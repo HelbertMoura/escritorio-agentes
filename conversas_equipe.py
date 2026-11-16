@@ -48,6 +48,8 @@ EMOJIS = ("👍", "❤️", "😂", "🎉", "😮", "😢", "🙏", "👀")
 EX_MEMBRO = "ex-membro"
 SALA_MAX = 80
 BUSCA_MAX, BUSCA_TERMOS = 100, 8
+STATUS, STATUS_PADRAO, STATUS_TEXTO_MAX = ("disponivel", "ocupado", "reuniao", "ausente"), "disponivel", 40
+NOVAS_MAX = 50   # as mensagens novas do canal aberto que vão no /api/ao-vivo
 TOKEN_OK = re.compile(r"[0-9a-f]{32}")
 SHA_OK = re.compile(r"[0-9a-f]{64}")
 TIPO_OK = re.compile(r"[a-z]+/[a-z0-9.+-]{1,80}")
@@ -72,6 +74,9 @@ CREATE TABLE IF NOT EXISTS anexo (id INTEGER PRIMARY KEY AUTOINCREMENT, mensagem
                                   tamanho INTEGER NOT NULL, sha256 TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS acesso_dm (id INTEGER PRIMARY KEY, canal INTEGER NOT NULL, admin TEXT NOT NULL, u1 TEXT,
                                       u2 TEXT, quando REAL NOT NULL, quantas INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS mencao (mensagem INTEGER NOT NULL, usuario TEXT NOT NULL, PRIMARY KEY (mensagem, usuario));
+CREATE INDEX IF NOT EXISTS mencao_usuario ON mencao (usuario, mensagem);
+CREATE TABLE IF NOT EXISTS status (usuario TEXT PRIMARY KEY, status TEXT NOT NULL, texto TEXT NOT NULL);
 CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(texto, content='mensagem', content_rowid='id',
                                                   tokenize='unicode61 remove_diacritics 2');
 CREATE TRIGGER IF NOT EXISTS fts_novo AFTER INSERT ON mensagem WHEN new.texto IS NOT NULL BEGIN
@@ -169,6 +174,11 @@ class Equipe:
             self.otimizar = False
         except sqlite3.OperationalError:
             self.otimizar = True
+        # o status de cada conta fica na memória também: o /api/ao-vivo lê o de todo mundo a cada pedido
+        self.status = {u: {"status": s, "texto": t} for u, s, t in self.con.execute("SELECT usuario, status, texto FROM status")}
+        # a versão de cada canal (muda ao apagar e ao reagir): só na memória, com uma base sorteada para não repetir um
+        # valor de antes de reiniciar
+        self.base_versao, self.versoes = secrets.randbelow(2 ** 40), {}
 
     def fechar(self):
         with self.trava:
@@ -244,6 +254,7 @@ class Equipe:
             tokens += [t for (t,) in self.con.execute(f"SELECT token FROM anexo WHERE mensagem IN ({marcas})", lote)]
             self.con.execute(f"DELETE FROM anexo WHERE mensagem IN ({marcas})", lote)
             self.con.execute(f"DELETE FROM reacao WHERE mensagem IN ({marcas})", lote)
+            self.con.execute(f"DELETE FROM mencao WHERE mensagem IN ({marcas})", lote)
             self.con.execute(f"DELETE FROM mensagem WHERE id IN ({marcas})", lote)
         return tokens
 
@@ -307,14 +318,22 @@ class Equipe:
                                (id_canal, autor, nome, texto, agora))
         return cur.lastrowid
 
+    def _mudou(self, ref):
+        self.versoes[ref] = self.versoes.get(ref, 0) + 1
+
     # --- mensagens
-    def enviar(self, canal, usuario, nome, texto):
-        """Uma mensagem no canal. Devolve a mensagem como o histórico a mostra."""
+    def enviar(self, canal, usuario, nome, texto, mencoes=()):
+        """Uma mensagem no canal. mencoes: os logins citados com @, já conferidos pelo escritorio.py contra quem tem papel
+        no andar (em DM não contam: a DM já avisa). Devolve a mensagem como o histórico a mostra."""
         usuario, nome, limpo = _usuario(usuario), _nome(nome), limpar_texto(texto)
+        citados = {_usuario(u) for u in mencoes} - {usuario}
         with self.trava:
             agora = self.relogio()
             with self.con:
                 id_m = self._inserir(self._escrever_canal(canal, usuario), usuario, nome, limpo, agora)
+                if _canal(canal)[1] is None:
+                    self.con.executemany("INSERT INTO mencao (mensagem, usuario) VALUES (?, ?)",
+                                         [(id_m, u) for u in sorted(citados)])
             msg = self._mensagens("m.id = ?", (id_m,), usuario)[0]
             if self._uso_banco() > self.teto_banco:
                 self._cortar_pelo_teto()
@@ -336,7 +355,7 @@ class Equipe:
         """O autor apaga a própria; o moderador (admin da empresa no andar, do prédio no saguão) apaga qualquer uma em
         canal, nunca em DM. O texto e o anexo somem de verdade."""
         with self.trava:
-            linha = self.con.execute("SELECT m.autor, c.dm FROM mensagem m JOIN canal c ON c.id = m.canal "
+            linha = self.con.execute("SELECT m.autor, c.dm, c.id, c.chave FROM mensagem m JOIN canal c ON c.id = m.canal "
                                      "WHERE m.id = ? AND m.texto IS NOT NULL", (id_mensagem,)).fetchone()
             if linha is None or not (linha[0] == usuario or moderador and not linha[1]):
                 raise SemAcesso()
@@ -344,7 +363,9 @@ class Equipe:
                 tokens = [t for (t,) in self.con.execute("SELECT token FROM anexo WHERE mensagem=?", (id_mensagem,))]
                 self.con.execute("DELETE FROM anexo WHERE mensagem=?", (id_mensagem,))
                 self.con.execute("DELETE FROM reacao WHERE mensagem=?", (id_mensagem,))
+                self.con.execute("DELETE FROM mencao WHERE mensagem=?", (id_mensagem,))
                 self.con.execute("UPDATE mensagem SET texto = NULL WHERE id=?", (id_mensagem,))
+            self._mudou(f"dm:{linha[2]}" if linha[1] else linha[3])
             self._apagar_arquivos(tokens)
             self._limpar_disco()
 
@@ -376,7 +397,7 @@ class Equipe:
         if emoji not in EMOJIS or type(ligar) is not bool:
             raise ValueError("reação inválida")
         with self.trava:
-            linha = self.con.execute("SELECT c.id, c.dm FROM mensagem m JOIN canal c ON c.id = m.canal "
+            linha = self.con.execute("SELECT c.id, c.dm, c.chave FROM mensagem m JOIN canal c ON c.id = m.canal "
                                      "WHERE m.id = ? AND m.texto IS NOT NULL", (id_mensagem,)).fetchone()
             if linha is None:
                 raise SemAcesso()
@@ -389,6 +410,8 @@ class Equipe:
                 else:
                     self.con.execute("DELETE FROM reacao WHERE mensagem=? AND usuario=? AND emoji=?",
                                      (id_mensagem, usuario, emoji))
+            self._mudou(f"dm:{linha[0]}" if linha[1] else linha[2])
+            return self._mensagens("m.id = ?", (id_mensagem,), usuario)[0]
 
     def mural(self, canal):
         """Os avisos fixos do canal (geral ou sala), do mais antigo ao mais novo."""
@@ -480,6 +503,99 @@ class Equipe:
                                    f"({','.join('?' * len(ids))}) AND m.texto IS NOT NULL ORDER BY m.id DESC LIMIT ?",
                                    (consulta, *ids, limite), usuario)
 
+    # --- o que o /api/ao-vivo e o push leem (Onda 2)
+    def contadores(self, usuario):
+        """({canal: não lidas}, {canal: menções não lidas}) da pessoa: geral, salas e as DMs dela, só os maiores que 0.
+        As mensagens dela mesma não contam."""
+        ate = "m.id > COALESCE((SELECT ultima FROM leitura WHERE canal = c.id AND usuario = ?), 0)"
+        ref = lambda i, dm, chave: f"dm:{i}" if dm else chave
+        with self.trava:
+            nao_lidas = {ref(i, dm, chave): n for i, dm, chave, n in self.con.execute(
+                "SELECT c.id, c.dm, c.chave, COUNT(m.id) FROM canal c JOIN mensagem m ON m.canal = c.id "
+                f"WHERE (c.dm = 0 OR c.u1 = ? OR c.u2 = ?) AND m.texto IS NOT NULL AND (m.autor IS NULL OR m.autor <> ?) "
+                f"AND {ate} GROUP BY c.id", (usuario, usuario, usuario, usuario))}
+            mencoes = {ref(i, dm, chave): n for i, dm, chave, n in self.con.execute(
+                "SELECT c.id, c.dm, c.chave, COUNT(*) FROM mencao x JOIN mensagem m ON m.id = x.mensagem "
+                f"JOIN canal c ON c.id = m.canal WHERE x.usuario = ? AND m.texto IS NOT NULL AND {ate} GROUP BY c.id",
+                (usuario, usuario))}
+        return nao_lidas, mencoes
+
+    def novas(self, usuario, canal, depois, limite=NOVAS_MAX):
+        """As mensagens do canal com id maior que depois (o canal aberto no painel), em ordem."""
+        _inteiro(depois, 0, 2 ** 62, "id inválido")
+        with self.trava:
+            id_c = self._ler_canal(canal, usuario)
+            if id_c is None:
+                return []
+            return self._mensagens("m.canal = ? AND m.id > ? ORDER BY m.id LIMIT ?", (id_c, depois, limite), usuario)
+
+    def versao(self, canal):
+        """Muda quando uma mensagem do canal é apagada ou ganha ou perde reação (o painel relê o histórico)."""
+        with self.trava:
+            return self.base_versao + self.versoes.get(canal, 0)
+
+    def versoes_mural(self):
+        """{canal: versão} dos murais com aviso. Fixar sobe o maior id; tirar baixa a contagem: o par nunca se repete."""
+        with self.trava:
+            return {chave: maior * 100 + n for chave, maior, n in self.con.execute(
+                "SELECT c.chave, MAX(m.id), COUNT(*) FROM mural m JOIN canal c ON c.id = m.canal GROUP BY c.id")}
+
+    def pode_escrever(self, canal, usuario):
+        """Confere, sem criar nada, que a pessoa pode escrever no canal (antes de ler o corpo de um anexo): DM alheia é
+        SemAcesso; DM com a outra ponta fora do andar, ValueError."""
+        chave, id_dm = _canal(canal)
+        if id_dm is not None:
+            with self.trava:
+                if None in self._dm(id_dm, usuario):
+                    raise ValueError("A outra pessoa não está mais no andar.")
+
+    def para_aviso(self, id_mensagem):
+        """O que o aviso no celular mostra, lido na hora do GET /api/avisos (o aviso não guarda cópia do texto): o nome
+        de quem mandou, o canal, o texto (None se foi apagada) e se tem anexo. Mensagem que não existe mais: None."""
+        with self.trava:
+            linha = self.con.execute("SELECT m.autor, m.nome, c.id, c.dm, c.chave, m.texto, a.id FROM mensagem m "
+                                     "JOIN canal c ON c.id = m.canal LEFT JOIN anexo a ON a.mensagem = m.id WHERE m.id = ?",
+                                     (id_mensagem,)).fetchone()
+        if linha is None:
+            return None
+        autor, nome, id_c, dm, chave, texto, id_a = linha
+        return {"nome": nome if autor is not None else EX_MEMBRO, "canal": f"dm:{id_c}" if dm else chave,
+                "texto": texto, "anexo": id_a is not None}
+
+    # --- status da conta neste andar e o "Entendi" da DM
+    def status_de(self, usuario):
+        with self.trava:
+            return dict(self.status.get(usuario) or {"status": STATUS_PADRAO, "texto": ""})
+
+    def definir_status(self, usuario, status, texto):
+        usuario = _usuario(usuario)
+        if status not in STATUS or not isinstance(texto, str):
+            raise ValueError("status inválido")
+        texto = texto.strip()
+        if len(texto) > STATUS_TEXTO_MAX or not _visivel(texto):
+            raise ValueError(f"O recado do status vai até {STATUS_TEXTO_MAX} caracteres, sem símbolos invisíveis.")
+        with self.trava:
+            with self.con:
+                if status == STATUS_PADRAO and not texto:
+                    self.con.execute("DELETE FROM status WHERE usuario = ?", (usuario,))
+                else:
+                    self.con.execute("INSERT INTO status (usuario, status, texto) VALUES (?, ?, ?) ON CONFLICT (usuario) "
+                                     "DO UPDATE SET status = excluded.status, texto = excluded.texto", (usuario, status, texto))
+            if status == STATUS_PADRAO and not texto:
+                self.status.pop(usuario, None)
+            else:
+                self.status[usuario] = {"status": status, "texto": texto}
+        return {"status": status, "texto": texto}
+
+    def entendeu_dm(self, usuario):
+        with self.trava:
+            return self._ajuste("dm_aviso:" + _usuario(usuario), 0) == 1
+
+    def marcar_entendeu_dm(self, usuario):
+        with self.trava:
+            with self.con:
+                self.con.execute("INSERT OR REPLACE INTO ajuste (chave, valor) VALUES (?, 1)", ("dm_aviso:" + _usuario(usuario),))
+
     # --- retenção, teto e contas
     def retencao(self):
         with self.trava:
@@ -528,8 +644,12 @@ class Equipe:
                 self.con.execute("UPDATE mural SET autor = NULL, nome = NULL WHERE autor = ?", (usuario,))
                 self.con.execute("DELETE FROM reacao WHERE usuario = ?", (usuario,))
                 self.con.execute("DELETE FROM leitura WHERE usuario = ?", (usuario,))
+                self.con.execute("DELETE FROM mencao WHERE usuario = ?", (usuario,))
+                self.con.execute("DELETE FROM status WHERE usuario = ?", (usuario,))
+                self.con.execute("DELETE FROM ajuste WHERE chave = ?", ("dm_aviso:" + usuario,))
                 self.con.execute("UPDATE canal SET u1 = NULL, chave = NULL WHERE dm = 1 AND u1 = ?", (usuario,))
                 self.con.execute("UPDATE canal SET u2 = NULL, chave = NULL WHERE dm = 1 AND u2 = ?", (usuario,))
+            self.status.pop(usuario, None)
             self.reservas = {t: r for t, r in self.reservas.items() if r[0] != usuario}
 
     # --- auditoria de DM (D4 b, D10 a): o escritorio.py só chama para o admin da empresa no andar
