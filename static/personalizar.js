@@ -258,8 +258,27 @@ const Personalizar = (() => {
     const ex = window.Expediente;
     $("av-expediente").textContent = ex ? `Só no expediente (${ex.abre} às ${ex.fecha})` : "Só no expediente";
   }
+  // "Mostrar o começo da mensagem no aviso" (E.4; padrão ligado): só com as conversas da equipe (config.equipe), criado
+  // aqui para não mexer no index.html; vai no POST como avisos.comeco
+  let comeco = null;
+  function caixaComeco() {
+    if (comeco || !configApp || !configApp.equipe) return comeco;
+    const rot = document.createElement("label"), span = document.createElement("span"), ajuda = document.createElement("p");
+    comeco = document.createElement("input");
+    comeco.type = "checkbox"; comeco.id = "av-comeco"; comeco.checked = true;
+    rot.className = "marcar"; span.textContent = "Mostrar o começo da mensagem no aviso";
+    ajuda.id = "av-comeco-ajuda"; ajuda.className = "ajuda";
+    ajuda.textContent = "Desligado, o aviso de menção e de mensagem direta diz só quem escreveu. Na tela bloqueada, o que aparece também depende do ajuste do celular.";
+    comeco.setAttribute("aria-describedby", ajuda.id);
+    comeco.addEventListener("change", () => avisoAvisos(""));
+    rot.append(comeco, span);
+    $("av-aviso").before(rot, ajuda);
+    return comeco;
+  }
   function mostrarAvisos(p) {
     const modo = p && ["sempre", "expediente", "silencio"].includes(p.modo) ? p.modo : "sempre";
+    const c = caixaComeco();
+    if (c) c.checked = !(p && p.comeco === false);
     for (const r of document.querySelectorAll('input[name="av-modo"]')) r.checked = r.value === modo;
     if (modo === "silencio" && HHMM.test(p.de) && HHMM.test(p.ate)) { $("av-de").value = p.de; $("av-ate").value = p.ate; }
     pintarAvisos();
@@ -279,7 +298,7 @@ const Personalizar = (() => {
     }
     bt.disabled = true; avisoAvisos("Salvando…");
     try {
-      const d = await pedirPerfil({ avisos: modo === "silencio" ? { modo, de, ate } : { modo } });
+      const d = await pedirPerfil({ avisos: { ...(modo === "silencio" ? { modo, de, ate } : { modo }), ...(comeco ? { comeco: comeco.checked } : {}) } });
       mostrarAvisos(d.avisos); avisoAvisos("Avisos salvos.", "ok");
     } catch (e) { avisoAvisos(`Não salvou: ${e.message}`, "ruim"); }
     finally { bt.disabled = false; }
