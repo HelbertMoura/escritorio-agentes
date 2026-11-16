@@ -135,6 +135,33 @@ class OutroWorkspace(unittest.TestCase):
         foto = l.foto()
         self.assertEqual((foto["conexao"], foto["agentes"], foto["tarefas"]), ("outra_org", [], []))
 
+    def test_conexao_nova_so_publica_depois_de_confirmar_a_org(self):
+        """E.2 item 5: o consentimento pode ter escolhido outra org sem tarefa com link para denunciar. A conexão nova
+        fica em "conferindo", sem agentes, até uma tarefa com o link do workspace do andar."""
+        confirmou = []
+
+        class Cred:
+            def token(self):
+                return "t"
+
+            def conferir_org(self):
+                return not confirmou
+
+            def confirmar_org(self):
+                confirmou.append(True)
+        l = e.Leitor(Cred(), e.url_app(e.AGENTES, ORG_B), os.path.join(PASTA, "nao-existe.json"), org=ORG_B)
+        l.mcp.sessao = "s"
+        tarefas = [{"agent": {"id": "b1"}, "status": "running", "label": "x", "started_at": "2026-11-14T10:00:00Z"}]
+        l.agentes, l.agentes_em = [{"id": "b1", "name": "Bolt", "handle": "bolt"}], 1_000_000
+        l._paginas = lambda nome, args, chave, token: (tarefas if chave == "tasks" else [], True)
+        l.ciclo(1_000_000)
+        foto = l.foto()
+        self.assertEqual((foto["conexao"], foto["agentes"], confirmou), ("conferindo", [], []))
+        tarefas.append(tarefa(ORG_B))
+        l.ciclo(1_000_030)
+        foto = l.foto()
+        self.assertEqual((foto["conexao"], [a["id"] for a in foto["agentes"]], confirmou), ("conectado", ["b1"], [True]))
+
     def test_principal_continua_sem_conferir_org(self):
         l = e.Leitor(None)
         self.assertIsNone(l.org)
@@ -343,6 +370,106 @@ class Http(unittest.TestCase):
         self.assertEqual((st, corpo["codigo"]), (404, "andar"))
         cab = {**self.cookie, "Origin": "https://outro.exemplo", "Content-Type": "application/json"}
         self.assertEqual(self.req("/api/andares", cab, b'{"acao":"renomear","id":"x","nome":"y"}')[0], 403)
+
+    def test_visitantes_so_no_principal(self):
+        self.assertIn("visitantes", self.get("/api/estado")[1])
+        self.assertNotIn("visitantes", self.get(f"/api/estado?andar={self.extra.id}")[1])
+
+    def conta(self, usuario, papel="membro"):
+        """Uma conta só do andar extra (sem o principal), pelo convite, e o cookie dela."""
+        acesso = self.srv.acesso
+        if usuario in acesso.usuarios:
+            acesso.remover(usuario)
+        token, _ = acesso.convidar(usuario.title(), [self.extra.id], principal=False)
+        cab = {"Cookie": "esc_sessao=" + acesso.aceitar_convite(token, usuario, "senha-da-pessoa-1", usuario.title(),
+                                                                {"color": "rose", "eyes": "round", "accessory": "cap"})}
+        if papel == "admin":
+            acesso.mudar_papel(usuario, "admin", self.extra.id)
+        return cab
+
+    def test_admin_da_empresa_no_classico(self):
+        """Sem saguão: a conta só de um andar extra cai nele sem ?andar=, e o admin dele não alcança o principal."""
+        bia = self.conta("bia", "admin")
+        rodar = lambda rota, cab=bia: self.req(rota, cab)[0]
+        st, cfg = self.req("/api/config", bia)[:2]
+        cfg = json.loads(cfg)
+        self.assertEqual((st, cfg["andar"], cfg["papel"], cfg["terreo"]), (200, self.extra.id, "admin", "classico"))
+        self.assertEqual([a["id"] for a in cfg["andares"]], [self.extra.id])   # o térreo de A não aparece
+        self.assertEqual([a["id"] for a in json.loads(self.req("/api/estado", bia)[1])["agentes"]], ["b1"])
+        self.assertEqual(rodar("/api/estado?andar=principal"), 404)
+        self.assertEqual(rodar("/api/andares"), 403)
+        self.assertEqual(rodar(f"/api/membros?andar={self.extra.id}"), 200)
+        st, corpo = self.req(f"/api/membros?andar={self.extra.id}", bia)[:2]
+        self.assertEqual({c["usuario"] for c in json.loads(corpo)["contas"]}, {"bia"})   # nem o dono aparece
+        self.srv.acesso.remover("bia")
+
+    def test_oauth_amarrado_a_conta_e_ao_andar(self):
+        """E.2: o state guarda quem começou; a volta só vale na sessão dessa conta e com o papel de admin ainda valendo.
+        Qualquer outra coisa dá o 400 do state inválido e gasta o state."""
+        cred = e.Credenciais(os.path.join(self.dados, "oauth-e2.json"), self.extra.times)
+        cred._cliente = lambda escopo, agora: "cliente-x"   # sem o registro de verdade (rede)
+        antes = self.extra.cred
+        self.extra.cred = cred
+        self.addCleanup(setattr, self.extra, "cred", antes)
+        bia = self.conta("bia", "admin")
+        self.addCleanup(self.srv.acesso.remover, "bia")
+        q = f"?andar={self.extra.id}"
+        estado = lambda: urllib.parse.parse_qs(urllib.parse.urlsplit(
+            self.req("/oauth/conectar" + q, bia)[2]["Location"]).query)["state"][0]
+        self.assertEqual(self.req("/oauth/conectar?andar=principal", bia)[0], 404)
+        s1 = estado()
+        st, corpo, _ = self.req(f"/oauth/retorno?code=c&state={s1}", self.cookie)   # o link de volta na sessão de outro
+        self.assertEqual(st, 400)
+        self.assertIn("venceu (vale 10 minutos) ou já foi usado", corpo.decode())
+        self.assertFalse(cred.tem_estado(s1))   # o state foi gasto
+        self.assertEqual(self.req(f"/oauth/retorno?code=c&state={s1}", bia)[0], 400)
+        s2 = estado()
+        papeis = self.srv.acesso.usuarios["bia"]["andares"]
+        papeis[self.extra.id] = "membro"   # o papel caiu dentro do prazo do pendente (o último admin, aqui, não sai)
+        # sem papel de admin em nenhum andar, a guarda barra (o 403 do membro); o state se gasta do mesmo jeito
+        self.assertEqual(self.req(f"/oauth/retorno?code=c&state={s2}", bia)[0], 403)
+        self.assertFalse(cred.tem_estado(s2))
+        papeis[self.extra.id] = "admin"
+        s3 = estado()
+        antes_post = e.post_form
+        e.post_form = lambda url, campos: {"access_token": "AC-e2", "refresh_token": "RF-e2", "scope": "read",
+                                           "expires_in": 3600}
+        self.addCleanup(setattr, e, "post_form", antes_post)
+        st, _, h = self.req(f"/oauth/retorno?code=c&state={s3}", bia)
+        self.assertEqual((st, h["Location"]), (302, f"/#andar={self.extra.id}"))
+        self.assertTrue(cred.conferir_org())   # até uma leitura confirmar a org, nenhum agente aparece
+        self.assertFalse(self.extra.cred.tem_estado(s3))
+        # o state de um andar não serve no outro: cada conexão tem os seus pendentes
+        self.assertEqual(self.req(f"/oauth/retorno?code=c&state={estado()}", self.cookie)[0], 400)
+
+    def test_desconectar_o_andar(self):
+        revogou = []
+
+        class Cred:
+            def desconectar(self):
+                revogou.append(True)
+
+            def tem_estado(self, s):
+                return False
+        antes = self.extra.cred
+        self.extra.cred = Cred()
+        self.addCleanup(setattr, self.extra, "cred", antes)
+        bia, ana = self.conta("bia", "admin"), self.conta("ana")
+        self.addCleanup(self.srv.acesso.remover, "bia")
+        self.addCleanup(self.srv.acesso.remover, "ana")
+        rota = f"/oauth/desconectar?andar={self.extra.id}"
+        post = lambda cab, dados, r=rota: self.req(r, {**cab, "Origin": self.base, "Content-Type": "application/json"},
+                                                   json.dumps(dados).encode())[0]
+        self.assertEqual(post(ana, {"senha": "senha-da-pessoa-1"}), 403)   # membro
+        self.assertEqual(post(bia, {"senha": "errada-errada"}), 403)
+        self.assertEqual(post(bia, {}), 400)
+        self.assertEqual(post(bia, {"senha": "senha-da-pessoa-1"}, "/oauth/desconectar?andar=principal"), 404)
+        self.assertEqual(revogou, [])
+        self.assertEqual(post(bia, {"senha": "senha-da-pessoa-1"}), 200)
+        fim = time.monotonic() + 5
+        while not revogou and time.monotonic() < fim:
+            time.sleep(0.01)
+        self.assertEqual(revogou, [True])
 
     def test_criar_renomear_e_remover_de_verdade(self):
         st, corpo = self.post("/api/andares", {"acao": "criar", "nome": "Suporte", "org": ORG_C,

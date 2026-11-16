@@ -118,8 +118,9 @@ PAUSA_429 = "O agentes.chat pediu uma pausa nas leituras; mostrando a última le
 SEM_CONEXAO = "o escritório ainda não está conectado ao agentes.chat (abra /oauth/conectar)"
 FALHA_LEITURA = "agentes.chat não respondeu; mostrando a última leitura"
 # o "conexao" do /api/estado: a faixa do navegador decide por ele, e não pelo texto do "erro"
-CONEXOES = ("carregando", "conectado", "sem_conexao", "recusada", "pausa", "falha", "outra_org")
+CONEXOES = ("carregando", "conectado", "sem_conexao", "recusada", "pausa", "falha", "outra_org", "conferindo")
 OUTRA_ORG = "a conta conectada é de outro workspace do agentes.chat; reconecte este andar escolhendo o workspace certo"
+CONFERINDO = "conectado; conferindo o workspace antes de mostrar os agentes (espere uma tarefa com link)"
 
 
 def texto_recusa(http):
@@ -277,7 +278,9 @@ class Credenciais:
                  "token_endpoint_auth_method": "none", "scope": escopo}
         return post_json(EMISSOR + "/api/oauth/register", corpo)["client_id"]
 
-    def url_autorizacao(self):
+    def url_autorizacao(self, usuario=None):
+        """O endereço do consentimento, com um state novo. usuario: a conta que começou (a volta só vale na sessão dela,
+        conferida pelo confere_dono)."""
         escopo = escopo_do_modo(carregar_times(self.times)["conversas"])
         with self.trava:
             agora = time.time()
@@ -288,7 +291,7 @@ class Credenciais:
             vivos = sorted(((k, v) for k, v in self.pendentes.items() if agora - v["em"] < self.VALIDADE), key=lambda kv: kv[1]["em"])
             self.pendentes = dict(vivos[-4:])  # no máximo 5 logins em andamento
             self.pendentes[estado] = {"verificador": verificador, "em": agora, "client_id": cliente, "escopo": escopo,
-                                      "redirect_uri": self.redirect_uri()}
+                                      "redirect_uri": self.redirect_uri(), "usuario": usuario}
             q = {"response_type": "code", "client_id": cliente, "redirect_uri": self.redirect_uri(), "scope": escopo,
                  "state": estado, "code_challenge": desafio, "code_challenge_method": "S256", "resource": MCP}
             return EMISSOR + "/api/oauth/authorize?" + urllib.parse.urlencode(q)
@@ -297,6 +300,28 @@ class Credenciais:
         """O state é de um login começado por esta conexão? (a volta do OAuth acha o andar dono por aqui)"""
         with self.trava:
             return bool(estado) and estado in self.pendentes
+
+    def confere_dono(self, estado, usuario, autorizado=True):
+        """A volta do OAuth (E.2): o state é de um login que esta conta começou, e ela ainda pode conectar o andar
+        (autorizado)? Se não, o state é gasto aqui: quem mandou o link de volta com o code da própria conta não tem
+        segunda chance, nem a mesma pessoa depois de perder o papel."""
+        with self.trava:
+            pend = self.pendentes.get(estado) if estado else None
+            if pend is not None and autorizado and usuario is not None and pend.get("usuario") == usuario:
+                return True
+            self.pendentes.pop(estado, None)
+            return False
+
+    def conferir_org(self):
+        """A conexão é nova (concluir) e a org ainda não foi confirmada por uma leitura? (E.2 item 5)"""
+        return self.dados.get("conferir_org") is True
+
+    def confirmar_org(self):
+        """Uma leitura confirmou a org do andar: o Leitor passa a publicar os agentes, também depois de reiniciar."""
+        with self.trava:
+            if self.dados.get("conferir_org") is True:
+                self.dados = {k: v for k, v in self.dados.items() if k != "conferir_org"}
+                self.salvar()
 
     def concluir(self, codigo, estado):
         with self.trava:
@@ -314,8 +339,9 @@ class Credenciais:
             antigo = self.dados
             # o dicionário novo fica pronto antes da troca: uma resposta ruim nunca derruba a conexão antiga
             try:
+                # conferir_org: o Leitor de um andar extra só publica agentes depois de confirmar a org (E.2 item 5)
                 novo = {"client_id": pend["client_id"], "redirect_uri": pend["redirect_uri"], "escopo_cliente": pend["escopo"],
-                        "emissor": AGENTES, **tokens(tok, escopo)}
+                        "emissor": AGENTES, **tokens(tok, escopo), "conferir_org": True}
             except ValueError:   # resposta que não dá para gravar: o que veio de token válido não fica vivo (B3)
                 self._revogar(tok, pend["client_id"])
                 raise
@@ -442,6 +468,19 @@ def outra_org(tarefas, org):
         if m and m.group(1).lower() != org:
             return True
     return False
+
+
+def org_confirmada(tarefas, org):
+    """Alguma tarefa com link deste workspace? É o sinal determinístico de que a conexão é da org do andar (E.2 item 5)."""
+    for t in tarefas:
+        m = ORG_NA_URL.search(str(t.get("url") or "")[:200]) if isinstance(t, dict) else None
+        if m and m.group(1).lower() == org:
+            return True
+    return False
+
+
+class Conferindo(Exception):
+    """Conexão nova de um andar extra sem leitura que confirme a org: nada dela aparece ainda."""
 
 
 class Limitado(Exception):
@@ -881,6 +920,10 @@ class Leitor(threading.Thread):
         self._carregar_canais(token, agora)
         if self.org and outra_org(tarefas, self.org):
             raise OutraOrg()
+        if self.org and getattr(self.cred, "conferir_org", lambda: False)():
+            if not org_confirmada(tarefas, self.org):
+                raise Conferindo()
+            self.cred.confirmar_org()
         return (resumir(self.agentes, tarefas, self.url_app), self.agentes_ok and ok,
                 normalizar(self.agentes, tarefas, self.url_app)[1])
 
@@ -959,12 +1002,13 @@ class Leitor(threading.Thread):
             if self.seguidos_429 == 1:
                 log(evento="leitura", resultado="limitado", espera=espera)
             return espera
-        except OutraOrg:   # a conta conectada é de outro workspace: nada dele aparece neste andar
+        except (OutraOrg, Conferindo) as x:   # outro workspace, ou ainda sem confirmar: nada dele aparece neste andar
+            outra = isinstance(x, OutraOrg)
             with self.trava:
-                self.estado = {**self.estado, "agentes": [], "trabalhos": [], "tarefas": [], "erro": OUTRA_ORG,
-                               "conexao": "outra_org"}
+                self.estado = {**self.estado, "agentes": [], "trabalhos": [], "tarefas": [],
+                               "erro": OUTRA_ORG if outra else CONFERINDO, "conexao": "outra_org" if outra else "conferindo"}
                 self.conversas = {"por_id": {}, "mudou": {}}
-            log(evento="leitura", resultado="outra_org")
+            log(evento="leitura", resultado="outra_org" if outra else "conferindo")
             return INTERVALO
         except PermissaoNegada as e:
             with self.trava:
@@ -1435,10 +1479,13 @@ class PonteVisitas(threading.Thread):
                  "aparece na sala.\n\n")
     AVISO_FILA = "Algumas mensagens antigas não chegaram ao agente; a equipe pode responder por aqui."
 
-    def __init__(self, salas, leitor, recepcao, relogio=time.time):
+    def __init__(self, salas, leitor, recepcao, relogio=time.time, atendente=None):
         super().__init__(daemon=True)
-        # recepcao() -> (handles, canal, ...): lida a cada passo, a tela troca o recepcionista sem reiniciar
+        # recepcao() -> (handles, canal, ...): lida a cada passo, a tela troca o recepcionista sem reiniciar.
+        # atendente() -> o Leitor do andar que atende a recepção (D11 a), ou None (removido, sem conexão): resolvido a
+        # cada passo, no lugar do leitor fixo. Só esta thread troca o self.leitor
         self.salas, self.leitor, self.recepcao, self.agora = salas, leitor, recepcao, relogio
+        self.atendente = atendente
         self.envios, self.leituras = collections.deque(), collections.deque()
         self.anfitrioes = {}   # id do agente -> {sala: último envio}, para saber se o canal de visitas é só de uma sala
         self.pausa_ate = 0
@@ -1455,6 +1502,13 @@ class PonteVisitas(threading.Thread):
         agora = self.agora()
         pendentes = self.salas.pendencias()
         if not pendentes:
+            return
+        if self.atendente:
+            self.leitor = self.atendente()
+        if self.leitor is None:   # nenhum andar atende: desligada, e as mensagens esperam na fila (com teto)
+            for chave, _, ponte, textos in pendentes:
+                self._devolver(chave, ponte, textos)
+                self._avisar(chave, ponte, "O agente não está disponível agora; a equipe pode responder por aqui.")
             return
         if agora < self.pausa_ate or (hasattr(self.leitor, "pausado") and self.leitor.pausado(agora)):
             for chave, _, ponte, textos in pendentes:   # esperam a pausa passar, até o teto da fila
@@ -2110,19 +2164,19 @@ def _versao_logo(caminho):
         return None
 
 
-def _ler_marca():
-    """marca.json como objeto; ausente, ilegível ou fora do formato vale como vazio."""
+def _ler_marca(caminho=None):
+    """marca.json (o do prédio, ou o do andar) como objeto; ausente, ilegível ou fora do formato vale como vazio."""
     try:
-        with open(ARQ_MARCA, encoding="utf-8") as f:
+        with open(caminho or ARQ_MARCA, encoding="utf-8") as f:
             m = json.load(f)
     except (OSError, ValueError, RecursionError):
         return {}
     return m if isinstance(m, dict) else {}
 
 
-def modo_serio(marca=None):
-    """Modo sério (Personalizar): pausa a vida social inteira. Só o true de JSON liga; o padrão é desligado."""
-    return (_ler_marca() if marca is None else marca).get("serio") is True
+def modo_serio(marca=None, caminho=None):
+    """Modo sério (Personalizar): pausa a vida social inteira do andar. Só o true de JSON liga; o padrão é desligado."""
+    return (_ler_marca(caminho) if marca is None else marca).get("serio") is True
 
 
 ARQ_PLACAR = os.path.join(DADOS, "placar.json")   # placar semanal do ringue (vida social); só a thread do Social grava
@@ -2181,9 +2235,15 @@ def ler_placar(caminho=None):
 
 def config_publica(andar=None):
     """times.json + o que a pessoa personalizou (nome, cor, expediente, modo sério, logo). Num andar extra, os times, a
-    aparência, o modo das conversas e o link do app são os dele; marca, expediente, clima e datas são do prédio."""
+    aparência, o modo das conversas, o link do app e a marca (nome, cor, logo, expediente e modo sério) são os dele;
+    sem marca salva, o nome do andar, a cor e o logo padrão, nunca a marca do prédio nem a de outro andar. Clima e datas
+    são do prédio. No saguão, sem times."""
+    extra = andar is not None and andar.id != ANDAR_PRINCIPAL
     cfg = carregar_times()
-    m = _ler_marca()
+    if extra:   # nada do times.json do principal vale num andar extra
+        cfg.update({k: v for k, v in carregar_times(andar.times, andar.org).items() if k not in ("clima", "empresa", "cor")})
+        cfg.update(empresa=andar.nome, cor=_validar_times({})["cor"])
+    m = _ler_marca(andar.arq_marca if extra else None)
     cfg["serio"] = modo_serio(m)
     if isinstance(m.get("empresa"), str) and ROTULO_OK.fullmatch(m["empresa"]):
         cfg["empresa"] = m["empresa"]
@@ -2196,8 +2256,8 @@ def config_publica(andar=None):
             log(evento="marca", resultado="expediente_invalido")
     # hash do conteúdo: muda a cada logo novo, até dois no mesmo segundo (o mtime não garante isso). Sem logo enviado,
     # vale o do logo padrão (static/logo.png, com cache público de 1 h): trocar a arte também fura o cache
-    versao = _versao_logo(ARQ_LOGO) or _versao_logo(os.path.join(ESTATICO, "logo.png")) or 0
-    cfg["logo"] = f"/logo?v={versao}"
+    versao = _versao_logo(andar.arq_logo if extra else ARQ_LOGO) or _versao_logo(os.path.join(ESTATICO, "logo.png")) or 0
+    cfg["logo"] = f"/logo?andar={andar.id}&v={versao}" if extra else f"/logo?v={versao}"
     # Personalizar > empresa do times.json > padrão; no padrão, a página mostra a etiqueta "exemplo"
     cfg["marca_exemplo"] = cfg["empresa"] == EMPRESA_PADRAO
     cfg["fonte"] = FONTE   # link "Código-fonte" do rodapé (AGPL §13)
@@ -2206,12 +2266,12 @@ def config_publica(andar=None):
     cfg["clima"], origem = clima_vigente(clima_arquivo)
     festas = festas_salvas()
     cfg["festas"] = {"proprias": festas["proprias"], "desligadas": festas["desligadas"]}
-    if andar is not None and andar.id != ANDAR_PRINCIPAL:
-        proprio = carregar_times(andar.times, andar.org)
-        cfg.update({k: proprio[k] for k in ("times", "aparencia", "conversas", "app_url")})
-    equipe = equipe_salva(None if andar is None else andar.arq_equipe)   # substitui inteiros os times e a aparência do times.json (sem misturar listas)
+    saguao = getattr(andar, "saguao", False)
+    equipe = None if saguao else equipe_salva(None if andar is None else andar.arq_equipe)   # substitui inteiros os times e a aparência do times.json (sem misturar listas)
     if equipe:
         cfg["times"], cfg["aparencia"] = equipe["times"], equipe["aparencia"]
+    if saguao:   # o times.json que ficou na raiz é da empresa que subiu de andar: nada dele aparece no saguão
+        cfg.update(times=[], aparencia={}, conversas="desligado", app_url="")
     cfg["ajustes"] = {"clima": origem, "clima_arquivo": clima_arquivo is not None, "equipe": "tela" if equipe else "arquivo",
                       "rev": {"festas": festas["rev"], "equipe": equipe["rev"] if equipe else 0}}
     return cfg
@@ -2271,12 +2331,42 @@ def recepcao_vigente():
     return set(), "", "nenhum"
 
 
-def recepcao_da_ponte(cred):
-    """O recepcionista para a ponte das visitas: o vigente, só com o modo "responder" e a escrita da conexão valendo
-    agora. Desligar o responder para as salas que já existem no passo seguinte, sem esperar o convite vencer."""
-    if carregar_times()["conversas"] != "responder" or not cred.tem_escrita():
+def recepcao_da_ponte(cred, times=None):
+    """O recepcionista para a ponte das visitas: o vigente, só com o modo "responder" (no times.json do andar que
+    atende) e a escrita da conexão valendo agora. Desligar o responder para as salas que já existem no passo seguinte, sem
+    esperar o convite vencer. Sem andar que atenda (cred None): desligada."""
+    if cred is None or (carregar_times(times) if times else carregar_times())["conversas"] != "responder" \
+            or not cred.tem_escrita():
         return set(), "", "desligada"
     return recepcao_vigente()
+
+
+def andar_da_recepcao(srv):
+    """O andar que atende a recepção pela própria conexão (E.1, D11 a), ou None. No modo clássico, o principal, como
+    sempre. No saguão, o andar com a org AGENTES_ORG (o da empresa que subiu do térreo), e só se um admin do prédio também
+    for admin dele: os agentes e o token são da empresa, e ela precisa concordar."""
+    if not saguao(srv):
+        return AndarPrincipal(srv)
+    andar = next((a for a in getattr(srv, "andares", {}).values() if a.org == ORG), None)
+    acesso = getattr(srv, "acesso", None)
+    if andar is None or acesso is None:
+        return None
+    papel = getattr(acesso, "papel", None)
+    if papel is None:
+        return andar
+    usuarios = getattr(acesso, "usuarios", {})
+    return andar if any(papel(u, ANDAR_PRINCIPAL) == "admin" and papel(u, andar.id) == "admin" for u in usuarios) else None
+
+
+def recebe_avisos(srv, conta, andar):
+    """O push do andar vai para esta conta? Só para quem tem papel no andar agora (perdeu o papel, parou de receber). A
+    assinatura de antes, sem conta, só recebe o principal do modo clássico (como na 1.5). O saguão não tem aviso."""
+    if conta is None:
+        return andar == ANDAR_PRINCIPAL and not saguao(srv)
+    if andar == ANDAR_PRINCIPAL and saguao(srv):
+        return False
+    papel = getattr(srv.acesso, "papel", None)
+    return papel is None or papel(conta, andar) is not None
 
 
 def festas_salvas():
@@ -2304,8 +2394,9 @@ def config_v(andar=None):
     """O "config_v" do /api/estado (modo TV): 12 hex que mudam quando muda a configuração. Só o os.stat (mtime e
     tamanho) de cada arquivo, sem ler o conteúdo de nenhum; a TV recarrega a página quando o valor muda."""
     h = hashlib.sha256()
-    proprios = (TIMES, ARQ_PLANTA, ARQ_EQUIPE) if andar is None else (andar.times, andar.arq_planta, andar.arq_equipe)
-    for arq in (proprios[0], ARQ_MARCA, ARQ_LOGO, proprios[1], ARQ_CLIMA, ARQ_FESTAS, proprios[2]):
+    proprios = (TIMES, ARQ_PLANTA, ARQ_EQUIPE, ARQ_MARCA, ARQ_LOGO) if andar is None else \
+        (andar.times, andar.arq_planta, andar.arq_equipe, andar.arq_marca, andar.arq_logo)
+    for arq in (proprios[0], proprios[3], proprios[4], proprios[1], ARQ_CLIMA, ARQ_FESTAS, proprios[2]):
         try:
             st = os.stat(arq)
             h.update(f"{st.st_mtime_ns}:{st.st_size};".encode())
@@ -2404,15 +2495,16 @@ def salvar_festas(dados, usuario):
     return 200, {"rev": nova["rev"], "festas": {"proprias": nova["proprias"], "desligadas": nova["desligadas"]}}
 
 
-def salvar_marca(empresa, cor, expediente=None, serio=None):
-    """expediente e serio None mantêm o que já estava salvo (a tela antiga e as boas-vindas não mandam os campos)."""
+def salvar_marca(empresa, cor, expediente=None, serio=None, caminho=None):
+    """expediente e serio None mantêm o que já estava salvo (a tela antiga e as boas-vindas não mandam os campos).
+    caminho: o marca.json do andar (None: o do prédio)."""
     if not ROTULO_OK.fullmatch(empresa or ""):
         raise ValueError("nome da empresa: até 40 letras, números e . ' & -")
     if not re.fullmatch(r"#[0-9a-fA-F]{6}", cor or ""):
         raise ValueError("cor inválida")
     if serio is not None and not isinstance(serio, bool):   # só true ou false de JSON: o "true" em texto é recusado
         raise ValueError("modo sério: true ou false")
-    novo, anterior = {"empresa": empresa, "cor": cor}, _ler_marca()
+    novo, anterior = {"empresa": empresa, "cor": cor}, _ler_marca(caminho)
     if expediente is not None:
         novo["expediente"] = validar_expediente(expediente)
     elif "expediente" in anterior:
@@ -2421,7 +2513,7 @@ def salvar_marca(empresa, cor, expediente=None, serio=None):
         novo["serio"] = serio
     elif isinstance(anterior.get("serio"), bool):
         novo["serio"] = anterior["serio"]
-    gravar(ARQ_MARCA, json.dumps(novo).encode("utf-8"))
+    gravar(caminho or ARQ_MARCA, json.dumps(novo).encode("utf-8"))
 
 
 # ---------------------------------------------------------------- HTTP
@@ -2496,11 +2588,27 @@ MEMBRO_GET = frozenset({"/", "", "/api/estado", "/api/config", "/api/social", "/
                         "/api/novidades", "/api/avisos", "/api/push/chave", "/api/perfil", "/api/ao-vivo"})
 MEMBRO_POST = frozenset({"/sair", "/api/sair-todos", "/api/push/assinar", "/api/push/sair", "/api/perfil",
                          "/api/presenca", "/api/sala/enviar"})
+# 1.6: a guarda decide pelo papel NO ANDAR do pedido (?andar=). Do prédio, para toda conta com pelo menos 1 andar: a
+# própria conta, o push e as novidades. O admin da empresa, só no andar dele: o do membro, mais marca, logo, times,
+# planta, membros e convites, a conexão OAuth, as conversas e o modo resposta. A pessoa do prédio (modo saguão), só no
+# saguão. Nada do prédio (andares, clima, datas, visitas) passa para quem não administra o prédio.
+PREDIO_GET = frozenset({"/", "", "/api/novidades", "/api/avisos", "/api/push/chave", "/api/perfil"})
+PREDIO_POST = frozenset({"/sair", "/api/sair-todos", "/api/push/assinar", "/api/push/sair", "/api/perfil"})
+ADMIN_EMPRESA_GET = MEMBRO_GET | {"/api/membros", "/api/conversa", "/oauth/conectar"}
+ADMIN_EMPRESA_POST = MEMBRO_POST | {"/api/membros", "/api/planta", "/api/equipe", "/api/marca", "/api/logo",
+                                    "/api/logo/remover", "/api/social/briga", "/api/social/greve/atender",
+                                    "/api/conversa/modo", "/api/conversa/modo/fechar", "/api/conversa/responder",
+                                    "/oauth/desconectar"}
+SAGUAO_GET = PREDIO_GET | {"/api/estado", "/api/config", "/api/ao-vivo"}
+SAGUAO_POST = PREDIO_POST | {"/api/presenca", "/api/sala/enviar"}
 SALAS_FIXAS = frozenset({"", "recepcao", "reuniao", "cozinha", "lounge"})   # "": o corredor (mapa.js: chave de cada sala)
 
 
 def salas_do_andar(andar):
-    """As chaves de sala que o mapa.js monta para este andar: as fixas e uma por time ("time:<nome>")."""
+    """As chaves de sala que o mapa.js monta para este andar: as fixas e uma por time ("time:<nome>"). O saguão só tem
+    as fixas."""
+    if andar.saguao:
+        return SALAS_FIXAS
     return SALAS_FIXAS | {"time:" + t["nome"] for t in carregar_times(andar.times)["times"]}
 
 
@@ -2602,21 +2710,33 @@ def aviso_erro_oauth(codigo):
 
 # ---------------------------------------------------------------- andares (andares.py): um workspace por andar
 
-NOME_PRINCIPAL = "Térreo"
+NOME_PRINCIPAL, NOME_SAGUAO = "Térreo", "Saguão"
+# o /api/estado do saguão: sem agentes, tarefas, conversas, vida social nem visitantes
+SAGUAO_VAZIO = {"agentes": [], "trabalhos": [], "tarefas": [], "eventos": [], "resolvidos": [], "atualizado": None,
+                "erro": None, "conexao": None}
+
+
+def saguao(srv):
+    """O prédio está no modo saguão (andares.json v2, gravado pela migração)? Sem o arquivo ou com o v1: o clássico."""
+    return getattr(getattr(srv, "registro_andares", None), "saguao", False) is True
 
 
 class AndarPrincipal:
-    """O andar de sempre: os objetos do servidor (srv.leitor, srv.cred...) e os arquivos de sempre, lidos na hora."""
+    """O andar de sempre: os objetos do servidor (srv.leitor, srv.cred...) e os arquivos de sempre, lidos na hora. No modo
+    saguão é o Saguão: o main() não liga conexão, Leitor, vida social nem jornal nele (as propriedades saem None)."""
     id = ANDAR_PRINCIPAL
 
     def __init__(self, srv):
         self.srv = srv
 
-    nome = NOME_PRINCIPAL
-    org = property(lambda self: ORG)
+    saguao = property(lambda self: saguao(self.srv))
+    nome = property(lambda self: NOME_SAGUAO if self.saguao else NOME_PRINCIPAL)
+    org = property(lambda self: None if self.saguao else ORG)
     times = property(lambda self: TIMES)
     arq_equipe = property(lambda self: ARQ_EQUIPE)
     arq_planta = property(lambda self: ARQ_PLANTA)
+    arq_marca = property(lambda self: ARQ_MARCA)   # a marca do prédio (a da tela de entrar)
+    arq_logo = property(lambda self: ARQ_LOGO)
     cred = property(lambda self: getattr(self.srv, "cred", None))
     leitor = property(lambda self: getattr(self.srv, "leitor", None))
     conversas = property(lambda self: getattr(self.srv, "conversas", None))
@@ -2628,17 +2748,21 @@ class AndarPrincipal:
 
 class Andar:
     """Um andar extra: a sua conexão OAuth, o seu Leitor (token, orçamento e pausa de 429 próprios), os seus times, a sua
-    planta, a sua vida social e o seu jornal, todos em dados/andares/<id>/. O push e as visitas são do prédio."""
+    planta, a sua vida social, o seu jornal e a sua marca (marca.json e logo.img), todos em dados/andares/<id>/. O push
+    (uma fila só, com o andar em cada aviso) e as visitas são do prédio."""
+    saguao = False
 
-    def __init__(self, reg, dados=None, atraso=0, clima=None):
+    def __init__(self, reg, dados=None, atraso=0, clima=None, avisos=None):
         self.id, self.nome, self.org = reg["id"], reg["nome"], reg["org"]
         pasta = mod_andares.pasta(dados or DADOS, self.id)
         caminho = lambda nome: os.path.join(pasta, nome)
         self.times, self.arq_equipe, self.arq_planta = (caminho(mod_andares.TIMES), caminho(mod_andares.EQUIPE),
                                                         caminho(mod_andares.PLANTA))
+        self.arq_marca, self.arq_logo = caminho("marca.json"), caminho("logo.img")   # os nomes da raiz
         arq_placar, arq_jornal = caminho(mod_andares.PLACAR), caminho(mod_andares.JORNAL)
         self.cred = Credenciais(caminho(mod_andares.OAUTH), self.times)
         self.leitor = Leitor(self.cred, url_app(AGENTES, self.org), self.times, atraso, self.org)
+        self.leitor.avisos = avisos.do_andar(self.id) if avisos else None
         self.jornal = self.leitor.jornal = Jornal(log, FUSO, lambda dados: gravar(arq_jornal, dados), ler_jornal(arq_jornal),
                                                   lambda: ((clima.foto() if clima else None) or {}).get("tipo"),
                                                   lambda: config_publica(self)["expediente"])
@@ -2658,9 +2782,10 @@ class Andar:
 
 
 def andares_publicos(srv, pode):
-    """[{id, nome, conexao}] dos andares que a pessoa pode ver, o principal primeiro (o "elevador" da tela)."""
+    """[{id, nome, conexao}] dos andares que a pessoa pode ver, o principal primeiro (o "elevador" da tela). O saguão
+    não tem conexão (null)."""
     lista = [AndarPrincipal(srv), *getattr(srv, "andares", {}).values()]
-    conexao = lambda a: (a.leitor.foto().get("conexao") if a.leitor else None) or "carregando"
+    conexao = lambda a: None if a.saguao else (a.leitor.foto().get("conexao") if a.leitor else None) or "carregando"
     return [{"id": a.id, "nome": a.nome, "conexao": conexao(a)} for a in lista if pode(a.id)]
 
 
@@ -2763,13 +2888,23 @@ class Pagina(BaseHTTPRequestHandler):
         ESCRITORIO_VISITAS_ANFITRIOES), canal de visitas válido e o mesmo controle do envio de mensagens (modo
         "responder" e conexão com escrita). Sem isso, lista vazia."""
         handles, canal, _ = recepcao_vigente()
-        if not handles or not UUID_MCP.fullmatch(canal) or not self._pode_responder():
+        if not handles or not UUID_MCP.fullmatch(canal) or not self._pode_responder(*self._na_recepcao()):
             return []
         return [{"id": a["id"], "nome": limpa_texto(a.get("nome") or a.get("handle") or "Agente", 60)[0]}
                 for a in self._agentes_lidos() if str(a.get("handle", "")).lower() in handles]
 
+    def _recepcao(self):
+        """O andar que atende a recepção (andar_da_recepcao), ou o saguão vazio quando nenhum atende: aí não há agente,
+        conexão nem resposta, e a recepção fica desligada."""
+        return andar_da_recepcao(self.server) or AndarPrincipal(self.server)
+
+    def _na_recepcao(self):
+        """Os argumentos do _pode_responder/_modo_resposta para o andar da recepção: nenhum no modo clássico (o
+        principal, como sempre); no saguão, o andar que atende."""
+        return (self._recepcao(),) if saguao(self.server) else ()
+
     def _agentes_lidos(self):
-        leitor = getattr(self.server, "leitor", None)
+        leitor = self._recepcao().leitor
         agentes = leitor.foto().get("agentes") if leitor else None
         return [a for a in agentes or [] if isinstance(a, dict) and isinstance(a.get("id"), str)]
 
@@ -2787,10 +2922,10 @@ class Pagina(BaseHTTPRequestHandler):
         if "limpar" not in dados and tela_recepcao() == "fechada":
             return self._json(403, {"erro": "Esta tela está desligada neste servidor. Quem administra o servidor liga "
                                             "com ESCRITORIO_VISITAS_TELA=1 ou define ESCRITORIO_VISITAS_ANFITRIOES."})
-        if not self._pode_responder():   # sem "codigo": a senha não resolve, então a tela não pede
+        if not self._pode_responder(*self._na_recepcao()):   # sem "codigo": a senha não resolve, então a tela não pede
             return self._json(403, {"erro": "Responder pelo escritório não está ligado. Ligue o modo \"responder\" "
                                             "com uma conexão de escrita antes de trocar o recepcionista."})
-        if not self._modo_resposta():   # "codigo": a tela pede a senha ali mesmo e tenta de novo
+        if not self._modo_resposta(*self._na_recepcao()):   # "codigo": a tela pede a senha ali mesmo e tenta de novo
             return self._json(403, {"erro": "Para trocar o recepcionista, confirme a senha do escritório. Ela abre o "
                                             "modo resposta por 1 hora neste navegador.", "codigo": "modo_fechado"})
         if "limpar" in dados:
@@ -2836,8 +2971,8 @@ class Pagina(BaseHTTPRequestHandler):
         if not lido:
             return 400, {"erro": "Esse agente não aparece na leitura do agentes.chat. Confira o @ e espere a próxima "
                                  "leitura, se ele acabou de ser criado."}
-        respostas = getattr(self.server, "respostas", None)
-        leitor = getattr(self.server, "leitor", None)
+        andar = self._recepcao()
+        respostas, leitor = andar.respostas, andar.leitor
         agora = time.time()
         if not respostas or not leitor or leitor.pausado(agora):
             return 503, {"erro": "O agentes.chat não está disponível agora; tente de novo em alguns minutos."}
@@ -2875,9 +3010,13 @@ class Pagina(BaseHTTPRequestHandler):
                           "ESCRITORIO_VISITAS_TELA=1 ou define ESCRITORIO_VISITAS_ANFITRIOES e ESCRITORIO_VISITAS_CANAL.")
         elif not any(h in lidos for h in handles):
             faltam.append("O recepcionista não aparece na leitura do agentes.chat.")
-        if carregar_times()["conversas"] != "responder":
+        andar = andar_da_recepcao(self.server)
+        if andar is None:
+            faltam.append("Nenhum andar atende a recepção: ela fica com o andar do workspace AGENTES_ORG, e quem "
+                          "administra o prédio precisa ser admin dele também.")
+        elif (carregar_times(andar.times) if andar.id != ANDAR_PRINCIPAL else carregar_times())["conversas"] != "responder":
             faltam.append('Ponha "conversas": "responder" no times.json.')
-        cred = getattr(self.server, "cred", None)
+        cred = andar.cred if andar else None
         if not cred or not cred.tem_escrita():
             faltam.append("Conecte o escritório de novo com o acesso de mandar tarefas aos agentes.")
         return {"origem": origem, "tela": tela, "liberados": sorted(ANFITRIOES_VISITAS), "anfitrioes": sorted(handles),
@@ -2885,24 +3024,76 @@ class Pagina(BaseHTTPRequestHandler):
                 "nomes": [limpa_texto(lidos[h].get("nome") or h, 60)[0] for h in sorted(handles) if h in lidos],
                 "faltam": faltam}
 
-    def _papel(self):
-        """O papel da sessão no prédio (o do andar principal): "admin", "membro" ou None. Sem papéis no acesso, e na
-        prévia, todo logado é admin (o escritório de antes das contas de membro)."""
-        papel = getattr(self.server.acesso, "papel", None)
-        if papel is None or self._previa():
+    def _papel(self, id_andar=ANDAR_PRINCIPAL):
+        """O papel da sessão no andar: "admin", "membro", "pessoa" (a pessoa do prédio, no saguão) ou None. O admin do
+        prédio é "admin" em todo andar. Sem papéis no acesso, e na prévia, todo logado é admin (o escritório de antes
+        das contas de membro)."""
+        if self._admin_do_predio():
             return "admin"
-        usuario = self._usuario()
-        return papel(usuario, ANDAR_PRINCIPAL) if usuario else None
+        usuario, papel = self._usuario(), self.server.acesso.papel
+        if not usuario:
+            return None
+        if id_andar == ANDAR_PRINCIPAL and saguao(self.server):
+            return "pessoa" if self._andares_da_conta() else None
+        return papel(usuario, id_andar) if id_andar == ANDAR_PRINCIPAL or id_andar in getattr(self.server, "andares", {}) \
+            else None
+
+    def _andares_da_conta(self):
+        """Os andares que existem e em que a sessão tem papel (o principal primeiro). Sem nenhum, a conta não é nem
+        pessoa do prédio."""
+        usuario, papel = self._usuario(), self.server.acesso.papel
+        if not usuario:
+            return []
+        return [a for a in (ANDAR_PRINCIPAL, *getattr(self.server, "andares", {})) if papel(usuario, a) is not None]
+
+    def _id_andar(self):
+        """O id do andar do pedido: o ?andar=; sem ele, o principal (o saguão), ou, no modo clássico, o primeiro andar de
+        quem não tem o principal (a conta só de uma empresa)."""
+        pedido = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("andar")
+        if pedido:
+            return pedido[0]
+        if saguao(self.server) or self._admin_do_predio():
+            return ANDAR_PRINCIPAL
+        meus = self._andares_da_conta()
+        return meus[0] if meus else ANDAR_PRINCIPAL
+
+    def _guarda(self, metodo, rota, nome=""):
+        """A guarda de papéis, num lugar só e antes de qualquer rota com sessão, pelo papel NO ANDAR do pedido (negar por
+        padrão): None passa; "papel" é o 403 da guarda; "andar" é o 404 de andar que não existe (sem acesso ao andar dá
+        a mesma resposta). O admin do prédio pode tudo; papel desconhecido, nada (falha fechada)."""
+        if self._admin_do_predio():
+            return None
+        usuario, papel = self._usuario(), self.server.acesso.papel
+        meus = self._andares_da_conta()
+        if not meus:
+            return "papel"
+        post = metodo == "POST"
+        if rota in (PREDIO_POST if post else PREDIO_GET) or (not post and nome in ARQUIVOS):
+            return None
+        if rota == "/oauth/retorno" and not post:   # quem decide é o state, amarrado à conta e ao andar (E.2)
+            return None if any(papel(usuario, a) == "admin" for a in meus) else "papel"
+        id_andar = self._id_andar()
+        if id_andar == ANDAR_PRINCIPAL and saguao(self.server):
+            return None if rota in (SAGUAO_POST if post else SAGUAO_GET) else "papel"
+        do_andar = rota in (ADMIN_EMPRESA_POST if post else ADMIN_EMPRESA_GET)
+        p = self._papel(id_andar)
+        if p is None:
+            return "andar" if do_andar else "papel"
+        if p == "admin" and id_andar != ANDAR_PRINCIPAL:
+            return None if do_andar else "papel"
+        if p == "membro":
+            return None if rota in (MEMBRO_POST if post else MEMBRO_GET) else "papel"
+        return "papel"
 
     def _permitido(self, metodo, rota, nome=""):
-        """A guarda de papéis, num lugar só e antes de qualquer rota com sessão: admin pode tudo; membro, só o que
-        está no MEMBRO_GET/MEMBRO_POST (e os estáticos); papel desconhecido, nada (falha fechada)."""
-        papel = self._papel()
-        if papel == "admin":
-            return True
-        if papel != "membro":
-            return False
-        return rota in MEMBRO_POST if metodo == "POST" else rota in MEMBRO_GET or nome in ARQUIVOS
+        return self._guarda(metodo, rota, nome) is None
+
+    def _barrado(self, metodo, rota, nome=""):
+        """A resposta da guarda (403 de papel ou 404 de andar), ou None quando passa."""
+        motivo = self._guarda(metodo, rota, nome)
+        if motivo == "andar":
+            return self._sem_andar()
+        return self._proibido(rota) if motivo else None
 
     def _proibido(self, rota):
         log(evento="http", rota=rota[:40], resultado="papel_recusado")
@@ -2915,18 +3106,19 @@ class Pagina(BaseHTTPRequestHandler):
         papel = getattr(self.server.acesso, "papel", None)
         return papel is None or self._previa() or papel(self._usuario(), ANDAR_PRINCIPAL) == "admin"
 
+    def _admin_do_andar(self, id_andar):
+        """Administra este andar: o admin do prédio (todos) ou o admin da empresa (só o dele; o saguão é do prédio)."""
+        return self._admin_do_predio() or (id_andar != ANDAR_PRINCIPAL and self._papel(id_andar) == "admin")
+
     def _pode_andar(self, id_andar):
         """Quem administra o principal vê todos os andares; os outros, só os da própria conta (papel por andar no
-        acesso.py, quando houver). Sem papéis no acesso (todo logado é admin), vale todo andar."""
-        papel = getattr(self.server.acesso, "papel", None)
-        if papel is None or self._previa():
-            return True
-        usuario = self._usuario()
-        return bool(usuario) and (papel(usuario, ANDAR_PRINCIPAL) == "admin" or papel(usuario, id_andar) is not None)
+        acesso.py), e o saguão, toda conta com pelo menos 1 andar. Sem papéis no acesso (todo logado é admin), vale todo
+        andar."""
+        return self._papel(id_andar) is not None
 
     def _andar(self):
-        """O andar do ?andar= (ausente: o principal), ou None: inexistente e sem acesso dão a mesma resposta (404)."""
-        pedido = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("andar", [ANDAR_PRINCIPAL])[0]
+        """O andar do pedido (_id_andar), ou None: inexistente e sem acesso dão a mesma resposta (404)."""
+        pedido = self._id_andar()
         if pedido == ANDAR_PRINCIPAL:
             return AndarPrincipal(self.server) if self._pode_andar(ANDAR_PRINCIPAL) else None
         andar = getattr(self.server, "andares", {}).get(pedido)
@@ -2942,9 +3134,11 @@ class Pagina(BaseHTTPRequestHandler):
         return not self._previa() and andar.respostas is not None and cred is not None \
             and carregar_times(andar.times)["conversas"] == "responder" and cred.tem_escrita()
 
-    def _modo_resposta(self):
+    def _modo_resposta(self, andar=None):
         """(resta_s, teto_s) do modo resposta desta sessão neste navegador, ou None."""
-        return self.server.acesso.modo(self._token(), self._valor_cookie(nome_cookie_modo())) if self._pode_responder() else None
+        if not self._pode_responder(andar):
+            return None
+        return self.server.acesso.modo(self._token(), self._valor_cookie(nome_cookie_modo()))
 
     def _cookie_modo(self, valor):
         # sem Max-Age nem Expires: o navegador apaga ao fechar (melhor esforço; quem garante é o servidor: 1 h e 8 h)
@@ -3004,7 +3198,7 @@ class Pagina(BaseHTTPRequestHandler):
                         return self._json(400, {"erro": "Este agente não pode receber visitas."})
                     # como o envio pela tela Conversas: a sala escreve no agentes.chat em nome da conexão, então
                     # exige o modo resposta aberto com a senha nesta sessão e neste navegador
-                    if not self._modo_resposta():   # "codigo": a tela pede a senha ali mesmo e tenta de novo
+                    if not self._modo_resposta(*self._na_recepcao()):   # "codigo": a tela pede a senha ali mesmo e tenta de novo
                         return self._json(403, {"erro": "Para pôr um agente na sala, confirme a senha do escritório. "
                                                         "Ela abre o modo resposta por 1 hora neste navegador.",
                                                 "codigo": "modo_fechado"})
@@ -3086,8 +3280,15 @@ class Pagina(BaseHTTPRequestHandler):
         if rota == "/convite":   # o link do convite: a página lê o token do fragmento, que nunca chega ao servidor
             return self._estatico("convite.html")
         if rota == "/logo":   # público: a tela de entrar mostra a marca. Só PNG, JPEG ou WEBP pelos bytes; o resto vira o padrão
-            if os.path.exists(ARQ_LOGO):
-                with open(ARQ_LOGO, "rb") as f:
+            arq = ARQ_LOGO
+            if urllib.parse.parse_qs(caminho.query).get("andar", [ANDAR_PRINCIPAL])[0] != ANDAR_PRINCIPAL:
+                # o logo de uma empresa só com sessão e acesso ao andar; sem isso, o 404 de andar que não existe
+                andar = self._andar() if self._usuario() else None
+                if andar is None:
+                    return self._sem_andar()
+                arq = andar.arq_logo
+            if os.path.exists(arq):
+                with open(arq, "rb") as f:
                     dados = f.read(LOGO_MAX + 1)
                 t = tipo_imagem(dados)
                 if t and len(dados) <= LOGO_MAX:
@@ -3098,14 +3299,21 @@ class Pagina(BaseHTTPRequestHandler):
             if rota.startswith("/api/"):
                 return self._json(401, {"erro": "entre de novo"})
             return self._envia(302, b"", extra={"Location": "/entrar"})
-        if not self._permitido("GET", rota, nome):
-            return self._proibido(rota)
-        membro = self._papel() != "admin"   # membro não lê as conversas dos agentes nem abre o modo resposta
+        if rota == "/oauth/retorno" and self._guarda("GET", rota, nome):   # quem não pode mais conectar: o state se gasta
+            estado_oauth = urllib.parse.parse_qs(caminho.query).get("state", [""])[0]
+            for a in getattr(self.server, "andares", {}).values():
+                if hasattr(a.cred, "confere_dono"):
+                    a.cred.confere_dono(estado_oauth, None, False)
+        barrado = self._barrado("GET", rota, nome)
+        if barrado is not None:
+            return barrado
         por_andar = ("/api/estado", "/api/config", "/api/social", "/api/social/placar", "/api/jornal", "/api/conversa",
-                     "/oauth/conectar", "/api/ao-vivo")
+                     "/oauth/conectar", "/api/ao-vivo", "/api/membros")
         andar = self._andar() if rota in por_andar else None
         if rota in por_andar and andar is None:
             return self._sem_andar()
+        # membro (e a pessoa do prédio) não lê as conversas dos agentes nem abre o modo resposta
+        membro = self._papel(andar.id if andar else self._id_andar()) != "admin"
         if rota == "/api/estado":
             clima, leitor = getattr(self.server, "clima", None), andar.leitor
             if hasattr(leitor, "ver"):
@@ -3115,29 +3323,35 @@ class Pagina(BaseHTTPRequestHandler):
             aceita = (lambda it: andar.respostas.aceita(it, agora)) if pode else None
             conversas = conversas_publicas(do_dia(), agora, aceita) if not membro and do_dia \
                 and carregar_times(andar.times)["conversas"] in MODOS_CONVERSA else []
-            modo = self._modo_resposta() if pode else None   # só o da própria sessão, neste navegador
-            estado = {**leitor.foto(), "conversas": conversas, "clima": clima.foto() if clima else None,
+            modo = self._modo_resposta(andar) if pode else None   # só o da própria sessão, neste navegador
+            foto = leitor.foto() if leitor else dict(SAGUAO_VAZIO)   # o saguão não tem agentes
+            estado = {**foto, "conversas": conversas, "clima": clima.foto() if clima else None,
                       "usuario": usuario, "modo_resposta": {"resta_s": modo[0], "teto_s": modo[1]} if modo else None,
-                      "config_v": config_v(None if andar.id == ANDAR_PRINCIPAL else andar)}
-            visitantes = getattr(self.server, "visitantes", None)   # ?invisivel=1: a TV e quem desligou "Aparecer"
-            invisivel = urllib.parse.parse_qs(caminho.query).get("invisivel") == ["1"]
-            estado["visitantes"] = visitantes.ver(self._token(), agora, not invisivel) if visitantes else []
+                      "config_v": config_v(andar)}
+            if andar.id == ANDAR_PRINCIPAL and not andar.saguao:
+                # os visitantes anônimos contam as sessões de todo o prédio: só no principal do modo clássico, como hoje
+                visitantes = getattr(self.server, "visitantes", None)   # ?invisivel=1: a TV e quem desligou "Aparecer"
+                invisivel = urllib.parse.parse_qs(caminho.query).get("invisivel") == ["1"]
+                estado["visitantes"] = visitantes.ver(self._token(), agora, not invisivel) if visitantes else []
             social = andar.social
             if social:
                 try:   # a vida social nunca derruba o /api/estado: na falha, a resposta sai sem a chave
-                    # o modo sério lido a cada pedido; o top do placar só com quem está nesta leitura
-                    estado["social"] = social.foto(agora, modo_serio(), {a["id"] for a in estado.get("agentes", [])})
+                    # o modo sério do andar, lido a cada pedido; o top do placar só com quem está nesta leitura
+                    estado["social"] = social.foto(agora, modo_serio(caminho=andar.arq_marca),
+                                                   {a["id"] for a in estado.get("agentes", [])})
                 except Exception as x:   # 1 linha de log por tipo de erro, e não uma por tela a cada 10 s
                     if type(x).__name__ not in social.erros:
                         social.erros.add(type(x).__name__)
                         log(evento="social", resultado="erro", detalhe=type(x).__name__)
             return self._json(200, estado)
         if rota == "/api/config":
-            cfg = config_publica(None if andar.id == ANDAR_PRINCIPAL else andar)
+            cfg = config_publica(andar)
             if self._previa():  # o front mostra a faixa "Prévia de desenvolvimento · dados fixos"
                 cfg["previa"] = True
-            cfg["pode_responder"] = not membro and self._pode_responder()
-            cfg["papel"] = self._papel()   # a tela esconde o que é de admin; quem barra é a guarda
+            cfg["pode_responder"] = not membro and self._pode_responder(andar)
+            # a tela esconde o que não é do papel; quem barra é a guarda. O papel é o deste andar
+            cfg["papel"], cfg["admin_predio"] = self._papel(andar.id), self._admin_do_predio()
+            cfg["terreo"] = "saguao" if saguao(self.server) else "classico"
             cfg["base"] = BASE   # o endereço configurado (não é segredo): o link de conectar e o aviso de endereço trocado
             planta = andar.planta
             if planta:   # só aqui, e não no config_publica() que o diretor social chama a cada minuto
@@ -3162,6 +3376,11 @@ class Pagina(BaseHTTPRequestHandler):
             if self._previa():
                 return self._json(*erro(404, "previa", "Na prévia não há contas."))
             acesso = self.server.acesso
+            if andar.id != ANDAR_PRINCIPAL:   # a visão do andar: só quem tem papel nele, e nada dos outros andares
+                return self._json(200, {"contas": acesso.contas_do_andar(andar.id),
+                                        "convites": acesso.convites_pendentes(andar=andar.id)})
+            if not self._admin_do_predio():
+                return self._proibido(rota)
             return self._json(200, {"contas": acesso.contas(), "convites": acesso.convites_pendentes()})
         if rota == "/api/andares":   # a aba Andares: os extras com o workspace de cada um (o principal é o AGENTES_ORG)
             if not self._admin_do_predio():
@@ -3201,7 +3420,9 @@ class Pagina(BaseHTTPRequestHandler):
             avisos = getattr(self.server, "avisos", None)
             if not avisos:
                 return self._json(*erro(404, "push_desligado", "O aviso no celular está desligado neste escritório."))
-            return self._json(*avisos.chave_publica()) if rota == "/api/push/chave" else self._json(200, avisos.publico())
+            if rota == "/api/push/chave":
+                return self._json(*avisos.chave_publica())
+            return self._json(200, avisos.publico(None if self._previa() else usuario))   # só o que é desta conta
         if rota == "/api/conversa":   # só o "id" ou o "agente" da query contam: o canal sai do que o servidor viu
             conversas = andar.conversas
             if not conversas or carregar_times(andar.times)["conversas"] not in MODOS_CONVERSA:
@@ -3210,9 +3431,11 @@ class Pagina(BaseHTTPRequestHandler):
             if "id" in q:   # página Conversas
                 return self._json(*conversas.ler_id(q["id"][0]))
             return self._json(*conversas.ler(q.get("agente", [""])[0]))   # ficha do agente
-        if rota == "/oauth/conectar":
-            try:
-                return self._envia(302, b"", extra={"Location": andar.cred.url_autorizacao()})
+        if rota == "/oauth/conectar":   # o admin do andar (a guarda) ou o do prédio; o saguão não tem conexão
+            if andar.saguao:
+                return self._sem_andar()
+            try:   # o pendente guarda quem começou: a volta só vale na sessão dela (E.2)
+                return self._envia(302, b"", extra={"Location": andar.cred.url_autorizacao(usuario=usuario)})
             except Exception as e:
                 log(evento="oauth", resultado="erro", detalhe=str(e)[:200])
                 return self._envia(502, pagina_aviso(*aviso_conectar(e)), "text/html; charset=utf-8")
@@ -3223,10 +3446,16 @@ class Pagina(BaseHTTPRequestHandler):
                 log(evento="oauth", resultado="recusado", codigo=codigo if CODIGO_OAUTH_OK.fullmatch(codigo) else "outro")
                 return self._envia(400, pagina_aviso(*aviso_erro_oauth(codigo)), "text/html; charset=utf-8")
             # um redirect_uri só para o prédio: o state (sorteado no /oauth/conectar) diz de qual andar é o login.
-            # State desconhecido cai no principal, que recusa como sempre
+            # State desconhecido cai no principal, que recusa como sempre; no saguão não há principal: 400
             estado_oauth = q.get("state", [""])[0]
             andar = next((a for a in getattr(self.server, "andares", {}).values() if a.cred.tem_estado(estado_oauth)),
                          None) or AndarPrincipal(self.server)
+            # E.2: a volta só vale na sessão de quem começou e com o papel de admin no andar conferido de novo agora.
+            # Qualquer outra coisa gasta o state e dá o mesmo 400 do state inválido (fecha o login CSRF)
+            confere = getattr(andar.cred, "confere_dono", None)
+            if andar.cred is None or (confere and not confere(estado_oauth, usuario, self._admin_do_andar(andar.id))):
+                log(evento="oauth", resultado="estado_recusado", andar=andar.id)
+                return self._envia(400, pagina_aviso(*aviso_retorno(EstadoInvalido())), "text/html; charset=utf-8")
             try:
                 andar.cred.concluir(q.get("code", [""])[0], estado_oauth)
             except Exception as e:
@@ -3247,8 +3476,8 @@ class Pagina(BaseHTTPRequestHandler):
                 andar.leitor.conferir_conta(zerar)
             else:
                 zerar()
-            if andar.id == ANDAR_PRINCIPAL and getattr(self.server, "avisos", None):   # o último aviso (o push lê o principal)
-                self.server.avisos.zerar()
+            if getattr(self.server, "avisos", None):   # os avisos da conta anterior deste andar
+                self.server.avisos.zerar(andar.id)
             if hasattr(andar.leitor, "acordar"):   # a primeira leitura com a conexão nova sai agora
                 andar.leitor.acordar()
             log(evento="oauth", resultado="conectado", usuario=usuario, andar=andar.id)
@@ -3350,7 +3579,7 @@ class Pagina(BaseHTTPRequestHandler):
         social = andar.social
         if not social:
             return self._json(*erro(404, "social_desligado", "A vida social está desligada neste escritório."))
-        cfg = config_publica(None if andar.id == ANDAR_PRINCIPAL else andar)
+        cfg = config_publica(andar)
         if briga:
             st, corpo = social.ordenar(dados["a"], dados["b"], time.time(), andar.leitor.foto(), cfg)
         else:
@@ -3406,8 +3635,10 @@ class Pagina(BaseHTTPRequestHandler):
         if rota == "/api/festas":
             return self._json(*salvar_festas(dados, usuario))
         if rota == "/api/equipe":
-            andar = self._andar()
-            return self._json(*salvar_equipe(dados, usuario, andar.arq_equipe)) if andar else self._sem_andar()
+            andar = self._andar()   # o saguão não tem times
+            if andar is None or andar.saguao:
+                return self._sem_andar()
+            return self._json(*salvar_equipe(dados, usuario, andar.arq_equipe))
         st, corpo = salvar_clima(dados, usuario)
         clima = getattr(self.server, "clima", None)
         if st == 200 and clima:   # o clima novo vale sem reiniciar
@@ -3480,7 +3711,8 @@ class Pagina(BaseHTTPRequestHandler):
                 andares = dict(getattr(self.server, "andares", {}))
                 if acao == "criar":
                     reg = registro.criar(dados["nome"], dados["org"])
-                    novo = Andar(reg, registro.dados, clima=getattr(self.server, "clima", None))
+                    novo = Andar(reg, registro.dados, clima=getattr(self.server, "clima", None),
+                                 avisos=getattr(self.server, "avisos", None))
                     novo.iniciar()
                     andares[reg["id"]] = novo
                     resposta = {"andar": reg}
@@ -3627,9 +3859,38 @@ class Pagina(BaseHTTPRequestHandler):
             log(evento="perfil", resultado="nao_gravou", detalhe=str(x))
             return self._json(*erro(500, "gravar", "Não deu para salvar agora."))
 
+    def _post_marca(self, rota, andar):
+        """Personalizar do andar (já com sessão, origem e papel conferidos): nome, cor, expediente e modo sério
+        (/api/marca), o logo (/api/logo, PNG/JPEG/WEBP pelos bytes, até 600 KB) e tirar o logo. Responde o config do
+        andar."""
+        if rota == "/api/marca":
+            try:
+                dados = json.loads(self._corpo(2048))
+                salvar_marca(str(dados.get("empresa", "")), str(dados.get("cor", "")), dados.get("expediente"),
+                             dados.get("serio"), andar.arq_marca)
+            except (ValueError, AttributeError) as e:
+                return self._json(400, {"erro": str(e)[:120]})
+            cfg = config_publica(andar)
+            if cfg["serio"] and andar.social:   # modo sério ligado: a cena em curso sai na hora
+                andar.social.cancelar(time.time())
+            return self._json(200, cfg)
+        if rota == "/api/logo":
+            try:
+                dados = self._corpo(LOGO_MAX)
+            except ValueError:
+                return self._json(400, {"erro": "a imagem precisa ter até 600 KB"})
+            if not tipo_imagem(dados):
+                return self._json(400, {"erro": "envie PNG, JPEG ou WEBP"})
+            gravar(andar.arq_logo, dados)
+        elif os.path.exists(andar.arq_logo):
+            os.unlink(andar.arq_logo)
+        return self._json(200, config_publica(andar))
+
     def _post_membros(self, rota):
         """Convidar, revogar, papel, andares e remover (a guarda já deixou só admin). Origin igual à BASE e JSON exato de
-        até 2 KB; convidar e remover pedem a senha da conta (balde do login): criam e apagam acesso ao prédio."""
+        até 2 KB; convidar, papel, andares e remover pedem a senha da conta (balde do login): criam e apagam acesso.
+        Com ?andar=X (o admin da empresa, ou o do prédio olhando X), tudo vale só em X: o convite é só para X, o papel é
+        o de X, remover tira só X da conta, e conta sem papel em X responde como conta que não existe."""
         acesso = self.server.acesso
         if self.headers.get("Origin") != BASE:
             log(evento="http", rota=rota[:40], resultado="origem_recusada")
@@ -3639,12 +3900,20 @@ class Pagina(BaseHTTPRequestHandler):
         usuario = self._usuario()
         if not usuario:
             return self._json(401, {"erro": "entre de novo"})
+        andar = self._andar()
+        if andar is None:
+            return self._sem_andar()
+        if andar.id != ANDAR_PRINCIPAL:
+            return self._post_membros_do_andar(rota, usuario, andar.id)
+        if not self._admin_do_predio():
+            return self._proibido(rota)
         dados = self._json_pedido(2048)
         if dados is False:
             return self._json(*erro(415, "formato", "Envie JSON (application/json)."))
         formatos = {"convidar": {"acao", "nome", "andares", "senha"}, "revogar": {"acao", "id"},
                     "papel": {"acao", "usuario", "papel", "senha"}, "andares": {"acao", "usuario", "andares", "senha"},
                     "remover": {"acao", "usuario", "senha"}}
+        classico = not saguao(self.server)   # no saguão, o principal não é caixa de andar: é de todos
         acao = dados.get("acao") if isinstance(dados, dict) else None
         textos_ok = lambda: all(isinstance(v, str) and len(v) <= 256 for k, v in dados.items() if k != "andares")
         if acao not in formatos or set(dados) != formatos[acao] or not textos_ok():
@@ -3663,7 +3932,7 @@ class Pagina(BaseHTTPRequestHandler):
                 return self._json(*erro(403, "senha_incorreta", "Senha incorreta."))
         try:
             if acao == "convidar":
-                token, convite = acesso.convidar(dados["nome"], dados["andares"])
+                token, convite = acesso.convidar(dados["nome"], dados["andares"], principal=classico)
                 log(evento="membros", resultado="convidou", usuario=usuario, convite=convite["id"])
                 return self._json(200, {"link": f"{BASE}/convite#{token}", "convite": convite})
             if acao == "revogar":
@@ -3671,7 +3940,7 @@ class Pagina(BaseHTTPRequestHandler):
             elif acao == "papel":
                 acesso.mudar_papel(dados["usuario"], dados["papel"])
             elif acao == "andares":
-                acesso.definir_andares(dados["usuario"], dados["andares"])
+                acesso.definir_andares(dados["usuario"], dados["andares"], principal=classico)
             else:
                 # some do mapa dos outros na hora, pelo nome normalizado ("Ana " e "ANA" são a conta "ana")
                 removida = acesso.remover(dados["usuario"])
@@ -3691,6 +3960,92 @@ class Pagina(BaseHTTPRequestHandler):
             return self._json(*erro(500, "gravar", "Não deu para salvar agora."))
         log(evento="membros", resultado=acao, usuario=usuario)
         return self._json(200, {"contas": acesso.contas(), "convites": acesso.convites_pendentes()})
+
+    def _post_membros_do_andar(self, rota, usuario, id_andar):
+        """A aba Membros de um andar (A.5): convidar (só para este andar, como membro), revogar (só convite dele), papel
+        (neste andar) e remover (tira este andar da conta). Nada daqui alcança outro andar nem a conta inteira."""
+        acesso = self.server.acesso
+        dados = self._json_pedido(2048)
+        if dados is False:
+            return self._json(*erro(415, "formato", "Envie JSON (application/json)."))
+        formatos = {"convidar": {"acao", "nome", "senha"}, "revogar": {"acao", "id"},
+                    "papel": {"acao", "usuario", "papel", "senha"}, "remover": {"acao", "usuario", "senha"}}
+        acao = dados.get("acao") if isinstance(dados, dict) else None
+        if acao not in formatos or set(dados) != formatos[acao] or \
+                not all(isinstance(v, str) and len(v) <= 256 for v in dados.values()):
+            return self._json(*erro(400, "pedido", "Pedido inválido."))
+        if "senha" in dados:
+            try:
+                acesso.conferir(usuario, dados["senha"])
+            except PermissionError as x:
+                log(evento="membros", resultado="senha_recusada", usuario=usuario, andar=id_andar)
+                if isinstance(x, TentativasDemais):
+                    return self._json(*erro(429, "tentativas_demais", "Tentativas demais; espere alguns minutos."))
+                return self._json(*erro(403, "senha_incorreta", "Senha incorreta."))
+        try:
+            if acao == "convidar":
+                token, convite = acesso.convidar(dados["nome"], [id_andar], principal=False)
+                log(evento="membros", resultado="convidou", usuario=usuario, convite=convite["id"], andar=id_andar)
+                return self._json(200, {"link": f"{BASE}/convite#{token}", "convite": convite})
+            if acao == "revogar":
+                acesso.revogar_convite(dados["id"], andar=id_andar)
+            elif acao == "papel":
+                acesso.mudar_papel(dados["usuario"], dados["papel"], id_andar)
+            else:
+                tirada = acesso.tirar_andar(dados["usuario"], id_andar)
+                if not acesso.andares_da_conta(tirada):   # sem andar nenhum: some do mapa dos outros na hora
+                    self.server.presenca.sair(tirada)
+        except UltimoAdmin:
+            return self._json(*erro(409, "ultimo_admin", "O andar precisa de pelo menos uma pessoa que administra."))
+        except ConvitesDemais as x:
+            return self._json(*erro(409, "convites_demais", str(x)))
+        except KeyError:
+            return self._json(*erro(404, "nao_existe", "Essa conta ou esse convite não existe mais; recarregue a página."))
+        except ValueError as x:
+            return self._json(*erro(400, "pedido", str(x)[:160]))
+        except NaoGravou as x:
+            log(evento="membros", resultado="nao_gravou", detalhe=str(x))
+            return self._json(*erro(500, "gravar", "Não deu para salvar agora."))
+        log(evento="membros", resultado=acao, usuario=usuario, andar=id_andar)
+        return self._json(200, {"contas": acesso.contas_do_andar(id_andar),
+                                "convites": acesso.convites_pendentes(andar=id_andar)})
+
+    def _post_desconectar(self, rota):
+        """"Desconectar" o andar (E.2 item 6): Origin igual à BASE, sessão de admin do andar (a guarda), JSON {"senha"} de
+        até 1 KB, no balde do login. Revoga o token (melhor esforço, fora do pedido) e apaga a conexão; o client_id fica
+        para conectar de novo. O saguão não tem conexão."""
+        acesso = self.server.acesso
+        if self.headers.get("Origin") != BASE:
+            log(evento="http", rota=rota[:40], resultado="origem_recusada")
+            return self._json(*erro(403, "origem", "Origem não permitida."))
+        if self._previa():
+            return self._json(*erro(403, "previa", "Na prévia não há conexão."))
+        usuario = self._usuario()
+        if not usuario:
+            return self._json(401, {"erro": "entre de novo"})
+        andar = self._andar()
+        if andar is None or andar.saguao or andar.cred is None:
+            return self._sem_andar()
+        if not self._admin_do_andar(andar.id):
+            return self._proibido(rota)
+        dados = self._json_pedido(1024)
+        if dados is False:
+            return self._json(*erro(415, "formato", "Envie JSON (application/json)."))
+        senha = dados.get("senha") if isinstance(dados, dict) and set(dados) == {"senha"} else None
+        if not isinstance(senha, str) or not 0 < len(senha) <= 256:
+            return self._json(*erro(400, "pedido", "Pedido inválido."))
+        try:
+            acesso.conferir(usuario, senha)
+        except PermissionError as x:
+            log(evento="oauth", resultado="desconectar_recusado", usuario=usuario, andar=andar.id)
+            if isinstance(x, TentativasDemais):
+                return self._json(*erro(429, "tentativas_demais", "Tentativas demais; espere alguns minutos."))
+            return self._json(*erro(403, "senha_incorreta", "Senha incorreta."))
+        threading.Thread(target=andar.cred.desconectar, daemon=True).start()   # a revogação é rede: fora do pedido
+        if hasattr(andar.leitor, "acordar"):   # a próxima leitura já sai sem conexão
+            andar.leitor.acordar()
+        log(evento="oauth", resultado="desconectado", usuario=usuario, andar=andar.id)
+        return self._json(200, {"ok": True})
 
     def _post_sair_todos(self, rota):
         """"Sair de todos os aparelhos": Origin obrigatório e igual à BASE (sem a volta para o Referer), sessão, JSON
@@ -3740,8 +4095,10 @@ class Pagina(BaseHTTPRequestHandler):
         self.lido = self.rfile.read(int(tam)) if re.fullmatch(r"[0-9]{1,7}", tam) and int(tam) <= CORPO_ANTES else None
         rota = urllib.parse.urlsplit(self.path).path
         acesso = self.server.acesso
-        if rota not in POST_PUBLICOS and self._usuario() and not self._permitido("POST", rota):
-            return self._proibido(rota)
+        if rota not in POST_PUBLICOS and self._usuario():
+            barrado = self._barrado("POST", rota)
+            if barrado is not None:
+                return barrado
         if rota in ("/convite/ver", "/convite/aceitar"):
             return self._post_convite(rota)
         if rota == "/api/perfil":
@@ -3750,6 +4107,8 @@ class Pagina(BaseHTTPRequestHandler):
             return self._post_presenca(rota)
         if rota == "/api/membros":
             return self._post_membros(rota)
+        if rota == "/oauth/desconectar":
+            return self._post_desconectar(rota)
         if rota in ROTAS_ADMIN_VISITAS or rota in ("/api/visitas/entrar", "/api/visitas/enviar", "/api/visitas/receber",
                                                    "/api/visitas/sair", "/api/visitas/mapa", "/api/visitas/recepcao",
                                                    "/api/mundo/clima"):
@@ -3800,29 +4159,13 @@ class Pagina(BaseHTTPRequestHandler):
             return self._envia(303, b"", extra={"Location": "/entrar", "Set-Cookie": [self._cookie("", 0), self._cookie_modo("")]})
         if not self._usuario():
             return self._json(401, {"erro": "entre de novo"})
-        if rota == "/api/marca":
-            try:
-                dados = json.loads(self._corpo(2048))
-                salvar_marca(str(dados.get("empresa", "")), str(dados.get("cor", "")), dados.get("expediente"), dados.get("serio"))
-            except (ValueError, AttributeError) as e:
-                return self._json(400, {"erro": str(e)[:120]})
-            cfg = config_publica()
-            if cfg["serio"] and getattr(self.server, "social", None):   # modo sério ligado: a cena em curso sai na hora
-                self.server.social.cancelar(time.time())
-            return self._json(200, cfg)
-        if rota == "/api/logo":
-            try:
-                dados = self._corpo(LOGO_MAX)
-            except ValueError:
-                return self._json(400, {"erro": "a imagem precisa ter até 600 KB"})
-            if not tipo_imagem(dados):
-                return self._json(400, {"erro": "envie PNG, JPEG ou WEBP"})
-            gravar(ARQ_LOGO, dados)
-            return self._json(200, config_publica())
-        if rota == "/api/logo/remover":
-            if os.path.exists(ARQ_LOGO):
-                os.unlink(ARQ_LOGO)
-            return self._json(200, config_publica())
+        if rota in ("/api/marca", "/api/logo", "/api/logo/remover"):   # a marca do andar (?andar=; sem ele, a do prédio)
+            andar = self._andar()
+            if andar is None:
+                return self._sem_andar()
+            if not self._admin_do_andar(andar.id):
+                return self._proibido(rota)
+            return self._post_marca(rota, andar)
         return self._envia(404, b"")
 
 
