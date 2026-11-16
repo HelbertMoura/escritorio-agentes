@@ -5,12 +5,12 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 
-function carregar(resposta) {
+function carregar(resposta, abas = []) {
   const ouvintes = {}, mostradas = [], abertas = [], focadas = [];
   const self = {
     addEventListener: (t, f) => (ouvintes[t] = f),
     registration: { scope: "https://escritorio.exemplo/", showNotification: (titulo, op) => { mostradas.push({ titulo, ...op }); return Promise.resolve(); } },
-    clients: { claim() {}, matchAll: async () => [], openWindow: async url => abertas.push(url) },
+    clients: { claim() {}, matchAll: async () => abas, openWindow: async url => abertas.push(url) },
     skipWaiting() {},
   };
   const fetch = async () => (resposta instanceof Error ? Promise.reject(resposta) : { ok: true, json: async () => resposta });
@@ -35,6 +35,12 @@ function carregar(resposta) {
     assert.equal(n.body, "olha o relatório de…");
     assert.equal(n.data.agente, null);
     assert.equal(n.data.andar, "a1b2c3d4");
+    assert.equal(n.data.canal, "geral");
+  }
+  // o canal só no formato do contrato (geral, sala:<chave>, dm:<n>); fora disso fica de fora
+  for (const [canal, esperado] of [["sala:cozinha", "sala:cozinha"], ["dm:4", "dm:4"], ["dm:x", null], ["outro", null], [3, null]]) {
+    const n = await carregar({ aviso: { tipo: "dm", titulo: "Ana", corpo: "", andar: "a1b2c3d4", canal } }).push();
+    assert.equal(n.data.canal, esperado, String(canal));
   }
   // "mostrar o começo" desligado: corpo vazio vira o texto genérico, sem nada da mensagem
   {
@@ -60,6 +66,18 @@ function carregar(resposta) {
     const url = await carregar({}).tocar({ agente: null, andar: "a1b2c3d4" });
     assert.equal(url, "https://escritorio.exemplo/#andar=a1b2c3d4");
     assert.equal(await carregar({}).tocar({ agente: "a1", andar: null }), "https://escritorio.exemplo/?agente=a1");
+  }
+  // com o escritório já aberto: foca a aba e manda o andar e o canal do aviso pessoal (o app.js troca de andar e abre o canal)
+  {
+    const recebidas = [], focos = [];
+    const aba = { url: "https://escritorio.exemplo/#andar=0badc0de", postMessage: m => recebidas.push(m), focus: () => focos.push(1) };
+    const sw = carregar({}, [aba]);
+    assert.equal(await sw.tocar({ agente: null, andar: "a1b2c3d4", canal: "dm:4" }), undefined, "não abre outra aba");
+    assert.deepEqual(JSON.parse(JSON.stringify(recebidas)), [{ tipo: "aviso", andar: "a1b2c3d4", canal: "dm:4" }]);
+    assert.equal(focos.length, 1);
+    recebidas.length = 0;
+    await carregar({}, [aba]).tocar({ agente: "a1", andar: null, canal: null });
+    assert.deepEqual(JSON.parse(JSON.stringify(recebidas)), [{ tipo: "agente", agente: "a1" }], "o aviso de agente continua o de sempre");
   }
   console.log("test_sw.js ok");
 })().catch(e => { console.error(e); process.exit(1); });
