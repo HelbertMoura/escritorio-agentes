@@ -60,7 +60,8 @@ Ele **não chama nenhum modelo de IA** e não gasta tokens. Aprovar é sempre no
 - 📺 **Modo TV:** tela cheia, tela sempre acesa e um diretor de câmera que corre para os pedidos, as brigas e as greves, com uma faixa de notícias (veja [Modo TV](#modo-tv)).
 - 📲 **App e aviso no celular:** instale o escritório na tela de início e receba um aviso quando um agente pedir a sua aprovação ou fizer uma pergunta (veja [App instalável](#app-instalável-pwa) e [Avisar no celular](#avisar-no-celular)).
 - 🏬 **Andares:** cada workspace do agentes.chat vira um andar do prédio, e o elevador da barra troca de andar (veja [Andares](#andares-vários-workspaces-no-mesmo-prédio)).
-- 👥 **Equipe:** contas de membro por convite, com nome e boneco no mapa e um chat de texto por sala (veja [Equipe](#equipe)).
+- 👥 **Equipe:** contas de membro por convite, com nome e boneco no mapa; conversas da equipe (geral, salas e DM, com menções, reações, anexos e busca), mural, status, reuniões com agenda e o resumo de enquanto você esteve fora (veja [Equipe](#equipe)).
+- 🙈 **Modo apresentação:** troca os nomes por "Agente 1" e "Pessoa 2" e esconde o que é sensível, para mostrar a tela a um cliente (veja [Modo apresentação](#modo-apresentação)).
 - 👀 **Visitantes:** quem mais da equipe está com o escritório aberto aparece no mapa com o próprio nome e boneco (veja [Visitantes](#visitantes)).
 - 🚪 **Visitas por convite:** um link de 1 hora traz alguém de fora para a sala de reunião, sem senha (veja [Visitas por convite](#visitas-por-convite)).
 - 🌎 **Mundo:** uma página pública que desce do globo ao Brasil, à cidade e à porta da recepção, com o tempo real de 28 cidades (veja [Mundo](#mundo)).
@@ -163,6 +164,8 @@ O serviço escuta em `127.0.0.1:737`, uma porta privilegiada, para que nenhum us
 
 O endereço do código-fonte que a página oferece a quem a usa (AGPL, seção 13) é, por padrão, este repositório; se você roda uma versão modificada, passe `ESCRITORIO_FONTE=<endereço https do seu código>` (um endereço `https://` simples, até 200 caracteres, sem aspas nem espaços; o instalador recusa qualquer outra coisa).
 
+Duas variáveis opcionais das conversas da equipe (1.6): `ESCRITORIO_JITSI=<host>` aceita o Jitsi da sua instalação no link fixo das salas, além da lista fechada (Meet, Zoom, `meet.jit.si`, Teams e Whereby); vale um host exato, como `jitsi.exemplo.com`, e um valor fora desse formato é ignorado. `ESCRITORIO_PISO_DISCO_MB=<MB>` define quanto disco livre os anexos nunca usam; sem ela, o maior entre 2 GB e 10% do volume. O instalador não pede nenhuma das duas: acrescente a linha ao `/etc/escritorio.env` e reinicie o serviço (`sudo systemctl restart escritorio`), e refaça depois de cada reinstalação, que reescreve o arquivo. No Docker, ponha a variável no `environment` do serviço `escritorio` no `docker-compose.yml`.
+
 O instalador publica o endereço `/` da porta 443 desta máquina na tailnet (`tailscale serve`). Se essa rota já publica outra coisa, ele para sem mudar nada, para não derrubar o que já existe. Isso vale também ao reinstalar com outra `ESCRITORIO_PORTA`: libere a 443 antes (veja `tailscale serve status`).
 
 **Reinstalar ou atualizar:** rode o instalador de novo com as mesmas variáveis. Ele reescreve o `/etc/escritorio.env` toda vez, então `ESCRITORIO_PORTA` e `ESCRITORIO_FONTE` voltam ao padrão quando ficam de fora (num fork, o link do código-fonte voltaria a apontar para este repositório). Usuários, sessões, tokens e o `/opt/escritorio/times.json` são mantidos.
@@ -221,6 +224,8 @@ No mapa, cada pessoa conectada aparece com o próprio nome e boneco, e cada sala
 - **O admin do prédio lê o geral, as salas, o mural e os anexos de toda empresa, sem escrever neles** (a DM, não). Moderar (apagar mensagem de outra pessoa, tirar aviso do mural) e mudar a retenção é só de quem administra cada empresa; no saguão, do admin do prédio.
 - **Reuniões:** cada sala pode ter um link fixo de Meet, Zoom, Jitsi, Teams ou Whereby (o admin da empresa cola; só https e sem senha no endereço), e a agenda do andar guarda título, sala, horário e convidados pela mesma retenção, com aviso 5 minutos antes e o `.ics` para a agenda de cada um. A voz e o vídeo ficam no serviço do link, fora do escritório.
 - O banco não é cifrado: quem opera o servidor lê tudo.
+
+No dia a dia: o **@login** menciona alguém do andar, as mensagens recebem reações e a busca procura no geral, nas salas e nas suas DMs. Cada sala tem um mural na parede (até 10 avisos), e cada pessoa escolhe um status (disponível, ocupado, em reunião, ausente) com um recado curto, que aparece no boneco. A lista do andar mostra quem está e onde, com **Ir até**, **Acenar**, **Bater na porta** e **Mensagem direta** (quem está ocupado não recebe aceno). Na agenda, quem administra a empresa também chama a equipe para uma **reunião geral**: chega o aviso a cada pessoa do andar, e o mapa leva o boneco até a sala. Quem está na sala de uma reunião em andamento e não pôs status aparece "em reunião", e a porta ganha a placa. Quem volta a um andar depois de mais de 1 hora vê no topo **Enquanto você esteve fora**, com as tarefas concluídas e as esperas de aprovação ou resposta dos agentes, e o cartão de cada agente mostra a linha do tempo de hoje.
 
 Sem nenhuma conta, o chat continua só na memória, como antes. Os detalhes estão em [para onde vai cada dado](./docs/visitas-privadas-plano.md#conversas-da-equipe-no-disco-16).
 

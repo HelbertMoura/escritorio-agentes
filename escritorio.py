@@ -63,7 +63,7 @@ from social import PLACAR_BYTES, PLACAR_MAX, PLACAR_TETO, Social  # noqa: E402
 from visitas_sala import Salas, LimiteRequisicoes  # noqa: E402
 from presenca import Limite as LimitePresenca, Presenca  # noqa: E402
 
-VERSAO = "1.5.2"
+VERSAO = "1.6.0"
 AGENTES_PADRAO = "https://app.agentes.chat"
 # a nuvem ou a sua instalação self-host (o PUBLIC_URL dela): o main() confere (erro_agentes)
 AGENTES = os.environ.get("AGENTES_URL", "").strip().rstrip("/") or AGENTES_PADRAO
@@ -3622,7 +3622,8 @@ class Pagina(BaseHTTPRequestHandler):
                 return self._json(200, linha.fora(int(desde), agora))
             agente, dia = q.get("agente", [""])[0], q.get("dia", [""])[0] or linha.dia_de(agora).isoformat()
             try:   # só os 14 dias que a linha guarda: de hoje-13 a hoje
-                dia_ok = re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", dia) is not None                     and linha.dia_ok(datetime.date.fromisoformat(dia), agora)
+                dia_ok = (re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", dia) is not None
+                          and linha.dia_ok(datetime.date.fromisoformat(dia), agora))
             except ValueError:
                 dia_ok = False
             if not dia_ok or not LINHA_AGENTE.fullmatch(agente):
