@@ -441,12 +441,15 @@ class Equipe:
         return {"id": cur.lastrowid, "usuario": usuario, "nome": nome, "texto": limpo, "em": _iso(agora)}
 
     def desafixar(self, id_aviso, usuario, moderador=False):
+        """Tira o aviso (o autor, ou o moderador). Devolve o canal dele."""
         with self.trava:
-            linha = self.con.execute("SELECT autor FROM mural WHERE id=?", (id_aviso,)).fetchone()
+            linha = self.con.execute("SELECT m.autor, c.chave FROM mural m JOIN canal c ON c.id = m.canal WHERE m.id=?",
+                                     (id_aviso,)).fetchone()
             if linha is None or not (linha[0] == usuario or moderador):
                 raise SemAcesso()
             with self.con:
                 self.con.execute("DELETE FROM mural WHERE id=?", (id_aviso,))
+            return linha[1]
 
     # --- DM
     def abrir_dm(self, usuario, outro):

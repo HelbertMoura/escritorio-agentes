@@ -31,6 +31,7 @@ import math
 import os
 import re
 import secrets
+import shutil
 import signal
 import sys
 import threading
@@ -50,7 +51,9 @@ import vapid  # noqa: E402
 from ajustes import (ACESSORIOS, CLIMA_BYTES, CORES, EQUIPE_BYTES, FESTAS_BYTES, HANDLE_OK, ICONES_OK, OLHOS,  # noqa: E402
                      ROTULO_OK, limpa_texto)
 from avisos import (CORPO_MAX as PUSH_CORPO, PUSH_BYTES, Avisos, EndpointInvalido, validar_arquivo as validar_push,  # noqa: E402
-                    validar_assinatura, validar_preferencia, validar_saida)
+                    validar_assinatura, validar_preferencia, validar_saida, comeco, mostra_comeco)
+import anexos  # noqa: E402
+from conversas_equipe import (ANEXO_MAX, EMOJIS, STATUS, CotaCheia, Equipe, SemAcesso)  # noqa: E402
 from jornal import JORNAL_BYTES, Jornal, validar as validar_jornal  # noqa: E402
 from novidades import Novidades  # noqa: E402
 from planta import PLANTA_BYTES, Planta, validar_planta  # noqa: E402
@@ -2152,6 +2155,17 @@ ARQ_MARCA = os.path.join(DADOS, "marca.json")
 ARQ_LOGO = os.path.join(DADOS, "logo.img")
 LOGO_MAX = 600_000
 CORPO_ANTES = 128 * 1024   # POST: corpo lido antes de qualquer resposta (do_POST); acima disso, só a rota que aceita lê
+# o anexo (E.5): o envio inteiro tem PRAZO_ANEXO segundos (o timeout de 15 s vale por bloco: sem o prazo, 1 byte a cada
+# 14 s seguraria a thread por dias); no máximo ENVIOS_MAX ao mesmo tempo no servidor e 1 por conta; DOWNLOADS_MAX por
+# conta. O piso de disco do prédio (bytes livres que o anexo nunca usa) sai de ESCRITORIO_PISO_DISCO_MB; sem ele,
+# max(2 GB, 10% do volume)
+PRAZO_ANEXO, ENVIOS_MAX, DOWNLOADS_MAX, BLOCO_ANEXO = 120, 4, 4, 64 * 1024
+PISO_DISCO = int(os.environ["ESCRITORIO_PISO_DISCO_MB"]) * 1024 * 1024 if os.environ.get(
+    "ESCRITORIO_PISO_DISCO_MB", "").isdigit() else None
+ACENO_VIDA, ACENO_ENTRE = 60, 30   # o aceno fica 60 s no /api/ao-vivo de quem recebe; 1 a cada 30 s por par
+AVISO_DM = "As mensagens diretas da {empresa} podem ser lidas pela administração da empresa."
+LEMBRETE_AUDITORIA = "O acesso a esta conversa fica registrado e as duas pessoas veem a data."
+MENCAO = re.compile(r"@([a-z0-9][a-z0-9._-]{2,31})", re.I)
 
 
 def tipo_imagem(dados):
@@ -2378,6 +2392,68 @@ def recebe_avisos(srv, conta, andar):
     return papel is None or papel(conta, andar) is not None
 
 
+def equipe_ligada(srv):
+    """As conversas da equipe ficam no disco quando o escritório tem pelo menos 1 conta ou um andares.json (decidido a
+    cada pedido). Sem nenhum dos dois, tudo como antes da 1.6."""
+    arquivo = getattr(getattr(srv, "registro_andares", None), "arquivo", None)
+    return bool(arquivo and os.path.exists(arquivo)) or bool(getattr(getattr(srv, "acesso", None), "usuarios", None))
+
+
+class Baldes:
+    """Balde de fichas por (tipo, chave): taxa por segundo e rajada. Só na memória."""
+
+    def __init__(self):
+        self.trava, self.baldes = threading.Lock(), {}
+
+    def gastar(self, chave, taxa, rajada, agora=None):
+        agora = time.monotonic() if agora is None else agora
+        with self.trava:
+            fichas, antes = self.baldes.get(chave, (rajada, agora))
+            fichas = min(rajada, fichas + (agora - antes) * taxa)
+            if fichas < 1:
+                raise LimitePresenca("Devagar: pedidos demais em pouco tempo.")
+            self.baldes[chave] = (fichas - 1, agora)
+            if len(self.baldes) > 5000:   # balde cheio de novo é igual a não ter balde
+                self.baldes = {k: v for k, v in self.baldes.items() if agora - v[1] < 120}
+
+
+def nome_do_canal(canal):
+    """"geral", "cozinha" ou o nome do time: o que vai no título do aviso."""
+    chave = canal[5:] if canal.startswith("sala:") else canal
+    return chave[5:] if chave.startswith("time:") else chave
+
+
+def resolver_de_avisos(srv):
+    """O resolver do Avisos (E.4): título e corpo do aviso pessoal, montados na hora do GET /api/avisos a partir do
+    store (o aviso não guarda o texto). Mensagem apagada antes disso: o texto genérico."""
+    def resolver(conta, item, id_andar, mais):
+        andar = srv.andares.get(id_andar) or (AndarPrincipal(srv) if id_andar == ANDAR_PRINCIPAL else None)
+        if andar is None or andar.saguao:
+            return None
+        de, tipo = item.get("de") or "Alguém", item["tipo"]
+        corpo = ""
+        if tipo in ("aceno", "porta"):
+            titulo = f"{de} acenou para você" if tipo == "aceno" else f"{de} bateu na porta"
+        else:
+            info = srv.equipe_de(andar).para_aviso(item["msg"])
+            de = info["nome"] if info else de
+            titulo = f"{de} · mensagem direta" if tipo == "dm" else f"{de} · #{nome_do_canal(item['canal'])}"
+            if mais:
+                corpo = f"{de} e mais {mais} mensagens"
+            elif info is None or info["texto"] is None:
+                corpo = f"{de} te mandou uma mensagem"
+            elif info["anexo"]:
+                corpo = f"{de} enviou um arquivo"
+            else:
+                corpo = info["texto"]
+        if len(srv.acesso.andares_da_conta(conta)) > 1:   # quem está em mais de uma empresa vê de qual
+            titulo += f" · {config_publica(andar)['empresa']}"
+        if not mostra_comeco(srv.acesso.avisos_de(conta)):
+            corpo = ""
+        return {"tipo": tipo, "titulo": comeco(titulo), "corpo": comeco(corpo), "canal": item.get("canal")}
+    return resolver
+
+
 def festas_salvas():
     return ajustes.ler(ARQ_FESTAS, FESTAS_BYTES, lambda d: ajustes.validar_festas(d, arquivo=True), log, "festas") \
         or ajustes.festas_vazias()
@@ -2593,24 +2669,36 @@ PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "convite.html", "convite.js"
 
 # Contas de membro: o que uma sessão de membro pode pedir, além dos estáticos. Todo o resto é só de quem administra o
 # prédio (negar por padrão, conferido num lugar só: Pagina._permitido). Rota nova entra aqui só de propósito.
+# 1.6 Onda 2: as conversas da equipe (histórico, busca, DM, pessoas, mural, anexo, status e aceno) e a auditoria de DM
+EQUIPE_GET = frozenset({"/api/canal/historico", "/api/canal/busca", "/api/dm", "/api/pessoas", "/api/mural",
+                        "/api/anexo"})
+EQUIPE_POST = frozenset({"/api/canal/enviar", "/api/canal/apagar", "/api/canal/lida", "/api/canal/reagir",
+                         "/api/dm/abrir", "/api/dm/entendi", "/api/mural/fixar", "/api/mural/tirar", "/api/status",
+                         "/api/aceno", "/api/anexo"})
+AUDITORIA_GET = frozenset({"/api/dm/auditoria", "/api/dm/auditoria/pares", "/api/dm/auditoria/registro"})
 MEMBRO_GET = frozenset({"/", "", "/api/estado", "/api/config", "/api/social", "/api/social/placar", "/api/jornal",
-                        "/api/novidades", "/api/avisos", "/api/push/chave", "/api/perfil", "/api/ao-vivo"})
+                        "/api/novidades", "/api/avisos", "/api/push/chave", "/api/perfil", "/api/ao-vivo"}) | EQUIPE_GET
 MEMBRO_POST = frozenset({"/sair", "/api/sair-todos", "/api/push/assinar", "/api/push/sair", "/api/perfil",
-                         "/api/presenca", "/api/sala/enviar"})
+                         "/api/presenca", "/api/sala/enviar"}) | EQUIPE_POST
 # 1.6: a guarda decide pelo papel NO ANDAR do pedido (?andar=). Do prédio, para toda conta com pelo menos 1 andar: a
 # própria conta, o push e as novidades. O admin da empresa, só no andar dele: o do membro, mais marca, logo, times,
 # planta, membros e convites, a conexão OAuth, as conversas e o modo resposta. A pessoa do prédio (modo saguão), só no
 # saguão. Nada do prédio (andares, clima, datas, visitas) passa para quem não administra o prédio.
 PREDIO_GET = frozenset({"/", "", "/api/novidades", "/api/avisos", "/api/push/chave", "/api/perfil"})
 PREDIO_POST = frozenset({"/sair", "/api/sair-todos", "/api/push/assinar", "/api/push/sair", "/api/perfil"})
-ADMIN_EMPRESA_GET = MEMBRO_GET | {"/api/membros", "/api/conversa", "/oauth/conectar"}
+ADMIN_EMPRESA_GET = MEMBRO_GET | {"/api/membros", "/api/conversa", "/oauth/conectar"} | AUDITORIA_GET
 ADMIN_EMPRESA_POST = MEMBRO_POST | {"/api/membros", "/api/planta", "/api/equipe", "/api/marca", "/api/logo",
                                     "/api/logo/remover", "/api/social/briga", "/api/social/greve/atender",
                                     "/api/conversa/modo", "/api/conversa/modo/fechar", "/api/conversa/responder",
-                                    "/oauth/desconectar"}
-SAGUAO_GET = PREDIO_GET | {"/api/estado", "/api/config", "/api/ao-vivo"}
-SAGUAO_POST = PREDIO_POST | {"/api/presenca", "/api/sala/enviar"}
-SAGUAO_NAO_TEM = frozenset({"/api/social", "/api/social/placar", "/api/jornal", "/api/conversa", "/oauth/conectar"})   # 404
+                                    "/oauth/desconectar", "/api/canal/retencao"}
+# no saguão: o geral do prédio, o mural, o status e o aceno; sem DM, anexo, pessoas nem auditoria (os GET dão 404)
+SAGUAO_GET = PREDIO_GET | {"/api/estado", "/api/config", "/api/ao-vivo", "/api/canal/historico", "/api/canal/busca",
+                           "/api/mural"}
+SAGUAO_POST = PREDIO_POST | {"/api/presenca", "/api/sala/enviar", "/api/canal/enviar", "/api/canal/apagar",
+                             "/api/canal/lida", "/api/canal/reagir", "/api/mural/fixar", "/api/mural/tirar",
+                             "/api/status", "/api/aceno"}
+SAGUAO_NAO_TEM = frozenset({"/api/social", "/api/social/placar", "/api/jornal", "/api/conversa", "/oauth/conectar",
+                            "/api/dm", "/api/pessoas", "/api/anexo"}) | AUDITORIA_GET   # 404
 SALAS_FIXAS = frozenset({"", "recepcao", "reuniao", "cozinha", "lounge"})   # "": o corredor (mapa.js: chave de cada sala)
 
 
@@ -2748,6 +2836,7 @@ class AndarPrincipal:
     arq_planta = property(lambda self: ARQ_PLANTA)
     arq_marca = property(lambda self: ARQ_MARCA)   # a marca do prédio (a da tela de entrar)
     arq_logo = property(lambda self: ARQ_LOGO)
+    pasta = property(lambda self: getattr(self.srv, "dados", DADOS))   # o equipe.db do principal (ou do saguão)
     cred = property(lambda self: getattr(self.srv, "cred", None))
     leitor = property(lambda self: getattr(self.srv, "leitor", None))
     conversas = property(lambda self: getattr(self.srv, "conversas", None))
@@ -2765,7 +2854,7 @@ class Andar:
 
     def __init__(self, reg, dados=None, atraso=0, clima=None, avisos=None):
         self.id, self.nome, self.org = reg["id"], reg["nome"], reg["org"]
-        pasta = mod_andares.pasta(dados or DADOS, self.id)
+        pasta = self.pasta = mod_andares.pasta(dados or DADOS, self.id)
         caminho = lambda nome: os.path.join(pasta, nome)
         self.times, self.arq_equipe, self.arq_planta = (caminho(mod_andares.TIMES), caminho(mod_andares.EQUIPE),
                                                         caminho(mod_andares.PLANTA))
@@ -3323,7 +3412,9 @@ class Pagina(BaseHTTPRequestHandler):
         barrado = self._barrado("GET", rota, nome)
         if barrado is not None:
             return barrado
-        por_andar = ("/api/estado", "/api/config", "/api/social", "/api/social/placar", "/api/jornal", "/api/conversa",
+        if rota in EQUIPE_GET or rota in AUDITORIA_GET:   # as conversas da equipe e a auditoria de DM (Onda 2)
+            return self._get_equipe(rota, caminho, usuario)
+        por_andar =("/api/estado", "/api/config", "/api/social", "/api/social/placar", "/api/jornal", "/api/conversa",
                      "/oauth/conectar", "/api/ao-vivo", "/api/membros")
         andar = self._andar() if rota in por_andar else None
         if rota in por_andar and andar is None:
@@ -3373,6 +3464,7 @@ class Pagina(BaseHTTPRequestHandler):
             if planta:   # só aqui, e não no config_publica() que o diretor social chama a cada minuto
                 cfg["planta"] = planta.publica()
             cfg["andar"], cfg["andares"] = andar.id, andares_publicos(self.server, self._pode_andar)
+            cfg["equipe"] = self._config_equipe(andar, usuario, cfg.get("empresa") or andar.nome)
             return self._json(200, cfg)
         if rota == "/api/ao-vivo":   # quem mais está neste andar e o chat da sala; ?invisivel=1 (a TV) só lê
             if self._previa():
@@ -3380,9 +3472,10 @@ class Pagina(BaseHTTPRequestHandler):
             q = urllib.parse.parse_qs(caminho.query)
             desde = q.get("desde", ["0"])[0]
             try:   # no saguão o login não sai: cada pessoa vira um id opaco (M2)
-                return self._json(200, self.server.presenca.ao_vivo(andar.id, usuario, int(desde) if desde.isdigit() else 0,
-                                                                    renovar=q.get("invisivel") != ["1"],
-                                                                    mascara=self.server.id_pessoa if andar.saguao else None))
+                vivo = self.server.presenca.ao_vivo(andar.id, usuario, int(desde) if desde.isdigit() else 0,
+                                                    renovar=q.get("invisivel") != ["1"],
+                                                    mascara=self.server.id_pessoa if andar.saguao else None)
+                return self._json(200, self._ao_vivo_equipe(andar, usuario, vivo, q))
             except LimitePresenca as x:
                 return self._json(*erro(429, "limite", str(x)))
         if rota == "/api/perfil":   # o próprio perfil (nome e boneco), qualquer papel; "aparencia": o boneco que os outros veem
@@ -3828,7 +3921,15 @@ class Pagina(BaseHTTPRequestHandler):
             if rota == "/api/sala/enviar":
                 if dados is None or set(dados) != {"texto"}:
                     return self._json(*erro(400, "pedido", "Pedido inválido."))
-                return self._json(200, {"seq": presenca.enviar(andar.id, usuario, dados["texto"])})
+                resposta = {"seq": presenca.enviar(andar.id, usuario, dados["texto"])}
+                sala, eq = presenca.sala_de(andar.id, usuario), self._equipe(andar)
+                if eq is not None and sala and not andar.saguao:   # com o store, o balão também fica no canal da sala
+                    nome = self._nome_publico(usuario, andar)
+                    mencoes = self._mencionados(dados["texto"], andar, usuario)
+                    msg = eq.enviar("sala:" + sala, usuario, nome, dados["texto"], mencoes)
+                    self._depois_de_enviar(andar, eq, usuario, nome, msg, mencoes)
+                    resposta["id"] = msg["id"]
+                return self._json(200, resposta)
             if dados is None or set(dados) != {"x", "y", "destino", "sala", "olha"} or dados["sala"] not in salas_do_andar(andar):
                 return self._json(*erro(400, "pedido", "Pedido inválido."))
             perfil = self.server.acesso.perfil(usuario)
@@ -3868,7 +3969,7 @@ class Pagina(BaseHTTPRequestHandler):
         try:
             if "avisos" in dados:
                 pref = validar_preferencia(dados["avisos"])
-                self.server.acesso.salvar_avisos(usuario, None if pref["modo"] == "sempre" else pref)
+                self.server.acesso.salvar_avisos(usuario, None if pref == {"modo": "sempre"} else pref)
             else:
                 self.server.acesso.salvar_perfil(usuario, dados["nome"], dados["avatar"])
             return self._json(200, self._perfil_publico(usuario))
@@ -3959,11 +4060,15 @@ class Pagina(BaseHTTPRequestHandler):
             elif acao == "papel":
                 acesso.mudar_papel(dados["usuario"], dados["papel"])
             elif acao == "andares":
+                antes = set(acesso.andares_da_conta(dados["usuario"]))
                 acesso.definir_andares(dados["usuario"], dados["andares"], principal=classico)
+                conta = dados["usuario"].strip().lower()   # nas conversas dos andares que saíram, vira ex-membro
+                self._esquecer_na_equipe(conta, antes - set(acesso.andares_da_conta(conta)))
             else:
                 # some do mapa dos outros na hora, pelo nome normalizado ("Ana " e "ANA" são a conta "ana")
                 removida = acesso.remover(dados["usuario"])
                 self.server.presenca.sair(removida)
+                self._esquecer_na_equipe(removida, [ANDAR_PRINCIPAL, *self.server.andares])
                 if getattr(self.server, "avisos", None):   # e o celular dela para de receber os avisos do prédio
                     self.server.avisos.esquecer(removida)
         except UltimoAdmin:
@@ -4012,6 +4117,7 @@ class Pagina(BaseHTTPRequestHandler):
                 acesso.mudar_papel(dados["usuario"], dados["papel"], id_andar)
             else:
                 tirada = acesso.tirar_andar(dados["usuario"], id_andar)
+                self._esquecer_na_equipe(tirada, [id_andar])
                 if not acesso.andares_da_conta(tirada):   # sem andar nenhum: some do mapa dos outros na hora
                     self.server.presenca.sair(tirada)
         except UltimoAdmin:
@@ -4110,6 +4216,475 @@ class Pagina(BaseHTTPRequestHandler):
             self.server.avisos.limpar(None if self._papel_de(usuario) == "admin" else usuario)
         return self._json(200, {"ok": True}, {"Set-Cookie": [self._cookie("", 0), self._cookie_modo("")]})
 
+    # ------------------------------------------------------------ conversas da equipe (1.6 Onda 2)
+
+    def _equipe(self, andar):
+        """O store do andar, ou None: sem conta nem andares.json (o escritório de antes da 1.6) e na prévia."""
+        if self._previa() or not equipe_ligada(self.server):
+            return None
+        return self.server.equipe_de(andar)
+
+    def _desligado(self):
+        return self._json(*erro(404, "desligado", "As conversas da equipe estão desligadas neste escritório."))
+
+    def _nao_existe(self):
+        return self._json(*erro(404, "nao_existe", "Isso não existe mais."))
+
+    def _mascara(self, andar):
+        """No saguão, o login vira o id opaco (M2) em tudo o que sai; nos andares, sai o login."""
+        return self.server.id_pessoa if andar.saguao else (lambda u: u)
+
+    def _publicas(self, andar, msgs):
+        mostra = self._mascara(andar)
+        return [{**m, "usuario": mostra(m["usuario"]) if m["usuario"] else None} for m in msgs]
+
+    def _nome_publico(self, usuario, andar):
+        perfil = self.server.acesso.perfil(usuario)
+        nome = perfil["nome"]
+        if andar.saguao and nome.strip().lower() == perfil["usuario"]:   # no saguão, nem o login vira nome (M2)
+            nome = NOME_PESSOA_SAGUAO
+        return nome[:80]
+
+    def _canal_ok(self, andar, canal, mural=False):
+        """O canal vale neste andar: o geral, uma sala do mapa do andar (sem o corredor) ou uma DM. No saguão, o chat
+        é só o geral (o mural também tem as salas) e não há DM."""
+        if not isinstance(canal, str):
+            return False
+        if canal == "geral":
+            return True
+        if canal.startswith("sala:"):
+            return (mural or not andar.saguao) and canal[5:] != "" and canal[5:] in salas_do_andar(andar)
+        return not mural and not andar.saguao and re.fullmatch(r"dm:[1-9][0-9]{0,17}", canal) is not None
+
+    def _do_andar(self, login, andar):
+        """O login tem papel neste andar (o papel da conta, sem o "admin em todo andar" do admin do prédio)."""
+        papel = getattr(self.server.acesso, "papel", None)
+        return papel is not None and isinstance(login, str) and papel(login, andar.id) is not None
+
+    def _mencionados(self, texto, andar, autor):
+        """Os @login do texto que têm papel neste andar (quem é de fora não é achado). O saguão não tem menção."""
+        if andar.saguao or not isinstance(texto, str):
+            return []
+        return sorted(u for u in {m.lower() for m in MENCAO.findall(texto)} - {autor} if self._do_andar(u, andar))
+
+    def _avisar(self, conta, andar, item):
+        """O aviso pessoal (E.4): sempre na tela (GET /api/avisos); push só se a pessoa não está "ocupada" neste andar
+        nem com o escritório aberto. O saguão não tem aviso."""
+        avisos = getattr(self.server, "avisos", None)
+        if not avisos or andar.saguao:
+            return
+        push = self.server.equipe_de(andar).status_de(conta)["status"] != "ocupado" and not self.server.presenca.aberto(conta)
+        avisos.pessoal(conta, andar.id, item, time.time(), push=push)
+
+    def _depois_de_enviar(self, andar, eq, usuario, nome, msg, mencoes):
+        canal = msg["canal"]
+        if canal.startswith("dm:"):
+            outro = next((d["outro"] for d in eq.dms(usuario) if d["canal"] == canal), None)
+            if outro:
+                self._avisar(outro, andar, {"tipo": "dm", "msg": msg["id"], "de": nome, "canal": canal})
+            return
+        for conta in mencoes:
+            self._avisar(conta, andar, {"tipo": "mencao", "msg": msg["id"], "de": nome, "canal": canal})
+
+    @staticmethod
+    def _inteiro(valor, padrao, minimo, maximo):
+        """Um número da query (ou do JSON): ausente vale o padrão; fora do formato ou da faixa, ValueError."""
+        if valor is None:
+            return padrao
+        if isinstance(valor, str) and re.fullmatch(r"[0-9]{1,19}", valor):
+            valor = int(valor)
+        if type(valor) is not int or not minimo <= valor <= maximo:
+            raise ValueError("Pedido inválido.")
+        return valor
+
+    def _mural(self, andar, eq, canal, usuario):
+        mostra = self._mascara(andar)
+        return {"avisos": [{**a, "usuario": mostra(a["usuario"]) if a["usuario"] else None, "meu": a["usuario"] == usuario}
+                           for a in eq.mural(canal)], "v": eq.versoes_mural().get(canal, 0)}
+
+    def _config_equipe(self, andar, usuario, empresa):
+        """O config.equipe do andar (contrato da Onda 2, item 1), ou None com o store desligado."""
+        eq = self._equipe(andar)
+        if eq is None:
+            return None
+        papel = getattr(self.server.acesso, "papel", None)
+        tem_dm = not andar.saguao
+        return {"retencao": eq.retencao(), "pode_moderar": self._admin_do_andar(andar.id), "dm": tem_dm,
+                "anexo": tem_dm, "mencao": tem_dm, "emojis": list(EMOJIS), "anexo_max": ANEXO_MAX,
+                "aviso_dm": AVISO_DM.format(empresa=empresa) if tem_dm else None,
+                "aviso_dm_entendido": eq.entendeu_dm(usuario) if tem_dm else False,
+                "auditoria": tem_dm and (papel is None or papel(usuario, andar.id) == "admin"), "mural": True,
+                "status": list(STATUS)}
+
+    def _ao_vivo_equipe(self, andar, usuario, vivo, q):
+        """Os campos novos do /api/ao-vivo com o store ligado: status, acenos, versão do mural, não lidas, menções, as
+        mensagens novas do canal aberto e, no saguão, o total do prédio sem nome."""
+        eq = self._equipe(andar)
+        if eq is None:
+            return vivo
+        mostra = self._mascara(andar)
+        status = {mostra(u): eq.status_de(u) for u in self.server.presenca.quem_esta(andar.id)}
+        for p in vivo["pessoas"]:
+            s = status.get(p["usuario"]) or {"status": STATUS[0], "texto": ""}
+            p["status"], p["status_texto"] = s["status"], s["texto"]
+        vivo["meu_status"] = eq.status_de(usuario)
+        desde = q.get("desde", ["0"])[0]
+        desde = int(desde) if desde.isdigit() else 0
+        agora = time.monotonic()
+        with self.server.trava_acenos:
+            chave = (andar.id, usuario)
+            lista = [a for a in self.server.acenos.get(chave, ()) if agora - a[0] < ACENO_VIDA]
+            if lista:
+                self.server.acenos[chave] = lista
+            else:
+                self.server.acenos.pop(chave, None)
+        vivo["acenos"] = [{"de": mostra(de), "nome": nome, "tipo": tipo, "seq": seq}
+                          for _, seq, de, nome, tipo in lista if seq > desde]
+        vivo["mural_v"] = eq.versoes_mural()
+        vivo["nao_lidas"], vivo["mencoes"] = eq.contadores(usuario)
+        canal = q.get("canal", [None])[0]
+        if canal is not None:
+            vivo["aberto"] = None
+            if self._canal_ok(andar, canal):
+                try:
+                    depois = self._inteiro(q.get("depois", [None])[0], 0, 0, 2 ** 62)
+                    vivo["aberto"] = {"canal": canal, "novas": self._publicas(andar, eq.novas(usuario, canal, depois)),
+                                      "v": eq.versao(canal)}
+                except (SemAcesso, ValueError):
+                    pass
+        if andar.saguao:
+            vivo["no_predio"] = self.server.presenca.no_predio()
+        return vivo
+
+    def _get_equipe(self, rota, caminho, usuario):
+        """GET das conversas da equipe e da auditoria de DM (a guarda já passou). Andar alheio: o 404 de andar; DM,
+        anexo ou mensagem que não existe ou não é da pessoa: o mesmo 404 nao_existe."""
+        andar = self._andar()
+        if andar is None or (andar.saguao and rota in SAGUAO_NAO_TEM):
+            return self._sem_andar()
+        eq = self._equipe(andar)
+        if eq is None:
+            return self._desligado()
+        q = urllib.parse.parse_qs(caminho.query, keep_blank_values=True)
+        um = lambda k: q.get(k, [None])[0]
+        try:
+            if rota == "/api/anexo":
+                return self._get_anexo(andar, eq, usuario, q)
+            if rota == "/api/canal/historico":
+                canal = um("canal")
+                if not self._canal_ok(andar, canal):
+                    return self._json(*erro(400, "pedido", "Pedido inválido."))
+                limite = self._inteiro(um("limite"), 50, 1, 200)
+                msgs = eq.historico(usuario, canal, self._inteiro(um("antes"), None, 1, 2 ** 62), limite)
+                r = {"mensagens": self._publicas(andar, msgs), "mais": len(msgs) == limite}
+                if canal.startswith("dm:"):   # o aviso fixo e as datas em que a administração abriu (E.3, D10 a)
+                    r["aviso"] = AVISO_DM.format(empresa=config_publica(andar)["empresa"])
+                    r["acessos"] = eq.acessos_da_dm(usuario, canal)
+                return self._json(200, r)
+            if rota == "/api/canal/busca":
+                salas = [] if andar.saguao else sorted("sala:" + s for s in salas_do_andar(andar) if s)
+                msgs = eq.buscar(usuario, um("q") or "", ["geral", *salas], self._inteiro(um("limite"), 20, 1, 100))
+                return self._json(200, {"mensagens": self._publicas(andar, msgs)})
+            if rota == "/api/mural":
+                if not self._canal_ok(andar, um("canal"), mural=True):
+                    return self._json(*erro(400, "pedido", "Pedido inválido."))
+                return self._json(200, self._mural(andar, eq, um("canal"), usuario))
+            contas = {c["usuario"]: c["nome"] for c in self.server.acesso.contas_do_andar(andar.id)}
+            if rota == "/api/pessoas":
+                return self._json(200, {"pessoas": [{"usuario": u, "nome": n} for u, n in contas.items() if u != usuario]})
+            if rota == "/api/dm":
+                return self._json(200, {"dms": [{**d, "outro": {"usuario": d["outro"], "nome": contas.get(d["outro"], d["outro"])}
+                                                 if d["outro"] else None} for d in eq.dms(usuario)]})
+            # a auditoria de DM (E.3): só quem tem papel admin NESTE andar (a empresa é a controladora); o registro,
+            # também o admin do prédio. Os outros: o 404 de andar
+            papel = getattr(self.server.acesso, "papel", None)
+            admin_aqui = papel is None or papel(usuario, andar.id) == "admin"
+            if rota == "/api/dm/auditoria/registro":
+                if not (admin_aqui or self._admin_do_predio()):
+                    return self._sem_andar()
+                return self._json(200, {"registro": eq.registro_acessos_dm()})
+            if not admin_aqui:
+                return self._sem_andar()
+            if rota == "/api/dm/auditoria/pares":
+                log(evento="dm_auditoria", andar=andar.id, resultado="pares")
+                return self._json(200, {"pares": eq.pares_dm(), "lembrete": LEMBRETE_AUDITORIA})
+            canal = um("canal")
+            if not isinstance(canal, str) or not re.fullmatch(r"dm:[1-9][0-9]{0,17}", canal):
+                return self._json(*erro(400, "pedido", "Pedido inválido."))
+            limite = self._inteiro(um("limite"), 50, 1, 200)
+            msgs = eq.auditar_dm(usuario, canal, self._inteiro(um("antes"), None, 1, 2 ** 62), limite)
+            log(evento="dm_auditoria", andar=andar.id, resultado="leu")   # sem os participantes: o log sai da máquina
+            return self._json(200, {"mensagens": msgs, "mais": len(msgs) == limite, "lembrete": LEMBRETE_AUDITORIA})
+        except SemAcesso:
+            return self._nao_existe()
+        except LimitePresenca as x:
+            return self._json(*erro(429, "limite", str(x)))
+        except ValueError:
+            return self._json(*erro(400, "pedido", "Pedido inválido."))
+
+    def _get_anexo(self, andar, eq, usuario, q):
+        """O download (E.5): em blocos a partir do disco, sempre attachment (a imagem sem ?baixar=1 vai inline, para o
+        <img>), com o tipo da lista, nosniff, sandbox e sem cache. No máximo DOWNLOADS_MAX por conta ao mesmo tempo."""
+        id_anexo = self._inteiro(q.get("id", [""])[0], None, 1, 2 ** 62)
+        if id_anexo is None:
+            raise ValueError("id")
+        with self.server.trava_anexos:
+            if self.server.downloads[usuario] >= DOWNLOADS_MAX:
+                return self._json(*erro(429, "limite", "Downloads demais ao mesmo tempo; espere um terminar."))
+            self.server.downloads[usuario] += 1
+        try:
+            info = eq.arquivo_do_anexo(usuario, id_anexo)
+            try:
+                f = open(info["caminho"], "rb")
+            except FileNotFoundError:
+                return self._nao_existe()
+            with f:
+                tipo = info["tipo"]
+                inline = tipo in anexos.IMAGENS and q.get("baixar") != ["1"]
+                seguro = re.sub(r"[^A-Za-z0-9._ -]", "_", info["nome"])
+                self.send_response(200)
+                self.send_header("Content-Type", tipo + ("; charset=utf-8" if tipo.startswith("text/") else ""))
+                self.send_header("Content-Length", str(os.fstat(f.fileno()).st_size))
+                self.send_header("Content-Disposition", ("inline" if inline else "attachment") +
+                                 f'; filename="{seguro}"; filename*=UTF-8\'\'{urllib.parse.quote(info["nome"], safe="")}')
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header("Content-Security-Policy", "default-src 'none'; sandbox")
+                self.send_header("Cache-Control", "private, no-store")
+                self.send_header("X-Frame-Options", "DENY")
+                self.send_header("Referrer-Policy", "same-origin")
+                self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+                try:
+                    self.end_headers()
+                    if self.command != "HEAD":
+                        shutil.copyfileobj(f, self.wfile, BLOCO_ANEXO)
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    self.close_connection = True
+        finally:
+            with self.server.trava_anexos:
+                self.server.downloads[usuario] -= 1
+
+    def _post_equipe(self, rota):
+        """POST das conversas da equipe (a guarda já passou): Origin igual à BASE, sessão e JSON exato de até 2 KB. O
+        texto nunca vai ao log."""
+        if self.headers.get("Origin") != BASE:
+            log(evento="http", rota=rota[:40], resultado="origem_recusada")
+            self.close_connection = self.lido is None
+            return self._json(*erro(403, "origem", "Origem não permitida."))
+        usuario = self._usuario()
+        if not usuario:
+            return self._json(401, {"erro": "entre de novo"})
+        andar = self._andar()
+        if andar is None:
+            return self._sem_andar()
+        if rota == "/api/anexo":
+            return self._post_anexo(andar, usuario)
+        if andar.saguao and rota in ("/api/dm/abrir", "/api/dm/entendi"):
+            return self._sem_andar()
+        eq = self._equipe(andar)
+        if eq is None:
+            return self._desligado()
+        dados = self._json_pedido(2048)
+        if dados is False:
+            return self._json(*erro(415, "formato", "Envie JSON (application/json)."))
+        formatos = {"/api/canal/enviar": {"canal", "texto"}, "/api/canal/apagar": {"id"}, "/api/canal/lida": {"canal", "ate"},
+                    "/api/canal/reagir": {"id", "emoji", "ligar"}, "/api/dm/abrir": {"com"}, "/api/dm/entendi": set(),
+                    "/api/mural/fixar": {"canal", "texto"}, "/api/mural/tirar": {"id"}, "/api/status": {"status", "texto"},
+                    "/api/aceno": {"para", "tipo"}, "/api/canal/retencao": {"dias"}}
+        if dados is None or set(dados) != formatos[rota] or \
+                any(type(dados[k]) is not int for k in ("id", "ate", "dias") if k in dados):
+            return self._json(*erro(400, "pedido", "Pedido inválido."))
+        baldes = self.server.baldes
+        try:
+            if rota == "/api/canal/enviar":
+                if not self._canal_ok(andar, dados["canal"]):
+                    return self._json(*erro(400, "pedido", "Pedido inválido."))
+                baldes.gastar(("enviar", usuario), 1, 5)
+                nome = self._nome_publico(usuario, andar)
+                mencoes = self._mencionados(dados["texto"], andar, usuario)
+                msg = eq.enviar(dados["canal"], usuario, nome, dados["texto"], mencoes)
+                self._depois_de_enviar(andar, eq, usuario, nome, msg, mencoes)
+                return self._json(200, {"mensagem": self._publicas(andar, [msg])[0]})
+            if rota == "/api/canal/apagar":
+                eq.apagar(dados["id"], usuario, moderador=self._admin_do_andar(andar.id))
+            elif rota == "/api/canal/lida":
+                if not self._canal_ok(andar, dados["canal"]):
+                    return self._json(*erro(400, "pedido", "Pedido inválido."))
+                eq.marcar_lida(usuario, dados["canal"], dados["ate"])
+            elif rota == "/api/canal/reagir":
+                baldes.gastar(("reagir", usuario), 4, 8)
+                msg = eq.reagir(usuario, dados["id"], dados["emoji"], dados["ligar"])
+                return self._json(200, {"mensagem": self._publicas(andar, [msg])[0]})
+            elif rota == "/api/dm/abrir":
+                com = dados["com"].strip().lower() if isinstance(dados["com"], str) else None
+                if com == usuario or not self._do_andar(usuario, andar) or not self._do_andar(com, andar):
+                    return self._nao_existe()   # login de fora do andar e login que não existe: a mesma resposta
+                return self._json(200, {"canal": eq.abrir_dm(usuario, com)})
+            elif rota == "/api/dm/entendi":
+                eq.marcar_entendeu_dm(usuario)
+            elif rota == "/api/mural/fixar":
+                if not self._canal_ok(andar, dados["canal"], mural=True):
+                    return self._json(*erro(400, "pedido", "Pedido inválido."))
+                baldes.gastar(("mural", usuario), 1, 3)
+                if len(eq.mural(dados["canal"])) >= 10:
+                    return self._json(*erro(409, "mural_cheio", "O mural já tem 10 avisos; tire um antes."))
+                eq.fixar(dados["canal"], usuario, self._nome_publico(usuario, andar), dados["texto"])
+                return self._json(200, self._mural(andar, eq, dados["canal"], usuario))
+            elif rota == "/api/mural/tirar":
+                canal = eq.desafixar(dados["id"], usuario, moderador=self._admin_do_andar(andar.id))
+                return self._json(200, self._mural(andar, eq, canal, usuario))
+            elif rota == "/api/status":
+                baldes.gastar(("status", usuario), 1, 3)
+                return self._json(200, eq.definir_status(usuario, dados["status"], dados["texto"]))
+            elif rota == "/api/aceno":
+                return self._aceno(andar, eq, usuario, dados)
+            else:   # /api/canal/retencao: a empresa só baixa de 1 ano (D3)
+                if not self._admin_do_andar(andar.id):
+                    return self._proibido(rota)
+                eq.definir_retencao(dados["dias"])
+                log(evento="equipe", resultado="retencao", andar=andar.id, dias=dados["dias"])
+                return self._json(200, {"retencao": dados["dias"]})
+            return self._json(200, {"ok": True})
+        except SemAcesso:
+            return self._nao_existe()
+        except LimitePresenca as x:
+            return self._json(*erro(429, "limite", str(x)))
+        except ValueError as x:
+            if "não está mais no andar" in str(x):
+                return self._json(*erro(409, "outro_saiu", "A outra pessoa não está mais no andar."))
+            return self._json(*erro(400, "pedido", str(x)[:160]))
+
+    def _aceno(self, andar, eq, usuario, dados):
+        """Acenar ou bater na porta: só para quem está no andar agora (no saguão, pelo id opaco), nunca para quem está
+        "ocupado", 1 a cada 30 s por par. Chega no /api/ao-vivo de quem recebe e vira push se a aba dela está fechada."""
+        para, tipo = dados["para"], dados["tipo"]
+        if tipo not in ("aceno", "porta") or not isinstance(para, str):
+            return self._json(*erro(400, "pedido", "Pedido inválido."))
+        mostra = self._mascara(andar)
+        alvo = next((u for u in self.server.presenca.quem_esta(andar.id) if mostra(u) == para), None)
+        if alvo is None:
+            return self._nao_existe()
+        if alvo == usuario:
+            return self._json(*erro(400, "pedido", "Pedido inválido."))
+        if eq.status_de(alvo)["status"] == "ocupado":
+            return self._json(*erro(409, "ocupado", "Essa pessoa está ocupada agora."))
+        self.server.baldes.gastar(("aceno", usuario, alvo), 1 / ACENO_ENTRE, 1)
+        seq, nome = self.server.presenca.tocar(andar.id), self._nome_publico(usuario, andar)
+        with self.server.trava_acenos:
+            lista = self.server.acenos.setdefault((andar.id, alvo), [])
+            lista.append((time.monotonic(), seq, usuario, nome, tipo))
+            del lista[:-20]
+        self._avisar(alvo, andar, {"tipo": tipo, "de": nome})
+        return self._json(200, {"ok": True})
+
+    def _post_anexo(self, andar, usuario):
+        """O envio do anexo (E.5): o corpo cru, lido em blocos direto para o disco (0600), com Content-Length de 1 B a
+        25 MiB conferido antes de ler, prazo total, semáforo (ENVIOS_MAX no servidor, 1 por conta), 10 por minuto, piso
+        de disco do prédio e a cota da empresa reservada antes. O tipo sai dos bytes (anexos.py). Nada vai ao log."""
+        self.close_connection = self.lido is None   # o corpo pode ficar por ler: a conexão fecha depois da resposta
+        if andar.saguao:
+            return self._sem_andar()
+        eq = self._equipe(andar)
+        if eq is None:
+            return self._desligado()
+        canal = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("canal", [""])[0]
+        if not self._canal_ok(andar, canal):
+            return self._json(*erro(400, "pedido", "Pedido inválido."))
+        tam = self.headers.get("Content-Length", "")
+        if not re.fullmatch(r"[0-9]{1,9}", tam) or self.headers.get("Transfer-Encoding"):
+            return self._json(*erro(411, "tamanho", "Envie o tamanho do arquivo (Content-Length)."))
+        tam = int(tam)
+        if tam > ANEXO_MAX:
+            return self._json(*erro(413, "grande", "O arquivo passa de 25 MB."))
+        try:
+            if tam == 0:
+                raise ValueError("vazio")
+            nome = anexos.nome_do_cabecalho(self.headers.get("X-Nome", ""))
+            texto = urllib.parse.unquote_to_bytes(self.headers.get("X-Texto", "")).decode("utf-8")
+            eq.pode_escrever(canal, usuario)
+            self.server.baldes.gastar(("anexo", usuario), 10 / 60, 10)
+        except SemAcesso:
+            return self._nao_existe()
+        except LimitePresenca:
+            return self._json(*erro(429, "limite", "Anexos demais em pouco tempo; espere um pouco."))
+        except (ValueError, anexos.Recusado) as x:   # UnicodeDecodeError é ValueError
+            if "não está mais no andar" in str(x):
+                return self._json(*erro(409, "outro_saiu", "A outra pessoa não está mais no andar."))
+            return self._json(*erro(400, "pedido", "Pedido inválido."))
+        with self.server.trava_anexos:
+            if sum(self.server.envios.values()) >= ENVIOS_MAX or self.server.envios[usuario]:
+                return self._json(*erro(429, "limite", "Outro envio está em andamento; espere ele terminar."))
+            self.server.envios[usuario] += 1
+        token = None
+        try:
+            disco = shutil.disk_usage(andar.pasta)
+            if disco.free - tam < (PISO_DISCO if PISO_DISCO is not None else max(2 * 1024 ** 3, disco.total // 10)):
+                log(evento="anexo", resultado="piso_de_disco", andar=andar.id)
+                return self._json(*erro(507, "disco", "O disco do escritório está quase cheio; avise quem administra."))
+            try:
+                token = eq.reservar(usuario, tam)
+            except CotaCheia:
+                return self._json(*erro(507, "cota", "A empresa usou toda a cota de 5 GB de anexos. Apague arquivos antigos."))
+            temporario = eq.temporario(token)
+            with os.fdopen(os.open(temporario, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o600),
+                           "wb") as f:
+                if self.lido is not None:   # até 128 KB o do_POST já leu
+                    if len(self.lido) != tam:
+                        return self._json(*erro(400, "pedido", "O arquivo chegou pela metade."))
+                    f.write(self.lido)
+                else:
+                    prazo, falta = time.monotonic() + PRAZO_ANEXO, tam
+                    while falta:
+                        if time.monotonic() > prazo:
+                            raise TimeoutError("prazo")
+                        bloco = self.rfile.read1(min(BLOCO_ANEXO, falta))
+                        if not bloco:
+                            raise ConnectionAbortedError("caiu")
+                        f.write(bloco)
+                        falta -= len(bloco)
+            self.close_connection = False   # o corpo inteiro foi lido
+            try:
+                tipo, arquivo = anexos.validar(temporario, nome)
+            except anexos.Recusado as x:
+                return self._json(*erro(415, "tipo", str(x)))
+            soma = hashlib.sha256()
+            with open(temporario, "rb") as f:
+                for bloco in iter(lambda: f.read(BLOCO_ANEXO), b""):
+                    soma.update(bloco)
+            nome_pub = self._nome_publico(usuario, andar)
+            mencoes = self._mencionados(texto, andar, usuario)
+            msg = eq.anexar(token, usuario, nome_pub, canal, arquivo, tipo, os.path.getsize(temporario), soma.hexdigest(),
+                            texto)
+            token = None
+            self._depois_de_enviar(andar, eq, usuario, nome_pub, msg, mencoes)
+            return self._json(200, {"mensagem": self._publicas(andar, [msg])[0]})
+        except TimeoutError:   # o prazo total ou 15 s parado num bloco
+            self.close_connection = True
+            return self._json(*erro(408, "prazo", "O envio demorou demais. Tente de novo numa conexão melhor."))
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+            self.close_connection = True
+        except SemAcesso:
+            return self._nao_existe()
+        except ValueError as x:
+            if "não está mais no andar" in str(x):
+                return self._json(*erro(409, "outro_saiu", "A outra pessoa não está mais no andar."))
+            return self._json(*erro(400, "pedido", "Pedido inválido."))
+        finally:
+            if token:
+                eq.liberar(token)
+            with self.server.trava_anexos:
+                self.server.envios[usuario] -= 1
+
+    def _esquecer_na_equipe(self, usuario, ids):
+        """A conta saiu destes andares: nas conversas deles ela vira ex-membro (D8 a). Só abre o store que já existe."""
+        for id_andar in ids:
+            andar = AndarPrincipal(self.server) if id_andar == ANDAR_PRINCIPAL else self.server.andares.get(id_andar)
+            if andar is None or not (id_andar in self.server.equipes or os.path.exists(os.path.join(andar.pasta, "equipe.db"))):
+                continue
+            try:
+                self.server.equipe_de(andar).remover_conta(usuario)
+            except Exception as x:
+                log(evento="equipe", resultado="remover_erro", detalhe=type(x).__name__)
+
     def do_POST(self):
         # o corpo (até 128 KB) é lido antes de qualquer resposta: respondendo com ele ainda por ler, o sistema fecha a
         # conexão com reset e o cliente que ainda está mandando perde a resposta (a recusa virava "Sem conexão"). O teto
@@ -4128,6 +4703,8 @@ class Pagina(BaseHTTPRequestHandler):
             return self._post_perfil(rota)
         if rota in ("/api/presenca", "/api/sala/enviar"):
             return self._post_presenca(rota)
+        if rota in EQUIPE_POST or rota == "/api/canal/retencao":
+            return self._post_equipe(rota)
         if rota == "/api/membros":
             return self._post_membros(rota)
         if rota == "/oauth/desconectar":
@@ -4228,15 +4805,38 @@ class Servidor(ThreadingHTTPServer):
         self.presenca = Presenca()   # as pessoas da equipe no mapa e o chat das salas (só na memória)
         self.id_pessoa = IdPessoa(ARQ_SEGREDO_PESSOA)   # o id opaco das pessoas no saguão (M2)
         self.andares, self.registro_andares = {}, None   # o main() põe os andares extras (andares.py)
+        # as conversas da equipe (conversas_equipe.py): um store por andar, aberto no primeiro pedido que precisa dele
+        self.dados, self.equipes, self.trava_equipes = DADOS, {}, threading.Lock()
+        self.acenos, self.trava_acenos = {}, threading.Lock()   # (andar, login) -> [(instante, seq, de, nome, tipo)]
+        self.baldes = Baldes()
+        self.envios, self.downloads, self.trava_anexos = collections.Counter(), collections.Counter(), threading.Lock()
         self.proxy_visitas = proxy_visitas(PROXY_VISITAS)
         self.cabecalho_visitas = CABECALHO_VISITAS
         self._proxima_limpeza_visitas = time.monotonic() + 30
+        self._proxima_varredura = time.monotonic() + 3600
+
+    def equipe_de(self, andar):
+        """O store de conversas do andar, aberto uma vez só (o saguão sem DM nem anexo)."""
+        with self.trava_equipes:
+            eq = self.equipes.get(andar.id)
+            if eq is None:
+                eq = self.equipes[andar.id] = Equipe(andar.pasta, saguao=andar.saguao)
+            return eq
 
     def service_actions(self):
         agora = time.monotonic()
         if agora >= self._proxima_limpeza_visitas:
             self.salas_visitas.limpar()
             self._proxima_limpeza_visitas = agora + 30
+        if agora >= self._proxima_varredura:   # a retenção e o teto das conversas, 1 vez por dia
+            self._proxima_varredura = agora + 86400
+            with self.trava_equipes:
+                abertos = list(self.equipes.values())
+            for eq in abertos:
+                try:
+                    eq.varrer()
+                except Exception as x:   # nunca derruba o servidor; o texto nunca vai ao log
+                    log(evento="equipe", resultado="varredura_erro", detalhe=type(x).__name__)
 
     def handle_error(self, request, client_address):
         # o padrão do socketserver imprime o endereço da conexão (sem proxy, o IP do visitante) e o traceback
@@ -4371,6 +4971,7 @@ def main():
     avisos = srv.avisos = criar_avisos()
     if avisos:   # o "Não perturbe" de cada conta e o expediente do andar (o do Personalizar, lido na hora)
         avisos.preferencia, avisos.pode = contas.avisos_de, lambda conta, andar: recebe_avisos(srv, conta, andar)
+        avisos.resolver = resolver_de_avisos(srv)   # menção, DM e aceno: o texto sai do store na hora do GET (E.4)
         avisos.expediente = lambda andar=ANDAR_PRINCIPAL: config_publica(
             srv.andares.get(andar) or AndarPrincipal(srv))["expediente"]
         avisos.start()

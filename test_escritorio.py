@@ -2914,7 +2914,7 @@ class Docker(unittest.TestCase):
         esperados = {n + ".py" for n in locais}
         self.assertEqual(esperados, {"escritorio.py", "acesso.py", "andares.py", "presenca.py", "social.py", "planta.py", "ajustes.py", "jornal.py",
                                  "avisos.py", "vapid.py", "novidades.py", "visitas_sala.py", "conversas_equipe.py",
-                                 "migracao_saguao.py"})
+                                 "migracao_saguao.py", "anexos.py"})
         self.assertLessEqual(esperados, copiados)
         self.assertLessEqual(esperados, liberados)
         with open(os.path.join(raiz, "instalar.sh"), encoding="utf-8") as f:

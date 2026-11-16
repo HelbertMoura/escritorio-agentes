@@ -144,7 +144,7 @@ class Mural(Base):
         with self.assertRaises(SemAcesso):
             self.eq.desafixar(ids[0], "bia")   # nem autora nem moderadora
         self.eq.desafixar(ids[0], "bia", moderador=True)
-        self.eq.desafixar(ids[1], "ana")
+        self.assertEqual(self.eq.desafixar(ids[1], "ana"), "geral")   # devolve o canal do aviso
         self.assertEqual([a["texto"] for a in self.eq.mural("geral")], [f"aviso {i}" for i in range(2, ce.MURAL_MAX)])
         with self.assertRaises(ValueError):
             self.eq.fixar("geral", "ana", "Ana", "x" * (ce.MURAL_TEXTO_MAX + 1))
