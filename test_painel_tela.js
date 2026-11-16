@@ -93,7 +93,9 @@ const RESP = {
   "POST api/canal/lida": { status: 200, corpo: { ok: true } },
   "GET api/dm/auditoria/pares": { status: 200, corpo: { pares: [{ canal: "dm:3", u1: "ana.lima", u2: "joao", mensagens: 4, ultima: "2026-11-15T10:00:00Z" }],
     lembrete: "O acesso a esta conversa fica registrado e as duas pessoas veem a data." } },
-  "GET api/dm/auditoria/registro": { status: 200, corpo: { registro: [] } },
+  "GET api/dm/auditoria/registro": { status: 200, corpo: { registro: [
+    { canal: "dm:3", admin: "joao", u1: "ana.lima", u2: "bruno", quando: "2026-11-15T10:00:00Z", quantas: 4 },
+    { canal: "dm:5", admin: "carla", u1: null, u2: "ana.lima", quando: "2026-11-14T10:00:00Z", quantas: 1 }] } },
   "GET api/dm/auditoria": { status: 200, corpo: { mensagens: [MSG(7, { canal: "dm:3" })], mais: false,
     lembrete: "O acesso a esta conversa fica registrado e as duas pessoas veem a data." } },
 };
@@ -163,6 +165,15 @@ const abas = p => achar(p, "chat-sala-aba").map(b => b.dataset.id);
     auditar.click(); await espera(); await espera();
     assert.match(achar(painel, "chat-sala-fixo")[0].textContent, /fica registrado/);
     assert.equal(achar(painel, "chat-sala-fixo")[0].hidden, false);
+    // o registro de acessos (quem abriu qual conversa, quando e quantas mensagens), sem texto e sem botão
+    assert.ok(pedidos.some(p => p.rota === "api/dm/auditoria/registro"));
+    assert.equal(achar(painel, "chat-sala-secao")[0].textContent, "Registro de acessos");
+    const linhas = achar(painel, "chat-sala-registro-item");
+    assert.equal(linhas.length, 2);
+    assert.match(linhas[0].textContent, /^Você abriu a conversa de Ana Lima e bruno/);
+    assert.match(linhas[0].textContent, /15\/11\/2026.*4 mensagens/);
+    assert.match(linhas[1].textContent, /^carla abriu a conversa de ex-membro e Ana Lima.*1 mensagem$/);
+    assert.equal(todos(linhas[0]).some(x => x.tagName === "BUTTON"), false);
     porTexto(achar(painel, "chat-sala-itens")[0], "Ana Lima e Você").click(); await espera(); await espera();
     assert.equal(pedidos.find(p => p.rota === "api/dm/auditoria").q.get("canal"), "dm:3");
     assert.equal(achar(painel, "chat-sala-form")[0].hidden, true);
@@ -211,6 +222,40 @@ const abas = p => achar(p, "chat-sala-aba").map(b => b.dataset.id);
     assert.deepEqual(achar(painel, "chat-sala-msg").map(li => li.dataset.id), ["1", "2"]);
     assert.match(achar(painel, "oculto").find(x => x.attrs.role === "status").textContent, /Ana: chegou/);
     assert.equal(ChatSala.paraAoVivo(), "&canal=geral&depois=2");
+  }
+  // ChatSala.abrirCanal e abrirDM (o mapa e o toque no aviso chamam): abrem o painel no lugar pedido
+  {
+    const ENT = { ...ANDAR, equipe: { ...EQUIPE, aviso_dm_entendido: true } };
+    const resp = { ...RESP, "GET api/dm": { status: 200, corpo: { dms: [{ canal: "dm:4", outro: { usuario: "ana.lima", nome: "Ana Lima" }, ultima: null, nao_lidas: 0 }] } } };
+    {
+      const { painel, pedidos, ChatSala } = carregar({ config: ENT, respostas: resp, sala: "cozinha" });
+      assert.equal(await ChatSala.abrirCanal("sala:reuniao"), true); await espera();
+      assert.equal(painel.hidden, false);
+      assert.equal(pedidos.filter(p => p.rota === "api/canal/historico").at(-1).q.get("canal"), "sala:reuniao");
+      assert.equal(await ChatSala.abrirCanal("dm:4"), true); await espera(); await espera();
+      assert.equal(todos(painel).find(x => x.id === "chat-sala-titulo").textContent, "Ana Lima", "o nome sai do GET /api/dm");
+      assert.equal(achar(painel, "chat-sala-fixo")[0].hidden, false);
+      for (const ruim of ["x", "dm:0", "sala:", 3, null]) assert.equal(await ChatSala.abrirCanal(ruim), false, String(ruim));
+    }
+    {
+      const { painel, pedidos, ChatSala } = carregar({ config: ENT, respostas: resp });
+      assert.equal(await ChatSala.abrirDM("ana.lima"), true); await espera(); await espera();
+      assert.deepEqual(pedidos.find(p => p.rota === "api/dm/abrir").corpo, { com: "ana.lima" });
+      assert.equal(todos(painel).find(x => x.id === "chat-sala-titulo").textContent, "Ana Lima");
+    }
+    // sem o "Entendi" ainda: o aviso aparece antes de abrir
+    {
+      const { painel, pedidos, ChatSala } = carregar({ config: { ...ANDAR, equipe: { ...EQUIPE, aviso_dm_entendido: false } }, respostas: resp });
+      ChatSala.abrirDM("ana.lima"); for (let i = 0; i < 5; i++) await espera();
+      assert.equal(achar(painel, "chat-sala-entendi")[0].hidden, false);
+      assert.equal(pedidos.some(p => p.rota === "api/dm/abrir"), false);
+    }
+    // saguão (sem DM) e store desligado: abrirDM não faz nada
+    for (const config of [SAGUAO, { andar: "principal", equipe: null }]) {
+      const { pedidos, ChatSala } = carregar({ config, respostas: resp, sala: "cozinha" });
+      assert.equal(await ChatSala.abrirDM("ana.lima"), false);
+      assert.equal(pedidos.length, 0);
+    }
   }
   // store desligado (config.equipe null): o chat da sala de sempre, com o painel do index.html e sem rota nova
   {

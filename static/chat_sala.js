@@ -294,7 +294,8 @@ const ChatSala = (() => {
     form.addEventListener("submit", e => { e.preventDefault(); mandar(); });
     campo.addEventListener("input", () => { if (!aviso.hidden && aviso.classList.contains("ruim")) mostrarAviso(""); });
     painel.addEventListener("keydown", e => { if (e.key === "Escape") { e.stopPropagation(); fecharPainel(); } });
-    return { minhaSala, aoVivo, atualizar, paraAoVivo: () => "", abrir: abrirPainel, fechar: fecharPainel };
+    const nada = async () => false;   // sem store não há canal nem DM
+    return { minhaSala, aoVivo, atualizar, paraAoVivo: () => "", abrirCanal: nada, abrirDM: nada, abrir: abrirPainel, fechar: fecharPainel };
   }
 
   // ======== o painel de conversa da equipe (store ligado; contrato da Onda 2)
@@ -305,7 +306,7 @@ const ChatSala = (() => {
       enviar: "api/canal/enviar", lida: "api/canal/lida", reagir: "api/canal/reagir", apagar: "api/canal/apagar",
       busca: termo => `api/canal/busca?q=${encodeURIComponent(termo)}&limite=20`,
       pessoas: "api/pessoas", dms: "api/dm", abrirDm: "api/dm/abrir", entendi: "api/dm/entendi",
-      pares: "api/dm/auditoria/pares", auditoria: (canal, antes) => `api/dm/auditoria?canal=${encodeURIComponent(canal)}&limite=50${antes ? `&antes=${antes}` : ""}`,
+      pares: "api/dm/auditoria/pares", registro: "api/dm/auditoria/registro", auditoria: (canal, antes) => `api/dm/auditoria?canal=${encodeURIComponent(canal)}&limite=50${antes ? `&antes=${antes}` : ""}`,
       anexo: canal => `api/anexo?canal=${encodeURIComponent(canal)}`,
     };
     const svg = d => {   // ícone de traço, decorativo
@@ -555,6 +556,20 @@ const ChatSala = (() => {
         return item(nome, `${x.mensagens} ${x.mensagens === 1 ? "mensagem" : "mensagens"}, a última em ${data(x.ultima)}`, () => irPara(`auditoria:${x.canal}`, nome));
       }));
       ui.vazio.textContent = "Nenhuma conversa direta neste andar."; ui.vazio.hidden = d.pares.length > 0;
+      carregarRegistro();
+    }
+    // o registro de acessos da auditoria (E.3): quem abriu qual conversa, quando e quantas mensagens; nunca o texto
+    async function carregarRegistro() {
+      const { ok, d } = await pedir(ROTAS.registro);
+      if (s.vista !== "auditoria" || !ok || !d || !Array.isArray(d.registro) || !d.registro.length) return;
+      const titulo = criar("li", "chat-sala-secao-li"), h = criar("h3", "chat-sala-secao", "Registro de acessos");
+      titulo.append(h);
+      ui.itens.append(titulo, ...d.registro.map(x => {
+        const li = criar("li", "chat-sala-registro-item"), n = Number.isInteger(x.quantas) ? x.quantas : 0;
+        li.append(criar("span", "chat-sala-item-nome", `${nomeDe(x.admin)} abriu a conversa de ${nomeDe(x.u1)} e ${nomeDe(x.u2)}`),
+          criar("span", "chat-sala-item-det", `${data(x.quando)} ${hora(x.quando)} · ${n} ${n === 1 ? "mensagem" : "mensagens"}`));
+        return li;
+      }));
     }
     async function carregarAuditoria(antes) {
       const vista = s.vista, { ok, d } = await pedir(ROTAS.auditoria(vista.slice("auditoria:".length), antes));
@@ -683,12 +698,36 @@ const ChatSala = (() => {
       const { ok, d } = await pedir(ROTAS.pessoas);
       if (ok && d && Array.isArray(d.pessoas)) s.pessoas = d.pessoas.filter(p => p && typeof p.usuario === "string");
     }
-    async function abrirPainel() {
+    async function mostrarPainel() {
+      if (aberto()) return;
       painel.hidden = false; abrir.setAttribute("aria-expanded", "true"); abrir.hidden = true;
       await carregarPessoas();
+    }
+    async function abrirPainel() {
+      await mostrarPainel();
       const sala = canalDaSala(s.onde.sala), daSalaOk = sala && abas(eq(), s.onde).some(a => a.id === sala);
       irPara(daSalaOk ? sala : s.vista.startsWith("dm:") ? s.vista : "geral", s.titulo);
       ui.campo.focus();
+    }
+    // de fora (o mapa e o toque no aviso, pelo app.js): o painel aberto num canal ou na DM com alguém. true se abriu
+    const CANAL_OK = /^(geral|sala:.{1,80}|dm:[1-9][0-9]{0,17})$/;
+    async function abrirCanal(canal) {
+      if (tv() || typeof canal !== "string" || !CANAL_OK.test(canal) || (canal.startsWith("dm:") && !eq().dm)) return false;
+      if (canal.startsWith("dm:")) {
+        if (!(await entendido())) return false;
+        await mostrarPainel();
+        const { ok, d } = await pedir(ROTAS.dms), dm = ok && d && Array.isArray(d.dms) ? d.dms.find(x => x.canal === canal) : null;
+        irPara(canal, dm ? (dm.outro ? dm.outro.nome || dm.outro.usuario : EX) : "Mensagem direta");
+        if (dm && !dm.outro) { ui.form.hidden = true; mostrarAviso("A outra pessoa não está mais no andar. A conversa fica só para ler.", false); }
+      } else { await mostrarPainel(); irPara(canal); }
+      ui.campo.focus();
+      return true;
+    }
+    async function abrirDM(usuario) {
+      if (tv() || !eq().dm || typeof usuario !== "string" || !usuario) return false;
+      await mostrarPainel();
+      await comecarDm(s.pessoas.find(p => p.usuario === usuario) || { usuario, nome: usuario });
+      return true;
     }
     function fecharPainel(focar = true) {
       fecharEmojis(); fecharSugestoes();
@@ -777,7 +816,7 @@ const ChatSala = (() => {
       else if (s.vista === "busca") ui.voltar.click();
       else fecharPainel();
     });
-    return { minhaSala, aoVivo, atualizar, paraAoVivo, abrir: abrirPainel, fechar: fecharPainel };
+    return { minhaSala, aoVivo, atualizar, paraAoVivo, abrirCanal, abrirDM, abrir: abrirPainel, fechar: fecharPainel };
   }
 
   // ---- qual dos dois: decide no primeiro evento depois do /api/config
@@ -799,6 +838,7 @@ const ChatSala = (() => {
   new MutationObserver(() => escolher()?.atualizar()).observe(document.body, { attributes: true, attributeFilter: ["class"] });   // entrar e sair da TV
   escolher();
 
-  return { ...puro, elMensagem, paraAoVivo: () => (modo ? modo.paraAoVivo() : ""), abrir: () => escolher()?.abrir(), fechar: f => modo?.fechar(f) };
+  return { ...puro, elMensagem, paraAoVivo: () => (modo ? modo.paraAoVivo() : ""), abrir: () => escolher()?.abrir(), fechar: f => modo?.fechar(f),
+    abrirCanal: async c => (escolher() ? escolher().abrirCanal(c) : false), abrirDM: async u => (escolher() ? escolher().abrirDM(u) : false) };
 })();
 if (typeof window !== "undefined") window.ChatSala = ChatSala;
