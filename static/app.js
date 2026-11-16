@@ -1878,6 +1878,8 @@ $("abas-aprov").addEventListener("keydown", ev => {   // abas: setas, Home e End
 });
 $("ver-historico").addEventListener("click", () => escolherAba("resolvidos", true));
 $("busca-pedidos").addEventListener("input", () => { if (estado) desenharPainel(); });
+// modo apresentação (apresentacao.js) ligado ou desligado: a lista de agentes troca os nomes na hora, sem esperar a leitura
+addEventListener("apresentacao", () => { if (estado) desenharPainel(); });
 
 let eventosTodos = false;   // "Ver tudo": 5 linhas fechado, 15 aberto
 function desenharEventos() {

@@ -32,4 +32,6 @@ assert.match(cena, /\n  desenharPortas\(t\);\n  for \(const s of \[\.\.\.predio\
   ouvintes.aceno({ detail: { nome: "Ana", tipo: "porta" } });
   assert.equal(el.textContent, "Ana bateu na porta", "o aceno continua igual");
 }
+// (5) ligar e desligar a apresentação (evento window "apresentacao") redesenha o painel: a lista de agentes volta aos nomes
+assert.match(app, /\naddEventListener\("apresentacao", \(\) => \{ if \(estado\) desenharPainel\(\); \}\);/);
 console.log("test_apresentacao_gancho.js ok");
