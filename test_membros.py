@@ -453,9 +453,10 @@ class EmpresasNoSaguao(unittest.TestCase):
         acesso.definir_andares("dono", [cls.A], principal=False)   # o que a migração faz: admin do prédio e de A
         acesso.mudar_papel("dono", "admin", cls.A)
         cls.cab = {}
-        for usuario, andar, papel in (("adminb", cls.B, "admin"), ("membrob", cls.B, "membro"), ("membroa", cls.A, "membro")):
-            token, _ = acesso.convidar(usuario.title(), [andar], principal=False)
-            cls.cab[usuario] = Membros.cookie(acesso.aceitar_convite(token, usuario, SENHA, usuario.title(), AVATAR))
+        for usuario, nome, andar, papel in (("adminb", "Beto", cls.B, "admin"), ("membrob", "Bia", cls.B, "membro"),
+                                            ("membroa", "Ana", cls.A, "membro")):
+            token, _ = acesso.convidar(nome, [andar], principal=False)
+            cls.cab[usuario] = Membros.cookie(acesso.aceitar_convite(token, usuario, SENHA, nome, AVATAR))
             if papel == "admin":
                 acesso.mudar_papel(usuario, "admin", andar)
         cls.cab["dono"] = Membros.cookie(acesso.entrar("dono", SENHA_DONO))
@@ -672,7 +673,7 @@ class EmpresasNoSaguao(unittest.TestCase):
         self.assertEqual(self.post("/api/presenca", pos("recepcao"), self.cab["membrob"])[0], 200)
         self.assertEqual(self.post("/api/presenca", pos("time:Time secreto de A"), self.cab["membrob"])[0], 400)
         ao_vivo = self.get("/api/ao-vivo", self.cab["membroa"])[1]
-        self.assertEqual([p["nome"] for p in ao_vivo["pessoas"]], ["Membrob"])
+        self.assertEqual([p["nome"] for p in ao_vivo["pessoas"]], ["Bia"])
 
     def test_presenca_no_saguao_sem_login(self):
         """M2: no saguão, o "usuario" das pessoas e das mensagens e o "eu" são um id opaco estável por pessoa
@@ -688,7 +689,7 @@ class EmpresasNoSaguao(unittest.TestCase):
         self.assertIn(de_b["eu"], [p["usuario"] for p in de_a["pessoas"]])
         self.assertEqual([m["usuario"] for m in de_a["mensagens"]], [de_b["eu"]])
         self.assertEqual([m["usuario"] for m in de_b["mensagens"]], [de_b["eu"]])   # a própria mensagem: o mesmo "eu"
-        self.assertNotIn("membro", json.dumps([de_a, de_b]).replace("Membro", ""))   # nenhum login sai
+        self.assertNotIn("membro", json.dumps([de_a, de_b]).lower())   # nenhum login sai
         self.assertEqual(self.srv.id_pessoa("membrob"), de_b["eu"])
         with open(os.path.join(self.dados, "pessoa.chave"), "rb") as f:   # o segredo em dados/, nunca na resposta
             self.assertEqual(len(f.read()), 32)
@@ -696,6 +697,30 @@ class EmpresasNoSaguao(unittest.TestCase):
         q = f"?andar={self.B}"
         self.assertEqual(self.post("/api/presenca" + q, pos, self.cab["membrob"])[0], 200)
         self.assertEqual(self.get("/api/ao-vivo" + q, self.cab["membrob"])[1]["eu"], "membrob")
+
+    def test_saguao_sem_nome_proprio_nao_mostra_o_login(self):
+        """M2: no saguão, a conta sem nome de exibição (o admin do prédio nasce assim, com o nome igual ao login)
+        aparece como "Pessoa" nas pessoas e nas mensagens, e as pessoas saem na ordem do id opaco; fora do saguão, o
+        nome de sempre."""
+        pos = {"x": 40, "y": 80, "destino": None, "sala": "recepcao", "olha": "dir"}
+        for quem in ("dono", "membroa", "membrob"):
+            self.assertEqual(self.post("/api/presenca", pos, self.cab[quem])[0], 200)
+        self.assertEqual(self.post("/api/sala/enviar", {"texto": "oi de quem sobe"}, self.cab["dono"])[0], 200)
+        try:
+            de_b = self.get("/api/ao-vivo", self.cab["membrob"])[1]
+            dono = self.srv.id_pessoa("dono")
+            self.assertEqual({p["usuario"]: p["nome"] for p in de_b["pessoas"]}[dono], "Pessoa")
+            self.assertEqual([m["nome"] for m in de_b["mensagens"] if m["usuario"] == dono], ["Pessoa"])
+            self.assertNotIn("dono", json.dumps(de_b).lower())   # nem o login, nem um nome igual a ele
+            self.assertEqual([p["usuario"] for p in de_b["pessoas"]], sorted(p["usuario"] for p in de_b["pessoas"]))
+            q = f"?andar={self.A}"   # no andar da empresa, nada muda
+            for quem in ("dono", "membroa"):
+                self.assertEqual(self.post("/api/presenca" + q, pos, self.cab[quem])[0], 200)
+            de_a = self.get("/api/ao-vivo" + q, self.cab["membroa"])[1]
+            self.assertEqual({p["usuario"]: p["nome"] for p in de_a["pessoas"]}["dono"], "dono")
+        finally:
+            for quem in ("dono", "membroa", "membrob"):
+                self.srv.presenca.sair(quem)
 
 
 if __name__ == "__main__":

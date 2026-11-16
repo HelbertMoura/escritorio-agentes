@@ -122,9 +122,10 @@ class Presenca:
             eu = a["pessoas"].get(usuario)
             if eu is not None and renovar:
                 eu["visto"] = agora
-            pessoas = [{"usuario": mostra(u), "nome": p["nome"], "aparencia": p["aparencia"], "x": p["x"], "y": p["y"],
-                        "destino": p["destino"], "sala": p["sala"], "olha": p["olha"]}
-                       for u, p in sorted(a["pessoas"].items()) if u != usuario]
+            pessoas = sorted(({"usuario": mostra(u), "nome": p["nome"], "aparencia": p["aparencia"], "x": p["x"],
+                               "y": p["y"], "destino": p["destino"], "sala": p["sala"], "olha": p["olha"]}
+                              for u, p in a["pessoas"].items() if u != usuario),
+                             key=lambda p: p["usuario"])   # na ordem do "usuario" que sai, não do login
             mensagens = []
             if eu is not None and eu["sala"]:
                 inicio = max(desde, eu["entrou_seq"] - 1)

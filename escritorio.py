@@ -2721,6 +2721,7 @@ def aviso_erro_oauth(codigo):
 # ---------------------------------------------------------------- andares (andares.py): um workspace por andar
 
 NOME_PRINCIPAL, NOME_SAGUAO = "Térreo", "Saguão"
+NOME_PESSOA_SAGUAO = "Pessoa"   # no saguão, quem não tem nome próprio (o nome igual ao login) aparece assim (M2)
 # o /api/estado do saguão: sem agentes, tarefas, conversas, vida social nem visitantes
 SAGUAO_VAZIO = {"agentes": [], "trabalhos": [], "tarefas": [], "eventos": [], "resolvidos": [], "atualizado": None,
                 "erro": None, "conexao": None}
@@ -3831,7 +3832,10 @@ class Pagina(BaseHTTPRequestHandler):
             if dados is None or set(dados) != {"x", "y", "destino", "sala", "olha"} or dados["sala"] not in salas_do_andar(andar):
                 return self._json(*erro(400, "pedido", "Pedido inválido."))
             perfil = self.server.acesso.perfil(usuario)
-            seq = presenca.marcar(andar.id, usuario, perfil["nome"], aparencia_da_conta(usuario, perfil), dados["x"], dados["y"],
+            nome = perfil["nome"]
+            if andar.saguao and nome.strip().lower() == perfil["usuario"]:   # no saguão, nem o login vira nome (M2)
+                nome = NOME_PESSOA_SAGUAO
+            seq = presenca.marcar(andar.id, usuario, nome, aparencia_da_conta(usuario, perfil), dados["x"], dados["y"],
                                   dados["destino"], dados["sala"], dados["olha"])
             return self._json(200, {"seq": seq})
         except LimitePresenca as x:
