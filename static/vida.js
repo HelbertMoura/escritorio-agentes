@@ -1420,6 +1420,7 @@ const Vida = (() => {
   const AO_VIVO_VISIVEL = 1500, AO_VIVO_ESCONDIDO = 10000, ENVIO_MIN = 500, RENOVAR = 20000, PERFIL_A_CADA = 15000, COORD_MAX = 8192;
   const vivo = { ger: 0, ligado: false, lido: false, andar: null, seq: 0, falhas: 0, timer: 0, envio: 0, enviado: -1e9, perfilEm: -1e9,
     invisivel: () => true, perfil: null, m: null, eu: null, avisada: null,   // avisada: a última sala do evento "minha-sala"
+    status: null, muralV: {}, noPredio: null,   // 1.6 Onda 2 (só com o store ligado): o meu status, a versão do mural por canal e o total do prédio
     pessoas: new Map() };   // pessoas: os outros, pelo "usuario" da lista (só chave: no saguão é um id opaco, nunca vai para a tela)
 
   // liga (ou religa, ao trocar de andar) o polling; null desliga. invisivel(): a TV e quem desligou "Aparecer" só leem
@@ -1427,6 +1428,7 @@ const Vida = (() => {
     vivo.ger++; clearTimeout(vivo.timer); clearTimeout(vivo.envio); vivo.envio = 0;
     if (vivo.eu) { vivo.eu = null; avisarSala(null); }
     vivo.pessoas.clear(); vivo.seq = 0; vivo.falhas = 0; vivo.avisada = null; vivo.lido = false; vivo.ligado = !!opcoes;
+    vivo.status = null; vivo.muralV = {}; vivo.noPredio = null;
     if (!opcoes) return;
     vivo.andar = Andar.atual; vivo.invisivel = opcoes.invisivel || (() => false);
     lerPerfil(vivo.ger);
@@ -1451,7 +1453,8 @@ const Vida = (() => {
 
   async function lerAoVivo(ger) {
     try {
-      const url = `api/ao-vivo?desde=${vivo.seq}${vivo.invisivel() ? "&invisivel=1" : ""}`;
+      // o painel (chat_sala.js) pede o canal aberto: "" ou "&canal=…&depois=<id>"
+      const url = `api/ao-vivo?desde=${vivo.seq}${vivo.invisivel() ? "&invisivel=1" : ""}${window.ChatSala && ChatSala.paraAoVivo ? ChatSala.paraAoVivo() : ""}`;
       const r = await fetch(Andar.com(url, vivo.andar), { cache: "no-store", credentials: "same-origin" });
       if (ger !== vivo.ger) return;
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -1460,6 +1463,7 @@ const Vida = (() => {
       if (!d || !Number.isInteger(d.seq) || !Array.isArray(d.pessoas)) throw new Error("resposta inválida");
       vivo.falhas = 0; vivo.seq = d.seq; vivo.lido = true;
       receber(d.pessoas, typeof d.eu === "string" && d.eu ? d.eu : vivo.perfil && vivo.perfil.usuario);   // "eu": o id da sessão na lista
+      receberEquipe(d);
       if (performance.now() - vivo.perfilEm >= PERFIL_A_CADA) lerPerfil(ger);
       window.dispatchEvent(new CustomEvent("aovivo", { detail: d }));
     } catch (e) {
@@ -1484,7 +1488,7 @@ const Vida = (() => {
       let p = vivo.pessoas.get(it.usuario);
       if (!p) { p = novaPessoa(it.usuario, it.x, it.y); vivo.pessoas.set(it.usuario, p); }
       p.nome = nomeDe(it.nome, "Alguém"); p.ap = apDe(it.aparencia, it.usuario);   // sem nome: "Alguém", nunca o usuario
-      p.parado = DIRECOES.has(it.olha) ? it.olha : "baixo"; p.sala = typeof it.sala === "string" ? it.sala : ""; p.status = statusDe(it.status);
+      p.parado = DIRECOES.has(it.olha) ? it.olha : "baixo"; p.sala = typeof it.sala === "string" ? it.sala : ""; p.status = statusDe(it.status); p.texto = textoDe(it.status_texto);
       if (p.alvo && p.alvo[0] === alvo[0] && p.alvo[1] === alvo[1]) continue;
       p.alvo = alvo;   // destino novo: anda até lá (sem caminho, aparece direto)
       p.rota = (m && rotaAte(m, [p.x, p.y], alvo)) || [];
@@ -1495,11 +1499,48 @@ const Vida = (() => {
   const DIRECOES = new Set(["baixo", "cima", "esq", "dir"]);
   // ref: a chave da pessoa fora daqui (lista do andar, ir até, aceno), um contador; o "usuario" (no saguão, o id opaco) não sai
   let refs = 0;
-  const novaPessoa = (id, x, y) => ({ id: "pessoa:" + id, ref: "r" + ++refs, nome: "", ap: null, x, y, rota: [], alvo: null, sala: "", pose: "parado",
+  const novaPessoa = (id, x, y) => ({ id: "pessoa:" + id, usuario: id, ref: "r" + ++refs, nome: "", ap: null, x, y, rota: [], alvo: null, sala: "", pose: "parado",
     olha: "baixo", parado: "baixo", passos: 0, pausa: 0, aceno: 0, status: null, semente: semente(id) });
   // 1.6 Onda 2: o status de cada pessoa (o ícone no boneco e na lista); fora da lista, sem status
   const STATUS = Object.freeze(["disponivel", "ocupado", "reuniao", "ausente"]);
   const statusDe = s => (STATUS.includes(s) ? s : null);
+  const textoDe = t => (typeof t === "string" ? t.slice(0, 40) : "");
+
+  // os campos da Onda 2 no /api/ao-vivo (sem o store, não vêm): o meu status, o mural, o total do saguão e os acenos
+  function receberEquipe(d) {
+    const ms = d.meu_status;
+    if (ms && typeof ms === "object" && statusDe(ms.status)) { vivo.status = { status: ms.status, texto: textoDe(ms.texto) }; meuStatus(); }
+    vivo.muralV = {};
+    if (d.mural_v && typeof d.mural_v === "object") for (const [canal, v] of Object.entries(d.mural_v)) if (Number.isInteger(v)) vivo.muralV[canal] = v;
+    vivo.noPredio = Number.isInteger(d.no_predio) && d.no_predio >= 0 ? d.no_predio : null;
+    for (const a of Array.isArray(d.acenos) ? d.acenos.slice(0, 20) : []) {
+      if (!a || (a.tipo !== "aceno" && a.tipo !== "porta")) continue;
+      const p = typeof a.de === "string" && vivo.pessoas.get(a.de);
+      if (p) gesto(p, a.tipo === "porta" ? "Toc, toc!" : "Oi!");
+      window.dispatchEvent(new CustomEvent("aceno", { detail: { nome: nomeDe(a.nome, "Alguém"), tipo: a.tipo } }));   // a tela avisa (textContent)
+    }
+  }
+  function meuStatus() { if (vivo.eu && vivo.status) { vivo.eu.status = vivo.status.status; vivo.eu.texto = vivo.status.texto; } }
+
+  // POST com JSON no andar atual: {ok, mensagem} (a mensagem do servidor para a tela, quando recusa)
+  function postar(rota, corpo) {
+    return fetch(Andar.com(rota, vivo.andar), { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(corpo) }).then(async r => {
+      const d = await r.json().catch(() => null);
+      if (r.ok) return { ok: true, mensagem: "", d };
+      return { ok: false, mensagem: d && typeof d.mensagem === "string" ? d.mensagem.slice(0, 200) : "Não deu certo agora. Tente de novo." };
+    }).catch(() => ({ ok: false, mensagem: "Sem conexão com o escritório agora." }));
+  }
+
+  // muda o meu status (POST /api/status); aceito, o meu boneco mostra na hora. Status fora da lista: null, sem pedido
+  function mudarStatus(status, texto) {
+    if (!statusDe(status)) return Promise.resolve(null);
+    const ger = vivo.ger, corpo = { status, texto: textoDe(texto) };
+    return postar("api/status", corpo).then(r => {
+      if (r.ok && ger === vivo.ger) { vivo.status = corpo; meuStatus(); }
+      return { ok: r.ok, mensagem: r.mensagem };
+    });
+  }
   const semente = txt => { let h = 7; for (const ch of txt) h = (h * 31 + ch.charCodeAt(0)) % 997; return h; };
 
   // de a até b, com o caminho dos agentes: dentro da sala, porta, corredor, porta e dentro da outra sala
@@ -1546,9 +1587,9 @@ const Vida = (() => {
   function equipe(m) {
     const nomeSala = p => { const s = p.sala && m && salaDaChave(m, p.sala); return s ? s.nome : "Corredor"; };
     const outros = [...vivo.pessoas.values()].filter(p => p.x > -20)
-      .map(p => ({ chave: p.ref, nome: p.nome, sala: nomeSala(p), status: p.status, eu: false }))
+      .map(p => ({ chave: p.ref, nome: p.nome, sala: nomeSala(p), status: p.status, texto: p.texto || "", eu: false }))
       .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
-    const eu = vivo.eu && vivo.perfil ? [{ chave: "eu", nome: vivo.perfil.nome, sala: nomeSala(vivo.eu), status: vivo.eu.status || null, eu: true }] : [];
+    const eu = vivo.eu && vivo.perfil ? [{ chave: "eu", nome: vivo.perfil.nome, sala: nomeSala(vivo.eu), status: vivo.eu.status || null, texto: vivo.eu.texto || "", eu: true }] : [];
     return [...eu, ...outros];
   }
 
@@ -1569,22 +1610,19 @@ const Vida = (() => {
   }
 
   // acenar ("aceno") ou bater na porta ("porta"): o meu boneco acena com um balão. Para bater, quem está em outra sala:
-  // o meu boneco vai até a porta dela e bate ao chegar; na minha sala ou no corredor, vira um aceno
+  // o meu boneco vai até a porta dela e bate ao chegar; na minha sala ou no corredor, vira um aceno. O aviso sai já
+  // (POST /api/aceno, com o usuario da pessoa, que no saguão é o id opaco). Devolve false (sem boneco ou sem a pessoa)
+  // ou a promessa de {ok, mensagem}: quem está ocupado não recebe, e o mesmo par só a cada 30 s
   const ACENO_SEG = 2, BALAO_SEG = 3;
   function acenar(m, ref, tipo) {
     const eu = vivo.eu, p = outraPessoa(ref);
     if (!eu || m !== vivo.m || !p) return false;
+    if (tipo !== "porta") tipo = "aceno";
     const s = tipo === "porta" && p.sala && p.sala !== eu.sala ? salaDaChave(m, p.sala) : null;
-    if (s) {
-      const e = portaPerto(m, s, p.x), rota = rotaAte(m, [eu.x, eu.y], e.fora[0]);
-      if (rota && rota.length) {
-        eu.rota = rota; eu.bater = { olha: s.portas ? "baixo" : "cima" };
-        enviarPresenca();
-        return true;
-      }
-    }
-    gesto(eu, `Oi, ${p.nome}!`);
-    return true;
+    const e = s && portaPerto(m, s, p.x), rota = e && rotaAte(m, [eu.x, eu.y], e.fora[0]);
+    if (rota && rota.length) { eu.rota = rota; eu.bater = { olha: s.portas ? "baixo" : "cima" }; enviarPresenca(); }
+    else gesto(eu, `Oi, ${p.nome}!`);
+    return postar("api/aceno", { para: p.usuario, tipo }).then(r => ({ ok: r.ok, mensagem: r.mensagem }));
   }
   function gesto(p, fala, olha) {
     const agora = performance.now() / 1000;
@@ -1598,6 +1636,7 @@ const Vida = (() => {
     const recepcao = m.predio.salas.find(s => s.tipo === "recepcao"), alvo = recepcao && pontoDeVisita(m, recepcao);
     vivo.eu = { ...novaPessoa("eu", e.x - 22, e.calcadaY), id: "eu", nome: `${nome} (você)`, ap, eu: true, salaNome: "Corredor",
       rota: alvo ? [[e.x - 22, cy], [e.x, cy], ...alvo.r] : [[e.x - 22, cy], [e.x, cy]] };
+    meuStatus();
     enviarPresenca();
   }
 
@@ -1696,7 +1735,8 @@ const Vida = (() => {
     return n;
   }
 
-  return { criarMundo, sincronizar, passo, digitando, momento, objetoClicado, festaGeral, social, aoVivo, irAte, irAtePessoa, acenar, equipe, STATUS, pessoas, olhando, textoGreve, horaExtra, mexendo, intervaloQuadro, FRASES };
+  return { criarMundo, sincronizar, passo, digitando, momento, objetoClicado, festaGeral, social, aoVivo, irAte, irAtePessoa, acenar, mudarStatus, equipe, STATUS,
+    muralV: canal => (Object.hasOwn(vivo.muralV, canal) ? vivo.muralV[canal] : null), noPredio: () => vivo.noPredio, pessoas, olhando, textoGreve, horaExtra, mexendo, intervaloQuadro, FRASES };
 })();
 
 window.Vida = Vida;

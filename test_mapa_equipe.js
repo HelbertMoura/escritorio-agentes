@@ -17,7 +17,7 @@ function predio() {
     corredorAlt: 40, predioRet: { x: 60, y: 30, w: 400, h: 300 }, entrada: { x: 62, calcadaY: 350 } };
 }
 
-function carregar() {
+function carregar(globais = {}) {
   let agora = 0, prox = 1;
   const timers = new Map(), pedidos = [], eventos = [], respostas = [];
   const doc = { hidden: false, addEventListener() {} };
@@ -32,6 +32,7 @@ function carregar() {
     matchMedia: () => ({ matches: false }), URLSearchParams, Date, Math,
     fetch: (url, opcoes = {}) => new Promise(ok => { const p = { url, opcoes, ok }; pedidos.push(p); respostas.push(p); }),
   };
+  Object.assign(contexto, globais);
   contexto.window = contexto;
   contexto.dispatchEvent = ev => eventos.push(ev);
   vm.runInNewContext(ANDAR + "\n" + VIDA, contexto);
@@ -46,7 +47,12 @@ function carregar() {
     },
     async okPosts() { while (respostas.some(p => p.url.startsWith("api/presenca"))) await t.responder("api/presenca", 200, { seq: 1 }); },
     // passos de 50 ms no relógio e no mundo
-    async passos(m, n, ate = () => false) { for (let i = 0; i < n && !ate(); i++) { agora += 50; t.Vida.passo(m, 0.05); await t.okPosts(); } },
+    async passos(m, n, ate = () => false) { for (let i = 0; i < n && !ate(); i++) { agora += 50; t.Vida.passo(m, 0.05); await t.timers(); await t.okPosts(); } },
+    // roda os timers vencidos (o próximo /api/ao-vivo, a presença que esperou)
+    async timers() {
+      for (const [id, tm] of [...timers].sort((x, y) => x[1].em - y[1].em)) if (tm.em <= agora) { timers.delete(id); tm.f(); for (let k = 0; k < 5; k++) await null; }
+    },
+    async proximoAoVivo() { agora += 1600; await t.timers(); },
     get agora() { return agora; },
     set agora(v) { agora = v; },
   };
@@ -111,7 +117,7 @@ async function montar(lista, eu = "eu") {
     await t.passos(m, 10);
     assert.equal(t.Vida.mexendo(m), false, "todo mundo parado: modo econômico");
     const ana = t.Vida.equipe(m).find(p => p.nome === "Ana");
-    assert.equal(t.Vida.acenar(m, ana.chave, "aceno"), true);
+    assert.ok(t.Vida.acenar(m, ana.chave, "aceno"));
     await t.passos(m, 1);
     assert.equal(eu.pose, "acenando");
     assert.equal(eu.fala, "Oi, Ana!");
@@ -127,7 +133,7 @@ async function montar(lista, eu = "eu") {
   {
     const { t, m, eu } = await montar([pessoa("bia", "Bia", 160, 260, "reuniao")]);
     const bia = t.Vida.equipe(m).find(p => p.nome === "Bia");
-    assert.equal(t.Vida.acenar(m, bia.chave, "porta"), true);
+    assert.ok(t.Vida.acenar(m, bia.chave, "porta"));
     const fim = eu.rota.at(-1);
     assert.ok(fim[1] > 150 && fim[1] < 210, `para no corredor, na frente da porta da reunião: ${fim}`);
     assert.ok(Math.abs(fim[0] - 160) <= 20, `na porta: ${fim}`);
@@ -147,10 +153,80 @@ async function montar(lista, eu = "eu") {
   {
     const { t, m, eu } = await montar([pessoa("ana", "Ana", 150, 100, "recepcao")]);
     const ana = t.Vida.equipe(m).find(p => p.nome === "Ana");
-    assert.equal(t.Vida.acenar(m, ana.chave, "porta"), true);
+    assert.ok(t.Vida.acenar(m, ana.chave, "porta"));
     assert.equal(eu.rota.length, 0);
     await t.passos(m, 1);
     assert.equal(eu.pose, "acenando");
+  }
+
+  // o gancho do painel (chat_sala.js): ChatSala.paraAoVivo() vai no fim da url do /api/ao-vivo; sem o painel, nada muda
+  {
+    const t = carregar();
+    t.Vida.aoVivo({ invisivel: () => false });
+    assert.ok(t.pedidos.some(p => p.url === "api/ao-vivo?desde=0"));
+    const t2 = carregar({ ChatSala: { paraAoVivo: () => "&canal=geral&depois=5" } });
+    t2.Vida.aoVivo({ invisivel: () => false });
+    assert.ok(t2.pedidos.some(p => p.url === "api/ao-vivo?desde=0&canal=geral&depois=5"), t2.pedidos.map(p => p.url).join());
+  }
+
+  // contrato da Onda 2 no /api/ao-vivo: meu_status, status_texto, mural_v e no_predio (só no saguão); sem eles (store
+  // desligado), nada muda: sem status, sem mural e sem total
+  {
+    const { t, m } = await montar([pessoa("ana", "Ana", 150, 100, "recepcao", { status: "ausente", status_texto: "almoço" })]);
+    assert.equal(t.Vida.muralV("geral"), null);
+    assert.equal(t.Vida.noPredio(), null);
+    await t.proximoAoVivo();
+    await t.responder("api/ao-vivo", 200, { seq: 2, eu: "eu", mensagens: [], meu_status: { status: "ocupado", texto: "foco" },
+      mural_v: { geral: 7, "sala:reuniao": 3, x: "y" }, no_predio: 12,
+      pessoas: [pessoa("ana", "Ana", 150, 100, "recepcao", { status: "ausente", status_texto: "almoço" })] });
+    const [eu, ana] = t.Vida.equipe(m);
+    assert.deepEqual([eu.status, eu.texto, ana.status, ana.texto], ["ocupado", "foco", "ausente", "almoço"]);
+    assert.equal(t.Vida.muralV("geral"), 7);
+    assert.equal(t.Vida.muralV("sala:cozinha"), null);
+    assert.equal(t.Vida.muralV("x"), null, "versão que não é número: ignorada");
+    assert.equal(t.Vida.noPredio(), 12);
+  }
+
+  // aceno recebido: quem acenou acena no mapa com o balão, e o evento "aceno" leva o nome e o tipo (a tela avisa)
+  {
+    const { t, m } = await montar([pessoa("ana", "Ana", 150, 100, "recepcao")]);
+    await t.proximoAoVivo();
+    await t.responder("api/ao-vivo", 200, { seq: 9, eu: "eu", mensagens: [], pessoas: [pessoa("ana", "Ana", 150, 100, "recepcao")],
+      acenos: [{ de: "ana", nome: "Ana", tipo: "porta", seq: 9 }, { de: "fantasma", nome: "<b>Zé</b>", tipo: "aceno", seq: 8 }, { de: "ana", tipo: "x", seq: 7 }] });
+    const ev = t.eventos.filter(e => e.type === "aceno").map(e => ({ ...e.detail }));
+    assert.deepEqual(ev, [{ nome: "Ana", tipo: "porta" }, { nome: "<b>Zé</b>", tipo: "aceno" }], "tipo fora da lista: ignorado; quem não está no mapa também avisa");
+    await t.passos(m, 1);
+    const ana = t.Vida.pessoas().find(p => p.nome === "Ana");
+    assert.equal(ana.pose, "acenando"); assert.equal(ana.fala, "Toc, toc!");
+    assert.equal(t.Vida.mexendo(m), true);
+  }
+
+  // acenar manda POST /api/aceno {para, tipo} com o usuario da pessoa (no saguão, o id opaco); a resposta diz se chegou
+  {
+    const { t, m } = await montar([pessoa("p_00000000000000aa", "Ana", 150, 100, "recepcao"), pessoa("p_00000000000000bb", "Bia", 160, 260, "reuniao")], "p_00000000000000ee");
+    const [, ana, bia] = t.Vida.equipe(m);
+    const r1 = t.Vida.acenar(m, ana.chave, "aceno");
+    const post = t.pedidos.find(p => p.url.startsWith("api/aceno"));
+    assert.equal(post.opcoes.method, "POST");
+    assert.deepEqual(JSON.parse(post.opcoes.body), { para: "p_00000000000000aa", tipo: "aceno" });
+    await t.responder("api/aceno", 200, { ok: true });
+    assert.deepEqual({ ...(await r1) }, { ok: true, mensagem: "" });
+    const r2 = t.Vida.acenar(m, bia.chave, "porta");
+    assert.deepEqual(JSON.parse(t.pedidos.filter(p => p.url.startsWith("api/aceno")).at(-1).opcoes.body), { para: "p_00000000000000bb", tipo: "porta" });
+    await t.responder("api/aceno", 409, { erro: "ocupado", mensagem: "Bia está ocupada." });
+    assert.deepEqual({ ...(await r2) }, { ok: false, mensagem: "Bia está ocupada." });
+  }
+
+  // mudar o meu status: POST /api/status; aceito, o meu boneco mostra na hora
+  {
+    const { t, m } = await montar([]);
+    const r = t.Vida.mudarStatus("reuniao", "daily");
+    const post = t.pedidos.find(p => p.url.startsWith("api/status"));
+    assert.deepEqual(JSON.parse(post.opcoes.body), { status: "reuniao", texto: "daily" });
+    await t.responder("api/status", 200, { status: "reuniao", texto: "daily" });
+    assert.equal((await r).ok, true);
+    assert.deepEqual([t.Vida.equipe(m)[0].status, t.Vida.pessoas().find(p => p.eu).status], ["reuniao", "reuniao"]);
+    assert.equal(await t.Vida.mudarStatus("<b>", ""), null, "fora da lista nem sai");
   }
 
   // o ícone do status (mapa.js): pixel art 9x9 desenhado em código, um desenho diferente por status (não só a cor), o
