@@ -61,8 +61,8 @@ function carregar(globais = {}) {
 const pessoa = (usuario, nome, x, y, sala, extra = {}) => ({ usuario, nome, aparencia: null, x, y, destino: null, sala, olha: "baixo", ...extra });
 
 // o mundo com o meu boneco já parado na recepção e as pessoas da lista
-async function montar(lista, eu = "eu") {
-  const t = carregar();
+async function montar(lista, eu = "eu", globais = {}) {
+  const t = carregar(globais);
   t.Vida.aoVivo({ invisivel: () => false });
   await t.responder("api/perfil", 200, { usuario: "eu", nome: "Eu Mesmo", avatar: null });
   await t.responder("api/ao-vivo", 200, { seq: 1, eu, pessoas: lista, mensagens: [] });
@@ -247,6 +247,115 @@ async function montar(lista, eu = "eu") {
     assert.equal(t.Vida.dmCom(ana.chave, { equipe: { dm: true }, noSaguao: true }), null, "no saguão, não");
     assert.equal(t.Vida.dmCom(ana.chave, { equipe: { dm: false }, noSaguao: false }), null);
     assert.equal(t.Vida.dmCom(ana.chave, { equipe: null, noSaguao: false }), null, "store desligado");
+    assert.equal(t.Vida.dmCom(ana.chave, { equipe: { dm: true, pode_escrever: false }, noSaguao: false }), null, "quem só lê não manda DM");
+    assert.equal(t.Vida.dmCom(ana.chave, { equipe: { dm: true, pode_escrever: true }, noSaguao: false }), "ana");
+  }
+
+  // modo apresentação (1.6 Onda 3): com o window.Apresentacao ligado, o nome mostrado de agentes, pessoas e o meu sai dele
+  // ("Agente 1", "Pessoa 1", "Você") desde a chegada (sincronizar, /api/ao-vivo, perfil); desligar e Vida.renomear() devolve
+  // os nomes reais. O nome mascarado vale para tudo o que lê b.nome (etiqueta, lista do andar, placar e faixa do ringue)
+  {
+    const { t, m } = await montar([pessoa("ana", "Ana Lima", 160, 100, "recepcao")]);
+    let ligado = true;
+    t.contexto.Apresentacao = { ligado: () => ligado, nome: b => (b.eu ? "Você" : b.handle ? "Agente 1" : "Pessoa 1") };
+    t.Vida.renomear();
+    const nomes = () => [...t.Vida.pessoas().map(p => p.nome)].sort();
+    assert.deepEqual(nomes(), ["Pessoa 1", "Você"]);
+    t.Vida.sincronizar(m, [{ id: "a1", handle: "bot", nome: "Robô do Financeiro", funcao: "" }], [], new Map(), () => ({ color: "graphite" }), true);
+    assert.equal(m.bonecos.get("a1").nome, "Agente 1", "agente novo já chega mascarado");
+    await t.proximoAoVivo();
+    await t.responder("api/ao-vivo", 200, { seq: 2, eu: "eu", pessoas: [pessoa("ana", "Ana Lima", 160, 100, "recepcao")] });
+    assert.deepEqual(nomes(), ["Pessoa 1", "Você"], "a leitura seguinte não devolve o nome real");
+    assert.ok(t.Vida.equipe(m).every(p => !/Ana|Eu Mesmo/.test(p.nome)), "a lista do andar também");
+    ligado = false;
+    t.Vida.renomear();
+    assert.deepEqual(nomes(), ["Ana Lima", "Eu Mesmo (você)"]);
+    assert.equal(m.bonecos.get("a1").nome, "Robô do Financeiro");
+    t.Vida.sincronizar(m, [{ id: "a1", handle: "bot", nome: "Robô Novo", funcao: "" }], [], new Map(), () => ({ color: "graphite" }), false);
+    assert.equal(m.bonecos.get("a1").nome, "Robô Novo");
+    delete t.contexto.Apresentacao;   // sem o apresentacao.js (TV, prévia): os nomes de sempre
+    t.Vida.renomear();
+    assert.equal(m.bonecos.get("a1").nome, "Robô Novo");
+  }
+
+  // reunião geral (1.6 Onda 3): a "convocacao" do /api/ao-vivo leva o meu boneco até a sala, com o balão "Reunião geral"
+  // em mim e em quem está no andar; a mesma convocação (seq) não repete. Enquanto anda, o modo econômico fica na taxa cheia
+  {
+    const { t, m, eu } = await montar([pessoa("ana", "Ana", 150, 100, "recepcao")]);
+    await t.proximoAoVivo();
+    await t.responder("api/ao-vivo", 200, { seq: 3, eu: "eu", pessoas: [pessoa("ana", "Ana", 150, 100, "recepcao")],
+      convocacao: { sala: "reuniao", de: "beto", nome: "Beto", seq: 3 } });
+    await t.passos(m, 1);
+    assert.ok(eu.rota.length > 0, "o meu boneco parte para a sala");
+    const fim = eu.rota.at(-1);
+    assert.ok(fim[0] > 100 && fim[0] < 220 && fim[1] > 220 && fim[1] < 300, `o destino é dentro da sala de reunião: ${fim}`);
+    assert.equal(eu.fala, "Reunião geral");
+    assert.equal(t.Vida.pessoas().find(p => !p.eu).fala, "Reunião geral", "quem está no andar também mostra o balão");
+    assert.equal(t.Vida.mexendo(m), true, "andando: taxa cheia");
+    const ev = t.eventos.find(e => e.type === "convocacao");
+    assert.ok(ev && ev.detail.nome === "Beto" && ev.detail.sala === "Reunião", "a tela pode avisar quem chamou e onde");
+    await t.passos(m, 600, () => !eu.rota.length);
+    assert.equal(eu.sala, "reuniao", "chegou na sala");
+    await t.proximoAoVivo();
+    await t.responder("api/ao-vivo", 200, { seq: 4, eu: "eu", pessoas: [], convocacao: { sala: "recepcao", de: "beto", nome: "Beto", seq: 3 } });
+    await t.passos(m, 1);
+    assert.equal(eu.rota.length, 0, "a mesma convocação não repete");
+    await t.proximoAoVivo();
+    await t.responder("api/ao-vivo", 200, { seq: 5, eu: "eu", pessoas: [], convocacao: { sala: "sala:nada", de: "x", nome: "X", seq: 5 } });
+    await t.passos(m, 1);
+    assert.equal(eu.rota.length, 0, "sala que não existe no mapa: nada");
+  }
+
+  // com "reduzir movimento", o boneco aparece direto na sala (sem caminhar) e avisa o servidor
+  {
+    const { t, m, eu } = await montar([], "eu", { matchMedia: () => ({ matches: true }) });
+    await t.proximoAoVivo();
+    await t.responder("api/ao-vivo", 200, { seq: 3, eu: "eu", pessoas: [], convocacao: { sala: "reuniao", de: "beto", nome: "Beto", seq: 3 } });
+    await t.passos(m, 1);
+    assert.equal(eu.rota.length, 0);
+    assert.ok(eu.y > 220 && eu.y < 300, "já na sala");
+    assert.equal(eu.sala, "reuniao");
+  }
+
+  // a placa "Em reunião": o reunioes_v do /api/ao-vivo faz ler a agenda (GET /api/reunioes); a sala fica "em reunião"
+  // enquanto inicio <= agora < fim. O mesmo v não relê; sem o campo (saguão, store desligado), não pede nada
+  {
+    const { t } = await montar([]);
+    assert.equal(t.pedidos.some(p => p.url.includes("api/reunioes")), false, "sem reunioes_v, sem pedido");
+    await t.proximoAoVivo();
+    await t.responder("api/ao-vivo", 200, { seq: 3, eu: "eu", pessoas: [], reunioes_v: 7 });
+    const agora = Math.floor(Date.now() / 1000);
+    await t.responder("api/reunioes", 200, { v: 7, reunioes: [
+      { id: 1, titulo: "Planejamento", sala: "reuniao", inicio: agora - 60, duracao: 30, fim: agora + 1740 },
+      { id: 2, titulo: "Depois", sala: "cozinha", inicio: agora + 3600, duracao: 30, fim: agora + 5400 },
+      { id: 3, titulo: "Lixo", sala: 5, inicio: "x", fim: null }] });
+    assert.equal(t.Vida.emReuniao("reuniao"), true);
+    assert.equal(t.Vida.emReuniao("cozinha"), false, "marcada para depois");
+    assert.equal(t.Vida.emReuniao("recepcao"), false);
+    const pedidos = () => t.pedidos.filter(p => p.url.includes("api/reunioes")).length;
+    assert.equal(pedidos(), 1);
+    await t.proximoAoVivo();
+    await t.responder("api/ao-vivo", 200, { seq: 4, eu: "eu", pessoas: [], reunioes_v: 7 });
+    assert.equal(pedidos(), 1, "o mesmo v não relê");
+    await t.proximoAoVivo();
+    await t.responder("api/ao-vivo", 200, { seq: 5, eu: "eu", pessoas: [], reunioes_v: 8 });
+    await t.responder("api/reunioes", 200, { v: 8, reunioes: [] });
+    assert.equal(t.Vida.emReuniao("reuniao"), false, "cancelada");
+  }
+
+  // a placa na porta (mapa.js): perto da porta, do lado do corredor, sem sair da parede da sala
+  {
+    const c = { window: {}, console }; c.window = c;
+    vm.runInNewContext(fs.readFileSync("static/mapa.js", "utf8"), c);
+    const cima = { px: 100, py: 40, pw: 200, ph: 100, porta: { x: 160 } }, baixo = { px: 100, py: 200, pw: 200, ph: 100, chao: 236, portas: [160] };
+    const canto = { px: 100, py: 200, pw: 200, ph: 100, chao: 236, portas: [274] };   // porta na ponta (a cozinha): a placa vai para a esquerda
+    const k = c.Mapa.placaReuniao(canto);
+    assert.ok(k.x + k.w < 274 - 8 && k.x >= canto.px, `à esquerda da porta: ${JSON.stringify(k)}`);
+    const a = c.Mapa.placaReuniao(cima), b = c.Mapa.placaReuniao(baixo);
+    assert.ok(a.x >= cima.px && a.x + a.w <= cima.px + cima.pw && Math.abs(a.y - (cima.py + cima.ph)) < 14, `em cima: junto da porta de baixo ${JSON.stringify(a)}`);
+    assert.ok(a.x > 160 + 14 || a.x + a.w < 160 - 14, "sem cobrir a porta");
+    assert.ok(b.x >= baixo.px && b.x + b.w <= baixo.px + baixo.pw && b.y >= baixo.py && b.y + b.h <= baixo.chao, `embaixo: na parede ${JSON.stringify(b)}`);
+    assert.ok(b.x > 160 + 8 || b.x + b.w < 160 - 8, "sem cobrir a porta");
   }
 
   // o ícone do status (mapa.js): pixel art 9x9 desenhado em código, um desenho diferente por status (não só a cor), o
