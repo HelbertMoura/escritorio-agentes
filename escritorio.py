@@ -56,6 +56,7 @@ import anexos  # noqa: E402
 from conversas_equipe import (ANEXO_MAX, AVISO_ANTES, CONVIDADOS_MAX, DURACAO_MAX, DURACAO_MIN, EMOJIS, STATUS,  # noqa: E402
                               TITULO_MAX, AgendaCheia, CotaCheia, Equipe, SalaOcupada, SemAcesso, hosts_reuniao)
 from jornal import JORNAL_BYTES, Jornal, validar as validar_jornal  # noqa: E402
+from linha import ID_OK as LINHA_AGENTE, Linha  # noqa: E402
 from novidades import Novidades  # noqa: E402
 from planta import PLANTA_BYTES, Planta, validar_planta  # noqa: E402
 from social import PLACAR_BYTES, PLACAR_MAX, PLACAR_TETO, Social  # noqa: E402
@@ -179,6 +180,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "avisar.js": "text/javascript; charset=utf-8", "resposta_rapida.js": "text/javascript; charset=utf-8",
     "novidades.js": "text/javascript; charset=utf-8",
     "reunioes.js": "text/javascript; charset=utf-8", "reunioes.css": "text/css; charset=utf-8",
+    "linha_tempo.js": "text/javascript; charset=utf-8", "linha_tempo.css": "text/css; charset=utf-8",
     "apresentacao.js": "text/javascript; charset=utf-8",
     "manifest.webmanifest": "application/manifest+json", "icone-180.png": "image/png", "icone-192.png": "image/png",
     "icone-512.png": "image/png", "icone-mascara-512.png": "image/png",
@@ -708,11 +710,13 @@ class Diario:
     LIMITE = 50
     PEDIDO = {"waiting_approval": "pediu_aprovacao", "waiting_input": "pediu_resposta"}
     TIPO = {"waiting_approval": "aprovacao", "waiting_input": "pergunta"}
+    LINHA = {None: "livre", "waiting_approval": "aprovacao", "waiting_input": "resposta"}   # o resto: "trabalhando"
 
     def __init__(self):
         self.runs = {}  # run_id -> {"status", "desde", "agente", "inicio", "rotulo"}
         self.eventos = collections.deque(maxlen=self.LIMITE)  # do mais novo para o mais velho
         self.novos = []   # os eventos só da última leitura, (tipo, id do agente, run_id): para o jornal e o push
+        self.transicoes = []   # as mudanças só da última leitura, (id do agente, de, para): para a linha do tempo
         self.resolvidos = collections.deque(maxlen=self.LIMITE)  # (instante, item), do mais novo para o mais velho
         self.base = False
 
@@ -733,7 +737,7 @@ class Diario:
         agora = time.time() if agora is None else agora
         em = _iso(agora)
         vistos = set()
-        self.novos = []
+        self.novos, self.transicoes = [], []
         for t in tarefas:
             rid, st = t["run_id"], t["status"]
             if rid in vistos:  # run_id repetido na mesma leitura: vale o primeiro (a cópia leva o mesmo "desde")
@@ -745,6 +749,7 @@ class Diario:
                 agente = handles.get(t["agente_id"], "")
                 if self.base:
                     self._transicao(em, agente, t["agente_id"], rid, antes and antes["status"], st)
+                    self.transicoes.append((t["agente_id"], self._linha(antes and antes["status"]), self._linha(st)))
                     if antes and antes["status"] in self.PEDIDO:
                         self._resolvido(agora, antes, rid, "outro_pedido" if st in self.PEDIDO else "voltou_a_trabalhar")
                 antes = self.runs[rid] = {"status": st, "desde": em, "agente": agente, "agente_id": t["agente_id"],
@@ -755,11 +760,15 @@ class Diario:
         for rid in [r for r in self.runs if r not in vistos] if completa else []:
             if self.base:
                 self._evento(em, "terminou", self.runs[rid]["agente"], rid, self.runs[rid]["agente_id"])
+                self.transicoes.append((self.runs[rid]["agente_id"], self._linha(self.runs[rid]["status"]), "livre"))
                 if self.runs[rid]["status"] in self.PEDIDO:
                     self._resolvido(agora, self.runs[rid], rid, "terminou")
             del self.runs[rid]
         self.base = True
         return list(self.eventos)
+
+    def _linha(self, status):
+        return self.LINHA.get(status, "trabalhando")
 
     def _transicao(self, em, agente, agente_id, rid, antes, agora):
         if antes is None:
@@ -871,6 +880,7 @@ class Leitor(threading.Thread):
         self.conferir, self.conferindo = None, None
         self.jornal = None   # o Jornal da semana, posto pelo main(); conta a cada leitura que deu certo
         self.avisos = None   # o push (avisos.py), posto pelo main(): os pedidos novos vão para a fila dele
+        self.linha = None   # a linha do tempo (linha.py), posta pelo main(): as transições de cada leitura, no disco
         self.agentes, self.agentes_ok, self.agentes_em = None, True, 0.0   # list_agents guardado entre as recargas
         self.seguidos_429 = self.seguidos_erro = 0
         self.pausa_ate = 0.0   # fim da pausa pedida por um 429; as rotas que chamam o MCP consultam pausado()
@@ -982,6 +992,8 @@ class Leitor(threading.Thread):
             self.diario.aplicar(novo, completa)
             if self.jornal:   # nunca levanta: o jornal não derruba a leitura
                 self.jornal.ler(self.diario.novos, novo, agora)
+            if self.linha:   # fora da trava, nunca levanta: o disco não segura nem derruba a leitura
+                self.linha.gravar(self.diario.transicoes, agora)
             if self.avisos:   # só põe na fila, sem rede; nunca levanta
                 self.avisos.transicoes(self.diario.novos, novo, agora)
             novo.update(atualizado=_iso(agora), erro=None, conexao="conectado")
@@ -2734,7 +2746,7 @@ REUNIAO_POST = frozenset({"/api/reunioes/marcar", "/api/reunioes/editar", "/api/
 REUNIAO_ADMIN_POST = frozenset({"/api/reunioes/link", "/api/reunioes/convocar"})
 EQUIPE_GET, EQUIPE_POST = EQUIPE_GET | REUNIAO_GET, EQUIPE_POST | REUNIAO_POST
 MEMBRO_GET = frozenset({"/", "", "/api/estado", "/api/config", "/api/social", "/api/social/placar", "/api/jornal",
-                        "/api/novidades", "/api/avisos", "/api/push/chave", "/api/perfil", "/api/ao-vivo"}) | EQUIPE_GET
+                        "/api/linha", "/api/fora", "/api/novidades", "/api/avisos", "/api/push/chave", "/api/perfil", "/api/ao-vivo"}) | EQUIPE_GET
 MEMBRO_POST = frozenset({"/sair", "/api/sair-todos", "/api/push/assinar", "/api/push/sair", "/api/perfil",
                          "/api/presenca", "/api/sala/enviar"}) | EQUIPE_POST
 # 1.6: a guarda decide pelo papel NO ANDAR do pedido (?andar=). Do prédio, para toda conta com pelo menos 1 andar: a
@@ -2754,7 +2766,8 @@ SAGUAO_GET = PREDIO_GET | {"/api/estado", "/api/config", "/api/ao-vivo", "/api/c
 SAGUAO_POST = PREDIO_POST | {"/api/presenca", "/api/sala/enviar", "/api/canal/enviar", "/api/canal/apagar",
                              "/api/canal/lida", "/api/canal/reagir", "/api/mural/fixar", "/api/mural/tirar",
                              "/api/status", "/api/aceno"}
-SAGUAO_NAO_TEM = frozenset({"/api/social", "/api/social/placar", "/api/jornal", "/api/conversa", "/oauth/conectar",
+SAGUAO_NAO_TEM = frozenset({"/api/social", "/api/social/placar", "/api/jornal", "/api/linha", "/api/fora",
+                            "/api/conversa", "/oauth/conectar",
                             "/api/dm", "/api/pessoas", "/api/anexo"}) | AUDITORIA_GET | REUNIAO_GET   # 404
 SALAS_FIXAS = frozenset({"", "recepcao", "reuniao", "cozinha", "lounge"})   # "": o corredor (mapa.js: chave de cada sala)
 
@@ -2899,6 +2912,7 @@ class AndarPrincipal:
     conversas = property(lambda self: getattr(self.srv, "conversas", None))
     respostas = property(lambda self: getattr(self.srv, "respostas", None))
     jornal = property(lambda self: getattr(self.srv, "jornal", None))
+    linha = property(lambda self: getattr(self.srv, "linha", None))
     social = property(lambda self: getattr(self.srv, "social", None))
     planta = property(lambda self: getattr(self.srv, "planta", None))
 
@@ -2923,6 +2937,7 @@ class Andar:
         self.jornal = self.leitor.jornal = Jornal(log, FUSO, lambda dados: gravar(arq_jornal, dados), ler_jornal(arq_jornal),
                                                   lambda: ((clima.foto() if clima else None) or {}).get("tipo"),
                                                   lambda: config_publica(self)["expediente"])
+        self.linha = self.leitor.linha = Linha(pasta, FUSO, log)
         self.conversas = Conversas(self.leitor)
         self.respostas = Respostas(self.leitor, self.conversas)
         self.social = Social(self.leitor, lambda: config_publica(self), log, FUSO, guardar=lambda dados: gravar(arq_placar, dados),
@@ -3481,7 +3496,7 @@ class Pagina(BaseHTTPRequestHandler):
         if rota in EQUIPE_GET or rota in AUDITORIA_GET:   # as conversas da equipe e a auditoria de DM (Onda 2)
             return self._get_equipe(rota, caminho, usuario)
         por_andar =("/api/estado", "/api/config", "/api/social", "/api/social/placar", "/api/jornal", "/api/conversa",
-                     "/oauth/conectar", "/api/ao-vivo", "/api/membros")
+                     "/oauth/conectar", "/api/ao-vivo", "/api/membros", "/api/linha", "/api/fora")
         andar = self._andar() if rota in por_andar else None
         if rota in por_andar and andar is None:
             return self._sem_andar()
@@ -3590,6 +3605,26 @@ class Pagina(BaseHTTPRequestHandler):
             foto = andar.leitor.foto()   # a conexão vai junto: sem leitura, a página diz por que a edição está vazia
             presentes = {a["id"] for a in foto.get("agentes", [])}
             return self._json(200, {**jornal.publico(time.time(), presentes), "conexao": foto.get("conexao") or "carregando"})
+        if rota in ("/api/linha", "/api/fora"):   # a linha do tempo (linha.py): só ids de agente, estados e horas
+            linha, q, agora = andar.linha, urllib.parse.parse_qs(caminho.query), time.time()
+            if andar.saguao:   # o saguão não tem agentes: nem para o admin do prédio
+                return self._sem_andar()
+            if not linha:
+                return self._json(*erro(404, "linha_desligada", "A linha do tempo está desligada neste escritório."))
+            if rota == "/api/fora":   # o resumo desde a última visita (o navegador guarda quando foi)
+                desde = q.get("desde", [""])[0]
+                if not re.fullmatch(r"[0-9]{1,12}", desde):
+                    return self._json(*erro(400, "pedido", "Informe desde, em segundos."))
+                return self._json(200, linha.fora(int(desde), agora))
+            agente, dia = q.get("agente", [""])[0], q.get("dia", [""])[0] or linha.dia_de(agora).isoformat()
+            try:
+                datetime.date.fromisoformat(dia)
+                dia_ok = re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", dia) is not None
+            except ValueError:
+                dia_ok = False
+            if not dia_ok or not LINHA_AGENTE.fullmatch(agente):
+                return self._json(*erro(400, "pedido", "Informe o agente e o dia (AAAA-MM-DD)."))
+            return self._json(200, {"agente": agente, "dia": dia, "itens": linha.do_dia(agente, dia)})
         if rota == "/api/novidades":   # do disco, sem chamar o agentes.chat; ausente ou ilegível sai com entradas: []
             return self._json(200, {"versao": VERSAO, "entradas": NOVIDADES.publico()})
         if rota in ("/api/push/chave", "/api/avisos"):   # o aviso no celular (avisos.py); o rótulo da tarefa nunca sai
@@ -5237,7 +5272,7 @@ def main():
         avisos.expediente = lambda andar=ANDAR_PRINCIPAL: config_publica(
             srv.andares.get(andar) or AndarPrincipal(srv))["expediente"]
         avisos.start()
-    srv.cred = srv.leitor = srv.conversas = srv.respostas = srv.jornal = srv.social = None   # o saguão não tem nada disso
+    srv.cred = srv.leitor = srv.conversas = srv.respostas = srv.jornal = srv.social = srv.linha = None   # o saguão não tem nada disso
     if not registro.saguao:
         cred = Credenciais(ARQ_TOKEN)
         leitor = Leitor(cred)
@@ -5245,6 +5280,7 @@ def main():
         leitor.jornal = Jornal(log, FUSO, lambda dados: gravar(ARQ_JORNAL, dados), ler_jornal(),
                                lambda: (clima.foto() or {}).get("tipo"), lambda: config_publica()["expediente"])
         leitor.avisos = avisos.do_andar(ANDAR_PRINCIPAL) if avisos else None
+        srv.linha = leitor.linha = Linha(DADOS, FUSO, log)   # dado de agente, não de pessoa: o principal também tem
         leitor.start()
         srv.cred, srv.leitor = cred, leitor
         srv.conversas = Conversas(leitor)
