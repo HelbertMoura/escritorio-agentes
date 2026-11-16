@@ -170,6 +170,7 @@ const Personalizar = (() => {
     $("m-empresa").value = salvo.empresa; $("m-cor").value = salvo.cor; $("m-abre").value = salvo.abre; $("m-fecha").value = salvo.fecha; $("m-serio").checked = salvo.serio;
     mostrarLogo(salvo.logo);
     aviso(""); mudou();
+    mostrarRetencao(cfg);
     lerPerfil();
   }
   window.addEventListener("hashchange", () => { // saiu sem salvar: volta a cor e descarta o logo escolhido
@@ -227,6 +228,74 @@ const Personalizar = (() => {
   zona.addEventListener("dragleave", () => zona.classList.remove("sobre"));
   zona.addEventListener("drop", ev => { ev.preventDefault(); zona.classList.remove("sobre"); escolherLogo(ev.dataTransfer.files[0]); });
   $("m-remover").addEventListener("click", () => { esquecerLogo(); tirarLogo = true; mostrarLogo(LOGO_PADRAO); mudou(); });
+
+  // ---------- Prazo das conversas da equipe (D3): só o admin do andar e só com config.equipe ------------------------
+  // Um cartão próprio, criado aqui (sem mexer no index.html), com o salvar dele: POST /api/canal/retencao?andar= {dias}.
+  // A empresa só baixa de 1 ano; diminuir apaga já o que passou do prazo, então pede confirmação antes.
+  const PRAZOS = [[365, "1 ano (padrão)"], [90, "90 dias"], [30, "30 dias"]];
+  let ret = null;   // {form, opcoes, confirmar, aviso, cfg}
+  function montarRetencao() {
+    const criar = (tag, classe, texto) => { const e = document.createElement(tag); if (classe) e.className = classe; if (texto != null) e.textContent = texto; return e; };
+    const form = criar("form", "cartao form-marca"), campo = criar("fieldset"), aviso = criar("p", "aviso-form");
+    form.id = "form-retencao"; form.noValidate = true;
+    const titulo = criar("legend", null, "Conversas da equipe: por quanto tempo guardar"), ajuda = criar("p", "ajuda",
+      "Mensagens, anexos e mensagens diretas mais antigas que o prazo são apagadas de vez, todo dia. O prazo vale para todo o andar.");
+    ajuda.id = "ret-ajuda"; campo.setAttribute("aria-describedby", ajuda.id);
+    campo.append(titulo, ajuda);
+    const opcoes = PRAZOS.map(([dias, rotulo]) => {
+      const l = criar("label", "marcar"), r = criar("input");
+      r.type = "radio"; r.name = "ret-dias"; r.value = String(dias);
+      r.addEventListener("change", () => { confirmar.hidden = true; mostrar(""); });
+      l.append(r, criar("span", null, rotulo)); campo.append(l);
+      return r;
+    });
+    const confirmar = criar("div", "confirmar-retencao"), texto = criar("p", "aviso-form ruim"), acoes = criar("div", "acoes");
+    confirmar.dataset.papel = "confirmar"; confirmar.hidden = true; confirmar.setAttribute("role", "alert");
+    const sim = criar("button", "botao", "Diminuir e apagar"), nao = criar("button", "botao fantasma", "Cancelar");
+    sim.type = nao.type = "button";
+    acoes.append(sim, nao); confirmar.append(texto, acoes);
+    aviso.setAttribute("role", "status");
+    const salvar = criar("button", "botao", "Salvar o prazo"), rodape = criar("div", "acoes");
+    salvar.type = "submit"; rodape.append(salvar);
+    form.append(campo, confirmar, aviso, rodape);
+    const mostrar = (t, tipo) => { aviso.textContent = t; aviso.className = "aviso-form" + (tipo ? ` ${tipo}` : ""); };
+    const atual = () => (ret.cfg.equipe && Number.isInteger(ret.cfg.equipe.retencao) ? ret.cfg.equipe.retencao : 365);
+    const escolhido = () => Number((opcoes.find(r => r.checked) || {}).value || atual());
+    async function enviarPrazo(dias) {
+      salvar.disabled = sim.disabled = true; mostrar("Salvando…");
+      try {
+        const r = await fetch(Andar.com("api/canal/retencao"), { method: "POST", credentials: "same-origin",
+          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dias }) });
+        if (r.status === 401) { location.href = "/entrar"; return; }
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { mostrar(`Não salvou: ${typeof d.mensagem === "string" && d.mensagem ? d.mensagem : `o servidor respondeu ${r.status}.`}`, "ruim"); return; }
+        if (ret.cfg.equipe && Number.isInteger(d.retencao)) ret.cfg.equipe.retencao = d.retencao;
+        confirmar.hidden = true; mostrar("Prazo salvo.", "ok");
+      } catch (e) { mostrar("Não salvou: sem conexão.", "ruim"); }
+      finally { salvar.disabled = sim.disabled = false; }
+    }
+    form.addEventListener("submit", ev => {
+      ev.preventDefault();
+      const dias = escolhido();
+      if (dias === atual()) { confirmar.hidden = true; mostrar("Esse já é o prazo."); return; }
+      if (dias > atual()) return enviarPrazo(dias);   // aumentar não apaga nada
+      texto.textContent = `Diminuir para ${dias} dias apaga agora, sem volta, as mensagens e os anexos com mais de ${dias} dias.`;
+      confirmar.hidden = false; nao.focus();
+    });
+    sim.addEventListener("click", () => enviarPrazo(escolhido()));
+    nao.addEventListener("click", () => { confirmar.hidden = true; marcar(); mostrar(""); salvar.focus(); });
+    function marcar() { for (const r of opcoes) r.checked = Number(r.value) === atual(); }
+    $("form-marca").after(form);
+    return { form, marcar };
+  }
+  function mostrarRetencao(cfg) {
+    const pode = !!cfg && !!cfg.equipe && Andar.perfil(cfg).admin;
+    if (!pode) { if (ret) ret.form.hidden = true; return; }
+    if (!ret) ret = { cfg };
+    ret.cfg = cfg;
+    if (!ret.form) Object.assign(ret, montarRetencao());
+    ret.form.hidden = false; ret.marcar();
+  }
 
   // ---------- Meu perfil (qualquer papel): GET e POST /api/perfil, só da própria conta ---------------
   // Lido uma vez por página aberta; um servidor sem a rota (404/403) deixa a seção escondida. Mensagens do servidor, só por textContent.

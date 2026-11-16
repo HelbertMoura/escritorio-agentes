@@ -14,7 +14,7 @@ function elemento(id = "") {
     addEventListener(t, f) { (e.ouvintes[t] ||= []).push(f); },
     setAttribute(k, v) { e.attrs[k] = String(v); }, getAttribute: k => e.attrs[k] ?? null, removeAttribute(k) { delete e.attrs[k]; },
     replaceChildren(...f) { e.filhos = f; }, append(...f) { e.filhos.push(...f); }, prepend(...f) { e.filhos.unshift(...f); },
-    before(...f) { e.antes.push(...f); }, replaceWith() {}, focus() {}, select() {}, closest: () => elemento(), querySelector: () => elemento(),
+    before(...f) { e.antes.push(...f); }, after() {}, replaceWith() {}, focus() {}, select() {}, closest: () => elemento(), querySelector: () => elemento(),
     querySelectorAll: () => [], getContext: () => TELA, classList: { toggle() {}, add() {}, remove() {} },
   };
   return e;
