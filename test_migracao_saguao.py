@@ -14,6 +14,7 @@ from unittest import mock
 
 import andares
 import conversas_equipe
+import linha
 import migracao_saguao as ms
 from migracao_saguao import MigracaoRecusada, ServicoRodando
 
@@ -55,6 +56,8 @@ class Base(unittest.TestCase):
                                ("jornal.json", '{"dias": []}'), ("marca.json", '{"empresa": "Dev Maniac\'s", "cor": "#123456"}'),
                                ("push.json", "[]"), ("sessoes.json", "{}"), ("vapid.json", "{}")):
             self.escreve(os.path.join(self.dados, nome), conteudo)
+        os.makedirs(os.path.join(self.dados, linha.PASTA))   # a linha do tempo dos agentes (1.6 Onda 2b): da empresa
+        self.escreve(os.path.join(self.dados, linha.PASTA, "2026-11-16.jsonl"), '{"t": 1}\n')
         with open(os.path.join(self.dados, "logo.img"), "wb") as f:
             f.write(b"\x89PNG\r\n\x1a\nlogo")
         self.escreve(os.path.join(self.dados, "andares.json"),
@@ -98,6 +101,8 @@ class IdaEVolta(Base):
         for nome in ms.MOVER[:5]:
             self.assertTrue(os.path.isfile(os.path.join(pasta, nome)), nome)
             self.assertFalse(os.path.exists(os.path.join(self.dados, nome)), nome)
+        self.assertTrue(os.path.isfile(os.path.join(pasta, linha.PASTA, "2026-11-16.jsonl")))   # a linha vai inteira
+        self.assertFalse(os.path.exists(os.path.join(self.dados, linha.PASTA)))
         for nome, origem in (("times.json", self.times), ("marca.json", os.path.join(self.dados, "marca.json")),
                              ("logo.img", os.path.join(self.dados, "logo.img"))):
             with open(origem, "rb") as a, open(os.path.join(pasta, nome), "rb") as b:

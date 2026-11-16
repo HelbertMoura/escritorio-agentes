@@ -41,6 +41,7 @@ import time
 
 import andares
 import conversas_equipe
+import linha
 from acesso import PAPEIS, UsuariosIlegiveis, gravar, ler_usuarios
 
 if os.name == "nt":
@@ -55,7 +56,7 @@ ESTADOS = ("em_andamento", "feito", "desfazendo", "desfeito")
 PRINCIPAL = andares.PRINCIPAL
 CONVERSAS = (conversas_equipe.ARQ, conversas_equipe.ARQ + "-wal", conversas_equipe.ARQ + "-shm", conversas_equipe.ANEXOS)
 COM_DADO = ("mensagem", "mural", "anexo", "acesso_dm")   # as tabelas que fazem do banco das conversas dado novo
-MOVER = (andares.OAUTH, andares.EQUIPE, andares.PLANTA, andares.PLACAR, andares.JORNAL, *CONVERSAS)
+MOVER = (andares.OAUTH, andares.EQUIPE, andares.PLANTA, andares.PLACAR, andares.JORNAL, linha.PASTA, *CONVERSAS)
 NOME_PADRAO = "Minha empresa"   # o EMPRESA_PADRAO do escritorio.py: marca ausente ou fora do formato
 ESPACO_MIN = 64 * 1024 * 1024
 

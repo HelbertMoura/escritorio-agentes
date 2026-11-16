@@ -19,6 +19,7 @@ ESTADOS = frozenset({"livre", "trabalhando", "aprovacao", "resposta"})
 ESPERAS = frozenset({"aprovacao", "resposta"})
 DIAS = 14
 TETO_DIA = 5000
+PASTA = "linha"   # dados/linha/ (ou andares/<id>/linha/): a migração para o saguão a leva junto
 FORA_MAX = 7 * 86400   # o resumo olha no máximo 7 dias para trás
 ID_OK = re.compile(r"[A-Za-z0-9_-]{1,100}")
 ARQ_OK = re.compile(r"([0-9]{4}-[0-9]{2}-[0-9]{2})\.jsonl")
@@ -32,7 +33,7 @@ def valido(x):
 
 class Linha:
     def __init__(self, pasta, fuso, log=None, teto=TETO_DIA):
-        self.pasta, self.fuso, self.log, self.teto = os.path.join(pasta, "linha"), fuso, log, teto
+        self.pasta, self.fuso, self.log, self.teto = os.path.join(pasta, PASTA), fuso, log, teto
         self.trava = threading.Lock()   # só entre gravações (o Leitor é um só, mas o teto e a limpeza contam juntos)
         self.contagem = {}   # dia -> linhas já no arquivo
         self.falhou = False   # uma linha de log por episódio de falha de disco

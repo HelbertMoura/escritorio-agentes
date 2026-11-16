@@ -54,6 +54,8 @@ async function iniciar() {
   if (!$("v-personalizar").hidden) { Personalizar.abrir(config); Ajustes.abrir(config); }   // abriu direto em #personalizar
   await buscar();
   ligarAoVivo();
+  if (!Brincar.demo && !Andar.perfil(config).noSaguao)   // "Enquanto você esteve fora" (linha_tempo.js); antes da ficha
+    LinhaTempo.iniciar({ json, nome: nomeAgente, ir: id => { const b = boneco(id); if (b) focarAgente(b, { foco: true }); }, andar: Andar.atual });
   irAoAgentePedido();
   irReuniaoPedida();
   ligarTV();
@@ -980,6 +982,7 @@ function renderFicha() {
     ...(t ? [document.createTextNode(" "), elem("span", "ficha-tempo suave", tempoNoEstado(t))] : []));
   if (t) linha("Fazendo", document.createTextNode(t.rotulo || "Tarefa sem descrição"));
   linha("Onde", document.createTextNode(ondeEsta(b)));
+  if (!Brincar.demo && !Andar.perfil(config).noSaguao) linha("Hoje", LinhaTempo.noCard(b.id));   // a linha do tempo (linha_tempo.js)
   if (social && !Brincar.demo) linha("Amizades", secaoAmizades(b));   // a demonstração não tem amizades: nada vai ao servidor
   const acoes = elem("div", "acoes");
   if (resp) { // uma caixa só: a resposta mora na página Conversas, e a ficha leva até ela
