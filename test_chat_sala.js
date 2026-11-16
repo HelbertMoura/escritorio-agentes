@@ -81,6 +81,7 @@ igual(P.completarMencao("oi @an tudo", 3, 6, "ana.lima"), { texto: "oi @ana.lima
 igual(P.partes("oi @ana.lima e @ninguem!", new Set(["ana.lima"])).map(p => [p.texto, !!p.mencao]),
   [["oi ", false], ["@ana.lima", true], [" e @ninguem!", false]]);
 igual(P.partes("sem", new Set()).map(p => p.texto), ["sem"]);
+igual(P.partes("valeu, @bia.santos.", new Set(["bia.santos"])).map(p => p.texto), ["valeu, ", "@bia.santos", "."], "o ponto final não é do login");
 // anexos: tamanho legível, teto de 25 MiB e o nome que o servidor aceita
 assert.equal(P.tamanho(512), "512 B");
 assert.equal(P.tamanho(1536), "1,5 KB");

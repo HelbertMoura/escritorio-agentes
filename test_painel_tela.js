@@ -125,6 +125,7 @@ const abas = p => achar(p, "chat-sala-aba").map(b => b.dataset.id);
     const { ids, painel, pedidos } = carregar({ config: SAGUAO, respostas: RESP, sala: "recepcao" });
     ids["chat-sala-abrir"].click(); await espera(); await espera();
     assert.deepEqual(abas(painel), ["geral"]);
+    assert.equal(achar(painel, "chat-sala-abas")[0].hidden, true, "uma aba só: a barra some");
     assert.equal(achar(painel, "chat-sala-anexar")[0].hidden, true);
     assert.equal(pedidos.some(p => p.rota === "api/pessoas"), false);
     assert.equal(achar(painel, "chat-sala-titulo").length + todos(painel).filter(x => x.id === "chat-sala-titulo").length > 0, true);

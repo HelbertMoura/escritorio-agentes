@@ -62,7 +62,7 @@ const ChatSala = (() => {
   }
   // o texto em pedaços para o textContent: "@login" de alguém do andar vira destaque
   function partes(texto, logins) {
-    const saida = [], re = /(^|\s)@([a-z0-9][a-z0-9._-]{2,31})/g;
+    const saida = [], re = /(^|\s)@([a-z0-9][a-z0-9._-]{1,30}[a-z0-9])/g;   // o login termina em letra ou número: "@ana." não leva o ponto
     let de = 0, m;
     while ((m = re.exec(texto))) {
       const ini = m.index + m[1].length, fim = ini + 1 + m[2].length;
@@ -145,7 +145,7 @@ const ChatSala = (() => {
     if (m.apagada) { li.append(criar("p", "chat-sala-texto", "Mensagem apagada.")); return li; }
     if (typeof m.texto === "string" && m.texto) {
       const p = criar("p", "chat-sala-texto");
-      for (const parte of partes(m.texto, ctx.logins))
+      for (const parte of partes(m.texto, ctx.eu ? new Set([...ctx.logins, ctx.eu]) : ctx.logins))   // a lista do andar vem sem mim
         p.append(parte.mencao ? criar("span", "chat-sala-mencao" + (parte.mencao === ctx.eu ? " a-mim" : ""), parte.texto) : parte.texto);
       li.append(p);
     }
@@ -436,6 +436,7 @@ const ChatSala = (() => {
         if (a.id === atual) b.setAttribute("aria-current", "true");
         return b;
       }));
+      ui.abas.hidden = ui.abas.children.length < 2;   // o saguão só tem o Geral: o título já diz
       contar();
     }
     function tituloDa(vista) {
@@ -472,11 +473,11 @@ const ChatSala = (() => {
     function desenharMsgs(rolarFim) {
       const ctx = { eu: eu(), logins: new Set(s.pessoas.map(p => p.usuario)), andar: s.andar, moderar: !!eq().pode_moderar,
         ler: s.vista.startsWith("auditoria:") };
-      const noFim = ui.lista.scrollHeight - ui.lista.scrollTop - ui.lista.clientHeight < 40;
+      const noFim = ui.corpo.scrollHeight - ui.corpo.scrollTop - ui.corpo.clientHeight < 40;   // quem rola é o corpo
       ui.lista.replaceChildren(...s.msgs.map(m => elMensagem(m, ctx)));
       ui.vazio.textContent = ctx.ler ? "Nenhuma mensagem nesta conversa." : "Ninguém escreveu aqui ainda.";
       ui.vazio.hidden = s.msgs.length > 0; ui.antes.hidden = !s.mais;
-      if (rolarFim || noFim) ui.lista.scrollTop = ui.lista.scrollHeight;
+      if (rolarFim || noFim) ui.corpo.scrollTop = ui.corpo.scrollHeight;
     }
     async function carregarCanal(antes) {
       const vista = s.vista, { ok, d } = await pedir(ROTAS.historico(vista, antes));

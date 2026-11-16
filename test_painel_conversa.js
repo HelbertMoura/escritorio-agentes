@@ -48,6 +48,11 @@ const ctx = { eu: "joao", logins: new Set(["joao", "ana.lima"]), andar: "a1b2c3d
   assert.equal(achar(li, "chat-sala-apagar").length, 0);
   assert.ok(!li.classes.has("de-mim"));
 }
+// a lista de pessoas do andar vem sem mim, mas a menção a mim também destaca
+{
+  const li = elMensagem(base, { ...ctx, logins: new Set(["ana.lima"]) });
+  assert.equal(achar(li, "chat-sala-mencao")[0].textContent, "@joao");
+}
 // a minha: "Você", com "Apagar"; o moderador apaga a dos outros no canal, nunca na DM
 {
   const li = elMensagem({ ...base, usuario: "joao" }, ctx);
