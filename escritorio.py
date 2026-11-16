@@ -339,9 +339,10 @@ class Credenciais:
             antigo = self.dados
             # o dicionário novo fica pronto antes da troca: uma resposta ruim nunca derruba a conexão antiga
             try:
-                # conferir_org: o Leitor de um andar extra só publica agentes depois de confirmar a org (E.2 item 5)
+                # conferir_org: o Leitor de um andar extra só publica agentes depois de confirmar a org (E.2 item 5);
+                # o principal clássico (times None) não tem org a conferir
                 novo = {"client_id": pend["client_id"], "redirect_uri": pend["redirect_uri"], "escopo_cliente": pend["escopo"],
-                        "emissor": AGENTES, **tokens(tok, escopo), "conferir_org": True}
+                        "emissor": AGENTES, **tokens(tok, escopo), **({} if self.times is None else {"conferir_org": True})}
             except ValueError:   # resposta que não dá para gravar: o que veio de token válido não fica vivo (B3)
                 self._revogar(tok, pend["client_id"])
                 raise
@@ -920,7 +921,7 @@ class Leitor(threading.Thread):
         self._carregar_canais(token, agora)
         if self.org and outra_org(tarefas, self.org):
             raise OutraOrg()
-        if self.org and getattr(self.cred, "conferir_org", lambda: False)():
+        if self.org and self.cred.conferir_org():
             if not org_confirmada(tarefas, self.org):
                 raise Conferindo()
             self.cred.confirmar_org()
@@ -1079,6 +1080,13 @@ class Leitor(threading.Thread):
             self.conversas, self.zerar_conversas, self.respondidos = {"por_id": {}, "mudou": {}}, True, {}
             self.atendidos = {}
             self.diario_novo = True
+
+    def esvaziar(self):
+        """O andar foi desconectado: nada do que a conta leu (a lista do dia, os agentes, os trabalhos e as tarefas) fica
+        à vista até a próxima conexão."""
+        self.zerar_memoria()
+        with self.trava:
+            self.estado = {**self.estado, "agentes": [], "trabalhos": [], "tarefas": []}
 
     def marcar_respondido(self, id_conversa, agora):
         """Envio que deu certo (M2): até a meia-noite, a leitura desse item sai sem o limite A1. O run de uma resposta
@@ -2184,6 +2192,7 @@ ID_PLACAR = re.compile(r"[A-Za-z0-9_-]{1,100}")
 ARQ_PLANTA = os.path.join(DADOS, "planta.json")   # modo construção; só o POST /api/planta grava, sob a trava da Planta
 ARQ_PUSH = os.path.join(DADOS, "push.json")   # assinaturas do aviso no celular (avisos.py); gravadas sob a trava dele
 ARQ_VAPID = os.path.join(DADOS, "vapid.json")   # a chave privada VAPID (vapid.py), 0600; nunca sai do servidor
+ARQ_SEGREDO_PESSOA = os.path.join(DADOS, "pessoa.chave")   # o segredo do id opaco do saguão (IdPessoa), 0600; nunca sai
 ARQ_JORNAL = os.path.join(DADOS, "jornal.json")   # jornal da semana (jornal.py); só a leitura grava, no máximo 1 vez por minuto
 
 
@@ -2601,6 +2610,7 @@ ADMIN_EMPRESA_POST = MEMBRO_POST | {"/api/membros", "/api/planta", "/api/equipe"
                                     "/oauth/desconectar"}
 SAGUAO_GET = PREDIO_GET | {"/api/estado", "/api/config", "/api/ao-vivo"}
 SAGUAO_POST = PREDIO_POST | {"/api/presenca", "/api/sala/enviar"}
+SAGUAO_NAO_TEM = frozenset({"/api/social", "/api/social/placar", "/api/jornal", "/api/conversa", "/oauth/conectar"})   # 404
 SALAS_FIXAS = frozenset({"", "recepcao", "reuniao", "cozinha", "lounge"})   # "": o corredor (mapa.js: chave de cada sala)
 
 
@@ -3064,16 +3074,20 @@ class Pagina(BaseHTTPRequestHandler):
         if self._admin_do_predio():
             return None
         usuario, papel = self._usuario(), self.server.acesso.papel
+        post = metodo == "POST"
+        if post and rota in ("/sair", "/api/sair-todos"):   # a conta sem andar também consegue sair
+            return None
         meus = self._andares_da_conta()
         if not meus:
             return "papel"
-        post = metodo == "POST"
         if rota in (PREDIO_POST if post else PREDIO_GET) or (not post and nome in ARQUIVOS):
             return None
         if rota == "/oauth/retorno" and not post:   # quem decide é o state, amarrado à conta e ao andar (E.2)
             return None if any(papel(usuario, a) == "admin" for a in meus) else "papel"
         id_andar = self._id_andar()
         if id_andar == ANDAR_PRINCIPAL and saguao(self.server):
+            if not post and rota in SAGUAO_NAO_TEM:
+                return "andar"
             return None if rota in (SAGUAO_POST if post else SAGUAO_GET) else "papel"
         do_andar = rota in (ADMIN_EMPRESA_POST if post else ADMIN_EMPRESA_GET)
         p = self._papel(id_andar)
@@ -3301,9 +3315,10 @@ class Pagina(BaseHTTPRequestHandler):
             return self._envia(302, b"", extra={"Location": "/entrar"})
         if rota == "/oauth/retorno" and self._guarda("GET", rota, nome):   # quem não pode mais conectar: o state se gasta
             estado_oauth = urllib.parse.parse_qs(caminho.query).get("state", [""])[0]
-            for a in getattr(self.server, "andares", {}).values():
-                if hasattr(a.cred, "confere_dono"):
-                    a.cred.confere_dono(estado_oauth, None, False)
+            principal = AndarPrincipal(self.server).cred   # None no saguão
+            for cred in [*([principal] if principal is not None else []),
+                         *(a.cred for a in getattr(self.server, "andares", {}).values())]:
+                cred.confere_dono(estado_oauth, None, False)
         barrado = self._barrado("GET", rota, nome)
         if barrado is not None:
             return barrado
@@ -3360,12 +3375,13 @@ class Pagina(BaseHTTPRequestHandler):
             return self._json(200, cfg)
         if rota == "/api/ao-vivo":   # quem mais está neste andar e o chat da sala; ?invisivel=1 (a TV) só lê
             if self._previa():
-                return self._json(200, {"seq": 0, "pessoas": [], "mensagens": []})
+                return self._json(200, {"seq": 0, "eu": None, "pessoas": [], "mensagens": []})
             q = urllib.parse.parse_qs(caminho.query)
             desde = q.get("desde", ["0"])[0]
-            try:
+            try:   # no saguão o login não sai: cada pessoa vira um id opaco (M2)
                 return self._json(200, self.server.presenca.ao_vivo(andar.id, usuario, int(desde) if desde.isdigit() else 0,
-                                                                    renovar=q.get("invisivel") != ["1"]))
+                                                                    renovar=q.get("invisivel") != ["1"],
+                                                                    mascara=self.server.id_pessoa if andar.saguao else None))
             except LimitePresenca as x:
                 return self._json(*erro(429, "limite", str(x)))
         if rota == "/api/perfil":   # o próprio perfil (nome e boneco), qualquer papel; "aparencia": o boneco que os outros veem
@@ -3452,8 +3468,7 @@ class Pagina(BaseHTTPRequestHandler):
                          None) or AndarPrincipal(self.server)
             # E.2: a volta só vale na sessão de quem começou e com o papel de admin no andar conferido de novo agora.
             # Qualquer outra coisa gasta o state e dá o mesmo 400 do state inválido (fecha o login CSRF)
-            confere = getattr(andar.cred, "confere_dono", None)
-            if andar.cred is None or (confere and not confere(estado_oauth, usuario, self._admin_do_andar(andar.id))):
+            if andar.cred is None or not andar.cred.confere_dono(estado_oauth, usuario, self._admin_do_andar(andar.id)):
                 log(evento="oauth", resultado="estado_recusado", andar=andar.id)
                 return self._envia(400, pagina_aviso(*aviso_retorno(EstadoInvalido())), "text/html; charset=utf-8")
             try:
@@ -4042,6 +4057,10 @@ class Pagina(BaseHTTPRequestHandler):
                 return self._json(*erro(429, "tentativas_demais", "Tentativas demais; espere alguns minutos."))
             return self._json(*erro(403, "senha_incorreta", "Senha incorreta."))
         threading.Thread(target=andar.cred.desconectar, daemon=True).start()   # a revogação é rede: fora do pedido
+        if hasattr(andar.leitor, "esvaziar"):   # o que a conta leu sai da tela já
+            andar.leitor.esvaziar()
+        if andar.conversas:   # as conversas lidas (cache de 60 s)
+            andar.conversas.esquecer()
         if hasattr(andar.leitor, "acordar"):   # a próxima leitura já sai sem conexão
             andar.leitor.acordar()
         log(evento="oauth", resultado="desconectado", usuario=usuario, andar=andar.id)
@@ -4169,6 +4188,32 @@ class Pagina(BaseHTTPRequestHandler):
         return self._envia(404, b"")
 
 
+class IdPessoa:
+    """O id opaco de cada pessoa no saguão (M2): "p_" e 16 hex do HMAC-SHA256 do login com um segredo do servidor,
+    sorteado no primeiro uso e gravado em dados/ (0600). Estável entre reinícios; o login não sai para os outros do
+    prédio. Segredo ilegível ou fora do tamanho: sorteia outro (os ids mudam, nada mais: a presença é só da memória)."""
+
+    def __init__(self, caminho):
+        self.caminho, self.trava, self.chave = caminho, threading.Lock(), None
+
+    def _chave(self):
+        with self.trava:
+            if self.chave is None:
+                try:
+                    with open(self.caminho, "rb") as f:
+                        chave = f.read(33)
+                except FileNotFoundError:
+                    chave = b""
+                if len(chave) != 32:
+                    chave = secrets.token_bytes(32)
+                    gravar(self.caminho, chave)
+                self.chave = chave
+            return self.chave
+
+    def __call__(self, login):
+        return "p_" + hmac.new(self._chave(), login.encode("utf-8"), hashlib.sha256).hexdigest()[:16]
+
+
 class Servidor(ThreadingHTTPServer):
     daemon_threads = True
     request_queue_size = 64  # fila do listen(): com o padrão (5), vários navegadores carregando juntos levavam conexão recusada
@@ -4177,6 +4222,7 @@ class Servidor(ThreadingHTTPServer):
         super().__init__(*args, **kwargs)
         self.salas_visitas = Salas()
         self.presenca = Presenca()   # as pessoas da equipe no mapa e o chat das salas (só na memória)
+        self.id_pessoa = IdPessoa(ARQ_SEGREDO_PESSOA)   # o id opaco das pessoas no saguão (M2)
         self.andares, self.registro_andares = {}, None   # o main() põe os andares extras (andares.py)
         self.proxy_visitas = proxy_visitas(PROXY_VISITAS)
         self.cabecalho_visitas = CABECALHO_VISITAS
@@ -4310,7 +4356,7 @@ def main():
         trava = migracao_saguao.travar(DADOS)   # fica presa pela vida do processo
     except migracao_saguao.ServicoRodando as x:
         sys.exit(str(x))
-    motivo = motivo_da_migracao(migracao_saguao, DADOS)
+    motivo = motivo_da_migracao(DADOS)
     if motivo:
         sys.exit(motivo)
     srv = Servidor((BIND, PORTA), Pagina)  # 127.0.0.1: a Tailscale (serve) publica só na rede privada
@@ -4374,11 +4420,15 @@ def main():
     srv.serve_forever()
 
 
-def motivo_da_migracao(mod, dados):
+def motivo_da_migracao(dados):
     """Por que o serviço não sobe por causa da migração para o saguão (ou None): o diário (dados/migracao-saguao.json)
-    ficou em andamento ou desfazendo, numa queda no meio. Subir assim abriria o modo clássico sem o oauth.json na raiz e
-    travaria a retomada. PROVISÓRIO: o nome e o retorno da função de estado saem do migracao_saguao.py (Trinity)."""
-    estado = mod.estado(dados)
+    ficou em andamento ou desfazendo, numa queda no meio, ou não pode ser lido. Subir assim abriria o modo clássico sem
+    o oauth.json na raiz e travaria a retomada."""
+    import migracao_saguao
+    try:
+        estado = migracao_saguao.estado(dados)
+    except migracao_saguao.MigracaoRecusada as x:
+        return f"migração para o saguão: {x}"
     if estado in ("em_andamento", "desfazendo"):
         return (f"a migração para o saguão ficou pela metade ({estado}): rode de novo `python3 -I escritorio.py saguao`"
                 " (ou `saguao --desfazer`) com o serviço parado antes de subir")

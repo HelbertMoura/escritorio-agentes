@@ -166,34 +166,14 @@ def _convites_do_principal(dados, agora):
 
 
 def _ler_v2(dados):
-    """A lista do andares.json v2, ou None se não for o v2. Validado com as funções públicas do andares.py."""
+    """A lista do andares.json v2, ou None se ele não existir ou for o v1. Lido e validado pelo andares.py (o mesmo
+    Andares do serviço): ilegível ou fora do formato, MigracaoRecusada."""
     try:
-        with open(os.path.join(dados, andares.ARQ), "rb") as f:
-            bruto = json.loads(f.read(andares.BYTES_MAX + 1))
-    except FileNotFoundError:
-        return None
-    except (OSError, ValueError, RecursionError):
-        raise MigracaoRecusada("o andares.json não pode ser lido; corrija ou restaure o backup") from None
-    if not isinstance(bruto, dict) or bruto.get("v") != 2:
-        return None
-    try:
-        if bruto.get("terreo") != "saguao" or not isinstance(bruto.get("andares"), list) \
-                or len(bruto["andares"]) > andares.MAX_EXTRAS:   # o teto do v2 é o mesmo do v1 (o andares.py do Neo)
-            raise ValueError("formato")
-        lista, ids, orgs = [], set(), set()
-        for a in bruto["andares"]:
-            if not isinstance(a, dict) or set(a) != {"id", "nome", "org"} or not isinstance(a["id"], str) \
-                    or not andares.ID_OK.fullmatch(a["id"]) or a["id"] in ids:
-                raise ValueError("andar")
-            org = andares.validar_org(a["org"])
-            if org in orgs:
-                raise ValueError("org repetida")
-            ids.add(a["id"])
-            orgs.add(org)
-            lista.append({"id": a["id"], "nome": andares.validar_nome(a["nome"]), "org": org})
-    except ValueError:
-        raise MigracaoRecusada("o andares.json v2 está fora do formato; corrija ou restaure o backup") from None
-    return lista
+        registro = andares.Andares(dados, None)   # a org do principal só pesa no v1, que o _planejar relê com ela
+    except andares.AndaresIlegiveis:
+        raise MigracaoRecusada("o andares.json não pode ser lido ou está fora do formato; corrija ou restaure o "
+                               "backup") from None
+    return registro.lista if registro.saguao else None
 
 
 def _nome_da_marca(dados):

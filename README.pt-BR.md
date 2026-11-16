@@ -189,6 +189,22 @@ Em **Configurações › Andares**, quem administra o escritório cria um andar 
 
 A lista fica em `dados/andares.json` e os dados de cada andar em `dados/andares/<id>/` (`oauth.json`, `times.json`, `equipe.json`, `planta.json`, `placar.json` e `jornal.json`). A marca, o expediente, o clima, as datas, as visitas e o aviso no celular são do prédio inteiro. Remover um andar desconecta o token dele, mas a pasta fica no servidor: apague `dados/andares/<id>/` à mão se não for usar mais. Um `andares.json` ilegível impede o serviço de subir, para nenhum andar sumir calado.
 
+#### Saguão: o térreo de todas as empresas
+
+A migração para o saguão transforma o térreo num saguão sem agentes, aberto a todas as pessoas do prédio, e sobe a empresa da `AGENTES_ORG` para um andar próprio, como as outras. Ela não roda sozinha: é um comando, com o serviço parado, rodando como o usuário do serviço (o dono da pasta de dados; como outro usuário, a migração recusa):
+
+```bash
+sudo systemctl stop escritorio
+sudo sh -c 'set -a; . /etc/escritorio.env; exec runuser -u escritorio -- /usr/bin/python3 -I /opt/escritorio/escritorio.py saguao'
+sudo systemctl start escritorio
+```
+
+No Docker: `docker compose stop escritorio`, depois `docker compose run --rm escritorio python3 -I escritorio.py saguao` e `docker compose start escritorio`. Faça backup da pasta de dados (ou do volume) antes. O relatório lista as contas que ganharam o andar da empresa, as que ficaram sem ele (dê pela aba Membros) e os convites que esperam e dão o térreo (revogue e reemita com o andar da empresa). Se o processo cair no meio, o serviço não sobe: rode o mesmo comando de novo para terminar.
+
+O `saguao --desfazer` volta ao térreo de antes, mas só enquanto ninguém usou o modo novo: com conversa, mural, anexo ou acesso a DM, ou qualquer dado novo no andar da empresa, ele recusa sem mexer em nada, e a volta passa a ser pelo backup.
+
+**Até migrar para o saguão**, nenhuma segunda empresa vai para produção, nem dado da Onda 2. No modo clássico, o convite de uma empresa sai só pela visão do andar dela (Configurações › Membros com `?andar=<id>` no endereço), para a pessoa não ganhar o térreo, que ainda é o da `AGENTES_ORG`.
+
 ### Equipe
 
 Além de quem administra, o escritório pode ter contas de membro para o resto da equipe. Em **Configurações › Membros**, quem administra escreve o nome da pessoa, marca os andares que ela vai ver e confirma a senha da conta. O escritório mostra o link do convite (`/convite#...`) uma vez só: mande à pessoa por um canal de confiança. O convite é pessoal, vale para uma conta só, dura 48 horas e pode ser revogado enquanto espera (até 20 pendentes). Quem abre o link escolhe o usuário, a senha (pelo menos 10 caracteres), o nome e o boneco, e já entra. Na mesma aba, quem administra muda o papel de cada conta (admin ou membro) e os andares que ela vê, e remove contas. Cada uma dessas mudanças pede a senha da conta de quem administra. Remover derruba as sessões da pessoa na hora. O escritório nunca fica sem um admin.

@@ -38,7 +38,45 @@ import social  # noqa: E402
 from acesso import Acesso  # noqa: E402
 
 
+_ORIGINAIS = {}
+
+
+def _so_local(url):
+    host = urllib.parse.urlsplit(url if isinstance(url, str) else url.full_url).hostname
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        raise AssertionError(f"um teste tentou falar com a rede ({host})")
+
+
+def setUpModule():
+    """Fusível de rede (B5): nenhum teste fala com a rede, só com os servidores que ele mesmo sobe em 127.0.0.1. O que
+    sair para fora (agentes.chat, emissor do OAuth, clima) levanta erro em vez de ir."""
+    _ORIGINAIS.update(_abrir=e._abrir, post_form=e.post_form, post_json=e.post_json, urlopen=urllib.request.urlopen)
+
+    def abrir(req):
+        _so_local(req)
+        return _ORIGINAIS["_abrir"](req)
+
+    def post_form(url, campos):
+        _so_local(url)
+        return _ORIGINAIS["post_form"](url, campos)
+
+    def post_json(url, corpo):
+        _so_local(url)
+        return _ORIGINAIS["post_json"](url, corpo)
+
+    def urlopen(url, *a, **k):
+        _so_local(url)
+        return _ORIGINAIS["urlopen"](url, *a, **k)
+    e._abrir, e.post_form, e.post_json, urllib.request.urlopen = abrir, post_form, post_json, urlopen
+
+
+def _soltar_fusivel():
+    e._abrir, e.post_form, e.post_json, urllib.request.urlopen = (_ORIGINAIS[n] for n in ("_abrir", "post_form",
+                                                                                            "post_json", "urlopen"))
+
+
 def tearDownModule():   # a pasta de dados da suíte não fica para trás no %TEMP%
+    _soltar_fusivel()
     shutil.rmtree(PASTA, ignore_errors=True)
 
 
@@ -615,6 +653,9 @@ class Http(unittest.TestCase):
 
             def concluir(self, code, state):
                 pass
+
+            def confere_dono(self, estado, usuario, autorizado=True):   # o state é de quem começou (E.2)
+                return autorizado and usuario is not None
         l = e.Leitor(Cred())
         l.mcp = Mcp()
         l.estado = {**l.estado, **e.resumir(AG, [{"run_id": "r1", "agent": {"id": "a1"}, "status": "waiting_input", "url": ORG_URL}])}
@@ -2872,7 +2913,8 @@ class Docker(unittest.TestCase):
                 pendentes += [n for n in nomes if os.path.isfile(os.path.join(raiz, n + ".py"))]
         esperados = {n + ".py" for n in locais}
         self.assertEqual(esperados, {"escritorio.py", "acesso.py", "andares.py", "presenca.py", "social.py", "planta.py", "ajustes.py", "jornal.py",
-                                 "avisos.py", "vapid.py", "novidades.py", "visitas_sala.py"})
+                                 "avisos.py", "vapid.py", "novidades.py", "visitas_sala.py", "conversas_equipe.py",
+                                 "migracao_saguao.py"})
         self.assertLessEqual(esperados, copiados)
         self.assertLessEqual(esperados, liberados)
         with open(os.path.join(raiz, "instalar.sh"), encoding="utf-8") as f:
@@ -4269,6 +4311,9 @@ class SocialHttp(unittest.TestCase):
         class Cred:
             def concluir(self, code, state):
                 pass
+
+            def confere_dono(self, estado, usuario, autorizado=True):   # o state é de quem começou (E.2)
+                return autorizado and usuario is not None
         com_valor(self.srv.social, "s1", "s2", 5)
         self.srv.social.ordenar("s3", "s4", time.time(), self.srv.leitor.foto(), e.config_publica())
         self.srv.cred = Cred()

@@ -1,4 +1,6 @@
 import atexit
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -35,6 +37,47 @@ os.environ.setdefault("AGENTES_ORG", "00000000-0000-4000-8000-000000000000")  # 
 import andares  # noqa: E402
 import escritorio as e  # noqa: E402
 from acesso import Acesso  # noqa: E402
+
+_ORIGINAIS = {}
+
+
+def _so_local(url):
+    host = urllib.parse.urlsplit(url if isinstance(url, str) else url.full_url).hostname
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        raise AssertionError(f"um teste tentou falar com a rede ({host})")
+
+
+def setUpModule():
+    """Fusível de rede (B5): nenhum teste fala com a rede, só com os servidores que ele mesmo sobe em 127.0.0.1. O que
+    sair para fora (agentes.chat, emissor do OAuth, clima) levanta erro em vez de ir."""
+    _ORIGINAIS.update(_abrir=e._abrir, post_form=e.post_form, post_json=e.post_json, urlopen=urllib.request.urlopen)
+
+    def abrir(req):
+        _so_local(req)
+        return _ORIGINAIS["_abrir"](req)
+
+    def post_form(url, campos):
+        _so_local(url)
+        return _ORIGINAIS["post_form"](url, campos)
+
+    def post_json(url, corpo):
+        _so_local(url)
+        return _ORIGINAIS["post_json"](url, corpo)
+
+    def urlopen(url, *a, **k):
+        _so_local(url)
+        return _ORIGINAIS["urlopen"](url, *a, **k)
+    e._abrir, e.post_form, e.post_json, urllib.request.urlopen = abrir, post_form, post_json, urlopen
+
+
+def _soltar_fusivel():
+    e._abrir, e.post_form, e.post_json, urllib.request.urlopen = (_ORIGINAIS[n] for n in ("_abrir", "post_form",
+                                                                                            "post_json", "urlopen"))
+
+
+def tearDownModule():
+    _soltar_fusivel()
+
 
 ORG_B = "11111111-1111-4111-8111-111111111111"
 ORG_C = "22222222-2222-4222-8222-222222222222"
@@ -146,14 +189,22 @@ class Subcomando(unittest.TestCase):
 
     def test_migracao_pela_metade_nao_deixa_subir(self):
         """Uma queda no meio da migração (ou do desfazer) não pode subir o serviço no modo clássico sem o oauth.json na
-        raiz: a retomada é pelo subcomando. O nome da função de estado é PROVISÓRIO até a Trinity exportar a dela."""
-        falso = type(sys)("migracao_saguao")
-        for estado, recusa in (("em_andamento", True), ("desfazendo", True), ("concluida", False), (None, False)):
-            falso.estado = lambda dados, x=estado: x
-            motivo = e.motivo_da_migracao(falso, "/dados")
+        raiz: a retomada é pelo subcomando. Diário ilegível também não sobe. O estado vem do migracao_saguao.estado."""
+        dados = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, dados, True)
+        diario = os.path.join(dados, "migracao-saguao.json")
+        self.assertIsNone(e.motivo_da_migracao(dados))   # sem diário
+        for estado, recusa in (("em_andamento", True), ("desfazendo", True), ("feito", False), ("desfeito", False)):
+            with open(diario, "w", encoding="utf-8") as f:
+                json.dump({"v": 1, "estado": estado}, f)
+            motivo = e.motivo_da_migracao(dados)
             self.assertEqual(motivo is not None, recusa, estado)
             if recusa:
                 self.assertIn("escritorio.py saguao", motivo)
+        for ruim in ("{", '{"estado": "outro"}'):
+            with open(diario, "w", encoding="utf-8") as f:
+                f.write(ruim)
+            self.assertIn("diário", e.motivo_da_migracao(dados))
 
     def test_a_entrada_do_script_chama_o_despacho(self):
         fonte = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "escritorio.py"), encoding="utf-8").read()
@@ -208,6 +259,31 @@ class OutroWorkspace(unittest.TestCase):
     def test_principal_continua_sem_conferir_org(self):
         l = e.Leitor(None)
         self.assertIsNone(l.org)
+
+    def test_so_a_conexao_de_andar_marca_conferir_org(self):
+        """B4: o concluir() marca conferir_org só na cred de um andar (com o times.json dele); o principal clássico não
+        tem org a conferir."""
+        dados = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, dados, True)
+        antes = e.post_form
+        e.post_form = lambda url, campos: {"access_token": "AC", "refresh_token": "RF", "scope": "read", "expires_in": 3600}
+        self.addCleanup(setattr, e, "post_form", antes)
+        for times, marca in ((None, False), (os.path.join(dados, "times.json"), True)):
+            cred = e.Credenciais(os.path.join(dados, f"oauth-{marca}.json"), times)
+            cred.pendentes["st"] = {"verificador": "v", "em": time.time(), "client_id": "c", "escopo": "read",
+                                    "redirect_uri": cred.redirect_uri(), "usuario": "bia"}
+            cred.concluir("code", "st")
+            self.assertEqual(cred.conferir_org(), marca, times)
+
+    def test_desconectar_esvazia_o_que_a_conta_leu(self):
+        """B3: o andar desconectado não mostra a lista do dia, os agentes, os trabalhos nem as tarefas da conta."""
+        l = e.Leitor(None, e.url_app(e.AGENTES, ORG_B), os.path.join(PASTA, "nao-existe.json"), org=ORG_B)
+        l.estado = {**l.estado, "agentes": [{"id": "b1"}], "trabalhos": [{"agente_id": "b1"}], "tarefas": [{"id": "t"}]}
+        l.conversas = {"por_id": {"x": {}}, "mudou": {"c": 1}}
+        l.esvaziar()
+        foto = l.foto()
+        self.assertEqual((foto["agentes"], foto["trabalhos"], foto["tarefas"]), ([], [], []))
+        self.assertEqual(l.conversas_do_dia(), {"por_id": {}, "mudou": {}})
 
     def test_alguem_vendo_o_andar_adianta_a_primeira_leitura(self):
         """O escalonamento da partida (atraso) deixava o andar sem agentes até a vez dele; quem abre o andar não espera."""
@@ -382,6 +458,9 @@ class Http(unittest.TestCase):
             def concluir(self, codigo, s):
                 chamados.append((self.nome, s))
 
+            def confere_dono(self, estado, usuario, autorizado=True):   # o state é de quem começou (E.2)
+                return autorizado and usuario is not None
+
         antes_extra, antes_srv = self.extra.cred, self.srv.cred
         self.extra.cred, self.srv.cred = Cred("extra", {"st-extra"}), Cred("principal", set())
         try:
@@ -485,6 +564,22 @@ class Http(unittest.TestCase):
         # o state de um andar não serve no outro: cada conexão tem os seus pendentes
         self.assertEqual(self.req(f"/oauth/retorno?code=c&state={estado()}", self.cookie)[0], 400)
 
+    def test_conta_sem_andar_ainda_sai(self):
+        """B6: o andar da conta saiu do prédio; o /sair e o /api/sair-todos passam antes da guarda de "sem andar"."""
+        cab = lambda c: {**c, "Origin": self.base, "Content-Type": "application/json"}
+        self.addCleanup(self.srv.acesso.remover, "caio")
+        for rota, corpo, esperado in (("/sair", b"", 303), ("/api/sair-todos", b'{"senha": "senha-da-pessoa-1"}', 200)):
+            with self.subTest(rota=rota):
+                caio = self.conta("caio")   # recria a conta a cada volta
+                extra = self.srv.andares.pop(self.extra.id)
+                try:
+                    self.assertEqual(self.req("/api/estado", caio)[0], 403)   # sem andar, nada mais passa
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        self.assertEqual(self.req(rota, cab(caio), corpo)[0], esperado)
+                finally:
+                    self.srv.andares[self.extra.id] = extra
+                self.assertEqual(self.req("/api/estado", caio)[0], 401)   # a sessão caiu
+
     def test_desconectar_o_andar(self):
         revogou = []
 
@@ -494,9 +589,16 @@ class Http(unittest.TestCase):
 
             def tem_estado(self, s):
                 return False
-        antes = self.extra.cred
-        self.extra.cred = Cred()
-        self.addCleanup(setattr, self.extra, "cred", antes)
+
+        class Conversas:
+            def esquecer(self):
+                limpou.append("conversas")
+        limpou = []
+        antes = self.extra.cred, self.extra.conversas
+        self.extra.cred, self.extra.conversas = Cred(), Conversas()
+        self.extra.leitor.esvaziar = lambda: limpou.append("leitor")
+        self.addCleanup(lambda: (setattr(self.extra, "cred", antes[0]), setattr(self.extra, "conversas", antes[1]),
+                                 delattr(self.extra.leitor, "esvaziar")))
         bia, ana = self.conta("bia", "admin"), self.conta("ana")
         self.addCleanup(self.srv.acesso.remover, "bia")
         self.addCleanup(self.srv.acesso.remover, "ana")
@@ -507,8 +609,9 @@ class Http(unittest.TestCase):
         self.assertEqual(post(bia, {"senha": "errada-errada"}), 403)
         self.assertEqual(post(bia, {}), 400)
         self.assertEqual(post(bia, {"senha": "senha-da-pessoa-1"}, "/oauth/desconectar?andar=principal"), 404)
-        self.assertEqual(revogou, [])
+        self.assertEqual((revogou, limpou), ([], []))
         self.assertEqual(post(bia, {"senha": "senha-da-pessoa-1"}), 200)
+        self.assertEqual(limpou, ["leitor", "conversas"])   # B3: o que a conta leu sai da tela já
         fim = time.monotonic() + 5
         while not revogou and time.monotonic() < fim:
             time.sleep(0.01)

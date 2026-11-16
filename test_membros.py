@@ -427,6 +427,9 @@ class EmpresasNoSaguao(unittest.TestCase):
             def tem_estado(self, estado):
                 return False
 
+            def confere_dono(self, estado, usuario, autorizado=True):   # o state é de quem começou (E.2)
+                return False
+
         cls.srv = e.Servidor(("127.0.0.1", 0), e.Pagina)
         cls.srv.leitor = cls.srv.cred = None   # o saguão não tem conexão
         cls.srv.acesso = Acesso(os.path.join(cls.dados, "contas"))
@@ -439,6 +442,7 @@ class EmpresasNoSaguao(unittest.TestCase):
             cls.srv.andares[reg["id"]] = andar
         cls.srv.avisos = avisos.Avisos("CHAVE", lambda endpoint, agora: "vapid", lambda **k: None, e.FUSO,
                                        pode=lambda conta, andar: e.recebe_avisos(cls.srv, conta, andar))
+        cls.srv.id_pessoa = e.IdPessoa(os.path.join(cls.dados, "pessoa.chave"))
         threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
         cls.base = "http://127.0.0.1:%d" % cls.srv.server_address[1]
         e.BASE = cls.base
@@ -517,6 +521,8 @@ class EmpresasNoSaguao(unittest.TestCase):
                                     esperado = "passa"
                                 elif rota == "/oauth/retorno" and metodo == "GET":   # quem decide é o state (E.2 item 3)
                                     esperado = "passa" if quem == "adminb" else "guarda"
+                                elif onde == "saguao" and metodo == "GET" and rota in e.SAGUAO_NAO_TEM:
+                                    esperado = "andar"   # o saguão não tem vida social, jornal, conversas nem conexão
                                 elif onde == "saguao":
                                     esperado = "passa" if rota in saguao else "guarda"
                                 elif onde == "alheio":
@@ -665,7 +671,31 @@ class EmpresasNoSaguao(unittest.TestCase):
         pos = lambda sala: {"x": 40, "y": 80, "destino": None, "sala": sala, "olha": "dir"}
         self.assertEqual(self.post("/api/presenca", pos("recepcao"), self.cab["membrob"])[0], 200)
         self.assertEqual(self.post("/api/presenca", pos("time:Time secreto de A"), self.cab["membrob"])[0], 400)
-        self.assertIn("membrob", [p["usuario"] for p in self.get("/api/ao-vivo", self.cab["membroa"])[1]["pessoas"]])
+        ao_vivo = self.get("/api/ao-vivo", self.cab["membroa"])[1]
+        self.assertEqual([p["nome"] for p in ao_vivo["pessoas"]], ["Membrob"])
+
+    def test_presenca_no_saguao_sem_login(self):
+        """M2: no saguão, o "usuario" das pessoas e das mensagens e o "eu" são um id opaco estável por pessoa
+        ("p_" e 16 hex, o HMAC do login com o segredo de dados/); fora do saguão, o login, como sempre."""
+        pos = {"x": 40, "y": 80, "destino": None, "sala": "recepcao", "olha": "dir"}
+        for quem in ("membroa", "membrob"):
+            self.assertEqual(self.post("/api/presenca", pos, self.cab[quem])[0], 200)
+        self.assertEqual(self.post("/api/sala/enviar", {"texto": "oi"}, self.cab["membrob"])[0], 200)
+        de_a, de_b = (self.get("/api/ao-vivo", self.cab[q])[1] for q in ("membroa", "membrob"))
+        self.assertRegex(de_a["eu"], r"^p_[0-9a-f]{16}$")
+        self.assertEqual(de_a["eu"], self.get("/api/ao-vivo", self.cab["membroa"])[1]["eu"])   # estável
+        self.assertNotEqual(de_a["eu"], de_b["eu"])
+        self.assertIn(de_b["eu"], [p["usuario"] for p in de_a["pessoas"]])
+        self.assertEqual([m["usuario"] for m in de_a["mensagens"]], [de_b["eu"]])
+        self.assertEqual([m["usuario"] for m in de_b["mensagens"]], [de_b["eu"]])   # a própria mensagem: o mesmo "eu"
+        self.assertNotIn("membro", json.dumps([de_a, de_b]).replace("Membro", ""))   # nenhum login sai
+        self.assertEqual(self.srv.id_pessoa("membrob"), de_b["eu"])
+        with open(os.path.join(self.dados, "pessoa.chave"), "rb") as f:   # o segredo em dados/, nunca na resposta
+            self.assertEqual(len(f.read()), 32)
+        # fora do saguão (o andar da empresa), nada muda: o login
+        q = f"?andar={self.B}"
+        self.assertEqual(self.post("/api/presenca" + q, pos, self.cab["membrob"])[0], 200)
+        self.assertEqual(self.get("/api/ao-vivo" + q, self.cab["membrob"])[1]["eu"], "membrob")
 
 
 if __name__ == "__main__":

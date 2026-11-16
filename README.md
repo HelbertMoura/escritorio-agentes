@@ -189,6 +189,22 @@ In **Settings › Floors**, whoever runs the office creates a floor from a name 
 
 The list lives in `dados/andares.json` and each floor's data in `dados/andares/<id>/` (`oauth.json`, `times.json`, `equipe.json`, `planta.json`, `placar.json` and `jornal.json`). Branding, office hours, weather, holidays, visits and phone alerts belong to the whole building. Removing a floor disconnects its token, but the folder stays on the server: delete `dados/andares/<id>/` by hand if you no longer need it. An unreadable `andares.json` stops the service from starting, so no floor disappears silently.
 
+#### Lobby: a ground floor for every company
+
+The lobby migration turns the ground floor into a lobby (saguão) with no agents, open to everyone in the building, and moves the `AGENTES_ORG` company up to a floor of its own, like the others. It never runs by itself: it is a command, run with the service stopped and as the service user (the owner of the data folder; as any other user the migration refuses):
+
+```bash
+sudo systemctl stop escritorio
+sudo sh -c 'set -a; . /etc/escritorio.env; exec runuser -u escritorio -- /usr/bin/python3 -I /opt/escritorio/escritorio.py saguao'
+sudo systemctl start escritorio
+```
+
+On Docker: `docker compose stop escritorio`, then `docker compose run --rm escritorio python3 -I escritorio.py saguao` and `docker compose start escritorio`. Back up the data folder (or the volume) first. The report lists the accounts that got the company floor, the ones left without it (grant it in the Members tab) and the pending invitations that grant the ground floor (revoke them and invite again with the company floor). If the process dies halfway, the service will not start: run the same command again to finish.
+
+`saguao --desfazer` goes back to the old ground floor, but only while nobody has used the new mode: with any conversation, wall post, attachment or DM access, or any new data on the company floor, it refuses without touching anything, and going back means restoring the backup.
+
+**Until you migrate to the lobby**, no second company goes to production, and no Wave 2 data either. In classic mode, a company's invitation goes out only from that floor's view (Settings › Members with `?andar=<id>` in the address), so the person does not get the ground floor, which still belongs to `AGENTES_ORG`.
+
 ### Team
 
 Besides whoever runs the office, it can have member accounts for the rest of the team. In **Settings › Members** (Membros), an admin types the person's name, ticks the floors they will see and confirms the account password. The office shows the invitation link (`/convite#...`) only once: send it to the person over a channel you trust. The invitation is personal, creates a single account, lasts 48 hours and can be revoked while it waits (up to 20 pending). Whoever opens the link picks a username, a password (at least 10 characters), a name and a character, and is signed in. In the same tab, an admin changes each account's role (admin or member) and the floors it sees, and removes accounts. Each of these changes asks for the admin's own password. Removing signs the person out everywhere at once. The office never runs out of admins.
