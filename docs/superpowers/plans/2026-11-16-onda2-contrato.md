@@ -30,8 +30,9 @@ D4 b, D5 b, D6 b, D8 a, D10 a, D12 a) e o contrato da Onda 1 (perfis, `?andar=`,
   `usuario` `null` com `nome` `"ex-membro"`: a conta saiu do andar (D8 a). `apagada: true` vem com `texto: null`.
   `id` é o do SQLite (persistente; não é o `seq` da presença).
 - **Saguão** (modo saguão, andar `principal`): só o canal `"geral"` no chat persistente; mural no `"geral"` e nas salas;
-  **sem DM, sem anexo, sem @menção, sem auditoria, sem push**. As rotas de DM, anexo, pessoas e auditoria dão o 404 de
-  andar no saguão. Onde aparece gente (mensagens, mural, acenos), `usuario` é o **id opaco** `p_<16 hex>` (o mesmo do
+  **sem DM, sem anexo, sem @menção, sem auditoria, sem push**. No saguão, os GET de DM, anexo, pessoas e auditoria dão
+  o 404 de andar; os POST de DM e anexo dão o 403 `papel` da guarda (a matriz da Onda 1 pede isso) e, para o admin do
+  prédio, o 404 de andar. Onde aparece gente (mensagens, mural, acenos), `usuario` é o **id opaco** `p_<16 hex>` (o mesmo do
   `eu` e das `pessoas` do `/api/ao-vivo`, M2), nunca o login; quem não tem nome próprio sai `"Pessoa"`.
 
 ## 1. Config (`GET /api/config?andar=`)
