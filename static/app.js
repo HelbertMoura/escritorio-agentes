@@ -72,6 +72,7 @@ function aplicarConfig() {
   aplicarMarca();
   mostrarElevador();
   aplicarPapel();
+  Reunioes.configurar(config);   // o menu e os links de reunião do andar (reunioes.js)
 }
 
 // O papel da conta NO ANDAR ("admin" | "membro" | "pessoa", a pessoa do prédio no saguão) vem no /api/config; sem o campo
@@ -906,7 +907,7 @@ function montarSalas() {
     const ic = elem("span", "sala-ic", "#"); ic.setAttribute("aria-hidden", "true"); ic.style.color = clarear(corDaSala(s), 0.25);
     b.append(ic, elem("span", "sala-nome", s.nome), elem("span", "sala-n"));
     b.addEventListener("click", () => { irParaEscritorio(); fecharFicha(); focarSala(s); if (innerWidth <= 760) $("palco-cartao").scrollIntoView({ block: "start", behavior: menosMovimento.matches ? "auto" : "smooth" }); });
-    li.append(b); return li;
+    li.append(b, Reunioes.entrar(s.chave, s.nome)); return li;   // o "Entrar na reunião" da sala, ao lado (reunioes.js)
   }));
   atualizarSalas();
 }
@@ -2554,15 +2555,17 @@ let telaAtual = "";
 function rota() {
   if (gavetaAberta()) { fecharGaveta(); $("principal").focus({ preventScroll: true }); }   // item do menu na gaveta: o foco vai ao conteúdo
   const r = (location.hash || "#escritorio").slice(1);
-  const TELAS = ["escritorio", "conversas", "aprovacoes", "jornal", "personalizar", "novidades", "ajuda"];
+  const TELAS = ["escritorio", "conversas", "aprovacoes", "jornal", "reunioes", "personalizar", "novidades", "ajuda"];
   // na demonstração o Personalizar não existe: ele grava a marca no servidor de verdade
-  const valida = TELAS.includes(r) && !(r === "personalizar" && Brincar.demo) && Andar.telaLiberada(r, config) ? r : "escritorio";
+  // reuniões só com config.equipe.reunioes (fora do saguão, com o store ligado)
+  const valida = TELAS.includes(r) && !(r === "personalizar" && Brincar.demo) && !(r === "reunioes" && !Reunioes.ligado(config)) && Andar.telaLiberada(r, config) ? r : "escritorio";
   for (const v of TELAS) $(`v-${v}`).hidden = v !== valida;
   // outra tela começa no topo (sem isso, voltar do Personalizar ao Escritório deixava o mapa fora de vista); o pulo para
   // uma âncora da mesma tela (#principal, #aviso-greve) não troca de tela e fica como está
   if (telaAtual && valida !== telaAtual) scrollTo({ top: 0, behavior: "instant" });
   telaAtual = valida;
-  if (valida === "personalizar" && window.Personalizar) { Personalizar.abrir(config); if (window.Ajustes) Ajustes.abrir(config); }
+  if (valida === "personalizar" && window.Personalizar) { Personalizar.abrir(config); if (window.Ajustes) Ajustes.abrir(config); Reunioes.ajustes(config); }
+  if (valida === "reunioes") Reunioes.abrir();
   if (valida === "conversas") paginaConversas();
   if (valida === "jornal") Jornal.abrir();
   if (valida === "novidades") Novidades.abrir(); else Novidades.fechar();
@@ -2627,6 +2630,7 @@ function irAoAgentePedido() {
   irAoAgente(id);
 }
 Avisar.iniciar({ demo: () => Brincar.demo });
+Reunioes.iniciar({ salas: () => (predio ? [...predio.salas, ...predio.baixo] : []) });
 Timelapse.iniciar({
   fotografar,
   podeGravar: () => !!predio && !naSimulacao() && !Brincar.demo && !Expediente.fora(Ceu.agora().h),
