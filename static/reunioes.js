@@ -308,31 +308,34 @@ const Reunioes = (() => {
       const li = criar("li", "reunioes-link"), rot = criar("label", null, x.nome), campo = criar("input"), acoes = criar("div", "acoes");
       li.dataset.sala = x.chave;
       campo.type = "url"; campo.id = `rl-${i}`; campo.value = s.links[x.chave] || ""; campo.maxLength = LINK_MAX; campo.autocomplete = "off";
-      campo.placeholder = "https://meet.google.com/…"; campo.setAttribute("inputmode", "url"); campo.setAttribute("aria-describedby", "reunioes-links-aviso");
+      campo.placeholder = "https://meet.google.com/…"; campo.setAttribute("inputmode", "url");
       rot.htmlFor = campo.id;
+      const erro = criar("p", "aviso-form ruim reunioes-link-erro");   // o erro na linha da sala: no celular, o fim da lista sai da tela
+      erro.id = `rl-erro-${i}`; erro.setAttribute("role", "status"); campo.setAttribute("aria-describedby", erro.id);
       const salvar = criar("button", "botao secundario", "Salvar"), tirar = criar("button", "botao fantasma", "Tirar");
       salvar.type = tirar.type = "button";
       salvar.setAttribute("aria-label", `Salvar o link da ${x.nome}`); tirar.setAttribute("aria-label", `Tirar o link da ${x.nome}`);
       tirar.hidden = !s.links[x.chave];
-      salvar.addEventListener("click", () => gravarLink(x, campo));
-      tirar.addEventListener("click", () => gravarLink(x, null));
+      salvar.addEventListener("click", () => gravarLink(x, campo, erro));
+      tirar.addEventListener("click", () => gravarLink(x, null, erro));
       campo.addEventListener("input", () => campo.removeAttribute("aria-invalid"));
       acoes.append(salvar, tirar);
-      li.append(rot, campo, acoes);
+      li.append(rot, campo, acoes, erro);
       if (focar === x.chave) setTimeout(() => campo.focus());
       return li;
     }));
   }
-  async function gravarLink(sala, campo) {
+  async function gravarLink(sala, campo, erro) {
     const aviso = $("reunioes-links-aviso");
     let url = "";
+    avisar(aviso, ""); erro.textContent = "";
     if (campo) {
       const v = linkValido(campo.value, lim().hosts);
-      if (!v.ok) { avisar(aviso, v.mensagem, true); campo.setAttribute("aria-invalid", "true"); campo.focus(); return; }
+      if (!v.ok) { erro.textContent = v.mensagem; campo.setAttribute("aria-invalid", "true"); campo.focus(); return; }
       url = v.url;
     }
     const r = await pedir("api/reunioes/link", { sala: sala.chave, url });
-    if (!r.ok || !r.d || !r.d.links) { avisar(aviso, mensagem(r, "Não deu para salvar o link"), true); return; }
+    if (!r.ok || !r.d || !r.d.links) { erro.textContent = mensagem(r, "Não deu para salvar o link"); return; }
     s.links = { ...r.d.links }; pintarTodos(); desenharLinks(sala.chave);
     avisar(aviso, url ? `Link da ${sala.nome} salvo.` : `Link da ${sala.nome} tirado.`);
   }

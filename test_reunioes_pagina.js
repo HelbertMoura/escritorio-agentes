@@ -22,6 +22,8 @@ assert.match(tag("v-reunioes"), /class="visao"[^>]*hidden/);
 assert.match(tag("reunioes-titulo"), /tabindex="-1"/);
 // os links fixos: aba nova, sem opener nem referrer
 for (const id of ["reuniao-entrar", "reuniao-aviso-entrar"]) assert.match(tag(id), /target="_blank" rel="noopener noreferrer"/, id);
+// o "Entrar" do aviso com a mesma cara do da agenda
+assert.match(tag("reuniao-aviso-entrar"), /class="botao reuniao-entrar-bt"/);
 // o aviso de 5 min é lido pelo leitor de tela; os diálogos têm título
 assert.match(tag("reuniao-aviso"), /role="status"/);
 assert.match(tag("dlg-reuniao"), /<dialog [^>]*aria-labelledby="reuniao-titulo"/);

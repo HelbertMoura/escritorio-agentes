@@ -271,7 +271,10 @@ function carregar({ config = CONFIG, respostas = RESP, agora = AGORA } = {}) {
     assert.equal(campo.type, "url");
     campo.value = "http://evil.com/x";
     botaoTexto(linhas[1], "Salvar").click(); await espera();
-    assert.equal(ids["reunioes-links-aviso"].textContent, "Use um link https de Meet, Zoom, Jitsi, Teams ou Whereby, sem senha no endereço.");
+    // o erro fica na linha da sala (no celular, o fim da lista sai da tela), ligado ao campo
+    const erro = achar(linhas[1], "reunioes-link-erro")[0];
+    assert.equal(erro.textContent, "Use um link https de Meet, Zoom, Jitsi, Teams ou Whereby, sem senha no endereço.");
+    assert.equal(campo.attrs["aria-describedby"], erro.id);
     assert.equal(campo.attrs["aria-invalid"], "true");
     assert.equal(pedidos.some(x => x.rota === "api/reunioes/link"), false);
     campo.value = " https://zoom.us/j/1 ";
