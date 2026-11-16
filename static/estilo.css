@@ -931,6 +931,46 @@ body.modo-foto .controles, body.modo-foto .selo-vivo, body.modo-foto .dica-mapa,
 .olhando-op input { width: 16px; height: 16px; margin: 0; accent-color: var(--destaque); }
 .olhando-op input:focus-visible { outline: 2px solid var(--destaque); outline-offset: 2px; }
 @media (pointer: coarse) { .olhando-op { min-height: 44px; } }
+/* a lista de quem está no andar (1.6): abre pelo "N pessoas olhando" */
+.olhando-btn { min-height: 32px; padding: 0 2px; border: 0; background: none; color: var(--texto2); font-size: 14px; text-decoration: underline; text-decoration-color: rgba(239, 239, 236, .35); text-underline-offset: 3px; }
+.olhando-btn:hover { text-decoration-color: currentColor; }
+.olhando-btn[aria-expanded="true"] { color: var(--texto); }
+.equipe { margin: 8px 0 0; padding: 10px 12px; max-width: 640px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--cartao); }
+.equipe-predio { margin: 0 0 8px; color: var(--suave); font-size: 14px; }
+.meu-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 0 0 10px; margin: 0 0 6px; border-bottom: 1px solid var(--linha); font-size: 14px; }
+.meu-status label { color: var(--texto2); font-weight: 600; }
+.meu-status select, .meu-status input { min-height: max(var(--ctl), 32px); padding: 0 10px; border: 1px solid var(--borda-forte); border-radius: var(--r-item); background: var(--campo); }
+.meu-status input { flex: 1 1 160px; min-width: 0; }
+.equipe-lista { list-style: none; margin: 0; padding: 0; max-height: 300px; overflow-y: auto; }
+.equipe-pessoa { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 7px 0; border-bottom: 1px solid var(--linha); }
+.equipe-pessoa:last-child { border-bottom: 0; }
+.equipe-quem { display: flex; flex-direction: column; flex: 1 1 140px; min-width: 0; }
+.equipe-nome { font-weight: 600; overflow-wrap: anywhere; }
+.equipe-onde { color: var(--suave); font-size: 13px; overflow-wrap: anywhere; }
+.equipe-acoes { display: flex; flex-wrap: wrap; gap: 6px; }
+.equipe-acoes .botao, .equipe-mural { min-height: max(var(--ctl), 32px); padding: 0 10px; font-size: 13px; }
+.equipe-mural { margin: 8px 0 0; }
+/* status: a cor e o nome do status na linha (o texto diz; a cor só reforça) */
+.status-ico { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #141320; background: #15803d; box-shadow: 0 0 0 1px rgba(255, 255, 255, .25); }
+.status-ico[data-status="ocupado"] { background: #dc2626; }
+.status-ico[data-status="reuniao"] { background: #2563eb; }
+.status-ico[data-status="ausente"] { background: #b45309; }
+.status-ico[data-status="nenhum"] { background: transparent; box-shadow: inset 0 0 0 2px var(--fora); border-color: transparent; }
+/* o aviso de aceno recebido: uma faixa curta no alto, longe da pílula do chat */
+.aceno-aviso { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 30; max-width: calc(100vw - 32px); margin: 0; padding: 10px 16px;
+  border: 1px solid var(--borda-forte); border-radius: var(--r-botao); background: var(--cartao2); color: var(--texto); font-weight: 600; box-shadow: 0 6px 20px rgba(0, 0, 0, .5); }
+/* o mural da sala */
+.dlg-mural { width: min(480px, calc(100vw - 24px)); }
+.mural-lista { list-style: none; margin: 8px 0 12px; padding: 0; max-height: 46vh; overflow-y: auto; }
+.mural-item { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 10px; padding: 10px 12px; margin: 0 0 8px; border-radius: var(--r-item); background: #3a2f1c; border-left: 4px solid #fde68a; }
+.mural-txt { flex: 1 1 100%; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mural-de { flex: 1 1 auto; color: var(--suave); font-size: 13px; align-self: center; }
+.mural-item .botao { min-height: max(var(--ctl), 32px); padding: 0 10px; font-size: 13px; }
+#mural-texto { width: 100%; padding: 8px 10px; border: 1px solid var(--borda-forte); border-radius: var(--r-item); background: var(--campo); color: var(--texto); font: inherit; resize: vertical; }
+@media (pointer: coarse) { .olhando-btn, .equipe-acoes .botao, .equipe-mural, .meu-status select, .meu-status input, .meu-status .botao, .mural-item .botao { min-height: 44px; } }
+@media (max-width: 900px) { .aceno-aviso { top: calc(64px + env(safe-area-inset-top, 0px)); } }   /* abaixo da barra do topo */
+@media (prefers-reduced-motion: no-preference) { .aceno-aviso { animation: aceno-entra var(--medio); } }
+@keyframes aceno-entra { from { opacity: 0; transform: translate(-50%, -6px); } }
 /* Modo TV (tv.js): só o mapa, o selo "ao vivo", a faixa de erro e a legenda do telejornal */
 .tv-acoes, .tv-legenda { display: none; }
 body.tv .faixa-demo, body.tv .faixa-fora, body.tv .controles, body.tv .dica-mapa, body.tv .abrir-cheia, body.tv .cartao-agente, body.tv .ficha,

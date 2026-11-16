@@ -122,4 +122,19 @@ function carregar({ hash = "", guardado = null, quebrado = false } = {}) {
   assert.equal(Andar.perfil({ papel: "admin", admin_predio: true }).predio, true);
 }
 
+// o toque no aviso pessoal com o escritório aberto (sw.js → postMessage {tipo: "aviso", andar, canal}): o andar e o canal
+// para o app.js trocar de andar e abrir o canal; o que não for andar válido ou canal do contrato não passa
+{
+  const { Andar } = carregar();
+  const de = d => { const r = Andar.doAviso(d); return r && { ...r }; };   // cópia: vem de outro realm (vm)
+  assert.deepEqual(de({ tipo: "aviso", andar: ID, canal: "geral" }), { andar: ID, canal: "geral" });
+  assert.deepEqual(de({ tipo: "aviso", andar: ID, canal: "dm:42" }), { andar: ID, canal: "dm:42" });
+  assert.deepEqual(de({ tipo: "aviso", andar: ID, canal: "sala:time:Design & Arte" }), { andar: ID, canal: "sala:time:Design & Arte" });
+  assert.deepEqual(de({ tipo: "aviso", andar: ID }), { andar: ID, canal: null }, "aceno e porta: só o andar");
+  assert.deepEqual(de({ tipo: "aviso", andar: ID, canal: "dm:x" }), { andar: ID, canal: null });
+  assert.deepEqual(de({ tipo: "aviso", andar: ID, canal: "sala:a\nb" }), { andar: ID, canal: null }, "controle não passa");
+  assert.deepEqual(de({ tipo: "aviso", andar: ID, canal: "sala:" + "x".repeat(200) }), { andar: ID, canal: null });
+  for (const ruim of [null, "x", { tipo: "agente", andar: ID }, { tipo: "aviso", andar: "../x" }, { tipo: "aviso" }]) assert.equal(Andar.doAviso(ruim), null);
+}
+
 console.log("test_andar.js: ok");
