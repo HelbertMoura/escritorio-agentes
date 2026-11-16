@@ -2635,9 +2635,18 @@ window.addEventListener("hashchange", rota);
 window.addEventListener("resize", () => { medirFaixa(); ajustarEscala(); });
 rota();
 iniciar().catch(() => { falhou = true; mostrarConexao(); setTimeout(() => location.reload(), 10000); });
+async function abrirAviso(a) {
+  if (!a) return;
+  if (a.andar !== Andar.atual) await trocarAndar(a.andar);
+  if (a.andar === Andar.atual && a.canal && window.ChatSala && ChatSala.abrirCanal) ChatSala.abrirCanal(a.canal);   // a troca falhou: fica onde está
+}
 // PWA (ícone na tela de início): o sw.js não guarda nada; sem ele (http fora do localhost, servidor antigo), o app abre igual
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
-  // toque no aviso com esta aba aberta: o sw.js foca a aba e manda ir ao agente
-  navigator.serviceWorker.addEventListener("message", ev => { if (ev.data && ev.data.tipo === "agente" && typeof ev.data.agente === "string") irAoAgente(ev.data.agente); });
+  // toque no aviso com esta aba aberta: o sw.js foca a aba e manda ir ao agente, ou (aviso pessoal: menção, DM, aceno,
+  // porta) o andar e o canal: troca para o andar e abre o canal no painel (chat_sala.js)
+  navigator.serviceWorker.addEventListener("message", ev => {
+    if (ev.data && ev.data.tipo === "agente" && typeof ev.data.agente === "string") irAoAgente(ev.data.agente);
+    else abrirAviso(Andar.doAviso(ev.data));
+  });
 }

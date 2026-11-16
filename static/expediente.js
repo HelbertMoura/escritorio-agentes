@@ -27,6 +27,13 @@ const Andar = (() => {
   const PRINCIPAL = "principal", CHAVE = "escritorio:andar";
   const valido = id => typeof id === "string" && (id === PRINCIPAL || /^[0-9a-f]{8}$/.test(id));
   const doHash = h => { const m = /^#andar=([^&]*)$/.exec(typeof h === "string" ? h : ""); return m && valido(m[1]) ? m[1] : null; };
+  // o aviso pessoal tocado com o escritório aberto (sw.js: postMessage {tipo: "aviso", andar, canal}): o andar e o canal
+  // do contrato ("geral", "sala:<chave>", "dm:<n>"; sem controle, até 120); o resto vira null
+  const doAviso = d => {
+    if (!d || typeof d !== "object" || d.tipo !== "aviso" || !valido(d.andar)) return null;
+    const c = d.canal, ok = typeof c === "string" && c.length <= 120 && !/[\u0000-\u001f\u007f]/.test(c) && /^(geral|sala:.+|dm:\d{1,9})$/.test(c);
+    return { andar: d.andar, canal: ok ? c : null };
+  };
   let atual = PRINCIPAL;
   const guardar = id => { try { if (id === PRINCIPAL) localStorage.removeItem(CHAVE); else localStorage.setItem(CHAVE, id); } catch (e) { /* aba anônima ou armazenamento bloqueado */ } };
   function ler() {   // endereço primeiro, depois o que ficou guardado; nada válido, principal
@@ -72,6 +79,6 @@ const Andar = (() => {
   // o andar que o /api/config respondeu (conta sem acesso ao principal recebe o primeiro andar dela): passa a valer daqui em diante
   const seguir = c => !!c && valido(c.andar) && definir(c.andar);
   ler();
-  return { PRINCIPAL, valido, rotuloConexao, estadoDoAndar, perfil, telaLiberada, seguir, doHash, ler, definir, com, limpar: () => definir(PRINCIPAL), get atual() { return atual; } };
+  return { PRINCIPAL, valido, rotuloConexao, estadoDoAndar, perfil, telaLiberada, seguir, doHash, doAviso, ler, definir, com, limpar: () => definir(PRINCIPAL), get atual() { return atual; } };
 })();
 window.Andar = Andar;
