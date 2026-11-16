@@ -60,9 +60,16 @@ const Andar = (() => {
     const admin = papel === "admin", saguao = cfg.terreo === "saguao";
     return { papel, admin, predio: admin && cfg.admin_predio !== false, saguao, noSaguao: saguao && (cfg.andar === undefined || cfg.andar === PRINCIPAL) };
   }
+  // a linha "Este andar: …" do elevador: conectado e sem conexão nenhuma (o saguão, conexao null) não dizem nada
+  const estadoDoAndar = c => (!c || c === "conectado" ? "" : `Este andar: ${rotuloConexao(c)}`);
+  // as telas pelo # que o perfil abre: Conversas só o admin do andar, e o saguão não tem conversas nem jornal
+  function telaLiberada(rota, c) {
+    const p = perfil(c);
+    return !(rota === "conversas" && (!p.admin || p.noSaguao)) && !(rota === "jornal" && p.noSaguao);
+  }
   // o andar que o /api/config respondeu (conta sem acesso ao principal recebe o primeiro andar dela): passa a valer daqui em diante
   const seguir = c => !!c && valido(c.andar) && definir(c.andar);
   ler();
-  return { PRINCIPAL, valido, rotuloConexao, perfil, seguir, doHash, ler, definir, com, limpar: () => definir(PRINCIPAL), get atual() { return atual; } };
+  return { PRINCIPAL, valido, rotuloConexao, estadoDoAndar, perfil, telaLiberada, seguir, doHash, ler, definir, com, limpar: () => definir(PRINCIPAL), get atual() { return atual; } };
 })();
 window.Andar = Andar;

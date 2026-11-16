@@ -78,12 +78,14 @@ function aplicarConfig() {
 // (servidor antigo) vale admin, a tela de sempre (expediente.js: Andar.perfil). A regra mora aqui: o body ganha data-papel e
 // o CSS esconde tudo que tem class "so-admin" (estilo.css); quem não é admin do andar fica com a tela do membro. O servidor
 // também barra no back (403); isto só evita mostrar botões que não funcionam. Conversas e o assistente dependem daqui.
-// No saguão (data-saguao) não há agentes nem conexão: o CSS esconde o que leva ao OAuth e às conversas.
+// No saguão (data-saguao) não há agentes nem conexão: o CSS esconde o que leva ao OAuth, às conversas e ao jornal.
+// O que é do prédio (Visitas) leva "so-predio" e só aparece para o admin do prédio (data-predio).
 const souMembro = () => !!config && !Andar.perfil(config).admin;
 function aplicarPapel() {
   document.body.dataset.papel = souMembro() ? "membro" : "admin";
+  document.body.toggleAttribute("data-predio", Andar.perfil(config).predio);
   document.body.toggleAttribute("data-saguao", Andar.perfil(config).noSaguao);
-  if ((souMembro() || Andar.perfil(config).noSaguao) && location.hash === "#conversas") rota();   // abriu direto numa tela de admin: o rota() manda para o mapa
+  if (location.hash && !Andar.telaLiberada(location.hash.slice(1), config)) rota();   // abriu direto numa tela fechada a este perfil: o rota() manda para o mapa
 }
 
 function aplicarMarca() {
@@ -2293,8 +2295,8 @@ function mostrarElevador() {
     }
     sel.value = atual.id;
     caixa.querySelector(".elevador-led").dataset.conexao = atual.conexao;
-    const estadoAndar = caixa.querySelector(".elevador-estado"); if (estadoAndar) { textoSe(estadoAndar, atual.conexao === "conectado" ? "" : `Este andar: ${Andar.rotuloConexao(atual.conexao)}`); estadoAndar.dataset.conexao = atual.conexao; }
-    sel.title = `Andar ${atual.nome}: ${Andar.rotuloConexao(atual.conexao)}`;
+    const estadoAndar = caixa.querySelector(".elevador-estado"); if (estadoAndar) { textoSe(estadoAndar, Andar.estadoDoAndar(atual.conexao)); estadoAndar.dataset.conexao = atual.conexao; }
+    sel.title = atual.conexao ? `Andar ${atual.nome}: ${Andar.rotuloConexao(atual.conexao)}` : `Andar ${atual.nome}`;
   }
   chaveElevador = chave;
   document.body.classList.toggle("com-andares", varios);
@@ -2363,7 +2365,7 @@ function rota() {
   const r = (location.hash || "#escritorio").slice(1);
   const TELAS = ["escritorio", "conversas", "aprovacoes", "jornal", "personalizar", "novidades", "ajuda"];
   // na demonstração o Personalizar não existe: ele grava a marca no servidor de verdade
-  const valida = TELAS.includes(r) && !(r === "personalizar" && Brincar.demo) && !(r === "conversas" && (souMembro() || Andar.perfil(config).noSaguao)) ? r : "escritorio";
+  const valida = TELAS.includes(r) && !(r === "personalizar" && Brincar.demo) && Andar.telaLiberada(r, config) ? r : "escritorio";
   for (const v of TELAS) $(`v-${v}`).hidden = v !== valida;
   // outra tela começa no topo (sem isso, voltar do Personalizar ao Escritório deixava o mapa fora de vista); o pulo para
   // uma âncora da mesma tela (#principal, #aviso-greve) não troca de tela e fica como está
