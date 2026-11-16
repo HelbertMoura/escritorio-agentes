@@ -211,13 +211,14 @@ Besides whoever runs the office, it can have member accounts for the rest of the
 
 A member sees the office on the floors they were given, the social life, the newspaper and what is new, can turn on phone alerts and changes their own name and character in **Settings › My profile** (Meu perfil). They cannot read the agents' conversations or reply as them, and cannot touch branding, floor plan, teams, weather, floors, members or visits. A member's **Sign out of all devices** only ends their own sessions and turns off alerts only on their own devices.
 
-On the map, each signed-in person shows up with their own name and character, and each room has a text chat for whoever is in it. Outside visitors do not see the team.
+On the map, each signed-in person shows up with their own name and character, and each room has a text chat. With no account at all, the room chat only reaches whoever is in the room and is gone in 10 minutes. With team conversations on (below), what is said in a room is kept for the retention period, and anyone on the floor can read it, including what was said before they arrived. Outside visitors do not see the team.
 
 **Team conversations (1.6): now kept on disk.** With at least 1 account, the general and room chat, direct messages (DMs), the board, the status and attachments are kept for **1 year** (a company can lower it to 90 or 30 days), one file per company. Before 1.6, none of this went to disk. What changes for users:
 
 - **The company's administrators can read DMs**, through an audit screen. Every read is logged (without the text), and both people in the conversation see the date. Every DM says so at the top, and people confirm it before their first one.
 - **Phone alerts show the start of the message** (up to 60 characters) for mentions and DMs, and it may show on the lock screen. It can be turned off in the profile or in the phone's notification settings.
 - **Attachments up to 25 MB, ZIP included** (5 GB per company). The type comes from the content, photos lose their location (GPS), and ZIP files are checked without ever being opened on the server. There is no antivirus.
+- **The building admin reads the general chat, the rooms, the board and the attachments of every company** (not DMs). Moderating (deleting someone else's message, taking a notice off the board) and changing the retention belong only to whoever runs each company; in the lobby, to the building admin.
 - The database is not encrypted: whoever runs the server can read everything.
 
 With no accounts, the chat stays in memory only, as before. Details in [where each piece of data goes](./docs/visitas-privadas-plano.md#conversas-da-equipe-no-disco-16) (in Portuguese).

@@ -153,6 +153,7 @@ class Equipe:
         self.pasta_anexos = os.path.join(pasta, ANEXOS)
         self.trava = threading.Lock()
         self.reservas = {}   # token -> (usuario, tamanho, instante); só na memória: reiniciar devolve tudo
+        self.dms_abertas = {}   # id da DM -> quando foi aberta: a varredura não tira a DM vazia de quem acabou de abrir
         self.vezes = {}      # (tipo, usuario) -> instante do último pedido limitado (busca, auditoria)
         os.makedirs(pasta, mode=0o700, exist_ok=True)
         caminho = os.path.join(pasta, ARQ)
@@ -465,7 +466,9 @@ class Equipe:
         with self.trava:
             with self.con:
                 self.con.execute("INSERT OR IGNORE INTO canal (chave, dm, u1, u2) VALUES (?, 1, ?, ?)", (chave, u1, u2))
-                return f"dm:{self.con.execute('SELECT id FROM canal WHERE chave=?', (chave,)).fetchone()[0]}"
+                id_dm = self.con.execute("SELECT id FROM canal WHERE chave=?", (chave,)).fetchone()[0]
+            self.dms_abertas[id_dm] = self.relogio()
+            return f"dm:{id_dm}"
 
     def dms(self, usuario):
         """As DMs da pessoa, da mais recente para a mais antiga. "outro" None: a outra ponta saiu (ex-membro)."""
@@ -613,21 +616,33 @@ class Equipe:
                                  "DO UPDATE SET valor = excluded.valor", (dias,))
 
     def varrer(self):
-        """A varredura diária: tira o que passou da retenção (e os anexos junto), o registro de acesso com mais de 1 ano
-        e, se ainda passar do teto, as mais antigas. Os temporários de envio sem reserva viva também saem."""
+        """A varredura diária: tira o que passou da retenção (as mensagens com os anexos, e os avisos do mural), o
+        registro de acesso com mais de 1 ano e, se ainda passar do teto, as mais antigas. Os temporários de envio sem
+        reserva viva também saem, e a DM sem nenhuma mensagem (e não aberta no último dia) perde a linha, com as
+        leituras: o par deixa de constar no banco. A DM de id mais alto fica sempre, para o id de uma DM que saiu nunca
+        voltar noutro par (o SQLite reusa o maior rowid apagado, e o registro de acesso aponta para o id)."""
         with self.trava:
             agora = self.relogio()
             prazo = agora - self._ajuste("retencao", RETENCAO_PADRAO) * DIA
             with self.con:
                 ids = [i for (i,) in self.con.execute("SELECT id FROM mensagem WHERE em < ?", (prazo,))]
                 tokens = self._apagar_linhas(ids)
+                avisos = self.con.execute("DELETE FROM mural WHERE em < ?", (prazo,)).rowcount
+                self.dms_abertas = {i: q for i, q in self.dms_abertas.items() if q >= agora - DIA}
+                vazias = [i for (i,) in self.con.execute(
+                    "SELECT id FROM canal c WHERE dm = 1 AND id < (SELECT MAX(id) FROM canal) "
+                    "AND NOT EXISTS (SELECT 1 FROM mensagem m WHERE m.canal = c.id)") if i not in self.dms_abertas]
+                for i in vazias:
+                    self.con.execute("DELETE FROM leitura WHERE canal = ?", (i,))
+                    self.con.execute("DELETE FROM canal WHERE id = ?", (i,))
                 registros = self.con.execute("DELETE FROM acesso_dm WHERE quando < ?", (agora - REGISTRO_DIAS * DIA,)).rowcount
             self._apagar_arquivos(tokens)
             self._reservado(agora)
             self._limpar_temporarios(agora)
-            if ids or registros:
+            if ids or avisos or vazias or registros:
                 self._limpar_disco()
-            return {"por_prazo": len(ids), "por_teto": self._cortar_pelo_teto(), "registros": registros}
+            return {"por_prazo": len(ids), "por_teto": self._cortar_pelo_teto(), "registros": registros,
+                    "avisos": avisos, "dms_vazias": len(vazias)}
 
     def uso(self):
         """O que a tela do admin mostra: o banco perto do teto e os anexos perto da cota (alerta em 90%)."""
@@ -737,14 +752,16 @@ class Equipe:
         except FileNotFoundError:
             pass
 
-    def anexar(self, token, usuario, nome, canal, arquivo, tipo, tamanho, sha256, texto=""):
-        """Confirma o envio: o temporário vai para anexos/<token> e vira uma mensagem com o anexo."""
+    def anexar(self, token, usuario, nome, canal, arquivo, tipo, tamanho, sha256, texto="", mencoes=()):
+        """Confirma o envio: o temporário vai para anexos/<token> e vira uma mensagem com o anexo (as menções do texto
+        entram como no enviar)."""
         temporario = self.temporario(token)
         usuario, nome, arquivo = _usuario(usuario), _nome(nome), _nome_arquivo(arquivo)
         if not isinstance(tipo, str) or not TIPO_OK.fullmatch(tipo) or not isinstance(sha256, str) \
                 or not SHA_OK.fullmatch(sha256):
             raise ValueError("anexo inválido")
         limpo = limpar_texto(texto) if texto else ""
+        citados = {_usuario(u) for u in mencoes} - {usuario}
         with self.trava:
             agora = self.relogio()
             self._reservado(agora)
@@ -760,6 +777,9 @@ class Equipe:
                     id_m = self._inserir(self._escrever_canal(canal, usuario), usuario, nome, limpo, agora)
                     self.con.execute("INSERT INTO anexo (mensagem, token, nome, tipo, tamanho, sha256) VALUES (?, ?, ?, ?, ?, ?)",
                                      (id_m, token, arquivo, tipo, tamanho, sha256))
+                    if _canal(canal)[1] is None:
+                        self.con.executemany("INSERT INTO mencao (mensagem, usuario) VALUES (?, ?)",
+                                             [(id_m, u) for u in sorted(citados)])
                     os.replace(temporario, final)
             except BaseException:
                 if os.path.exists(final):   # o commit falhou depois de mover: sem linha, sem arquivo
@@ -768,16 +788,23 @@ class Equipe:
             del self.reservas[token]
             return self._mensagens("m.id = ?", (id_m,), usuario)[0]
 
-    def arquivo_do_anexo(self, usuario, id_anexo):
-        """Para servir: o caminho no disco e os metadados. Anexo de DM só para as duas pontas."""
+    def arquivo_do_anexo(self, usuario, id_anexo, auditoria=False):
+        """Para servir: o caminho no disco e os metadados. Anexo de DM só para as duas pontas, ou para o admin pela
+        auditoria (auditoria=True; o escritorio.py só passa para o admin da empresa no andar): aí o download entra no
+        registro de acesso da DM, como a leitura (1 mensagem), e "auditoria" volta True."""
         with self.trava:
-            linha = self.con.execute("SELECT a.token, a.nome, a.tipo, a.tamanho, c.id, c.dm, c.chave FROM anexo a "
-                                     "JOIN mensagem m ON m.id = a.mensagem JOIN canal c ON c.id = m.canal WHERE a.id = ?",
-                                     (id_anexo,)).fetchone()
+            linha = self.con.execute("SELECT a.token, a.nome, a.tipo, a.tamanho, c.id, c.dm, c.chave, c.u1, c.u2 "
+                                     "FROM anexo a JOIN mensagem m ON m.id = a.mensagem JOIN canal c ON c.id = m.canal "
+                                     "WHERE a.id = ?", (id_anexo,)).fetchone()
             if linha is None:
                 raise SemAcesso()
-            token, arquivo, tipo, tamanho, id_c, dm, chave = linha
-            if dm:
+            token, arquivo, tipo, tamanho, id_c, dm, chave, u1, u2 = linha
+            auditou = bool(dm and auditoria)
+            if auditou:
+                with self.con:
+                    self.con.execute("INSERT INTO acesso_dm (canal, admin, u1, u2, quando, quantas) VALUES "
+                                     "(?, ?, ?, ?, ?, 1)", (id_c, _usuario(usuario), u1, u2, self.relogio()))
+            elif dm:
                 self._dm(id_c, usuario)
         return {"caminho": os.path.join(self.pasta_anexos, token), "nome": arquivo, "tipo": tipo, "tamanho": tamanho,
-                "canal": f"dm:{id_c}" if dm else chave}
+                "canal": f"dm:{id_c}" if dm else chave, "auditoria": auditou}

@@ -3,6 +3,8 @@ import os
 import shutil
 import struct
 import tempfile
+import time
+import tracemalloc
 import unittest
 import zipfile
 import zlib
@@ -215,6 +217,68 @@ class Zip(Base):
     def test_diretorio_central_grande_recusado(self):
         with mock.patch.object(anexos, "ZIP_CENTRAL_MAX", 100):
             self.recusa(zip_de([(f"{i:03d}-nome-comprido.txt", b"") for i in range(10)]), "a.zip")
+
+
+MB25 = 25 * 1024 * 1024
+
+
+class Custo(Base):
+    """O DoS do gate: 25 MB feitos para o laço de Python. Cada um é recusado, ou aceito em menos de 1 s, e a limpeza
+    não junta o arquivo na memória."""
+    def medir(self, dados, nome):
+        pasta, caminho = _arquivo(dados)
+        self.addCleanup(shutil.rmtree, pasta, ignore_errors=True)
+        tracemalloc.start()
+        comeco = time.perf_counter()
+        try:
+            resultado = anexos.validar(caminho, nome)
+        except anexos.Recusado:
+            resultado = None
+        finally:
+            gasto = time.perf_counter() - comeco
+            pico = tracemalloc.get_traced_memory()[1]
+            tracemalloc.stop()
+        self.assertLess(gasto, 1.0)
+        self.assertLess(pico, 4 * 1024 * 1024)
+        self.assertEqual(os.listdir(pasta), ["a"])   # o .limpo não sobra
+        return resultado
+
+    def test_jpeg_com_rst_fora_do_scan_recusado(self):
+        cabeca = jpeg()[:jpeg().index(b"\xff\xda")]
+        self.assertIsNone(self.medir(cabeca + b"\xff\xd0" * (MB25 // 2) + b"\xff\xd9", "a.jpg"))
+
+    def test_jpeg_com_scan_de_ff00_aceito_rapido(self):
+        cabeca = jpeg()[:jpeg().index(b"\x12\xff\x00")]
+        tipo, _ = self.medir(cabeca + b"\xff\x00" * (MB25 // 2) + b"\xff\xd9", "a.jpg")
+        self.assertEqual(tipo, "image/jpeg")
+
+    def test_jpeg_com_segmentos_ou_scans_demais_recusado(self):
+        corpo = jpeg()[:-2]
+        self.assertIsNone(self.medir(corpo + b"\xff\xfe\x00\x02" * (MB25 // 4) + b"\xff\xd9", "a.jpg"))
+        sos = b"\xff\xda\x00\x08\x01\x01\x00\x00\x3f\x00\x12"
+        self.assertIsNone(self.medir(corpo + sos * (anexos.JPEG_SCANS_MAX + 1) + b"\xff\xd9", "a.jpg"))
+
+    def test_png_com_chunks_vazios_demais_recusado(self):
+        corpo = png()
+        fim = corpo.index(_chunk(b"IEND", b""))
+        vazio = _chunk(b"teXt", b"")
+        self.assertIsNone(self.medir(corpo[:fim] + vazio * (MB25 // len(vazio)) + corpo[fim:], "a.png"))
+
+    def test_gif_com_sub_blocos_de_1_byte_recusado(self):
+        corpo = gif()
+        imagem = b"\x2c" + struct.pack("<HHHH", 0, 0, 1, 1) + b"\x00\x02" + b"\x01\x00" * (MB25 // 2) + b"\x00"
+        self.assertIsNone(self.medir(corpo[:-1] + imagem + b"\x3b", "a.gif"))
+
+    def test_webp_com_chunks_vazios_demais_recusado(self):
+        corpo = webp()[12:] + _riff(b"ALPH", b"") * (MB25 // 8)
+        self.assertIsNone(self.medir(b"RIFF" + struct.pack("<I", len(corpo) + 4) + b"WEBP" + corpo, "a.webp"))
+
+    def test_png_grande_de_verdade_aceito(self):
+        corpo = png()
+        fim = corpo.index(_chunk(b"IDAT", zlib.compress(b"\x00\x00")))
+        idat = _chunk(b"IDAT", bytes(8192))   # o tamanho do libpng
+        tipo, _ = self.medir(corpo[:fim] + idat * (MB25 // len(idat)) + corpo[fim:], "a.png")
+        self.assertEqual(tipo, "image/png")
 
 
 class NomeFinal(unittest.TestCase):

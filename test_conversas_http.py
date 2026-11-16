@@ -23,6 +23,7 @@ from unittest import mock
 
 import andares
 import avisos
+import conversas_equipe
 import escritorio as e
 from acesso import Acesso
 
@@ -30,6 +31,7 @@ SENHA, SENHA_DONO = "senha-da-pessoa-1", "senha-bem-grande"
 AVATAR = {"color": "rose", "eyes": "round", "accessory": "cap"}
 ORG_B, ORG_C = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 GPS = b"GPSLatitude-23.5505GPSLongitude-46.6333"
+PAINEL = {"X-Escritorio": "1"}   # o cabeçalho do painel nas rotas da auditoria
 
 
 def _chunk(tipo, dados):
@@ -63,8 +65,8 @@ class Http(unittest.TestCase):
             return err.code, err.read(), err.headers
 
     @classmethod
-    def get(cls, rota, quem):
-        st, corpo, _ = cls.req(rota, cls.cab[quem])
+    def get(cls, rota, quem, extra=None):
+        st, corpo, _ = cls.req(rota, {**cls.cab[quem], **(extra or {})})
         try:
             return st, json.loads(corpo)
         except ValueError:
@@ -178,6 +180,55 @@ class Ligado(unittest.TestCase):
         self.assertTrue(e.equipe_ligada(srv))
 
 
+class AcessoSemContas:
+    """O escritório de antes da 1.6: login sem contas nem papéis (todo logado é admin)."""
+    def sessao(self, token):
+        return "equipe" if token == "sessao-antiga" else None
+
+
+class Desligado(Http):
+    """Condição (3): sem conta e sem andares.json, as rotas novas dão 404 e o config e o ao-vivo ficam como antes."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dados = tempfile.mkdtemp(prefix="conversas-desligado-")
+        cls.antes = e.BASE, e.TIMES
+        e.TIMES = os.path.join(cls.dados, "times.json")
+        with open(e.TIMES, "w", encoding="utf-8") as f:
+            json.dump({"conversas": "ler", "times": []}, f)
+        cls.srv = e.Servidor(("127.0.0.1", 0), e.Pagina)
+        cls.srv.dados = cls.dados
+        cls.srv.leitor, cls.srv.cred, cls.srv.acesso = Leitor(), None, AcessoSemContas()
+        cls.srv.registro_andares = andares.Andares(cls.dados, e.ORG)
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        cls.base = e.BASE = "http://127.0.0.1:%d" % cls.srv.server_address[1]
+        cls.cab = {"equipe": {"Cookie": e.nome_cookie() + "=sessao-antiga", **PAINEL}}
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+        e.BASE, e.TIMES = cls.antes
+        shutil.rmtree(cls.dados, ignore_errors=True)
+
+    def test_rotas_novas_404_config_e_ao_vivo_como_antes(self):
+        self.assertFalse(e.equipe_ligada(self.srv))
+        for rota in sorted(e.EQUIPE_GET | e.AUDITORIA_GET):
+            st, r = self.get(rota + "?canal=geral&id=1", "equipe")
+            self.assertEqual((st, r["erro"]), (404, "desligado"), rota)
+        for rota in sorted(e.EQUIPE_POST - {"/api/anexo"}) + ["/api/canal/retencao"]:
+            self.assertEqual(self.post(rota, "equipe", {})[0], 404, rota)
+        self.assertEqual(self.anexo("/api/anexo?canal=geral", "equipe", b"oi", "x.txt")[0], 404)
+        st, cfg = self.get("/api/config", "equipe")
+        self.assertEqual(st, 200)
+        self.assertIsNone(cfg["equipe"])
+        st, vivo = self.get("/api/ao-vivo?canal=geral&depois=0", "equipe")
+        self.assertEqual(st, 200)
+        self.assertFalse(set(vivo) & {"meu_status", "acenos", "mural_v", "nao_lidas", "mencoes", "aberto", "no_predio"})
+        self.assertFalse(any("status" in p for p in vivo["pessoas"]))
+        self.assertEqual(self.srv.equipes, {})
+        self.assertFalse(os.path.exists(os.path.join(self.dados, "equipe.db")))
+
+
 class Canais(Predio):
     def test_config_traz_equipe(self):
         st, cfg = self.get(f"/api/config?andar={self.B}", "ana")
@@ -227,6 +278,22 @@ class Canais(Predio):
         self.assertEqual(self.post(f"/api/canal/apagar?andar={self.B}", "beto", {"id": m["id"]})[0], 200)   # modera
         h = self.get(f"/api/canal/historico?andar={self.B}&canal=geral", "bia")[1]["mensagens"]
         self.assertTrue(next(x for x in h if x["id"] == m["id"])["apagada"])
+
+    def test_admin_do_predio_le_mas_nao_modera_a_empresa(self):
+        m = self.envia("ana", "geral", "do dono não")
+        st, r = self.post(f"/api/mural/fixar?andar={self.B}", "ana", {"canal": "geral", "texto": "aviso da ana"})
+        aviso = next(a for a in r["avisos"] if a["texto"] == "aviso da ana")
+        self.assertFalse(self.get(f"/api/config?andar={self.B}", "dono")[1]["equipe"]["pode_moderar"])
+        self.assertTrue(self.get(f"/api/config?andar={self.B}", "beto")[1]["equipe"]["pode_moderar"])
+        st, h = self.get(f"/api/canal/historico?andar={self.B}&canal=geral", "dono")
+        self.assertIn("do dono não", [x["texto"] for x in h["mensagens"]])   # lê
+        self.assertEqual(self.post(f"/api/canal/apagar?andar={self.B}", "dono", {"id": m["id"]})[0], 404)
+        self.assertEqual(self.post(f"/api/mural/tirar?andar={self.B}", "dono", {"id": aviso["id"]})[0], 404)
+        self.assertEqual(self.post(f"/api/canal/retencao?andar={self.B}", "dono", {"dias": 30})[0], 403)
+        self.assertEqual(self.eq(self.B).retencao(), 365)
+        self.assertEqual(self.post(f"/api/canal/retencao?andar={self.B}", "beto", {"dias": 365}), (200, {"retencao": 365}))
+        self.assertEqual(self.post(f"/api/canal/retencao?andar={self.B}", "cida", {"dias": 30})[0], 404)   # de C
+        self.assertEqual(self.post(f"/api/mural/tirar?andar={self.B}", "beto", {"id": aviso["id"]})[0], 200)
 
     def test_busca(self):
         self.envia("ana", "sala:reuniao", "orçamento trimestral")
@@ -307,10 +374,15 @@ class DMs(Predio):
         self.assertEqual(self.get(f"/api/dm/auditoria/pares?andar={self.B}", "ana")[0], 403)   # membro
         self.assertEqual(self.get(f"/api/dm/auditoria/pares?andar={self.B}", "cida")[0], 404)  # admin de C
         self.assertEqual(self.get(f"/api/dm/auditoria?andar={self.B}&canal={canal}", "dono")[0], 404)   # do prédio
+        for cab in ({}, {"Sec-Fetch-Site": "cross-site"}, {"X-Escritorio": "0"}):   # só pelo painel (<img> de fora não)
+            for rota in (f"/api/dm/auditoria?andar={self.B}&canal={canal}", f"/api/dm/auditoria/pares?andar={self.B}"):
+                self.assertEqual(self.get(rota, "beto", cab), (403, {"erro": "origem", "mensagem":
+                                                                     "Abra pelo painel do escritório."}), (rota, cab))
+        self.assertEqual(self.eq(self.B).con.execute("SELECT COUNT(*) FROM acesso_dm").fetchone()[0], 0)
         saida = io.StringIO()
         with contextlib.redirect_stdout(saida):
-            st, pares = self.get(f"/api/dm/auditoria/pares?andar={self.B}", "beto")
-            st2, lido = self.get(f"/api/dm/auditoria?andar={self.B}&canal={canal}", "beto")
+            st, pares = self.get(f"/api/dm/auditoria/pares?andar={self.B}", "beto", {"Sec-Fetch-Site": "same-origin"})
+            st2, lido = self.get(f"/api/dm/auditoria?andar={self.B}&canal={canal}", "beto", PAINEL)
         self.assertEqual((st, st2), (200, 200))
         self.assertEqual([(p["canal"], p["u1"], p["u2"]) for p in pares["pares"]], [(canal, "ana", "bia")])
         self.assertEqual([x["texto"] for x in lido["mensagens"]], ["texto da dm"])   # sem a apagada
@@ -321,9 +393,21 @@ class DMs(Predio):
         registro = self.eq(self.B).con.execute("SELECT * FROM acesso_dm").fetchall()
         self.assertNotIn("texto da dm", json.dumps(registro))
         self.assertEqual(len(self.get(f"/api/canal/historico?andar={self.B}&canal={canal}", "ana")[1]["acessos"]), 1)
-        self.assertEqual(len(self.get(f"/api/dm/auditoria/registro?andar={self.B}", "dono")[1]["registro"]), 1)
+        self.assertEqual(len(self.get(f"/api/dm/auditoria/registro?andar={self.B}", "dono", PAINEL)[1]["registro"]), 1)
         self.assertEqual(self.get(f"/api/dm/auditoria/registro?andar={self.B}", "ana")[0], 403)
         self.assertNotEqual(m["id"], 0)
+
+
+class Varredura(Predio):
+    def test_varre_o_andar_que_ninguem_abriu_desde_o_boot(self):
+        andar = self.srv.andares[self.C]
+        velho = conversas_equipe.Equipe(andar.pasta, relogio=lambda: time.time() - 400 * 86400)
+        velho.enviar("geral", "carlos", "Carlos", "de 400 dias atrás")
+        velho.fechar()
+        self.assertNotIn(self.C, self.srv.equipes)
+        self.srv.varrer_equipes()
+        self.assertEqual(self.eq(self.C).historico("carlos", "geral"), [])
+        self.assertNotIn(self.B, self.srv.equipes)   # B não tem equipe.db: não ganha um
 
 
 class Push(Predio):
@@ -411,6 +495,27 @@ class Anexos(Predio):
         self.assertEqual(st, 200, r)
         self.assertEqual(self.req(f"/api/anexo?andar={self.B}&id={r['mensagem']['anexo']['id']}", self.cab["beto"])[0], 404)
         self.assertEqual(self.anexo(f"/api/anexo?andar={self.B}&canal={canal}", "beto", b"oi", "x.txt")[0], 404)
+
+    def test_auditor_baixa_o_anexo_da_dm_com_registro(self):
+        canal = self.dm("ana", "bia")
+        st, r = self.anexo(f"/api/anexo?andar={self.B}&canal={canal}", "bia", b"contrato", "c.txt")   # ana já gastou o balde
+        rota = f"/api/anexo?andar={self.B}&id={r['mensagem']['anexo']['id']}&auditoria=1"
+        registro = lambda: self.eq(self.B).con.execute("SELECT admin, u1, u2, quantas FROM acesso_dm").fetchall()
+        self.assertEqual(self.req(rota, self.cab["dono"])[0], 404)   # o admin do prédio não lê DM
+        self.assertEqual(self.req(rota, {**self.cab["dono"], **PAINEL})[0], 404)
+        self.assertEqual(self.req(rota, self.cab["beto"])[0], 403)   # sem o cabeçalho do painel
+        self.assertEqual(registro(), [])
+        st, corpo, h = self.req(rota, {**self.cab["beto"], **PAINEL})
+        self.assertEqual((st, corpo), (200, b"contrato"))
+        self.assertEqual(registro(), [("beto", "ana", "bia", 1)])
+        self.assertEqual(len(self.get(f"/api/canal/historico?andar={self.B}&canal={canal}", "bia")[1]["acessos"]), 1)
+
+    def test_mencao_no_texto_do_anexo_grava(self):
+        st, r = self.anexo(f"/api/anexo?andar={self.B}&canal=geral", "bia", b"oi", "x.txt", "@ana e @carlos, vejam")
+        self.assertEqual(st, 200, r)
+        linhas = self.eq(self.B).con.execute("SELECT usuario FROM mencao WHERE mensagem = ?",
+                                             (r["mensagem"]["id"],)).fetchall()
+        self.assertEqual(linhas, [("ana",)])
 
     def test_grande_demais_413_e_sem_tamanho_411(self):
         conexao = http.client.HTTPConnection("127.0.0.1", self.srv.server_address[1], timeout=10)
@@ -539,6 +644,15 @@ class Saguao(Http):
         self.assertEqual(self.anexo("/api/anexo?canal=geral", "dono", b"oi", "x.txt")[0], 404)
         cfg = self.get("/api/config", "bia")[1]["equipe"]
         self.assertEqual((cfg["dm"], cfg["anexo"], cfg["mencao"], cfg["auditoria"]), (False, False, False, False))
+
+    def test_admin_do_predio_modera_o_saguao(self):
+        self.assertTrue(self.get("/api/config", "dono")[1]["equipe"]["pode_moderar"])
+        self.assertFalse(self.get("/api/config", "bia")[1]["equipe"]["pode_moderar"])
+        time.sleep(0.3)
+        st, r = self.post("/api/canal/enviar", "bia", {"canal": "geral", "texto": "modere-me"})
+        self.assertEqual(self.post("/api/canal/apagar", "ana", {"id": r["mensagem"]["id"]})[0], 404)
+        self.assertEqual(self.post("/api/canal/apagar", "dono", {"id": r["mensagem"]["id"]})[0], 200)
+        self.assertEqual(self.post("/api/canal/retencao", "bia", {"dias": 90})[0], 403)
 
     def test_mural_status_aceno_e_no_predio(self):
         st, r = self.post("/api/mural/fixar", "bia", {"canal": "geral", "texto": "bem-vindos"})

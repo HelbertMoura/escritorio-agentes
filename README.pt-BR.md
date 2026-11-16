@@ -211,13 +211,14 @@ Além de quem administra, o escritório pode ter contas de membro para o resto d
 
 O membro vê o escritório dos andares liberados, a vida social, o jornal e as novidades, pode ligar o aviso no celular e muda o próprio nome e boneco em **Configurações › Meu perfil**. Ele não lê as conversas dos agentes nem responde por eles, e não mexe em marca, planta, times, clima, andares, membros ou visitas. O **Sair de todos os aparelhos** de um membro derruba só as sessões dele e desliga o aviso só nos aparelhos dele.
 
-No mapa, cada pessoa conectada aparece com o próprio nome e boneco, e cada sala tem um chat de texto para quem está nela. Visitantes de fora não veem a equipe.
+No mapa, cada pessoa conectada aparece com o próprio nome e boneco, e cada sala tem um chat de texto. Sem nenhuma conta, o chat da sala chega só a quem está nela e some em 10 minutos. Com as conversas da equipe ligadas (abaixo), o que se diz numa sala fica guardado pela retenção, e toda pessoa do andar pode ler, inclusive o que foi dito antes de ela chegar. Visitantes de fora não veem a equipe.
 
 **Conversas da equipe (1.6): agora ficam no disco.** Com pelo menos 1 conta, o chat geral e das salas, as mensagens diretas (DM), o mural, o status e os anexos ficam guardados por **1 ano** (a empresa pode baixar para 90 ou 30 dias), um arquivo por empresa. Antes da 1.6, nada disso ia ao disco. O que muda para quem usa:
 
 - **A DM pode ser lida pela administração da empresa**, por uma tela de auditoria. Cada leitura fica registrada (sem o texto), e as duas pessoas da conversa veem a data. Toda DM avisa isso no topo, e a pessoa confirma antes da primeira.
 - **O aviso no celular mostra o começo da mensagem** (até 60 caracteres) na menção e na DM, e ele pode aparecer na tela bloqueada. Dá para desligar no perfil ou no ajuste de notificações do celular.
 - **Anexos de até 25 MB, ZIP incluído** (5 GB por empresa). O tipo sai do conteúdo, a foto perde a localização (GPS), e o ZIP é conferido sem nunca ser aberto no servidor. Não há antivírus.
+- **O admin do prédio lê o geral, as salas, o mural e os anexos de toda empresa** (a DM, não). Moderar (apagar mensagem de outra pessoa, tirar aviso do mural) e mudar a retenção é só de quem administra cada empresa; no saguão, do admin do prédio.
 - O banco não é cifrado: quem opera o servidor lê tudo.
 
 Sem nenhuma conta, o chat continua só na memória, como antes. Os detalhes estão em [para onde vai cada dado](./docs/visitas-privadas-plano.md#conversas-da-equipe-no-disco-16).

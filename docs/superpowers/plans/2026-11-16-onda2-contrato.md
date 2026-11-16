@@ -46,13 +46,14 @@ Campo novo `equipe` (`null` com o store desligado):
            "status": ["disponivel", "ocupado", "reuniao", "ausente"]}
 ```
 - `retencao`: os dias (365, 90 ou 30) da empresa (item 10). `pode_moderar`: apaga mensagem alheia em canal e tira aviso
-  do mural (admin da empresa; no saguão, o admin do prédio).
+  do mural: só quem tem papel `admin` **neste** andar; no saguão, o admin do prédio. O admin do prédio lê os andares
+  das empresas, mas sai `false` neles.
 - `dm`, `anexo`, `mencao`: `false` no saguão. `auditoria`: `true` só para quem tem papel `admin` **neste** andar (o
   admin do prédio que não é admin do andar sai `false`).
 - `aviso_dm` (o texto fixo do topo de toda DM, E.3) e `aviso_dm_entendido` (o "Entendi" desta conta neste andar, item 6).
 - `mural: true` quando o store está ligado (Flynn: sem store, sem mural).
 - Retenção: `POST /api/canal/retencao?andar=` `{"dias": 30|90|365}` → `{"retencao": dias}`. Só o admin da empresa (no
-  saguão, o do prédio); a empresa só baixa de 1 ano (D3). Membro: 403 `papel`.
+  saguão, o do prédio); a empresa só baixa de 1 ano (D3). Membro e admin do prédio no andar de uma empresa: 403 `papel`.
 
 ## 2. `/api/ao-vivo` (deltas; tudo o que já existia continua igual)
 
@@ -132,8 +133,8 @@ Campos novos (só com o store ligado):
   `{"status", "texto"}`. Fica na conta, por andar (e no saguão), no disco do andar. 1/s com rajada de 3.
 - `POST /api/aceno` `{"para": "<usuario ou id opaco>", "tipo": "aceno"|"porta"}` → `{"ok": true}`. `para` precisa
   estar no andar agora (na presença); senão 404 `nao_existe`. Quem está `ocupado` não recebe: 409 `ocupado`. 1 a cada 30 s
-  por par (429 `limite`). Para você mesmo: 400 `pedido`. Chega no `/api/ao-vivo` de quem recebe (`acenos`) e, se a aba
-  dele estiver fechada (fora da presença), vira push (não no saguão).
+  por par (429 `limite`). Para você mesmo: 400 `pedido`. Chega no `/api/ao-vivo` de quem recebe (`acenos`) e no aviso
+  da tela (`GET /api/avisos`, fora do saguão); push, nunca: quem recebe está na presença, com o escritório aberto.
 
 ## 7. Anexo (E.5; não existe no saguão)
 
@@ -156,6 +157,8 @@ Download: `GET /api/anexo?andar=&id=<anexo.id>[&baixar=1]`
 - `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`,
   `Cache-Control: private, no-store`. Sem Range. Anexo que não existe ou de DM alheia: 404 `nao_existe`.
 - 4 downloads ao mesmo tempo por pessoa (o 5º: 429 `limite`).
+- Na tela de auditoria, o anexo da DM baixa com `&auditoria=1` e o cabeçalho do painel (item 8): só o admin **deste**
+  andar (os outros: 404 de andar), e cada download entra no registro como uma leitura (`quantas: 1`).
 
 ## 8. Auditoria de DM (E.3; só o admin **deste** andar; não existe no saguão)
 
@@ -170,6 +173,9 @@ Download: `GET /api/anexo?andar=&id=<anexo.id>[&baixar=1]`
 - `lembrete`: "O acesso a esta conversa fica registrado e as duas pessoas veem a data." — mostre ao abrir.
 - Pares e leitura: só quem tem papel `admin` no andar. Membro: 403 `papel`. Admin de outro andar e admin do prédio sem
   papel admin no andar: 404. Ler não marca como lida e grava o registro (sem texto). 1 leitura por segundo (429).
+- **Toda rota da auditoria** (as três acima e o anexo com `&auditoria=1`) manda o cabeçalho `X-Escritorio: 1` (no
+  `fetch`; o `<img src>` da mesma origem já vai com `Sec-Fetch-Site: same-origin`, que também vale). Sem nenhum dos
+  dois: 403 `origem` ("Abra pelo painel do escritório.") e nada é registrado.
 - Registro: os admins do andar e o admin do prédio.
 
 ## 9. Push (E.4) e `GET /api/avisos`

@@ -76,107 +76,115 @@ def nome_final(nome, tipo):
 
 
 # ---------------------------------------------------------------- imagens: sem metadado e sem cauda
+# O laço é Python puro: sem teto, 25 MB de segmentos vazios (ou de sub-blocos de 1 byte no GIF) custam segundos de CPU.
+# Os tetos ficam longe do arquivo de verdade (o libpng grava IDAT de 8 KB: 25 MB dão ~3200 chunks), o fim do scan do
+# JPEG sai de um regex sobre o mmap e a saída vai direto para o .limpo, por memoryview, sem juntar o arquivo numa lista.
+SEGMENTOS_MAX = 8192          # segmentos do JPEG, chunks do PNG e do WEBP, blocos do GIF
+JPEG_SCANS_MAX = 1024         # o progressivo do libjpeg usa ~10
+GIF_SUBBLOCOS_MAX = 1 << 18   # 25 MB em sub-blocos de 255 bytes dão ~100 mil
+_ENCHIMENTO = re.compile(rb"\xff+")
+_FIM_DO_SCAN = re.compile(rb"\xff[^\x00\xd0-\xd7]")   # FF00 e RSTn são dados do scan
 
-def _reescrever(caminho, pedacos):
-    temporario = caminho + ".limpo"
-    with open(temporario, "wb") as f:
-        for p in pedacos:
-            f.write(p)
-    os.replace(temporario, caminho)
+
+def _contar(contagem, chave, teto):
+    contagem[chave] = contagem.get(chave, 0) + 1
+    if contagem[chave] > teto:
+        raise Recusado("Imagem com partes demais.")
 
 
-def _jpeg(m):
+def _jpeg(m, v, f):
     """Os segmentos que ficam: APP0 (JFIF), APP2 do perfil de cor, APP14 da Adobe e os que desenham. Sai o resto dos
-    APPn (EXIF e XMP no APP1, IPTC no APP13) e os comentários, e tudo depois do EOI."""
-    n, pos, saida = len(m), 2, [b"\xff\xd8"]
+    APPn (EXIF e XMP no APP1, IPTC no APP13) e os comentários, e tudo depois do EOI. RST e TEM só valem dentro do scan."""
+    n, pos, contagem = len(m), 2, {}
+    f.write(b"\xff\xd8")
     while True:
+        _contar(contagem, "segmentos", SEGMENTOS_MAX)
         if pos + 2 > n or m[pos] != 0xFF:
             raise Recusado("Imagem JPEG quebrada.")
-        while pos + 1 < n and m[pos + 1] == 0xFF:   # bytes de enchimento entre marcadores
-            pos += 1
+        pos = _ENCHIMENTO.match(m, pos).end() - 1   # bytes de enchimento entre marcadores
+        if pos + 1 >= n:
+            raise Recusado("Imagem JPEG quebrada.")
         marcador = m[pos + 1]
         if marcador == 0xD9:
-            saida.append(b"\xff\xd9")
-            return saida
-        if marcador == 0x01 or 0xD0 <= marcador <= 0xD7:
-            saida.append(m[pos:pos + 2])
-            pos += 2
-            continue
-        if pos + 4 > n:
+            f.write(b"\xff\xd9")
+            return
+        if marcador == 0x01 or 0xD0 <= marcador <= 0xD7 or pos + 4 > n:
             raise Recusado("Imagem JPEG quebrada.")
         tamanho = struct.unpack(">H", m[pos + 2:pos + 4])[0]
         fim = pos + 2 + tamanho
         if tamanho < 2 or fim > n:
             raise Recusado("Imagem JPEG quebrada.")
-        dados = m[pos + 4:fim]
-        fica = not (0xE1 <= marcador <= 0xEF or marcador == 0xFE) or \
-            (marcador == 0xE2 and dados.startswith(b"ICC_PROFILE\x00")) or (marcador == 0xEE and dados.startswith(b"Adobe"))
-        if fica:
-            saida.append(m[pos:fim])
+        inicio = m[pos + 4:min(fim, pos + 16)]
+        if not (0xE1 <= marcador <= 0xEF or marcador == 0xFE) or \
+                (marcador == 0xE2 and inicio.startswith(b"ICC_PROFILE\x00")) or \
+                (marcador == 0xEE and inicio.startswith(b"Adobe")):
+            f.write(v[pos:fim])
         pos = fim
-        if marcador == 0xDA:   # os dados da imagem vão até o próximo marcador de verdade (FF00 e RSTn são dados)
-            i = pos
-            while True:
-                i = m.find(b"\xff", i)
-                if i < 0 or i + 1 >= n:
-                    raise Recusado("Imagem JPEG quebrada.")
-                if m[i + 1] == 0x00 or 0xD0 <= m[i + 1] <= 0xD7:
-                    i += 2
-                    continue
-                break
-            saida.append(m[pos:i])
-            pos = i
+        if marcador == 0xDA:   # os dados da imagem vão até o próximo marcador de verdade
+            _contar(contagem, "scans", JPEG_SCANS_MAX)
+            achado = _FIM_DO_SCAN.search(m, pos)
+            if not achado:
+                raise Recusado("Imagem JPEG quebrada.")
+            f.write(v[pos:achado.start()])
+            pos = achado.start()
 
 
-def _png(m):
+def _png(m, v, f):
     """Os chunks até o IEND, sem os de texto e de EXIF; nada depois do IEND."""
-    n, pos, saida = len(m), 8, [m[:8]]
-    primeiro = True
+    n, pos, contagem = len(m), 8, {}
+    f.write(v[:8])
     while pos + 12 <= n:
+        _contar(contagem, "chunks", SEGMENTOS_MAX)
         tamanho, tipo = struct.unpack(">I4s", m[pos:pos + 8])
         fim = pos + 12 + tamanho
-        if fim > n or (primeiro and tipo != b"IHDR"):
+        if fim > n or (pos == 8 and tipo != b"IHDR"):
             break
-        primeiro = False
         if tipo not in (b"eXIf", b"tEXt", b"iTXt", b"zTXt"):
-            saida.append(m[pos:fim])
+            f.write(v[pos:fim])
         if tipo == b"IEND":
-            return saida
+            return
         pos = fim
     raise Recusado("Imagem PNG quebrada.")
 
 
-def _webp(m):
-    """Os chunks do RIFF sem EXIF e XMP (e os bits deles no VP8X apagados); nada além do tamanho do RIFF."""
+def _webp(m, v, f):
+    """Os chunks do RIFF sem EXIF e XMP (e os bits deles no VP8X apagados); nada além do tamanho do RIFF. O tamanho
+    novo do RIFF vai no fim, por cima do provisório."""
     n = len(m)
     fim = 8 + struct.unpack("<I", m[4:8])[0]
     if fim > n or fim < 20:
         raise Recusado("Imagem WEBP quebrada.")
-    pos, chunks = 12, []
+    pos, contagem = 12, {}
+    f.write(b"RIFF\x00\x00\x00\x00WEBP")
     while pos + 8 <= fim:
+        _contar(contagem, "chunks", SEGMENTOS_MAX)
         tipo, tamanho = struct.unpack("<4sI", m[pos:pos + 8])
         prox = pos + 8 + tamanho + (tamanho & 1)
         if pos + 8 + tamanho > fim:
             raise Recusado("Imagem WEBP quebrada.")
-        if not chunks and tipo not in (b"VP8 ", b"VP8L", b"VP8X"):
+        if pos == 12 and tipo not in (b"VP8 ", b"VP8L", b"VP8X"):
             raise Recusado("Imagem WEBP quebrada.")
         if tipo == b"VP8X" and tamanho >= 1:
-            chunks.append(m[pos:pos + 8] + bytes([m[pos + 8] & ~0x0C & 0xFF]) + m[pos + 9:min(prox, fim)])
+            f.write(v[pos:pos + 8])
+            f.write(bytes([m[pos + 8] & ~0x0C & 0xFF]))
+            f.write(v[pos + 9:min(prox, fim)])
         elif tipo not in (b"EXIF", b"XMP "):
-            chunks.append(m[pos:min(prox, fim)])
+            f.write(v[pos:min(prox, fim)])
         pos = prox
-    if not chunks:
+    if pos == 12:
         raise Recusado("Imagem WEBP quebrada.")
-    corpo = b"WEBP" + b"".join(chunks)
-    return [b"RIFF", struct.pack("<I", len(corpo)), corpo]
+    total = f.tell()
+    f.seek(4)
+    f.write(struct.pack("<I", total - 8))
 
 
-def _gif(m):
+def _gif(m, v, f):
     """Os blocos até o trailer, sem comentários e sem extensões de aplicativo (fica só a do laço da animação)."""
-    n = len(m)
+    n, contagem = len(m), {}
 
     def sub_blocos(i):
         while True:
+            _contar(contagem, "sub-blocos", GIF_SUBBLOCOS_MAX)
             if i >= n:
                 raise Recusado("Imagem GIF quebrada.")
             if m[i] == 0:
@@ -186,23 +194,24 @@ def _gif(m):
     if n < 13:
         raise Recusado("Imagem GIF quebrada.")
     pos = 13 + (3 * 2 ** ((m[10] & 7) + 1) if m[10] & 0x80 else 0)
-    saida = [m[:pos]]
+    f.write(v[:pos])
     while pos < n:
+        _contar(contagem, "blocos", SEGMENTOS_MAX)
         b = m[pos]
         if b == 0x3B:
-            saida.append(b"\x3b")
-            return saida
+            f.write(b"\x3b")
+            return
         if b == 0x2C:
             if pos + 10 > n:
                 break
             fim = pos + 10 + (3 * 2 ** ((m[pos + 9] & 7) + 1) if m[pos + 9] & 0x80 else 0)
             fim = sub_blocos(fim + 1)   # o byte do tamanho mínimo do LZW e os dados
-            saida.append(m[pos:fim])
+            f.write(v[pos:fim])
         elif b == 0x21 and pos + 2 < n:
             rotulo, fim = m[pos + 1], sub_blocos(pos + 2)
             app = m[pos + 3:pos + 14] if rotulo == 0xFF else b""
             if rotulo != 0xFE and (rotulo != 0xFF or app in (b"NETSCAPE2.0", b"ANIMEXTS1.0")):
-                saida.append(m[pos:fim])
+                f.write(v[pos:fim])
         else:
             break
         pos = fim
@@ -210,12 +219,22 @@ def _gif(m):
 
 
 def _limpar_imagem(caminho, limpar):
-    with open(caminho, "rb") as f, mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as m:
-        try:
-            pedacos = [bytes(p) for p in limpar(m)]
-        except (struct.error, IndexError):
-            raise Recusado("Imagem quebrada.") from None
-    _reescrever(caminho, pedacos)
+    """Reescreve a imagem limpa no lugar: grava no .limpo enquanto lê e só troca se a limpeza chegou ao fim."""
+    temporario = caminho + ".limpo"
+    try:
+        with open(caminho, "rb") as f, mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as m, \
+                open(temporario, "wb") as saida:
+            v = memoryview(m)
+            try:
+                limpar(m, v, saida)
+            except (struct.error, IndexError):
+                raise Recusado("Imagem quebrada.") from None
+            finally:
+                v.release()
+        os.replace(temporario, caminho)
+    finally:
+        if os.path.exists(temporario):
+            os.remove(temporario)
 
 
 # ---------------------------------------------------------------- ZIP: só metadados

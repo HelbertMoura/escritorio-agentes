@@ -269,6 +269,26 @@ class Retencao(Base):
         self.assertEqual(self.eq.historico("bia", "geral"), [])
         self.assertNotEqual(velha, nova)
 
+    def test_mural_e_dm_vazia_saem_na_varredura(self):
+        self.eq.fixar("geral", "ana", "Ana", "aviso velho")
+        dm_velha = self.eq.abrir_dm("ana", "bia")
+        self.manda(self.eq, dm_velha, "ana", "vai vencer")
+        vazia = self.eq.abrir_dm("ana", "caio")
+        self.eq.marcar_lida("ana", vazia, 1)
+        self.r.t += 200 * DIA
+        self.eq.fixar("geral", "bia", "Bia", "aviso novo")
+        ultima = self.eq.abrir_dm("bia", "caio")   # a de id mais alto fica, mesmo vazia
+        self.r.t += 170 * DIA
+        rel = self.eq.varrer()
+        self.assertEqual((rel["avisos"], rel["dms_vazias"]), (1, 2))
+        self.assertEqual([a["texto"] for a in self.eq.mural("geral")], ["aviso novo"])
+        sobram = self.eq.con.execute("SELECT u1, u2 FROM canal WHERE dm = 1").fetchall()
+        self.assertEqual(sobram, [("bia", "caio")])
+        self.assertEqual(self.eq.con.execute("SELECT COUNT(*) FROM leitura").fetchone()[0], 0)
+        nova = self.eq.abrir_dm("ana", "bia")   # o par volta com outro id, nunca com um que já saiu
+        self.assertGreater(int(nova[3:]), int(ultima[3:]))
+        self.assertNotIn(nova, (dm_velha, vazia))
+
     def test_teto_do_banco_tira_as_mais_antigas_e_avisa(self):
         eq = self.abrir("teto", teto_banco=256 * 1024)
         ids = [self.manda(eq, "geral", "ana", f"m{i} " + "texto comprido " * 30)["id"] for i in range(600)]

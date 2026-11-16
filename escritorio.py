@@ -3214,6 +3214,15 @@ class Pagina(BaseHTTPRequestHandler):
         """Administra este andar: o admin do prédio (todos) ou o admin da empresa (só o dele; o saguão é do prédio)."""
         return self._admin_do_predio() or (id_andar != ANDAR_PRINCIPAL and self._papel(id_andar) == "admin")
 
+    def _moderador(self, id_andar):
+        """Modera as conversas (apaga mensagem alheia, tira aviso do mural) e muda a retenção (contrato da Onda 2): só
+        quem tem papel admin neste andar; no saguão, o admin do prédio. O admin do prédio lê os andares das empresas,
+        mas não modera nem muda a retenção deles."""
+        if id_andar == ANDAR_PRINCIPAL:
+            return self._admin_do_predio()
+        papel = getattr(self.server.acesso, "papel", None)
+        return papel is None or papel(self._usuario(), id_andar) == "admin"
+
     def _pode_andar(self, id_andar):
         """Quem administra o principal vê todos os andares; os outros, só os da própria conta (papel por andar no
         acesso.py), e o saguão, toda conta com pelo menos 1 andar. Sem papéis no acesso (todo logado é admin), vale todo
@@ -4267,13 +4276,14 @@ class Pagina(BaseHTTPRequestHandler):
             return []
         return sorted(u for u in {m.lower() for m in MENCAO.findall(texto)} - {autor} if self._do_andar(u, andar))
 
-    def _avisar(self, conta, andar, item):
+    def _avisar(self, conta, andar, item, push=True):
         """O aviso pessoal (E.4): sempre na tela (GET /api/avisos); push só se a pessoa não está "ocupada" neste andar
         nem com o escritório aberto. O saguão não tem aviso."""
         avisos = getattr(self.server, "avisos", None)
         if not avisos or andar.saguao:
             return
-        push = self.server.equipe_de(andar).status_de(conta)["status"] != "ocupado" and not self.server.presenca.aberto(conta)
+        push = push and self.server.equipe_de(andar).status_de(conta)["status"] != "ocupado" \
+            and not self.server.presenca.aberto(conta)
         avisos.pessoal(conta, andar.id, item, time.time(), push=push)
 
     def _depois_de_enviar(self, andar, eq, usuario, nome, msg, mencoes):
@@ -4309,7 +4319,7 @@ class Pagina(BaseHTTPRequestHandler):
             return None
         papel = getattr(self.server.acesso, "papel", None)
         tem_dm = not andar.saguao
-        return {"retencao": eq.retencao(), "pode_moderar": self._admin_do_andar(andar.id), "dm": tem_dm,
+        return {"retencao": eq.retencao(), "pode_moderar": self._moderador(andar.id), "dm": tem_dm,
                 "anexo": tem_dm, "mencao": tem_dm, "emojis": list(EMOJIS), "anexo_max": ANEXO_MAX,
                 "aviso_dm": AVISO_DM.format(empresa=empresa) if tem_dm else None,
                 "aviso_dm_entendido": eq.entendeu_dm(usuario) if tem_dm else False,
@@ -4368,7 +4378,13 @@ class Pagina(BaseHTTPRequestHandler):
         q = urllib.parse.parse_qs(caminho.query, keep_blank_values=True)
         um = lambda k: q.get(k, [None])[0]
         try:
+            papel = getattr(self.server.acesso, "papel", None)
+            admin_aqui = papel is None or papel(usuario, andar.id) == "admin"
             if rota == "/api/anexo":
+                if q.get("auditoria") == ["1"] and not admin_aqui:
+                    return self._sem_andar()
+                if q.get("auditoria") == ["1"] and not self._do_painel():
+                    return self._fora_do_painel(rota)
                 return self._get_anexo(andar, eq, usuario, q)
             if rota == "/api/canal/historico":
                 canal = um("canal")
@@ -4396,15 +4412,13 @@ class Pagina(BaseHTTPRequestHandler):
                 return self._json(200, {"dms": [{**d, "outro": {"usuario": d["outro"], "nome": contas.get(d["outro"], d["outro"])}
                                                  if d["outro"] else None} for d in eq.dms(usuario)]})
             # a auditoria de DM (E.3): só quem tem papel admin NESTE andar (a empresa é a controladora); o registro,
-            # também o admin do prédio. Os outros: o 404 de andar
-            papel = getattr(self.server.acesso, "papel", None)
-            admin_aqui = papel is None or papel(usuario, andar.id) == "admin"
-            if rota == "/api/dm/auditoria/registro":
-                if not (admin_aqui or self._admin_do_predio()):
-                    return self._sem_andar()
-                return self._json(200, {"registro": eq.registro_acessos_dm()})
-            if not admin_aqui:
+            # também o admin do prédio. Os outros: o 404 de andar. Toda rota dela só pelo painel (_do_painel)
+            if not (admin_aqui or (rota == "/api/dm/auditoria/registro" and self._admin_do_predio())):
                 return self._sem_andar()
+            if not self._do_painel():
+                return self._fora_do_painel(rota)
+            if rota == "/api/dm/auditoria/registro":
+                return self._json(200, {"registro": eq.registro_acessos_dm()})
             if rota == "/api/dm/auditoria/pares":
                 log(evento="dm_auditoria", andar=andar.id, resultado="pares")
                 return self._json(200, {"pares": eq.pares_dm(), "lembrete": LEMBRETE_AUDITORIA})
@@ -4422,6 +4436,16 @@ class Pagina(BaseHTTPRequestHandler):
         except ValueError:
             return self._json(*erro(400, "pedido", "Pedido inválido."))
 
+    def _do_painel(self):
+        """O pedido veio do próprio painel, não de um <img>, link ou formulário de outro site (a auditoria grava acesso
+        a cada leitura): Sec-Fetch-Site same-origin, que o navegador põe e a página não forja, ou o X-Escritorio: 1, que
+        outro site só manda com CORS (e o escritório não libera)."""
+        return self.headers.get("Sec-Fetch-Site") == "same-origin" or self.headers.get("X-Escritorio") == "1"
+
+    def _fora_do_painel(self, rota):
+        log(evento="http", rota=rota[:40], resultado="origem_recusada")
+        return self._json(*erro(403, "origem", "Abra pelo painel do escritório."))
+
     def _get_anexo(self, andar, eq, usuario, q):
         """O download (E.5): em blocos a partir do disco, sempre attachment (a imagem sem ?baixar=1 vai inline, para o
         <img>), com o tipo da lista, nosniff, sandbox e sem cache. No máximo DOWNLOADS_MAX por conta ao mesmo tempo."""
@@ -4433,7 +4457,9 @@ class Pagina(BaseHTTPRequestHandler):
                 return self._json(*erro(429, "limite", "Downloads demais ao mesmo tempo; espere um terminar."))
             self.server.downloads[usuario] += 1
         try:
-            info = eq.arquivo_do_anexo(usuario, id_anexo)
+            info = eq.arquivo_do_anexo(usuario, id_anexo, auditoria=q.get("auditoria") == ["1"])
+            if info["auditoria"]:
+                log(evento="dm_auditoria", andar=andar.id, resultado="anexo")   # sem os participantes nem o nome
             try:
                 f = open(info["caminho"], "rb")
             except FileNotFoundError:
@@ -4505,7 +4531,7 @@ class Pagina(BaseHTTPRequestHandler):
                 self._depois_de_enviar(andar, eq, usuario, nome, msg, mencoes)
                 return self._json(200, {"mensagem": self._publicas(andar, [msg])[0]})
             if rota == "/api/canal/apagar":
-                eq.apagar(dados["id"], usuario, moderador=self._admin_do_andar(andar.id))
+                eq.apagar(dados["id"], usuario, moderador=self._moderador(andar.id))
             elif rota == "/api/canal/lida":
                 if not self._canal_ok(andar, dados["canal"]):
                     return self._json(*erro(400, "pedido", "Pedido inválido."))
@@ -4530,7 +4556,7 @@ class Pagina(BaseHTTPRequestHandler):
                 eq.fixar(dados["canal"], usuario, self._nome_publico(usuario, andar), dados["texto"])
                 return self._json(200, self._mural(andar, eq, dados["canal"], usuario))
             elif rota == "/api/mural/tirar":
-                canal = eq.desafixar(dados["id"], usuario, moderador=self._admin_do_andar(andar.id))
+                canal = eq.desafixar(dados["id"], usuario, moderador=self._moderador(andar.id))
                 return self._json(200, self._mural(andar, eq, canal, usuario))
             elif rota == "/api/status":
                 baldes.gastar(("status", usuario), 1, 3)
@@ -4538,7 +4564,7 @@ class Pagina(BaseHTTPRequestHandler):
             elif rota == "/api/aceno":
                 return self._aceno(andar, eq, usuario, dados)
             else:   # /api/canal/retencao: a empresa só baixa de 1 ano (D3)
-                if not self._admin_do_andar(andar.id):
+                if not self._moderador(andar.id):
                     return self._proibido(rota)
                 eq.definir_retencao(dados["dias"])
                 log(evento="equipe", resultado="retencao", andar=andar.id, dias=dados["dias"])
@@ -4555,7 +4581,8 @@ class Pagina(BaseHTTPRequestHandler):
 
     def _aceno(self, andar, eq, usuario, dados):
         """Acenar ou bater na porta: só para quem está no andar agora (no saguão, pelo id opaco), nunca para quem está
-        "ocupado", 1 a cada 30 s por par. Chega no /api/ao-vivo de quem recebe e vira push se a aba dela está fechada."""
+        "ocupado", 1 a cada 30 s por par. Chega no /api/ao-vivo de quem recebe e no aviso da tela; push, nunca: quem
+        recebe está na presença, com o escritório aberto."""
         para, tipo = dados["para"], dados["tipo"]
         if tipo not in ("aceno", "porta") or not isinstance(para, str):
             return self._json(*erro(400, "pedido", "Pedido inválido."))
@@ -4573,7 +4600,7 @@ class Pagina(BaseHTTPRequestHandler):
             lista = self.server.acenos.setdefault((andar.id, alvo), [])
             lista.append((time.monotonic(), seq, usuario, nome, tipo))
             del lista[:-20]
-        self._avisar(alvo, andar, {"tipo": tipo, "de": nome})
+        self._avisar(alvo, andar, {"tipo": tipo, "de": nome}, push=False)
         return self._json(200, {"ok": True})
 
     def _post_anexo(self, andar, usuario):
@@ -4653,7 +4680,7 @@ class Pagina(BaseHTTPRequestHandler):
             nome_pub = self._nome_publico(usuario, andar)
             mencoes = self._mencionados(texto, andar, usuario)
             msg = eq.anexar(token, usuario, nome_pub, canal, arquivo, tipo, os.path.getsize(temporario), soma.hexdigest(),
-                            texto)
+                            texto, mencoes)
             token = None
             self._depois_de_enviar(andar, eq, usuario, nome_pub, msg, mencoes)
             return self._json(200, {"mensagem": self._publicas(andar, [msg])[0]})
@@ -4830,13 +4857,17 @@ class Servidor(ThreadingHTTPServer):
             self._proxima_limpeza_visitas = agora + 30
         if agora >= self._proxima_varredura:   # a retenção e o teto das conversas, 1 vez por dia
             self._proxima_varredura = agora + 86400
-            with self.trava_equipes:
-                abertos = list(self.equipes.values())
-            for eq in abertos:
-                try:
-                    eq.varrer()
-                except Exception as x:   # nunca derruba o servidor; o texto nunca vai ao log
-                    log(evento="equipe", resultado="varredura_erro", detalhe=type(x).__name__)
+            self.varrer_equipes()
+
+    def varrer_equipes(self):
+        """Varre todo andar que tem conversas: o store já aberto e o equipe.db de andar que ninguém abriu desde o boot."""
+        for andar in [AndarPrincipal(self), *self.andares.values()]:
+            if andar.id not in self.equipes and not os.path.exists(os.path.join(andar.pasta, "equipe.db")):
+                continue
+            try:
+                self.equipe_de(andar).varrer()
+            except Exception as x:   # nunca derruba o servidor; o texto nunca vai ao log
+                log(evento="equipe", resultado="varredura_erro", detalhe=type(x).__name__)
 
     def handle_error(self, request, client_address):
         # o padrão do socketserver imprime o endereço da conexão (sem proxy, o IP do visitante) e o traceback
