@@ -1174,3 +1174,16 @@ body[data-saguao] .lat-externos, body[data-saguao] section.agora, body[data-sagu
 .cv-andares legend { font-size: 14px; font-weight: 600; padding: 0; margin-bottom: 4px; }
 .cv-andares > div, .membro-andares { display: flex; flex-direction: column; gap: 2px; }
 #cv-link-campo { flex: 1 1 260px; min-width: 0; font: 13px ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; }
+/* modo apresentação (apresentacao.js, 1.6 Onda 3): some tudo o que mostra nome de gente ou de agente, título de tarefa,
+   texto de conversa, mural e recado de status; display:none tira também do leitor de tela, com o title e o aria-label.
+   Os nomes do mapa viram "Agente 1"/"Pessoa 2" no vida.js e os balões somem no app.js. Painel novo com dado assim: data-sensivel */
+html.apresentacao #lista, html.apresentacao #busca-lista, html.apresentacao #usuario-nome, html.apresentacao #usuario-ini,
+html.apresentacao #cartao-agente, html.apresentacao #ficha, html.apresentacao #conversa, html.apresentacao #chat-sala,
+html.apresentacao #greve-motivo, html.apresentacao #tv-legenda, html.apresentacao #social-anuncio, html.apresentacao #equipe-lista,
+html.apresentacao #meu-status, html.apresentacao #equipe-mural, html.apresentacao #equipe-aviso, html.apresentacao #aceno-aviso,
+html.apresentacao #mural-lista, html.apresentacao #placar-tabela, html.apresentacao #ringue-lista, html.apresentacao #ringue-texto,
+html.apresentacao .widgets, html.apresentacao .agora, html.apresentacao #v-conversas > *, html.apresentacao #v-aprovacoes > *,
+html.apresentacao #v-jornal > *, html.apresentacao [data-sensivel] { display: none !important; }
+html.apresentacao :is(#v-conversas, #v-aprovacoes, #v-jornal)::before { content: "Modo apresentação ligado: esta página fica escondida."; display: block; padding: 24px 0; color: var(--suave); }
+.controles .apresentacao-bt svg { display: block; }
+html.apresentacao .controles .apresentacao-bt { background: var(--destaque); color: var(--destaque-texto); }

@@ -329,7 +329,7 @@ const Vida = (() => {
         else if (foraDoExpediente()) colocar(b, { tipo: "fora" });
         else { const v = vagaLivre(m, b); colocar(b, v ? { tipo: "vaga", vaga: v } : mesa ? { tipo: "mesa", mesa } : { tipo: "fora" }); }
       }
-      b.nome = ag.nome; b.funcao = ag.funcao; b.mesa = mesa || b.mesa; b.ap = aparencia(ag.handle);
+      mostrar(b, ag.nome); b.funcao = ag.funcao; b.mesa = mesa || b.mesa; b.ap = aparencia(ag.handle);
       b.papel = (PAPEIS.find(([re]) => re.test(ag.funcao || "")) || [0, "geral"])[1];
       const antes = b.status, depois = t ? t.status : null;
       b.trabalho = t;
@@ -1444,7 +1444,7 @@ const Vida = (() => {
   }
   function meuPerfil(usuario, nome, ap) {
     vivo.perfil = { usuario, nome: nomeDe(nome, usuario), ap: apDe(ap, usuario) };
-    if (vivo.eu) { vivo.eu.nome = `${vivo.perfil.nome} (você)`; vivo.eu.ap = vivo.perfil.ap; }
+    if (vivo.eu) { mostrar(vivo.eu, `${vivo.perfil.nome} (você)`); vivo.eu.ap = vivo.perfil.ap; }
   }
   const nomeDe = (nome, reserva) => String(typeof nome === "string" && nome.trim() ? nome : reserva).slice(0, 40);
   // servidor antigo, sem a aparência efetiva: o padrão do front (o mesmo do "Meu perfil")
@@ -1487,7 +1487,7 @@ const Vida = (() => {
       vistos.add(it.usuario);
       let p = vivo.pessoas.get(it.usuario);
       if (!p) { p = novaPessoa(it.usuario, it.x, it.y); vivo.pessoas.set(it.usuario, p); }
-      p.nome = nomeDe(it.nome, "Alguém"); p.ap = apDe(it.aparencia, it.usuario);   // sem nome: "Alguém", nunca o usuario
+      mostrar(p, nomeDe(it.nome, "Alguém")); p.ap = apDe(it.aparencia, it.usuario);   // sem nome: "Alguém", nunca o usuario
       p.parado = DIRECOES.has(it.olha) ? it.olha : "baixo"; p.sala = typeof it.sala === "string" ? it.sala : ""; p.status = statusDe(it.status); p.texto = textoDe(it.status_texto);
       if (p.alvo && p.alvo[0] === alvo[0] && p.alvo[1] === alvo[1]) continue;
       p.alvo = alvo;   // destino novo: anda até lá (sem caminho, aparece direto)
@@ -1541,6 +1541,17 @@ const Vida = (() => {
       return { ok: r.ok, mensagem: r.mensagem };
     });
   }
+  // modo apresentação (apresentacao.js, 1.6 Onda 3): o nome mostrado de agentes, pessoas e o meu ("Agente 1", "Pessoa 2",
+  // "Você"); o real fica em nomeReal. Na origem, para valer em tudo o que lê b.nome (etiqueta, lista, placar e faixa do ringue)
+  function mostrar(b, nome) {
+    b.nomeReal = nome;
+    b.nome = window.Apresentacao && Apresentacao.ligado() ? Apresentacao.nome(b) : nome;
+  }
+  // ligou ou desligou (o apresentacao.js chama): renomeia quem já está no mapa
+  function renomear() {
+    const m = vivo.m;
+    for (const b of [...(m ? m.lista : []), ...vivo.pessoas.values(), ...(vivo.eu ? [vivo.eu] : [])]) mostrar(b, b.nomeReal ?? b.nome);
+  }
   const semente = txt => { let h = 7; for (const ch of txt) h = (h * 31 + ch.charCodeAt(0)) % 997; return h; };
 
   // de a até b, com o caminho dos agentes: dentro da sala, porta, corredor, porta e dentro da outra sala
@@ -1589,7 +1600,8 @@ const Vida = (() => {
     const outros = [...vivo.pessoas.values()].filter(p => p.x > -20)
       .map(p => ({ chave: p.ref, nome: p.nome, sala: nomeSala(p), status: p.status, texto: p.texto || "", eu: false }))
       .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
-    const eu = vivo.eu && vivo.perfil ? [{ chave: "eu", nome: vivo.perfil.nome, sala: nomeSala(vivo.eu), status: vivo.eu.status || null, texto: vivo.eu.texto || "", eu: true }] : [];
+    const meuNome = vivo.eu && vivo.eu.nome !== vivo.eu.nomeReal ? vivo.eu.nome : vivo.perfil && vivo.perfil.nome;   // mascarado: "Você"
+    const eu = vivo.eu && vivo.perfil ? [{ chave: "eu", nome: meuNome, sala: nomeSala(vivo.eu), status: vivo.eu.status || null, texto: vivo.eu.texto || "", eu: true }] : [];
     return [...eu, ...outros];
   }
 
@@ -1645,6 +1657,7 @@ const Vida = (() => {
     const recepcao = m.predio.salas.find(s => s.tipo === "recepcao"), alvo = recepcao && pontoDeVisita(m, recepcao);
     vivo.eu = { ...novaPessoa("eu", e.x - 22, e.calcadaY), id: "eu", nome: `${nome} (você)`, ap, eu: true, salaNome: "Corredor",
       rota: alvo ? [[e.x - 22, cy], [e.x, cy], ...alvo.r] : [[e.x - 22, cy], [e.x, cy]] };
+    mostrar(vivo.eu, vivo.eu.nome);
     meuStatus();
     enviarPresenca();
   }
@@ -1744,7 +1757,7 @@ const Vida = (() => {
     return n;
   }
 
-  return { criarMundo, sincronizar, passo, digitando, momento, objetoClicado, festaGeral, social, aoVivo, irAte, irAtePessoa, acenar, mudarStatus, equipe, dmCom, STATUS,
+  return { criarMundo, sincronizar, passo, renomear, digitando, momento, objetoClicado, festaGeral, social, aoVivo, irAte, irAtePessoa, acenar, mudarStatus, equipe, dmCom, STATUS,
     muralV: canal => (Object.hasOwn(vivo.muralV, canal) ? vivo.muralV[canal] : null), noPredio: () => vivo.noPredio, pessoas, olhando, textoGreve, horaExtra, mexendo, intervaloQuadro, FRASES };
 })();
 

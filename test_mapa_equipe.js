@@ -251,6 +251,33 @@ async function montar(lista, eu = "eu") {
     assert.equal(t.Vida.dmCom(ana.chave, { equipe: { dm: true, pode_escrever: true }, noSaguao: false }), "ana");
   }
 
+  // modo apresentação (1.6 Onda 3): com o window.Apresentacao ligado, o nome mostrado de agentes, pessoas e o meu sai dele
+  // ("Agente 1", "Pessoa 1", "Você") desde a chegada (sincronizar, /api/ao-vivo, perfil); desligar e Vida.renomear() devolve
+  // os nomes reais. O nome mascarado vale para tudo o que lê b.nome (etiqueta, lista do andar, placar e faixa do ringue)
+  {
+    const { t, m } = await montar([pessoa("ana", "Ana Lima", 160, 100, "recepcao")]);
+    let ligado = true;
+    t.contexto.Apresentacao = { ligado: () => ligado, nome: b => (b.eu ? "Você" : b.handle ? "Agente 1" : "Pessoa 1") };
+    t.Vida.renomear();
+    const nomes = () => [...t.Vida.pessoas().map(p => p.nome)].sort();
+    assert.deepEqual(nomes(), ["Pessoa 1", "Você"]);
+    t.Vida.sincronizar(m, [{ id: "a1", handle: "bot", nome: "Robô do Financeiro", funcao: "" }], [], new Map(), () => ({ color: "graphite" }), true);
+    assert.equal(m.bonecos.get("a1").nome, "Agente 1", "agente novo já chega mascarado");
+    await t.proximoAoVivo();
+    await t.responder("api/ao-vivo", 200, { seq: 2, eu: "eu", pessoas: [pessoa("ana", "Ana Lima", 160, 100, "recepcao")] });
+    assert.deepEqual(nomes(), ["Pessoa 1", "Você"], "a leitura seguinte não devolve o nome real");
+    assert.ok(t.Vida.equipe(m).every(p => !/Ana|Eu Mesmo/.test(p.nome)), "a lista do andar também");
+    ligado = false;
+    t.Vida.renomear();
+    assert.deepEqual(nomes(), ["Ana Lima", "Eu Mesmo (você)"]);
+    assert.equal(m.bonecos.get("a1").nome, "Robô do Financeiro");
+    t.Vida.sincronizar(m, [{ id: "a1", handle: "bot", nome: "Robô Novo", funcao: "" }], [], new Map(), () => ({ color: "graphite" }), false);
+    assert.equal(m.bonecos.get("a1").nome, "Robô Novo");
+    delete t.contexto.Apresentacao;   // sem o apresentacao.js (TV, prévia): os nomes de sempre
+    t.Vida.renomear();
+    assert.equal(m.bonecos.get("a1").nome, "Robô Novo");
+  }
+
   // o ícone do status (mapa.js): pixel art 9x9 desenhado em código, um desenho diferente por status (não só a cor), o
   // detalhe branco com contraste de pelo menos 3:1 sobre o fundo (WCAG 1.4.11) e nada para status fora da lista
   {
