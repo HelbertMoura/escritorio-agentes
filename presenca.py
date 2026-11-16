@@ -149,6 +149,38 @@ class Presenca:
             a["salas"].setdefault(p["sala"], collections.deque(maxlen=ANEL)).append((agora, msg))
             return a["seq"]
 
+    # --- consultas da Onda 2 (aceno, status, saguão): logins só para o escritorio.py, nunca para fora
+    def quem_esta(self, andar):
+        """Os logins com o escritório aberto no andar agora."""
+        with self.trava:
+            return set(self._andar(andar, self.relogio())["pessoas"])
+
+    def sala_de(self, andar, usuario):
+        with self.trava:
+            p = self._andar(andar, self.relogio())["pessoas"].get(usuario)
+            return p["sala"] if p else None
+
+    def aberto(self, usuario):
+        """A pessoa está com o escritório aberto em algum andar (o aviso no celular não precisa tocar)."""
+        agora = self.relogio()
+        with self.trava:
+            return any(agora - a["pessoas"][usuario]["visto"] < PRESENCA_TTL
+                       for a in self.andares.values() if usuario in a["pessoas"])
+
+    def no_predio(self):
+        """Quantas pessoas estão em algum andar agora, sem nome (o saguão mostra só o total, D12 a)."""
+        agora = self.relogio()
+        with self.trava:
+            return len({u for a in self.andares.values() for u, p in a["pessoas"].items()
+                        if agora - p["visto"] < PRESENCA_TTL})
+
+    def tocar(self, andar):
+        """Um seq novo no andar, para o que não é posição nem mensagem (o aceno). Devolve o seq."""
+        with self.trava:
+            a = self._andar(andar, self.relogio())
+            a["seq"] += 1
+            return a["seq"]
+
     def sair(self, usuario):
         """A conta saiu ou foi removida: some de todos os andares na hora (sem esperar o TTL)."""
         with self.trava:
