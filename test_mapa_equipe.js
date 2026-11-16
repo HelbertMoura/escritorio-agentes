@@ -247,6 +247,8 @@ async function montar(lista, eu = "eu") {
     assert.equal(t.Vida.dmCom(ana.chave, { equipe: { dm: true }, noSaguao: true }), null, "no saguão, não");
     assert.equal(t.Vida.dmCom(ana.chave, { equipe: { dm: false }, noSaguao: false }), null);
     assert.equal(t.Vida.dmCom(ana.chave, { equipe: null, noSaguao: false }), null, "store desligado");
+    assert.equal(t.Vida.dmCom(ana.chave, { equipe: { dm: true, pode_escrever: false }, noSaguao: false }), null, "quem só lê não manda DM");
+    assert.equal(t.Vida.dmCom(ana.chave, { equipe: { dm: true, pode_escrever: true }, noSaguao: false }), "ana");
   }
 
   // o ícone do status (mapa.js): pixel art 9x9 desenhado em código, um desenho diferente por status (não só a cor), o

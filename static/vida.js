@@ -1594,10 +1594,11 @@ const Vida = (() => {
   }
 
   // "Mensagem direta" da lista: o usuario da pessoa para o ChatSala.abrirDM (chat_sala.js). Só no andar da empresa, com o
-  // store e a DM ligados e o painel carregado; nunca no saguão (lá o usuario é o id opaco e não há DM) nem para mim
+  // store e a DM ligados e o painel carregado; nunca no saguão (lá o usuario é o id opaco e não há DM), nem para mim, nem
+  // para quem só lê (o admin do prédio no andar de uma empresa: pode_escrever false)
   function dmCom(ref, { equipe, noSaguao } = {}) {
     const p = outraPessoa(ref);
-    if (!p || noSaguao || !equipe || equipe.dm === false || !window.ChatSala || typeof ChatSala.abrirDM !== "function") return null;
+    if (!p || noSaguao || !equipe || equipe.dm === false || equipe.pode_escrever === false || !window.ChatSala || typeof ChatSala.abrirDM !== "function") return null;
     return p.usuario;
   }
 
