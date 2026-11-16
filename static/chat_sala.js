@@ -102,17 +102,80 @@ const ChatSala = (() => {
     const lista = ds.length === 1 ? ds[0] : `${ds.slice(0, -1).join(", ")} e ${ds[ds.length - 1]}`;
     return `A administração da empresa abriu esta conversa em ${lista}.`;
   }
+  function hora(em) {
+    const d = new Date(em);
+    return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  }
   const contagem = n => (!n ? "" : n > 9 ? "9+" : String(n));
   const puro = { daSala, validar, limpar, novas, euDe, deMim, TEXTO_MAX, EMOJIS, canalDaSala, mesclar, maisAntiga, mencaoEmCurso,
     sugestoes, completarMencao, partes, tamanho, conferirArquivo, ehImagem, alternarReacao, textoRetencao, avisoDM, linhaAcessos, contagem };
 
   if (typeof document === "undefined") return puro;
 
+  const criar = (tag, classe, texto) => {
+    const e = document.createElement(tag);
+    if (classe) e.className = classe;
+    if (texto != null) e.textContent = texto;
+    return e;
+  };
+  const urlAnexo = (andar, id, baixar) => Andar.com(`api/anexo?id=${id}${baixar ? "&baixar=1" : ""}`, andar);
+  // uma mensagem do store na tela. ctx: {eu, logins (Set do andar), andar, moderar (admin do andar: apaga em canal, nunca em DM)}
+  function elMensagem(m, ctx) {
+    const mim = deMim(m, ctx.eu), li = criar("li", "chat-sala-msg" + (mim ? " de-mim" : "") + (m.apagada ? " apagada" : ""));
+    li.dataset.id = String(m.id);
+    const cabeca = criar("p", "chat-sala-cabeca"), quando = criar("time", null, hora(m.em));
+    if (typeof m.em === "string") quando.dateTime = m.em;
+    cabeca.append(criar("strong", null, mim ? "Você" : (typeof m.nome === "string" && m.nome ? m.nome : "Alguém")), quando);
+    li.append(cabeca);
+    if (m.apagada) { li.append(criar("p", "chat-sala-texto", "Mensagem apagada.")); return li; }
+    if (typeof m.texto === "string" && m.texto) {
+      const p = criar("p", "chat-sala-texto");
+      for (const parte of partes(m.texto, ctx.logins))
+        p.append(parte.mencao ? criar("span", "chat-sala-mencao" + (parte.mencao === ctx.eu ? " a-mim" : ""), parte.texto) : parte.texto);
+      li.append(p);
+    }
+    if (m.anexo && Number.isInteger(m.anexo.id)) li.append(elAnexo(m.anexo, ctx.andar));
+    const reacoes = criar("div", "chat-sala-reacoes");
+    for (const r of Array.isArray(m.reacoes) ? m.reacoes : []) {
+      const b = criar("button", "chat-sala-reacao", `${r.emoji} ${r.n}`);
+      b.type = "button"; b.dataset.emoji = r.emoji;
+      b.setAttribute("aria-pressed", String(!!r.eu));
+      b.setAttribute("aria-label", `${r.emoji}: ${r.n} ${r.n === 1 ? "reação" : "reações"}${r.eu ? ", inclusive a sua" : ""}`);
+      reacoes.append(b);
+    }
+    const acoes = criar("div", "chat-sala-acoes"), reagir = criar("button", "chat-sala-reagir", "Reagir");
+    reagir.type = "button"; reagir.setAttribute("aria-haspopup", "true");
+    acoes.append(reagir);
+    if (mim || (ctx.moderar && !String(m.canal).startsWith("dm:"))) {
+      const apagar = criar("button", "chat-sala-apagar", "Apagar");
+      apagar.type = "button";
+      acoes.append(apagar);
+    }
+    li.append(reacoes, acoes);
+    return li;
+  }
+  // imagem (só os 4 tipos) aparece; todo o resto é nome, tamanho e "Baixar" (o servidor manda como attachment)
+  function elAnexo(a, andar) {
+    const caixa = criar("div", "chat-sala-anexo"), nome = typeof a.nome === "string" ? a.nome : "arquivo";
+    if (ehImagem(a.tipo)) {
+      const img = criar("img", "chat-sala-previa");
+      img.src = urlAnexo(andar, a.id); img.alt = nome; img.loading = "lazy"; img.decoding = "async";
+      caixa.append(img);
+    }
+    const info = criar("p", "chat-sala-arquivo");
+    info.append(criar("span", "chat-sala-arquivo-nome", nome), criar("span", "chat-sala-arquivo-tam", Number.isInteger(a.tamanho) ? tamanho(a.tamanho) : ""));
+    const baixar = criar("a", "chat-sala-baixar", "Baixar");
+    baixar.href = urlAnexo(andar, a.id, true); baixar.setAttribute("download", "");
+    baixar.setAttribute("aria-label", `Baixar ${nome}`);
+    caixa.append(info, baixar);
+    return caixa;
+  }
+
   const $ = id => document.getElementById(id);
   const caixa = $("chat-sala"), abrir = $("chat-sala-abrir"), painel = $("chat-sala-painel"), titulo = $("chat-sala-titulo"),
     contador = $("chat-sala-n"), lista = $("chat-sala-lista"), vazio = $("chat-sala-vazio"), form = $("chat-sala-form"),
     campo = $("chat-sala-campo"), enviar = $("chat-sala-enviar"), aviso = $("chat-sala-aviso"), fechar = $("chat-sala-fechar");
-  if (!caixa) return { daSala, validar, limpar, novas, euDe, deMim, TEXTO_MAX };
+  if (!caixa) return { ...puro, elMensagem };
 
   let sala = "", nomeSala = "", andar = "", desde = 0, vistos = new Set(), naoLidas = 0, enviando = false, avisoTempo = 0;
   const tv = () => !!(window.TV && TV.invisivel) || document.body.classList.contains("tv");
@@ -133,10 +196,6 @@ const ChatSala = (() => {
   }
   function esvaziar() {   // quem chega não vê histórico
     vistos = new Set(); naoLidas = 0; lista.replaceChildren(); vazio.hidden = false; mostrarAviso(""); contar();
-  }
-  function hora(em) {
-    const d = new Date(em);
-    return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   }
   function por(m, minha = false) {
     vistos.add(m.seq);
