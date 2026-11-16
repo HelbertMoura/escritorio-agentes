@@ -190,6 +190,10 @@ function carregar({ config = CONFIG, respostas = RESP, agora = AGORA } = {}) {
     assert.equal(p.q.get("andar"), ID);
     assert.equal(ids["dlg-reuniao"].open, false, "fecha ao marcar");
     assert.ok(pedidos.filter(x => x.rota === "api/reunioes").length >= 2, "relê a semana");
+    // fechar devolve o foco a quem abriu
+    ids["reunioes-marcar"].click(); await espera();
+    ids["r-fechar"].click();
+    assert.equal(foco, ids["reunioes-marcar"]);
     // problema na tela antes do servidor; e o erro do servidor (sala ocupada) aparece como veio
     ids["reunioes-marcar"].click(); ids["r-titulo"].value = ""; disparar(ids["form-reuniao"], "submit"); await espera();
     assert.match(ids["r-aviso"].textContent, /título/);
@@ -222,15 +226,18 @@ function carregar({ config = CONFIG, respostas = RESP, agora = AGORA } = {}) {
     assert.equal(ed.corpo.id, 13);
     assert.deepEqual(Object.keys(ed.corpo).sort(), ["convidados", "duracao", "id", "inicio", "sala", "titulo"]);
 
-    botaoTexto(achar(ids["reunioes-dias"], "reuniao")[1], "Cancelar").click(); await espera();
+    const cancelar = botaoTexto(achar(ids["reunioes-dias"], "reuniao")[1], "Cancelar");
+    cancelar.click(); await espera();
     assert.equal(ids["dlg-reuniao-confirmar"].open, true);
     assert.match(ids["rc-texto"].textContent, /Daily/);
     assert.equal(pedidos.some(x => x.rota === "api/reunioes/cancelar"), false, "nada sem confirmar");
     ids["rc-nao"].click();
     assert.equal(ids["dlg-reuniao-confirmar"].open, false);
+    assert.equal(foco, cancelar, "voltar devolve o foco ao Cancelar");
     botaoTexto(achar(ids["reunioes-dias"], "reuniao")[1], "Cancelar").click(); await espera();
     disparar(ids["form-rc"], "submit"); await espera();
     assert.deepEqual(pedidos.find(x => x.rota === "api/reunioes/cancelar").corpo, { id: 13 });
+    assert.equal(foco, ids["reunioes-titulo"], "o cartão some: o foco vai ao título da semana");
   }
 
   // reunião geral: só o admin do andar (pode_convocar); escolhe a sala e confirma
@@ -278,7 +285,7 @@ function carregar({ config = CONFIG, respostas = RESP, agora = AGORA } = {}) {
   // "Entrar na reunião" fora da agenda: o link criado pelo mapa (lista de salas, painel) e a pílula ao chegar na sala
   {
     const { ids, R, evento } = carregar();
-    const lateral = R.entrar("reuniao", "Sala de reunião"), outra = R.entrar("cozinha", "Cozinha");
+    const lateral = R.entrar("reuniao", "Reunião"), outra = R.entrar("cozinha", "Cozinha");
     R.configurar(CONFIG); await espera();
     assert.equal(lateral.hidden, false);
     assert.equal(lateral.href, "https://meet.google.com/abc-defg-hij");
@@ -327,6 +334,15 @@ function carregar({ config = CONFIG, respostas = RESP, agora = AGORA } = {}) {
     evento("aovivo", { reunioes_v: 4 }); await espera();
     timers.forEach(f => f()); await espera();
     assert.equal(ids["reuniao-aviso"].hidden, true);
+  }
+  // sem nenhum reunioes_v (o /api/ao-vivo parado): as próximas são lidas ao configurar o andar, e o aviso sai igual
+  {
+    const agora = R1.inicio * 1000 - 3 * 60000;
+    const { ids, pedidos, R, timers } = carregar({ agora });
+    R.configurar(CONFIG); await espera();
+    assert.ok(pedidos.some(p => p.rota === "api/reunioes" && p.q.get("dias") === "1"));
+    timers.forEach(f => f()); await espera();
+    assert.equal(ids["reuniao-aviso"].hidden, false);
   }
   console.log("test_reunioes_tela.js ok");
 })().catch(e => { console.error(e); process.exit(1); });

@@ -18,6 +18,8 @@ assert.ok(html.indexOf('src="reunioes.js?v=') > 0 && html.indexOf('src="reunioes
 // o menu e a tela: escondidos até o config dizer que há reuniões
 assert.match(tag("nav-reunioes"), /href="#reunioes"[^>]*data-rota="reunioes"[^>]*hidden|data-rota="reunioes"[^>]*hidden/);
 assert.match(tag("v-reunioes"), /class="visao"[^>]*hidden/);
+// o título da semana recebe o foco quando o botão que abriu o diálogo some
+assert.match(tag("reunioes-titulo"), /tabindex="-1"/);
 // os links fixos: aba nova, sem opener nem referrer
 for (const id of ["reuniao-entrar", "reuniao-aviso-entrar"]) assert.match(tag(id), /target="_blank" rel="noopener noreferrer"/, id);
 // o aviso de 5 min é lido pelo leitor de tela; os diálogos têm título

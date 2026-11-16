@@ -105,7 +105,7 @@ const Reunioes = (() => {
   const lim = () => reu(cfg()) || {};
   let opcoes = { salas: () => [] };
   const s = { andar: null, links: {}, semana: 0, rs: [], v: null, proximas: [], avisadas: new Set(), pessoas: null, editando: null, fim: null,
-    onde: { sala: "", nome: "" }, aviso: null };
+    onde: { sala: "", nome: "" }, aviso: null, gatilho: null, voltas: 0 };
   const vinculados = new Set();   // os "Entrar" que o mapa pediu: repintados quando os links mudam
 
   async function pedir(rota, corpo) {
@@ -133,17 +133,17 @@ const Reunioes = (() => {
   const linkDa = chave => (ligado(cfg()) && typeof s.links[chave] === "string" ? s.links[chave] : null);
   function entrar(chave, nome, classe = "sala-entrar") {
     const a = criar("a", classe, "Entrar");
-    a.dataset.sala = chave; a.dataset.nome = nome || nomeSala(chave);
+    a.dataset.sala = chave; a.dataset.nome = nome || "";
     vinculados.add(a);
-    return pintarLink(a, linkDa(chave), a.dataset.nome);
+    return pintarLink(a, linkDa(chave), nomeSala(chave) || a.dataset.nome);   // o nome da sala como o servidor escreve (o mapa diz "Reunião")
   }
   function pintarTodos() {
     for (const a of [...vinculados]) {
       if (a.isConnected === false && a.dataset.ligado) vinculados.delete(a);   // já esteve na página e saiu: a lista de salas foi remontada
-      else { if (a.isConnected) a.dataset.ligado = "1"; pintarLink(a, linkDa(a.dataset.sala), a.dataset.nome); }
+      else { if (a.isConnected) a.dataset.ligado = "1"; pintarLink(a, linkDa(a.dataset.sala), nomeSala(a.dataset.sala) || a.dataset.nome); }
     }
     const pilula = $("reuniao-entrar");
-    if (pilula) pintarLink(pilula, linkDa(s.onde.sala), s.onde.nome);
+    if (pilula) pintarLink(pilula, linkDa(s.onde.sala), nomeSala(s.onde.sala) || s.onde.nome);
   }
   async function carregarLinks() {
     const r = await pedir("api/reunioes/links");
@@ -198,8 +198,8 @@ const Reunioes = (() => {
       const editar = criar("button", "botao fantasma", "Editar"), cancelar = criar("button", "botao fantasma", "Cancelar");
       editar.type = cancelar.type = "button";
       editar.setAttribute("aria-label", `Editar ${r.titulo}`); cancelar.setAttribute("aria-label", `Cancelar ${r.titulo}`);
-      editar.addEventListener("click", () => abrirForm(r));
-      cancelar.addEventListener("click", () => cancelarReuniao(r));
+      editar.addEventListener("click", () => abrirForm(r, editar));
+      cancelar.addEventListener("click", () => cancelarReuniao(r, cancelar));
       acoes.append(editar, cancelar);
     }
     li.append(acoes);
@@ -217,8 +217,13 @@ const Reunioes = (() => {
     s.pessoas = r.ok && r.d && Array.isArray(r.d.pessoas) ? r.d.pessoas.filter(p => p && typeof p.usuario === "string") : [];
     return s.pessoas;
   }
-  async function abrirForm(r = null) {
-    s.editando = r;
+  // o foco volta a quem abriu o diálogo; se o botão sumiu (a agenda foi redesenhada), ao título da semana
+  function devolverFoco() {
+    const g = s.gatilho; s.gatilho = null;
+    (g && g.isConnected !== false ? g : $("reunioes-titulo")).focus();
+  }
+  async function abrirForm(r = null, gatilho = null) {
+    s.editando = r; s.gatilho = gatilho;
     $("reuniao-titulo").textContent = r ? "Editar reunião" : "Marcar reunião";
     $("r-salvar").textContent = r ? "Salvar" : "Marcar";
     $("r-titulo").maxLength = lim().titulo_max || 80;
@@ -257,8 +262,9 @@ const Reunioes = (() => {
   }
 
   // ---- confirmar (cancelar e reunião geral): resolve com a sala escolhida, true, ou false se voltou
-  function confirmar({ titulo, texto, sim, sala = false, oculto = false }) {
+  function confirmar({ titulo, texto, sim, sala = false, oculto = false, gatilho = null }) {
     if (s.fim) s.fim(false);
+    s.gatilho = gatilho;
     $("rc-titulo").textContent = titulo; $("rc-texto").textContent = texto; $("rc-sim").textContent = sim;
     $("rc-texto").toggleAttribute("data-sensivel", oculto);
     $("rc-sala-caixa").hidden = !sala; avisar($("rc-aviso"), "");
@@ -269,17 +275,19 @@ const Reunioes = (() => {
     $("dlg-reuniao-confirmar").showModal(); (sala ? $("rc-sala") : $("rc-nao")).focus();
     return new Promise(resolve => { s.fim = v => { s.fim = null; resolve(v); }; });
   }
-  async function cancelarReuniao(r) {
-    if (!(await confirmar({ titulo: "Cancelar a reunião?", texto: `“${r.titulo}” sai da agenda de quem marcou e dos convidados.`, sim: "Cancelar a reunião", oculto: true }))) return;
+  async function cancelarReuniao(r, gatilho) {
+    if (!(await confirmar({ titulo: "Cancelar a reunião?", texto: `“${r.titulo}” sai da agenda de quem marcou e dos convidados.`, sim: "Cancelar a reunião",
+      oculto: true, gatilho }))) return;
     const res = await pedir("api/reunioes/cancelar", { id: r.id });
     if (!res.ok) { avisar($("rc-aviso"), mensagem(res, "Não deu para cancelar"), true); return; }
+    s.gatilho = null;   // o cartão sai da agenda
     $("dlg-reuniao-confirmar").close();
     avisar($("reunioes-aviso"), "Reunião cancelada.");
     recarregar();
   }
   async function convocar() {
     const sala = await confirmar({ titulo: "Chamar a reunião geral?", texto: "Vai um aviso para todo mundo do andar, e os bonecos vão até a sala escolhida.",
-      sim: "Chamar agora", sala: true });
+      sim: "Chamar agora", sala: true, gatilho: $("reunioes-geral") });
     if (!sala) return;
     const res = await pedir("api/reunioes/convocar", { sala });
     if (!res.ok) { avisar($("rc-aviso"), mensagem(res, "Não deu para chamar"), true); return; }
@@ -369,26 +377,27 @@ const Reunioes = (() => {
     if (andar !== s.andar) {
       Object.assign(s, { andar, links: {}, rs: [], v: null, proximas: [], pessoas: null, aviso: null });
       $("reuniao-aviso").hidden = true;
-      if (liga) carregarLinks();
+      if (liga) { carregarLinks(); carregarProximas(); }
     }
     if (!liga) $("reuniao-aviso").hidden = true;
     pintarTodos();
   }
   function iniciar(op) {
     opcoes = { ...opcoes, ...op };
-    $("reunioes-marcar").addEventListener("click", () => abrirForm());
+    $("reunioes-marcar").addEventListener("click", () => abrirForm(null, $("reunioes-marcar")));
     $("reunioes-geral").addEventListener("click", convocar);
     $("reunioes-antes").addEventListener("click", () => { s.semana--; carregarSemana(); });
     $("reunioes-depois").addEventListener("click", () => { s.semana++; carregarSemana(); });
     $("reunioes-hoje").addEventListener("click", () => { s.semana = 0; carregarSemana(); });
     $("form-reuniao").addEventListener("submit", e => { e.preventDefault(); salvarForm(); });
     $("r-fechar").addEventListener("click", () => $("dlg-reuniao").close());
+    $("dlg-reuniao").addEventListener("close", devolverFoco);
     $("form-rc").addEventListener("submit", e => {
       e.preventDefault();
       if (s.fim) s.fim($("rc-sala-caixa").hidden ? true : $("rc-sala").value);   // quem fecha o diálogo é quem pediu, depois do POST
     });
     $("rc-nao").addEventListener("click", () => $("dlg-reuniao-confirmar").close());
-    $("dlg-reuniao-confirmar").addEventListener("close", () => { if (s.fim) s.fim(false); });
+    $("dlg-reuniao-confirmar").addEventListener("close", () => { if (s.fim) s.fim(false); devolverFoco(); });
     $("reuniao-aviso-fechar").addEventListener("click", () => { $("reuniao-aviso").hidden = true; });
     window.addEventListener("minha-sala", e => { const d = e.detail || {}; s.onde = { sala: typeof d.sala === "string" ? d.sala : "", nome: typeof d.nome === "string" ? d.nome : "" }; pintarTodos(); });
     window.addEventListener("aovivo", e => {
@@ -396,7 +405,7 @@ const Reunioes = (() => {
       if (!ligado(cfg()) || !numero(v) || v === s.v) return;
       s.v = v; recarregar();
     });
-    setInterval(verificar, 20000);
+    setInterval(() => { if (++s.voltas % 15 === 0 && ligado(cfg())) carregarProximas(); else verificar(); }, 20000);   // relê as próximas a cada 5 min
   }
   // o toque no aviso de reunião (app.js): a próxima agenda que abrir põe o foco nesse cartão
   const destacar = id => { s.destaque = id; };
