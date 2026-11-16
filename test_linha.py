@@ -194,6 +194,14 @@ class LeitorGrava(unittest.TestCase):
         self.assertEqual(leitor.linha.chamadas, [([], 1000), ([("a1", "trabalhando", "livre")], 1030)])
 
 
+class Estaticos(unittest.TestCase):
+    def test_arquivos_do_front_sao_servidos(self):
+        self.assertEqual((e.ARQUIVOS.get("linha_tempo.js"), e.ARQUIVOS.get("linha_tempo.css")),
+                         ("text/javascript; charset=utf-8", "text/css; charset=utf-8"))
+        for nome in ("linha_tempo.js", "linha_tempo.css"):
+            self.assertTrue(os.path.isfile(os.path.join(e.ESTATICO, nome)), nome)
+
+
 class Rotas(unittest.TestCase):
     """/api/linha e /api/fora: o membro do andar lê; outra empresa e o saguão dão o 404 de andar. O mesmo prédio do
     test_membros (A e B em andares próprios, o térreo é o saguão)."""

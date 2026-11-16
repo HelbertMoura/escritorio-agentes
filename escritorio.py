@@ -180,6 +180,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "avisar.js": "text/javascript; charset=utf-8", "resposta_rapida.js": "text/javascript; charset=utf-8",
     "novidades.js": "text/javascript; charset=utf-8",
     "reunioes.js": "text/javascript; charset=utf-8", "reunioes.css": "text/css; charset=utf-8",
+    "linha_tempo.js": "text/javascript; charset=utf-8", "linha_tempo.css": "text/css; charset=utf-8",
     "apresentacao.js": "text/javascript; charset=utf-8",
     "manifest.webmanifest": "application/manifest+json", "icone-180.png": "image/png", "icone-192.png": "image/png",
     "icone-512.png": "image/png", "icone-mascara-512.png": "image/png",
