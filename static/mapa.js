@@ -1271,6 +1271,22 @@ function telaDe(atlas, nome, cx, base) {
   return { x: x0 + r[0], y: y0 + r[1], w: r[2], h: r[3], chave: base + 0.2 };
 }
 
-return { nomePlaca, montarPredio, desenharMesa, lampadaX, desenharCadeira, mistura, hex6, cor, rgb, T, TELAS, PLACA_FONTE, PLACA_H, CATALOGO, FIXOS, SEM_ESPELHO, tamanho };
+// Status da pessoa (1.6): ícone 9x9 ao lado do nome. "o" = contorno escuro, "#" = a cor, "+" = o desenho em branco, que
+// muda de um status para o outro (não depende só da cor); as cores dão pelo menos 3:1 com o branco
+const ICONES_STATUS = {
+  disponivel: { cor: "#15803d", rotulo: "Disponível", linhas: ["..ooooo..", ".o#####o.", "o######+o", "o#####++o", "o+#+#++#o", "o#+++###o", "o##+####o", ".o#####o.", "..ooooo.."] },
+  ocupado:    { cor: "#dc2626", rotulo: "Ocupado",    linhas: ["..ooooo..", ".o#####o.", "o#######o", "o#######o", "o+++++++o", "o#######o", "o#######o", ".o#####o.", "..ooooo.."] },
+  reuniao:    { cor: "#2563eb", rotulo: "Em reunião", linhas: ["..ooooo..", ".o#####o.", "o#+###+#o", "o#+###+#o", "o#######o", "o+++#+++o", "o+++#+++o", ".o#####o.", "..ooooo.."] },
+  ausente:    { cor: "#b45309", rotulo: "Ausente",    linhas: ["..ooooo..", ".o##+##o.", "o###+###o", "o###+###o", "o###+++#o", "o#######o", "o#######o", ".o#####o.", "..ooooo.."] },
+};
+const iconeStatus = st => (Object.hasOwn(ICONES_STATUS, st) ? ICONES_STATUS[st] : null);
+// o ícone com o canto em (x, y), cada pixel com px de lado
+function desenharStatus(c, st, x, y, px) {
+  const ic = iconeStatus(st); if (!ic) return;
+  const cores = { o: "#141320", "#": ic.cor, "+": "#ffffff" };
+  ic.linhas.forEach((l, j) => { for (let i = 0; i < 9; i++) if (cores[l[i]]) { c.fillStyle = cores[l[i]]; c.fillRect(x + i * px, y + j * px, px, px); } });
+}
+
+return { iconeStatus, desenharStatus, nomePlaca, montarPredio, desenharMesa, lampadaX, desenharCadeira, mistura, hex6, cor, rgb, T, TELAS, PLACA_FONTE, PLACA_H, CATALOGO, FIXOS, SEM_ESPELHO, tamanho };
 })();
 window.Mapa = Mapa;

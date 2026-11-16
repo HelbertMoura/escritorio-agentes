@@ -153,5 +153,28 @@ async function montar(lista, eu = "eu") {
     assert.equal(eu.pose, "acenando");
   }
 
+  // o ícone do status (mapa.js): pixel art 9x9 desenhado em código, um desenho diferente por status (não só a cor), o
+  // detalhe branco com contraste de pelo menos 3:1 sobre o fundo (WCAG 1.4.11) e nada para status fora da lista
+  {
+    const c = { window: {}, console }; c.window = c;
+    vm.runInNewContext(fs.readFileSync("static/mapa.js", "utf8"), c);
+    const Mapa = c.Mapa, vistos = new Set();
+    const lum = hex => { const v = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(x => (x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4)); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+    for (const st of ["disponivel", "ocupado", "reuniao", "ausente"]) {
+      const ic = Mapa.iconeStatus(st);
+      assert.equal(ic.linhas.length, 9); assert.ok(ic.linhas.every(l => /^[.o#+]{9}$/.test(l)), st);
+      const detalhe = ic.linhas.join("").replace(/[^+]/g, "-");
+      assert.ok(detalhe.includes("+") && !vistos.has(detalhe), `o desenho de ${st} é só dele`); vistos.add(detalhe);
+      assert.ok((lum("#ffffff") + 0.05) / (lum(ic.cor) + 0.05) >= 3, `contraste de ${st}`);
+      assert.equal(typeof ic.rotulo, "string");
+      const feitos = []; const ctx = { set fillStyle(v) { feitos.push(v); }, fillRect() { feitos.push("r"); } };
+      Mapa.desenharStatus(ctx, st, 10, 20, 2);
+      assert.ok(feitos.filter(f => f === "r").length > 40);
+    }
+    assert.equal(Mapa.iconeStatus("<b>"), null);
+    const nada = []; Mapa.desenharStatus({ set fillStyle(v) { nada.push(v); }, fillRect() { nada.push("r"); } }, null, 0, 0, 1);
+    assert.equal(nada.length, 0);
+  }
+
   console.log("test_mapa_equipe: ok");
 })().catch(e => { console.error(e); process.exit(1); });
