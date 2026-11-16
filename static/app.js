@@ -295,6 +295,7 @@ function desenharCena(t) {
   Efeitos.festaChao(ctx, festa);
   Efeitos.robo(ctx, dtQuadro, t, ceu);
   for (const a of predio.animados) if (a.parede) desenharAnimado(a, ta);
+  for (const s of [...predio.salas, ...predio.baixo]) if (s.mural) desenharMural(s.mural);
   if (predio.ringue && predio.ringue.quadro) Efeitos.placar(ctx, predio.ringue.quadro, placarDaTela(), mundo);   // top 3 da semana na parede do ringue
   const cena = [];
   for (const o of predio.objetos) cena.push({ chave: o.chave, desenha: () => desenharObjeto(o, ta) });
@@ -328,6 +329,7 @@ function desenharCena(t) {
   const faixa = Efeitos.faixaVencedor(ctx, mundo, t); if (faixa) ocupadas.push(faixa);   // os balões desviam da faixa do vencedor
   const faixaEntrega = Efeitos.entregaAr(ctx, mundo.entrega, t); if (faixaEntrega) ocupadas.push(faixaEntrega);   // e da faixa do pedido atendido
   for (const b of visiveis.filter(b => b.fala).sort((a, b) => b.y - a.y || a.x - b.x)) desenharBalao(b, ocupadas);
+  for (const v of visitas) if (v.fala) desenharBalao(v, ocupadas);   // o aceno e o "Toc, toc!" das pessoas (vida.js)
   Brincar.desenhar(ctx);   // realce, reações dos objetos e a festa do Konami
 }
 
@@ -542,7 +544,8 @@ function desenharEtiqueta(b, t, ocupadas) {
   const S = escala, topo = (b.y - Avatar.TAM - 1) * S, v = vistaMundo();
   ctx.font = fonte(700, 4.6);
   const tam = tamMundo(4.6), est0 = b.trabalho && estadoDe(b.trabalho.status);
-  const w = ctx.measureText(b.nome).width + tam, h = tam + 6, folga = est0 && est0.balao ? tam * 2.4 : 0;
+  const px = b.status && Mapa.iconeStatus(b.status) ? Math.max(1, Math.round(tam / 6)) : 0, iw = px ? px * 9 + tam * 0.35 : 0;   // status da pessoa (1.6): o ícone à esquerda do nome
+  const w = ctx.measureText(b.nome).width + tam + iw, h = tam + 6, folga = est0 && est0.balao ? tam * 2.4 : 0;
   const x = Math.max(v.l + 2, Math.min(v.r - w - 2 - folga, b.x * S - w / 2)), cx = x + w / 2;   // nunca cortado na borda da tela
   let y = Math.max(v.t + 2, topo - h);
   for (let i = 0; i < 6 && ocupadas.some(r => x < r.x + r.w + 3 && x + w + 3 > r.x && y < r.y + r.h + 2 && y + h + 2 > r.y); i++) y -= h + 3;
@@ -552,7 +555,8 @@ function desenharEtiqueta(b, t, ocupadas) {
   ctx.fillStyle = selecionado === b.id ? "#f2f2f3" : "rgba(15,15,17,.85)";
   arred(x, y, w, h, h / 2); ctx.fill();
   ctx.fillStyle = selecionado === b.id ? "#111" : "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.fillText(b.nome, cx, y + h / 2 + 1);
+  ctx.fillText(b.nome, cx + iw / 2, y + h / 2 + 1);
+  if (px) Mapa.desenharStatus(ctx, b.status, Math.round(x + tam * 0.4), Math.round(y + (h - 9 * px) / 2), px);
   const est = b.trabalho && estadoDe(b.trabalho.status);
   b.selo = null;
   if (est && est.balao) { // selo "!" (aprovação) ou "?" (pergunta): pulsa até a pessoa resolver no agentes.chat
@@ -571,6 +575,19 @@ function desenharEtiqueta(b, t, ocupadas) {
     ocupadas.push({ x: bx - r * 1.3, y: by - r * 1.3, w: r * 2.6, h: r * 2.6 });   // balões não cobrem o selo
   }
   ctx.globalAlpha = 1;
+}
+
+// Mural da sala (1.6): o quadro de cortiça já está no fundo (mapa.js); com aviso fixado no canal (o mural_v do
+// /api/ao-vivo), três papeizinhos presos com tachinha. Parado: não anima
+function desenharMural(q) {
+  if (Vida.muralV(q.canal) === null) return;
+  const S = escala, papel = (x, y, cor) => {
+    ctx.fillStyle = "rgba(0,0,0,.22)"; ctx.fillRect((x + 1) * S, (y + 1) * S, 6 * S, 6 * S);
+    ctx.fillStyle = cor; ctx.fillRect(x * S, y * S, 6 * S, 6 * S);
+    ctx.fillStyle = "rgba(0,0,0,.28)"; ctx.fillRect((x + 1) * S, (y + 3) * S, 4 * S, S * 0.6); ctx.fillRect((x + 1) * S, (y + 4.6) * S, 3 * S, S * 0.6);
+    ctx.fillStyle = "#c81e1e"; ctx.fillRect((x + 2.5) * S, y * S, S, S);
+  };
+  papel(q.x + 3, q.y + 3, "#fde68a"); papel(q.x + 10, q.y + 5, "#fbcfe8"); papel(q.x + 16, q.y + 3, "#bfdbfe");
 }
 
 // Mão levantada de quem espera aprovação: braço na cor do agente, acenando (parado com menos movimento)
@@ -2007,6 +2024,17 @@ function agenteEm(p, raio) {
   for (const b of mundo.bonecos.values()) { if (!visivel(b)) continue; const d = Math.hypot(b.x - p.x, b.y - 9 - p.y); if (d < dist) { dist = d; perto = b; } }
   return perto;
 }
+// o quadro do mural (só com o store) e as pessoas da equipe (vida.js), fora eu
+function muralEm(p) {
+  if (!config.equipe || !config.equipe.mural) return null;
+  const s = [...predio.salas, ...predio.baixo].find(r => r.mural && p.x >= r.mural.x - 2 && p.x <= r.mural.x + r.mural.w + 2 && p.y >= r.mural.y - 2 && p.y <= r.mural.y + r.mural.h + 2);
+  return s ? { canal: s.mural.canal, sala: s.nome } : null;
+}
+function pessoaEm(p, raio) {
+  let melhor = null, dm = raio;
+  for (const v of Vida.pessoas()) { const d = Math.hypot(v.x - p.x, v.y - 8 - p.y); if (!v.eu && d < dm) { dm = d; melhor = v; } }
+  return melhor;
+}
 function seloEm(p) { return [...mundo.bonecos.values()].find(b => b.selo && visivel(b) && Math.hypot(b.selo.x - p.x, b.selo.y - p.y) < b.selo.r) || null; }
 function esperaVoce(b) { return !!(b.trabalho && b.trabalho.url && /^waiting_/.test(b.trabalho.status)); }
 
@@ -2053,6 +2081,10 @@ tela.addEventListener("pointerup", ev => {
   if (selo && esperaVoce(selo)) { window.open(selo.trabalho.url, "_blank", "noopener"); return; }   // aprovar continua só no agentes.chat
   const perto = agenteEm(p, ev.pointerType === "touch" ? 16 : 12);
   if (perto) { focarAgente(perto); return; }
+  const q = muralEm(p);
+  if (q) { abrirMural(q.canal, q.sala); return; }
+  const pessoa = pessoaEm(p, ev.pointerType === "touch" ? 16 : 12);
+  if (pessoa) { abrirEquipe(true, pessoa.ref); return; }   // a pessoa da equipe: a lista abre nela (ir até, acenar)
   const s = [...predio.salas, ...predio.baixo].find(r => r.placaRet && p.x >= r.placaRet.x && p.x <= r.placaRet.x + r.placaRet.w + 20 && p.y >= r.placaRet.y && p.y <= r.placaRet.y + r.placaRet.h);
   if (s) { focarSala(s); return; }
   if (Brincar.tocar(p, ev.pointerType)) return;   // objeto do mapa (TV, café, sino…)
@@ -2064,7 +2096,7 @@ tela.addEventListener("pointermove", ev => {
   const card = $("cartao-agente");
   if (ev.pointerType !== "mouse" || !mundo || (arrasto && arrasto.moveu)) { card.hidden = true; return; }
   const p = paraMundo(ev.clientX, ev.clientY);
-  const perto = seloEm(p) || agenteEm(p, 11), objeto = Brincar.sobre(p);
+  const perto = seloEm(p) || agenteEm(p, 11), objeto = Brincar.sobre(p) || muralEm(p) || pessoaEm(p, 11);
   tela.style.cursor = perto || objeto ? "pointer" : "";
   mostrarCartao(perto, ev.clientX, ev.clientY);
 });
@@ -2127,14 +2159,153 @@ $("aparecer").addEventListener("change", () => {
 // as pessoas da equipe no mapa (vida.js); a TV e quem desligou "Aparecer" leem sem marcar presença. Na prévia não há conta
 addEventListener("aovivo", mostrarOlhando);   // a cada leitura das pessoas do andar
 function ligarAoVivo() { if (!Brincar.demo && !config.previa) Vida.aoVivo({ invisivel: () => TV.invisivel || !aparecer }); }
-// os outros vêm das pessoas deste andar no mapa (vida.js); antes da 1ª leitura e na prévia, do /api/estado
+// os outros vêm das pessoas deste andar no mapa (vida.js); antes da 1ª leitura e na prévia, do /api/estado.
+// O texto é o botão que abre a lista de quem está no andar
 function mostrarOlhando() {
   const lista = estado && Array.isArray(estado.visitantes) ? estado.visitantes : null, noMapa = Vida.olhando();
   $("olhando").hidden = (noMapa === null && !lista) || Brincar.demo;   // servidor antigo ou demonstração: sem a linha
   if ($("olhando").hidden) return;
   const outros = Math.min(noMapa ?? lista.length, 50), n = outros + (aparecer ? 1 : 0);
   textoSe($("olhando-txt"), aparecer && n === 1 ? "Só você está olhando" : !n ? "Ninguém mais olhando" : `${n} ${n === 1 ? "pessoa olhando" : "pessoas olhando"}`);
+  desenharEquipe();
 }
+
+// ---------- a equipe no mapa (1.6 Onda 2): a lista do andar, o meu status, acenar, bater na porta e o mural ----------
+// vida.js tem as pessoas, o "ir até" e os pedidos; o store (config.equipe) liga o status, o aceno e o mural. A lista só
+// é redesenhada quando muda (o /api/ao-vivo chega a cada 1,5 s), e o foco volta para o mesmo botão
+const NOME_STATUS = { disponivel: "Disponível", ocupado: "Ocupado", reuniao: "Em reunião", ausente: "Ausente" };
+let equipeAberta = false, equipeAssinatura = "", minhaSala = "";
+addEventListener("minha-sala", ev => { minhaSala = ev.detail && typeof ev.detail.sala === "string" ? ev.detail.sala : ""; equipeAssinatura = ""; desenharEquipe(); });
+$("olhando-txt").addEventListener("click", () => abrirEquipe(!equipeAberta));
+function abrirEquipe(abre, foco) {
+  equipeAberta = abre;
+  $("equipe").hidden = !abre; $("olhando-txt").setAttribute("aria-expanded", String(abre));
+  if (!abre) return;
+  equipeAssinatura = ""; desenharEquipe();
+  const alvo = foco && $("equipe-lista").querySelector(`li[data-chave="${CSS.escape(foco)}"] button`);
+  if (alvo) { alvo.focus(); alvo.closest("li").scrollIntoView({ block: "nearest" }); }
+}
+function desenharEquipe() {
+  if (!equipeAberta || !mundo || !config) return;
+  const eq = config.equipe, lista = Vida.equipe(mundo), noSaguao = Andar.perfil(config).noSaguao, total = Vida.noPredio();
+  const assinatura = JSON.stringify([lista, !!eq, total, minhaSala]);
+  if (assinatura === equipeAssinatura) return;
+  equipeAssinatura = assinatura;
+  const comTotal = noSaguao && total !== null;   // só no saguão: o total do prédio, sem nome (D12 a)
+  textoSe($("equipe-predio"), comTotal ? `${total} ${total === 1 ? "pessoa" : "pessoas"} no prédio agora, somando todos os andares` : "");
+  $("equipe-predio").hidden = !comTotal;
+  const eu = lista.find(p => p.eu);
+  $("meu-status").hidden = !eq || !eu;
+  if (eq && eu && !$("meu-status").contains(document.activeElement)) { $("status-sel").value = eu.status || "disponivel"; $("status-txt").value = eu.texto; }
+  const ativo = document.activeElement, voltar = ativo && ativo.dataset && ativo.dataset.acao && ativo.closest("#equipe-lista") ? [ativo.closest("li").dataset.chave, ativo.dataset.acao] : null;
+  const salaMinha = eu ? eu.sala : "";
+  $("equipe-lista").replaceChildren(...lista.map(p => {
+    const li = elem("li", "equipe-pessoa"); li.dataset.chave = p.chave;
+    const ico = elem("span", "status-ico"); ico.dataset.status = p.status || "nenhum"; ico.setAttribute("aria-hidden", "true");
+    const quem = elem("span", "equipe-quem");
+    quem.append(elem("span", "equipe-nome", p.eu ? `${p.nome} (você)` : p.nome),
+      elem("span", "equipe-onde", [p.sala, p.status && NOME_STATUS[p.status], p.texto].filter(Boolean).join(" · ")));
+    li.append(ico, quem);
+    if (!p.eu) {
+      const acoes = elem("span", "equipe-acoes");
+      const botao = (acao, txt, rotulo) => { const b = elem("button", "botao fantasma", txt); b.type = "button"; b.dataset.acao = acao; b.setAttribute("aria-label", rotulo); return b; };
+      acoes.append(botao("ir", "Ir até", `Ir até ${p.nome}`));
+      if (eq && p.status !== "ocupado") {   // ocupado não recebe aceno
+        acoes.append(botao("aceno", "Acenar", `Acenar para ${p.nome}`));
+        if (p.sala !== "Corredor" && p.sala !== salaMinha) acoes.append(botao("porta", "Bater na porta", `Bater na porta de ${p.nome}, na ${p.sala}`));
+      }
+      li.append(acoes);
+    }
+    return li;
+  }));
+  if (voltar) { const b = $("equipe-lista").querySelector(`li[data-chave="${CSS.escape(voltar[0])}"] button[data-acao="${voltar[1]}"]`); if (b) b.focus(); }
+  const m = muralDaMinhaSala();
+  $("equipe-mural").hidden = !(eq && eq.mural);
+  textoSe($("equipe-mural"), m.canal === "geral" ? (noSaguao ? "Mural do prédio" : "Mural do andar") : `Mural da ${m.nome}`);
+}
+// o mural da sala onde o meu boneco está; na recepção e no corredor, o geral (no saguão, o do prédio)
+function muralDaMinhaSala() {
+  const s = minhaSala && predio ? [...predio.salas, ...predio.baixo].find(r => r.chave === minhaSala) : null;
+  return !s || s.tipo === "recepcao" ? { canal: "geral", nome: "" } : { canal: "sala:" + s.chave, nome: s.nome };
+}
+$("equipe-lista").addEventListener("click", async ev => {
+  const b = ev.target.closest("button[data-acao]"); if (!b || !mundo) return;
+  const chave = b.closest("li").dataset.chave, acao = b.dataset.acao;
+  textoSe($("equipe-aviso"), "");
+  if (acao === "ir") { if (!Vida.irAtePessoa(mundo, chave)) textoSe($("equipe-aviso"), "Não achei um caminho até essa pessoa agora."); return; }
+  const r = Vida.acenar(mundo, chave, acao);
+  if (!r) { textoSe($("equipe-aviso"), "Essa pessoa já saiu do andar."); return; }
+  const res = await r;
+  textoSe($("equipe-aviso"), res.ok ? (acao === "porta" ? "Você bateu na porta." : "Você acenou.") : res.mensagem);
+});
+$("status-salvar").addEventListener("click", async () => {
+  const r = await Vida.mudarStatus($("status-sel").value, $("status-txt").value.trim());
+  textoSe($("equipe-aviso"), !r ? "" : r.ok ? "Status salvo." : r.mensagem);
+  equipeAssinatura = ""; desenharEquipe();
+});
+$("status-txt").addEventListener("keydown", ev => { if (ev.key === "Enter") { ev.preventDefault(); $("status-salvar").click(); } });
+$("equipe-mural").addEventListener("click", () => { const m = muralDaMinhaSala(); abrirMural(m.canal, m.nome); });
+
+// aceno recebido (vida.js): uma faixa curta, lida pelo leitor de tela (role=status)
+let acenoTimer = 0;
+addEventListener("aceno", ev => {
+  const d = ev.detail || {}, el = $("aceno-aviso");
+  el.textContent = d.tipo === "porta" ? `${d.nome} bateu na porta` : `${d.nome} acenou para você`;
+  el.hidden = false; clearTimeout(acenoTimer); acenoTimer = setTimeout(() => { el.hidden = true; }, 6000);
+});
+
+// o mural (GET /api/mural; fixar e tirar): só texto (textContent); relê quando o mural_v do canal no /api/ao-vivo muda
+// (canal sem aviso não vem: null também conta como valor visto)
+let muralCanal = null, muralVisto = null, muralAbriu = null;
+function abrirMural(canal, nomeSala) {
+  const d = $("dlg-mural"); if (!d.showModal) return;
+  muralCanal = canal; muralAbriu = document.activeElement;
+  textoSe($("mural-titulo"), canal === "geral" ? (Andar.perfil(config).noSaguao ? "Mural do prédio" : "Mural do andar") : `Mural da ${nomeSala}`);
+  $("mural-lista").replaceChildren(); $("mural-vazio").hidden = true; textoSe($("mural-aviso"), "Abrindo…"); $("mural-texto").value = "";
+  if (!d.open) d.showModal();
+  carregarMural();
+}
+async function carregarMural() {
+  const canal = muralCanal;
+  muralVisto = Vida.muralV(canal);
+  let d;
+  try { d = await json(`api/mural?canal=${encodeURIComponent(canal)}`); } catch (e) { if (canal === muralCanal) textoSe($("mural-aviso"), "Não deu para abrir o mural agora."); return; }
+  if (canal === muralCanal) mostrarMural(d);
+}
+const dataCurta = iso => { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }); };
+function mostrarMural(d) {
+  const avisos = d && Array.isArray(d.avisos) ? d.avisos.slice(0, 10) : [], moderar = !!(config.equipe && config.equipe.pode_moderar);
+  textoSe($("mural-aviso"), "");
+  $("mural-vazio").hidden = avisos.length > 0;
+  $("mural-lista").replaceChildren(...avisos.map(a => {
+    const li = elem("li", "mural-item"), nome = String(a.nome || "Alguém");
+    li.append(elem("p", "mural-txt", String(a.texto || "")), elem("span", "mural-de", [nome, dataCurta(a.em)].filter(Boolean).join(" · ")));
+    if (a.meu || moderar) { const b = elem("button", "botao fantasma", "Tirar"); b.type = "button"; b.dataset.id = String(a.id); b.setAttribute("aria-label", `Tirar o aviso de ${nome}`); li.append(b); }
+    return li;
+  }));
+  const cheio = avisos.length >= 10;
+  $("mural-fixar").disabled = cheio;
+  if (cheio) textoSe($("mural-aviso"), "O mural está cheio (10 avisos). Tire um para fixar outro.");
+}
+$("form-mural").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const texto = $("mural-texto").value.trim();
+  if (!texto) { textoSe($("mural-aviso"), "Escreva o aviso antes de fixar."); $("mural-texto").focus(); return; }
+  const r = await postarResposta("api/mural/fixar", { canal: muralCanal, texto });
+  if (r.status === 200) { $("mural-texto").value = ""; mostrarMural(r.d); textoSe($("mural-aviso"), "Aviso fixado."); }
+  else textoSe($("mural-aviso"), mensagemDe(r, "Não deu para fixar agora. Tente de novo."));
+});
+$("mural-lista").addEventListener("click", async ev => {
+  const b = ev.target.closest("button[data-id]"); if (!b) return;
+  const r = await postarResposta("api/mural/tirar", { id: Number(b.dataset.id) });
+  if (r.status === 200) { mostrarMural(r.d); textoSe($("mural-aviso"), "Aviso tirado."); $("mural-texto").focus(); }
+  else textoSe($("mural-aviso"), mensagemDe(r, "Não deu para tirar agora. Tente de novo."));
+});
+$("mural-fechar").addEventListener("click", () => $("dlg-mural").close());
+$("dlg-mural").addEventListener("click", ev => { if (ev.target === $("dlg-mural")) $("dlg-mural").close(); });   // clique no fundo escurecido
+$("dlg-mural").addEventListener("close", () => { muralCanal = null; if (muralAbriu && muralAbriu.isConnected) muralAbriu.focus(); });
+addEventListener("aovivo", () => { if (muralCanal && $("dlg-mural").open && Vida.muralV(muralCanal) !== muralVisto) carregarMural(); });
+
 
 // ---------- modo TV (tv.js): a câmera e as notícias que o diretor usa ----------------
 function salasComGente() { // salas com alguém visível dentro, na ordem do prédio
@@ -2329,6 +2500,7 @@ function reiniciarAndar() {
   convAberta = null; convLida = ""; convDesenho = ""; pedidoConv++; pedidoConversa++; $("conv-aberta").replaceChildren();
   amizades = null; pedidoAmizades++; cenaVista = null; releitura = releituraPlacar = 0; greveVista = null;
   if ($("dlg-placar").open) $("dlg-placar").close();
+  if ($("dlg-mural").open) $("dlg-mural").close();
   Jornal.reiniciar();
   if (window.Ajustes) Ajustes.esquecerAndar();
 }
