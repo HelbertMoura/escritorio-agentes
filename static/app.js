@@ -328,8 +328,9 @@ function desenharCena(t) {
   for (const b of visiveis) Efeitos.emote(ctx, b, t, ceu.escuro);
   const faixa = Efeitos.faixaVencedor(ctx, mundo, t); if (faixa) ocupadas.push(faixa);   // os balões desviam da faixa do vencedor
   const faixaEntrega = Efeitos.entregaAr(ctx, mundo.entrega, t); if (faixaEntrega) ocupadas.push(faixaEntrega);   // e da faixa do pedido atendido
-  for (const b of visiveis.filter(b => b.fala).sort((a, b) => b.y - a.y || a.x - b.x)) desenharBalao(b, ocupadas);
-  for (const v of visitas) if (v.fala) desenharBalao(v, ocupadas);   // o aceno e o "Toc, toc!" das pessoas (vida.js)
+  const baloes = !(window.Apresentacao && Apresentacao.ligado());   // na apresentação, sem balão de fala
+  if (baloes) for (const b of visiveis.filter(b => b.fala).sort((a, b) => b.y - a.y || a.x - b.x)) desenharBalao(b, ocupadas);
+  if (baloes) for (const v of visitas) if (v.fala) desenharBalao(v, ocupadas);   // o aceno e o "Toc, toc!" das pessoas (vida.js)
   Brincar.desenhar(ctx);   // realce, reações dos objetos e a festa do Konami
 }
 
