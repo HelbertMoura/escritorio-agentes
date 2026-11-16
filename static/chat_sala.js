@@ -31,7 +31,82 @@ const ChatSala = (() => {
       .sort((a, b) => a.seq - b.seq);
   }
 
-  if (typeof document === "undefined") return { daSala, validar, limpar, novas, euDe, deMim, TEXTO_MAX };
+
+  // ---- 1.6: o painel de conversa da equipe. Os limites são os do store (conversas_equipe.py)
+  const SALA_MAX = 80, ANEXO_MAX = 25 * 1024 * 1024, NOME_ARQUIVO_MAX = 120, SUGESTOES = 6;
+  const EMOJIS = ["👍", "❤️", "😂", "🎉", "😮", "😢", "🙏", "👀"];
+  const IMAGENS = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);   // só estas aparecem em <img>
+  const canalDaSala = s => (typeof s === "string" && s.length >= 1 && s.length <= SALA_MAX ? `sala:${s}` : "");
+  // o histórico na tela: junta por id em ordem; a versão que chegou depois (apagada, reação nova) troca a de antes
+  function mesclar(atuais, chegaram) {
+    const porId = new Map(atuais.map(m => [m.id, m]));
+    for (const m of Array.isArray(chegaram) ? chegaram : []) if (m && Number.isInteger(m.id)) porId.set(m.id, m);
+    return [...porId.values()].sort((a, b) => a.id - b.id);
+  }
+  const maisAntiga = ms => (ms.length ? ms[0].id : null);
+  // menção: o "@termo" que está sendo escrito logo antes do cursor (no começo ou depois de espaço), ou null
+  function mencaoEmCurso(texto, cursor) {
+    const m = /(^|\s)@([a-z0-9._-]*)$/i.exec(String(texto).slice(0, cursor));
+    return m ? { inicio: m.index + m[1].length, termo: m[2] } : null;
+  }
+  const semAcento = t => String(t).normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  // quem sugerir: só da lista do andar que o servidor deu, sem mim; casa o começo do login ou de uma palavra do nome
+  function sugestoes(termo, pessoas, eu, max = SUGESTOES) {
+    const t = semAcento(termo);
+    return (Array.isArray(pessoas) ? pessoas : []).filter(p => p && typeof p.usuario === "string" && p.usuario !== eu &&
+      (p.usuario.startsWith(t) || semAcento(typeof p.nome === "string" ? p.nome : "").split(/\s+/).some(w => w.startsWith(t)))).slice(0, max);
+  }
+  function completarMencao(texto, inicio, cursor, usuario) {
+    const antes = `${texto.slice(0, inicio)}@${usuario} `;
+    return { texto: antes + texto.slice(cursor), cursor: antes.length };
+  }
+  // o texto em pedaços para o textContent: "@login" de alguém do andar vira destaque
+  function partes(texto, logins) {
+    const saida = [], re = /(^|\s)@([a-z0-9][a-z0-9._-]{2,31})/g;
+    let de = 0, m;
+    while ((m = re.exec(texto))) {
+      const ini = m.index + m[1].length, fim = ini + 1 + m[2].length;
+      if (!logins.has(m[2])) continue;
+      if (ini > de) saida.push({ texto: texto.slice(de, ini) });
+      saida.push({ texto: texto.slice(ini, fim), mencao: m[2] });
+      de = fim;
+    }
+    if (de < texto.length || !saida.length) saida.push({ texto: texto.slice(de) });
+    return saida;
+  }
+  function tamanho(b) {
+    const un = ["B", "KB", "MB", "GB"];
+    let i = 0;
+    while (b >= 1024 && i < un.length - 1) { b /= 1024; i++; }
+    return `${i ? String(Math.round(b * 10) / 10).replace(".", ",") : b} ${un[i]}`;
+  }
+  function conferirArquivo(f) {   // o que dá para dizer antes de subir; o tipo quem decide é o servidor, pelos bytes
+    if (!f || !f.size) return "O arquivo está vazio.";
+    if (f.size > ANEXO_MAX) return "O arquivo passa de 25 MB.";
+    if (typeof f.name !== "string" || !f.name || f.name.length > NOME_ARQUIVO_MAX) return "O nome do arquivo passa de 120 caracteres.";
+    return null;
+  }
+  const ehImagem = t => IMAGENS.has(t);
+  function alternarReacao(reacoes, emoji) {   // a minha liga ou desliga já; a próxima leitura traz a contagem de verdade
+    const r = reacoes.map(x => ({ ...x })), achou = r.find(x => x.emoji === emoji);
+    if (!achou) return [...r, { emoji, n: 1, eu: true }];
+    achou.n += achou.eu ? -1 : 1; achou.eu = !achou.eu;
+    return r.filter(x => x.n > 0);
+  }
+  const textoRetencao = dias => `As mensagens ficam guardadas por ${!Number.isInteger(dias) || dias >= 365 ? "1 ano" : `${dias} dias`}.`;
+  const avisoDM = empresa => `As mensagens diretas ${empresa ? `da ${empresa}` : "desta empresa"} podem ser lidas pela administração da empresa.`;
+  const data = em => { const d = new Date(em); return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("pt-BR", { timeZone: "UTC" }); };
+  function linhaAcessos(datas) {   // D10: as duas pontas veem quando a administração abriu a DM (as 3 últimas)
+    const ds = (Array.isArray(datas) ? datas : []).map(data).filter(Boolean).slice(-3);
+    if (!ds.length) return "";
+    const lista = ds.length === 1 ? ds[0] : `${ds.slice(0, -1).join(", ")} e ${ds[ds.length - 1]}`;
+    return `A administração da empresa abriu esta conversa em ${lista}.`;
+  }
+  const contagem = n => (!n ? "" : n > 9 ? "9+" : String(n));
+  const puro = { daSala, validar, limpar, novas, euDe, deMim, TEXTO_MAX, EMOJIS, canalDaSala, mesclar, maisAntiga, mencaoEmCurso,
+    sugestoes, completarMencao, partes, tamanho, conferirArquivo, ehImagem, alternarReacao, textoRetencao, avisoDM, linhaAcessos, contagem };
+
+  if (typeof document === "undefined") return puro;
 
   const $ = id => document.getElementById(id);
   const caixa = $("chat-sala"), abrir = $("chat-sala-abrir"), painel = $("chat-sala-painel"), titulo = $("chat-sala-titulo"),
