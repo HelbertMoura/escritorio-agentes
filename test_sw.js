@@ -88,5 +88,34 @@ function carregar(resposta, abas = []) {
     await carregar({}, [aba]).tocar({ agente: null, andar: "principal", canal: "dm:4" });
     assert.deepEqual(JSON.parse(JSON.stringify(recebidas)), [{ tipo: "aviso", andar: "principal", canal: "dm:4" }]);
   }
+  // Onda 3: "Reunião em 5 min" e a convocação para a reunião geral, com título e corpo do servidor
+  {
+    const n = await carregar({ aviso: { tipo: "reuniao", titulo: "Reunião em 5 min · Planejamento", corpo: "Sala de reunião", andar: "a1b2c3d4",
+      canal: null, sala: "reuniao", reuniao: 12, quando: 1 } }).push();
+    assert.equal(n.titulo, "Reunião em 5 min · Planejamento");
+    assert.equal(n.body, "Sala de reunião");
+    assert.equal(n.data.andar, "a1b2c3d4");
+    assert.equal(n.data.reuniao, 12);
+    assert.equal(n.data.canal, null);
+    const c = await carregar({ aviso: { tipo: "convocacao", titulo: "Beto chamou a equipe", corpo: "", andar: "a1b2c3d4", canal: null, sala: "reuniao" } }).push();
+    assert.equal(c.titulo, "Beto chamou a equipe");
+    assert.equal(c.body, "Toque para abrir o escritório.", "sem o começo: o genérico");
+    assert.equal(c.data.reuniao, null);
+    for (const reuniao of ["12", -1, 1.5, 2 ** 60]) {
+      const x = await carregar({ aviso: { tipo: "reuniao", titulo: "Reunião em 5 min", corpo: "", andar: "a1b2c3d4", reuniao } }).push();
+      assert.equal(x.data.reuniao, null, String(reuniao));
+    }
+  }
+  // o toque na reunião: abre a agenda do andar nessa reunião (?reuniao=); com a aba aberta, manda para ela
+  {
+    assert.equal(await carregar({}).tocar({ agente: null, andar: "a1b2c3d4", canal: null, reuniao: 12 }), "https://escritorio.exemplo/?reuniao=12#andar=a1b2c3d4");
+    const recebidas = [], aba = { url: "https://escritorio.exemplo/", postMessage: m => recebidas.push(m), focus() {} };
+    await carregar({}, [aba]).tocar({ agente: null, andar: "a1b2c3d4", canal: null, reuniao: 12 });
+    assert.deepEqual(JSON.parse(JSON.stringify(recebidas)), [{ tipo: "reuniao", andar: "a1b2c3d4", reuniao: 12 }]);
+    // a convocação vai ao mapa do andar (o boneco anda até a sala pelo /api/ao-vivo)
+    recebidas.length = 0;
+    await carregar({}, [aba]).tocar({ agente: null, andar: "a1b2c3d4", canal: null, reuniao: null });
+    assert.deepEqual(JSON.parse(JSON.stringify(recebidas)), [{ tipo: "aviso", andar: "a1b2c3d4", canal: null }]);
+  }
   console.log("test_sw.js ok");
 })().catch(e => { console.error(e); process.exit(1); });

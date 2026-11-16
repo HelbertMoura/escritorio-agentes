@@ -55,6 +55,7 @@ async function iniciar() {
   await buscar();
   ligarAoVivo();
   irAoAgentePedido();
+  irReuniaoPedida();
   ligarTV();
   if (!souMembro() && !Andar.perfil(config).noSaguao) Assistente.talvez(config, () => estado);   // nome de exemplo ou sem conexão: o assistente (uma vez por sessão, e na volta do OAuth)
   setInterval(buscar, 10000);
@@ -73,6 +74,7 @@ function aplicarConfig() {
   mostrarElevador();
   aplicarPapel();
   Reunioes.configurar(config);   // o menu e os links de reunião do andar (reunioes.js)
+  if (location.hash === "#reunioes" && telaAtual !== "reunioes") rota();   // abriu direto na agenda: ela só existe depois do config
 }
 
 // O papel da conta NO ANDAR ("admin" | "membro" | "pessoa", a pessoa do prédio no saguão) vem no /api/config; sem o campo
@@ -2629,6 +2631,20 @@ function irAoAgentePedido() {
   u.searchParams.delete("agente"); history.replaceState(history.state, "", u);   // recarregar não volta a abrir
   irAoAgente(id);
 }
+// o toque no aviso de reunião (sw.js): troca de andar e abre a agenda com o foco nessa reunião. Sem a aba aberta, o sw.js
+// abre /?reuniao=<id>#andar=<id>
+async function abrirReuniao(andar, id) {
+  if (andar !== Andar.atual) await trocarAndar(andar);
+  if (andar !== Andar.atual) return;   // a troca falhou: fica onde está
+  Reunioes.destacar(id);
+  if (location.hash === "#reunioes") rota(); else location.hash = "#reunioes";
+}
+function irReuniaoPedida() {
+  const u = new URL(location.href), id = Number(u.searchParams.get("reuniao"));
+  if (!u.searchParams.has("reuniao")) return;
+  u.searchParams.delete("reuniao"); history.replaceState(history.state, "", u);   // recarregar não volta a abrir
+  if (Number.isSafeInteger(id) && id > 0) abrirReuniao(Andar.atual, id);
+}
 Avisar.iniciar({ demo: () => Brincar.demo });
 Reunioes.iniciar({ salas: () => (predio ? [...predio.salas, ...predio.baixo] : []) });
 Timelapse.iniciar({
@@ -2668,7 +2684,9 @@ if ("serviceWorker" in navigator) {
   // toque no aviso com esta aba aberta: o sw.js foca a aba e manda ir ao agente, ou (aviso pessoal: menção, DM, aceno,
   // porta) o andar e o canal: troca para o andar e abre o canal no painel (chat_sala.js)
   navigator.serviceWorker.addEventListener("message", ev => {
-    if (ev.data && ev.data.tipo === "agente" && typeof ev.data.agente === "string") irAoAgente(ev.data.agente);
+    const d = ev.data;
+    if (d && d.tipo === "reuniao" && Andar.valido(d.andar) && Number.isSafeInteger(d.reuniao) && d.reuniao > 0) abrirReuniao(d.andar, d.reuniao);
+    else if (ev.data && ev.data.tipo === "agente" && typeof ev.data.agente === "string") irAoAgente(ev.data.agente);
     else abrirAviso(Andar.doAviso(ev.data));
   });
 }

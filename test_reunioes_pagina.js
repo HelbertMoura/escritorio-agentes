@@ -36,4 +36,10 @@ assert.match(/\nfunction aplicarConfig\(\) \{[\s\S]*?\n\}\n/.exec(app)[0], /Reun
 assert.match(app, /Reunioes\.ajustes\(config\)/);
 // a lista de salas da lateral: o "Entrar" ao lado do botão da sala (link não vai dentro de botão)
 assert.match(/\nfunction montarSalas\(\) \{[\s\S]*?\n\}\n/.exec(app)[0], /li\.append\(b, Reunioes\.entrar\(s\.chave, s\.nome\)\)/);
+// o toque no aviso de reunião (sw.js): com a aba aberta, o postMessage {tipo: "reuniao"}; sem ela, o ?reuniao= do endereço
+assert.match(app, /d\.tipo === "reuniao" && Andar\.valido\(d\.andar\)/);
+// aberto direto em #reunioes (recarregar a página): a agenda abre quando o config chega
+assert.match(/\nfunction aplicarConfig\(\) \{[\s\S]*?\n\}\n/.exec(app)[0], /if \(location\.hash === "#reunioes" && telaAtual !== "reunioes"\) rota\(\);/);
+assert.match(app, /searchParams\.get\("reuniao"\)/);
+assert.match(/\nasync function abrirReuniao\(andar, id\) \{[\s\S]*?\n\}\n/.exec(app)[0], /Reunioes\.destacar\(id\)[\s\S]*location\.hash = "#reunioes"/);
 console.log("test_reunioes_pagina.js ok");

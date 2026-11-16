@@ -176,6 +176,9 @@ const Reunioes = (() => {
       else { const ol = criar("ol", "reunioes-lista"); ol.append(...lista.map(elReuniao)); caixa.append(ol); }
       return caixa;
     }));
+    const alvo = s.destaque && [...$("reunioes-dias").querySelectorAll(".reuniao")].find(c => c.dataset.id === String(s.destaque));
+    s.destaque = null;   // uma vez só
+    if (alvo) { alvo.classList.add("destaque"); alvo.tabIndex = -1; alvo.focus(); if (alvo.scrollIntoView) alvo.scrollIntoView({ block: "center" }); }
   }
   function elReuniao(r) {
     const li = criar("li", "reuniao" + (r.agora ? " agora" : "")), quando = criar("p", "reuniao-hora", faixa(r));
@@ -395,6 +398,8 @@ const Reunioes = (() => {
     });
     setInterval(verificar, 20000);
   }
-  return { ...puro, iniciar, configurar, ligado, abrir, ajustes, entrar, pintar: pintarTodos, recarregar };
+  // o toque no aviso de reunião (app.js): a próxima agenda que abrir põe o foco nesse cartão
+  const destacar = id => { s.destaque = id; };
+  return { ...puro, iniciar, configurar, ligado, abrir, ajustes, entrar, pintar: pintarTodos, recarregar, destacar };
 })();
 if (typeof window !== "undefined") window.Reunioes = Reunioes;

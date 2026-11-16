@@ -160,6 +160,17 @@ function carregar({ config = CONFIG, respostas = RESP, agora = AGORA } = {}) {
     assert.equal(pedidos.filter(p => p.rota === "api/reunioes").pop().q.get("de"), String(s(new Date(2026, 10, 23))));
   }
 
+  // o toque no aviso de reunião: a agenda abre com o foco no cartão da reunião
+  {
+    const { ids, R } = carregar();
+    R.configurar(CONFIG); await espera();
+    R.destacar(13); await R.abrir(); await espera();
+    const c = achar(ids["reunioes-dias"], "reuniao").find(x => x.dataset.id === "13");
+    assert.ok(c.classes.has("destaque"));
+    assert.equal(foco, c);
+    await R.abrir(); await espera();
+    assert.equal(achar(ids["reunioes-dias"], "destaque").length, 0, "só uma vez");
+  }
   // marcar: o diálogo com as salas do mapa (sem o corredor) e a gente do andar; o POST com as chaves do contrato
   {
     const { ids, pedidos, R } = carregar();
