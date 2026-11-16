@@ -81,3 +81,4 @@ body.tv .reuniao-entrar { display: none; }
 .reunioes-link input[aria-invalid="true"] { border-color: var(--erro-texto); }
 .reunioes-link .acoes { flex-wrap: nowrap; }
 @media (max-width: 480px) { .reunioes-link { grid-template-columns: 1fr; } }
+.reuniao.destaque { outline: 2px solid var(--destaque); outline-offset: 2px; }
