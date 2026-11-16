@@ -39,7 +39,7 @@ D4 b, D5 b, D6 b, D8 a, D10 a, D12 a) e o contrato da Onda 1 (perfis, `?andar=`,
 
 Campo novo `equipe` (`null` com o store desligado):
 ```
-"equipe": {"retencao": 365, "pode_moderar": false, "dm": true, "anexo": true, "mencao": true,
+"equipe": {"retencao": 365, "pode_moderar": false, "cota": null, "dm": true, "anexo": true, "mencao": true,
            "emojis": ["👍", "❤️", "😂", "🎉", "😮", "😢", "🙏", "👀"], "anexo_max": 26214400,
            "aviso_dm": "As mensagens diretas da <empresa> podem ser lidas pela administração da empresa.",
            "aviso_dm_entendido": false, "auditoria": false, "mural": true,
@@ -48,6 +48,8 @@ Campo novo `equipe` (`null` com o store desligado):
 - `retencao`: os dias (365, 90 ou 30) da empresa (item 10). `pode_moderar`: apaga mensagem alheia em canal e tira aviso
   do mural: só quem tem papel `admin` **neste** andar; no saguão, o admin do prédio. O admin do prédio lê os andares
   das empresas, mas sai `false` neles.
+- `cota`: `{"usado": <bytes, com as reservas em curso>, "total": 5368709120}` dos anexos da empresa, só para quem
+  `pode_moderar` fora do saguão (o resto: `null`). O cartão do prazo mostra a linha e, a partir de 90%, o aviso.
 - `dm`, `anexo`, `mencao`: `false` no saguão. `auditoria`: `true` só para quem tem papel `admin` **neste** andar (o
   admin do prédio que não é admin do andar sai `false`).
 - `aviso_dm` (o texto fixo do topo de toda DM, E.3) e `aviso_dm_entendido` (o "Entendi" desta conta neste andar, item 6).
@@ -67,8 +69,8 @@ Campos novos (só com o store ligado):
 "meu_status": {"status": "disponivel", "texto": ""},
 "acenos": [{"de": "ana" | "p_…", "nome": "Ana", "tipo": "aceno" | "porta", "seq": 812}],   // para mim, seq > desde
 "mural_v": {"geral": 1203, "sala:cozinha": 4501},   // muda quando o mural do canal muda; canal sem aviso não aparece
-"nao_lidas": {"geral": 3, "sala:reuniao": 1, "dm:4": 2},   // só os canais com > 0 (DMs incluídas)
-"mencoes": {"geral": 1},                                   // menções a mim ainda não lidas, por canal (> 0)
+"nao_lidas": {"geral": 3, "sala:reuniao": 1, "dm:4": 2},   // só os canais com > 0 (DMs incluídas), até 100 por canal
+"mencoes": {"geral": 1},                                   // menções a mim ainda não lidas, por canal (> 0, até 100)
 "aberto": {"canal": "geral", "novas": [<mensagem>, ...], "v": 98123}   // até 50 mensagens com id > depois, em ordem
 "no_predio": 12                                             // só no saguão: total de pessoas em qualquer andar, sem nome (D12 a)
 ```

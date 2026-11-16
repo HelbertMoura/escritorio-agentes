@@ -50,6 +50,7 @@ SALA_MAX = 80
 BUSCA_MAX, BUSCA_TERMOS = 100, 8
 STATUS, STATUS_PADRAO, STATUS_TEXTO_MAX = ("disponivel", "ocupado", "reuniao", "ausente"), "disponivel", 40
 NOVAS_MAX = 50   # as mensagens novas do canal aberto que vão no /api/ao-vivo
+CONTAGEM_MAX = 100   # não lidas e menções contam até aqui por canal (a tela mostra "9+"): o poll não varre o ano todo
 TOKEN_OK = re.compile(r"[0-9a-f]{32}")
 SHA_OK = re.compile(r"[0-9a-f]{64}")
 TIPO_OK = re.compile(r"[a-z]+/[a-z0-9.+-]{1,80}")
@@ -155,6 +156,7 @@ class Equipe:
         self.reservas = {}   # token -> (usuario, tamanho, instante); só na memória: reiniciar devolve tudo
         self.dms_abertas = {}   # id da DM -> quando foi aberta: a varredura não tira a DM vazia de quem acabou de abrir
         self.vezes = {}      # (tipo, usuario) -> instante do último pedido limitado (busca, auditoria)
+        self.contados = (None, {})   # (total_changes do banco, {usuario: contadores}): o poll sem escrita no meio não relê
         os.makedirs(pasta, mode=0o700, exist_ok=True)
         caminho = os.path.join(pasta, ARQ)
         os.close(os.open(caminho, os.O_CREAT | os.O_RDWR, 0o600))   # o -wal e o -shm herdam a permissão
@@ -511,19 +513,34 @@ class Equipe:
 
     # --- o que o /api/ao-vivo e o push leem (Onda 2)
     def contadores(self, usuario):
-        """({canal: não lidas}, {canal: menções não lidas}) da pessoa: geral, salas e as DMs dela, só os maiores que 0.
-        As mensagens dela mesma não contam."""
-        ate = "m.id > COALESCE((SELECT ultima FROM leitura WHERE canal = c.id AND usuario = ?), 0)"
-        ref = lambda i, dm, chave: f"dm:{i}" if dm else chave
+        """({canal: não lidas}, {canal: menções não lidas}) da pessoa: geral, salas e as DMs dela, só os maiores que 0 e
+        até CONTAGEM_MAX. As mensagens dela mesma não contam. Roda a cada poll, então nada varre o histórico: as não
+        lidas leem o índice (canal, id) depois da última leitura, com teto; as menções, o índice (usuario, mensagem)."""
+        nao_lidas, mencoes = {}, {}
         with self.trava:
-            nao_lidas = {ref(i, dm, chave): n for i, dm, chave, n in self.con.execute(
-                "SELECT c.id, c.dm, c.chave, COUNT(m.id) FROM canal c JOIN mensagem m ON m.canal = c.id "
-                f"WHERE (c.dm = 0 OR c.u1 = ? OR c.u2 = ?) AND m.texto IS NOT NULL AND (m.autor IS NULL OR m.autor <> ?) "
-                f"AND {ate} GROUP BY c.id", (usuario, usuario, usuario, usuario))}
-            mencoes = {ref(i, dm, chave): n for i, dm, chave, n in self.con.execute(
-                "SELECT c.id, c.dm, c.chave, COUNT(*) FROM mencao x JOIN mensagem m ON m.id = x.mensagem "
-                f"JOIN canal c ON c.id = m.canal WHERE x.usuario = ? AND m.texto IS NOT NULL AND {ate} GROUP BY c.id",
-                (usuario, usuario))}
+            if self.contados[0] != self.con.total_changes:   # qualquer escrita no banco (só esta conexão escreve) zera
+                self.contados = (self.con.total_changes, {})
+            if usuario in self.contados[1]:
+                return tuple(dict(d) for d in self.contados[1][usuario])
+            canais = {i: (f"dm:{i}" if dm else chave, ultima) for i, dm, chave, ultima in self.con.execute(
+                "SELECT c.id, c.dm, c.chave, COALESCE(l.ultima, 0) FROM canal c "
+                "LEFT JOIN leitura l ON l.canal = c.id AND l.usuario = ? WHERE c.dm = 0 OR c.u1 = ? OR c.u2 = ?",
+                (usuario, usuario, usuario))}
+            for i, (ref, ultima) in canais.items():
+                n = self.con.execute(
+                    "SELECT COUNT(*) FROM (SELECT 1 FROM mensagem WHERE canal = ? AND id > ? AND texto IS NOT NULL "
+                    "AND (autor IS NULL OR autor <> ?) LIMIT ?)", (i, ultima, usuario, CONTAGEM_MAX)).fetchone()[0]
+                if n:
+                    nao_lidas[ref] = n
+            if nao_lidas:   # CROSS JOIN: a menção por fora, pelo índice da pessoa, a partir da leitura mais antiga
+                for i, id_m in self.con.execute(
+                        "SELECT m.canal, m.id FROM mencao x CROSS JOIN mensagem m ON m.id = x.mensagem "
+                        "WHERE x.usuario = ? AND x.mensagem > ? AND m.texto IS NOT NULL",
+                        (usuario, min(ultima for _, ultima in canais.values()))):
+                    ref, ultima = canais.get(i, (None, 0))
+                    if ref is not None and id_m > ultima:
+                        mencoes[ref] = min(mencoes.get(ref, 0) + 1, CONTAGEM_MAX)
+            self.contados[1][usuario] = (dict(nao_lidas), dict(mencoes))
         return nao_lidas, mencoes
 
     def novas(self, usuario, canal, depois, limite=NOVAS_MAX):

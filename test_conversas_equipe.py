@@ -539,6 +539,20 @@ class Onda2(Base):
         self.assertEqual(self.eq.contadores("bia"), ({"sala:cozinha": 1, dm: 1}, {}))
         self.assertEqual(self.eq.contadores("ana"), ({}, {}))   # as próprias não contam
 
+    def test_contadores_com_teto_e_relidos_a_cada_escrita(self):
+        with unittest.mock.patch.object(ce, "CONTAGEM_MAX", 3):
+            for i in range(5):
+                self.r.t += 1
+                self.eq.enviar("geral", "ana", "Ana", f"@bia {i}", mencoes=["bia"])
+            self.assertEqual(self.eq.contadores("bia"), ({"geral": 3}, {"geral": 3}))
+            antes = self.eq.con.total_changes
+            self.assertEqual(self.eq.contadores("bia"), ({"geral": 3}, {"geral": 3}))   # do cache: o banco não mudou
+            self.assertEqual(self.eq.con.total_changes, antes)
+            self.eq.marcar_lida("bia", "geral", self.eq.historico("bia", "geral")[-2]["id"])
+            self.assertEqual(self.eq.contadores("bia"), ({"geral": 1}, {"geral": 1}))   # a escrita invalida
+            self.eq.contadores("bia")[0]["geral"] = 99   # quem chama pode mexer no que recebe sem sujar o cache
+            self.assertEqual(self.eq.contadores("bia"), ({"geral": 1}, {"geral": 1}))
+
     def test_mencao_some_ao_apagar(self):
         self.r.t += 1
         m = self.eq.enviar("geral", "ana", "Ana", "@bia olha", mencoes=["bia"])

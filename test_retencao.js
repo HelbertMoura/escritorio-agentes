@@ -82,6 +82,24 @@ const ID = "a1b2c3d4", EQUIPE = { retencao: 365, pode_moderar: true };
     escolher(form, 365); await salvar(form);
     assert.deepEqual(envios[1].corpo, { dias: 365 });
     assert.equal(confirmacao(form).hidden, true);
+    // sem cota no config (servidor de antes ou não é quem cuida do prazo): a linha fica escondida
+    assert.equal(todos(form).find(x => x.dataset.papel === "cota").hidden, true);
+  }
+  // o admin do prédio no andar de uma empresa lê, mas não muda o prazo (pode_moderar false): sem o cartão
+  assert.equal(carregar({ andar: ID, papel: "admin", equipe: { ...EQUIPE, pode_moderar: false } }).form, undefined);
+  // a cota de anexos: a linha com o uso; a partir de 90%, o aviso
+  {
+    const GB = 1024 ** 3, linha = f => todos(f).find(x => x.dataset.papel === "cota");
+    const baixa = linha(carregar({ andar: ID, papel: "admin", equipe: { ...EQUIPE, cota: { usado: 1.5 * GB, total: 5 * GB } } }).form);
+    assert.equal(baixa.hidden, false);
+    assert.equal(baixa.textContent, "Anexos: 1,5 GB de 5 GB usados.");
+    assert.equal(baixa.attrs.role, undefined);
+    const pouco = linha(carregar({ andar: ID, papel: "admin", equipe: { ...EQUIPE, cota: { usado: 3.2 * 1024 ** 2, total: 5 * GB } } }).form);
+    assert.equal(pouco.textContent, "Anexos: 3,2 MB de 5 GB usados.");
+    const cheia = linha(carregar({ andar: ID, papel: "admin", equipe: { ...EQUIPE, cota: { usado: 4.6 * GB, total: 5 * GB } } }).form);
+    assert.match(cheia.textContent, /^Anexos: 4,6 GB de 5 GB usados\. A cota está quase cheia/);
+    assert.equal(cheia.attrs.role, "alert");
+    assert.match(cheia.className, /ruim/);
   }
   console.log("test_retencao.js ok");
 })().catch(e => { console.error(e); process.exit(1); });

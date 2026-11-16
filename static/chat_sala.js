@@ -395,7 +395,7 @@ const ChatSala = (() => {
     if (rot) rot.textContent = "Conversas";
 
     // ---- estado
-    const s = { andar: Andar.atual, onde: { sala: "", nome: "" }, vista: "geral", anterior: "geral", titulo: "", msgs: [], mais: false,
+    const s = { andar: Andar.atual, onde: { sala: "", nome: "" }, vista: "geral", anterior: "geral", titulo: "", com: "", msgs: [], mais: false,
       v: null, pessoas: [], naoLidas: {}, mencoes: {}, soLer: false, enviando: false, envio: null, opcao: -1, mencao: null, alvo: null,
       entendiFim: null, avisoTempo: 0, buscaTempo: 0 };
     const eq = () => (cfg() && cfg().equipe) || {};
@@ -450,9 +450,9 @@ const ChatSala = (() => {
       if (vista.startsWith("sala:")) return s.onde.nome || vista.slice(5);
       return { diretas: "Diretas", busca: "Busca", auditoria: "Auditoria das diretas" }[vista] || s.titulo || "Conversa";
     }
-    function irPara(vista, titulo = "") {
+    function irPara(vista, titulo = "", com = "") {   // com: o login da outra ponta da DM (para reabrir, ver mandar)
       if (vista !== s.vista && ehCanal(s.vista)) s.anterior = s.vista;
-      Object.assign(s, { vista, titulo, msgs: [], mais: false, v: null, soLer: false });
+      Object.assign(s, { vista, titulo, com, msgs: [], mais: false, v: null, soLer: false });
       fecharEmojis(); fecharSugestoes();
       const dm = vista.startsWith("dm:"), ler = vista.startsWith("auditoria:"), c = controles(eq(), ler ? "auditoria" : vista), mensagens = ehCanal(vista) || ler;
       ui.titulo.textContent = tituloDa(vista);
@@ -523,7 +523,7 @@ const ChatSala = (() => {
       const com = new Set(d.dms.map(x => x.outro && x.outro.usuario));
       const minhas = d.dms.map(x => {
         const nome = x.outro ? x.outro.nome || x.outro.usuario : EX;
-        return item(nome, x.ultima ? `Última em ${data(x.ultima)}` : "", () => abrirDm(x.canal, nome, !x.outro), x.nao_lidas);
+        return item(nome, x.ultima ? `Última em ${data(x.ultima)}` : "", () => abrirDm(x.canal, nome, x.outro && x.outro.usuario), x.nao_lidas);
       });
       const novas = s.pessoas.filter(p => !com.has(p.usuario)).map(p => item(p.nome || p.usuario, "Começar uma conversa", () => comecarDm(p)));
       ui.itens.replaceChildren(...minhas, ...novas);
@@ -546,12 +546,12 @@ const ChatSala = (() => {
     async function comecarDm(p) {
       if (!(await entendido())) return;
       const { ok, d } = await pedir(ROTAS.abrirDm, { metodo: "POST", corpo: { com: p.usuario } });
-      if (ok && d && typeof d.canal === "string") irPara(d.canal, p.nome || p.usuario);
+      if (ok && d && typeof d.canal === "string") irPara(d.canal, p.nome || p.usuario, p.usuario);
     }
-    async function abrirDm(canal, nome, soLer) {
+    async function abrirDm(canal, nome, com) {   // sem com: a outra ponta saiu do andar
       if (!(await entendido())) return;
-      irPara(canal, nome);
-      if (soLer) { s.soLer = true; ui.form.hidden = true; mostrarAviso("A outra pessoa não está mais no andar. A conversa fica só para ler.", false); }
+      irPara(canal, nome, com || "");
+      if (!com) { s.soLer = true; ui.form.hidden = true; mostrarAviso("A outra pessoa não está mais no andar. A conversa fica só para ler.", false); }
     }
     async function carregarPares() {
       const { ok, d } = await pedir(ROTAS.pares);
@@ -602,7 +602,16 @@ const ChatSala = (() => {
       const problema = validar(ui.campo.value);
       if (problema) { mostrarAviso(problema); ui.campo.focus(); return; }
       s.enviando = true; ui.enviar.disabled = true;
-      const canal = s.vista, { ok, d } = await pedir(ROTAS.enviar, { metodo: "POST", corpo: { canal, texto: limpar(ui.campo.value) } });
+      const texto = limpar(ui.campo.value);
+      let canal = s.vista, { ok, status, d } = await pedir(ROTAS.enviar, { metodo: "POST", corpo: { canal, texto } });
+      // a varredura apaga a DM vazia: reabre com a mesma pessoa (outro número) e reenvia uma vez, com o mesmo texto
+      if (!ok && status === 404 && d && d.erro === "nao_existe" && canal.startsWith("dm:") && canal === s.vista && s.com) {
+        const nova = await pedir(ROTAS.abrirDm, { metodo: "POST", corpo: { com: s.com } });
+        if (nova.ok && nova.d && typeof nova.d.canal === "string" && canal === s.vista) {
+          canal = nova.d.canal; irPara(canal, s.titulo, s.com);
+          ({ ok, d } = await pedir(ROTAS.enviar, { metodo: "POST", corpo: { canal, texto } }));
+        }
+      }
       s.enviando = false; ui.enviar.disabled = false;
       if (!ok) return;
       ui.campo.value = ""; mostrarAviso("");
@@ -724,7 +733,7 @@ const ChatSala = (() => {
         if (!(await entendido())) return false;
         await mostrarPainel();
         const { ok, d } = await pedir(ROTAS.dms), dm = ok && d && Array.isArray(d.dms) ? d.dms.find(x => x.canal === canal) : null;
-        irPara(canal, dm ? (dm.outro ? dm.outro.nome || dm.outro.usuario : EX) : "Mensagem direta");
+        irPara(canal, dm ? (dm.outro ? dm.outro.nome || dm.outro.usuario : EX) : "Mensagem direta", dm && dm.outro ? dm.outro.usuario : "");
         if (dm && !dm.outro) { ui.form.hidden = true; mostrarAviso("A outra pessoa não está mais no andar. A conversa fica só para ler.", false); }
       } else { await mostrarPainel(); irPara(canal); }
       ui.campo.focus();

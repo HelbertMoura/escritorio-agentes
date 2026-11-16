@@ -261,6 +261,26 @@ const abas = p => achar(p, "chat-sala-aba").map(b => b.dataset.id);
       assert.deepEqual(pedidos.find(p => p.rota === "api/dm/abrir").corpo, { com: "ana.lima" });
       assert.equal(todos(painel).find(x => x.id === "chat-sala-titulo").textContent, "Ana Lima");
     }
+    // a varredura apagou a DM vazia: o envio dá 404 nao_existe, o painel reabre com a mesma pessoa e reenvia uma vez
+    for (const segunda of [200, 404]) {
+      let abriu = 0, envio = 0;   // o mock lê o corpo antes do status: o 2º envio responde com "segunda"
+      const NAO = { erro: "nao_existe", mensagem: "Isso não existe mais." };
+      const r2 = { ...resp,
+        "POST api/dm/abrir": { status: 200, corpo: () => ({ canal: abriu++ ? "dm:9" : "dm:3" }) },
+        "POST api/canal/enviar": { get status() { return envio === 2 ? segunda : 404; },
+          corpo: () => (++envio === 2 && segunda === 200 ? { mensagem: MSG(20, { canal: "dm:9", usuario: "joao", texto: "ainda está aí?" }) } : NAO) } };
+      const { painel, pedidos, ChatSala } = carregar({ config: ENT, respostas: r2 });
+      await ChatSala.abrirDM("ana.lima"); await espera(); await espera();
+      const campo = todos(painel).find(x => x.attrs.role === "combobox");
+      campo.value = "ainda está aí?";
+      disparar(achar(painel, "chat-sala-form")[0], "submit"); for (let i = 0; i < 8; i++) await espera();
+      const envios = pedidos.filter(p => p.rota === "api/canal/enviar");
+      assert.deepEqual(envios.map(p => p.corpo), [{ canal: "dm:3", texto: "ainda está aí?" }, { canal: "dm:9", texto: "ainda está aí?" }],
+        "reenvia uma vez só, na DM nova");
+      assert.deepEqual(pedidos.filter(p => p.rota === "api/dm/abrir").at(-1).corpo, { com: "ana.lima" });
+      assert.equal(todos(painel).find(x => x.id === "chat-sala-titulo").textContent, "Ana Lima");
+      assert.equal(campo.value, segunda === 200 ? "" : "ainda está aí?", "o texto só sai do campo quando foi");
+    }
     // sem o "Entendi" ainda: o aviso aparece antes de abrir
     {
       const { painel, pedidos, ChatSala } = carregar({ config: { ...ANDAR, equipe: { ...EQUIPE, aviso_dm_entendido: false } }, respostas: resp });

@@ -134,6 +134,8 @@ body.tv .chat-sala, body.modo-foto .chat-sala { display: none !important; }
   .palco-cartao:not(.cheio) .chat-sala-abrir { top: 10px; right: 10px; left: auto; bottom: auto; min-height: 44px; }
   .palco-cartao:not(.cheio) .chat-sala-rot { display: none; }
   .palco-cartao:not(.cheio) .chat-sala-painel { left: 0; right: 0; top: 0; bottom: 0; max-height: none; border-radius: inherit; }
+  /* a conversa da equipe não cabe no cartão do mapa (abas, aviso da DM e o formulário comem a lista): a tela toda */
+  .palco-cartao:not(.cheio) .chat-sala-painel.equipe { position: fixed; inset: 0; z-index: 45; height: 100dvh; border-radius: 0; border: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .chat-sala-painel { animation: none; } }
 @media (forced-colors: active) { .chat-sala-aba[aria-current="true"], .chat-sala-sugestao[aria-selected="true"] { outline: 2px solid CanvasText; } }

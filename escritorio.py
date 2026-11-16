@@ -4318,8 +4318,12 @@ class Pagina(BaseHTTPRequestHandler):
         if eq is None:
             return None
         papel = getattr(self.server.acesso, "papel", None)
-        tem_dm = not andar.saguao
-        return {"retencao": eq.retencao(), "pode_moderar": self._moderador(andar.id), "dm": tem_dm,
+        tem_dm, modera = not andar.saguao, self._moderador(andar.id)
+        cota = None
+        if modera and tem_dm:   # a cota de anexos (D6 b), só para quem cuida do prazo; o saguão não tem anexo
+            uso = eq.uso()
+            cota = {"usado": uso["anexos"] + uso["reservado"], "total": uso["cota_anexos"]}
+        return {"retencao": eq.retencao(), "pode_moderar": modera, "cota": cota, "dm": tem_dm,
                 "anexo": tem_dm, "mencao": tem_dm, "emojis": list(EMOJIS), "anexo_max": ANEXO_MAX,
                 "aviso_dm": AVISO_DM.format(empresa=empresa) if tem_dm else None,
                 "aviso_dm_entendido": eq.entendeu_dm(usuario) if tem_dm else False,

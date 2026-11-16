@@ -239,6 +239,13 @@ class Canais(Predio):
         self.assertTrue(self.get(f"/api/config?andar={self.B}", "beto")[1]["equipe"]["auditoria"])
         self.assertFalse(self.get(f"/api/config?andar={self.B}", "dono")[1]["equipe"]["auditoria"])   # não é admin de B
 
+    def test_cota_de_anexos_so_para_quem_cuida_do_prazo(self):
+        cota = self.get(f"/api/config?andar={self.B}", "beto")[1]["equipe"]["cota"]
+        self.assertEqual(cota["total"], 5 * 1024 ** 3)
+        self.assertIsInstance(cota["usado"], int)
+        self.assertIsNone(self.get(f"/api/config?andar={self.B}", "ana")[1]["equipe"]["cota"])    # membro
+        self.assertIsNone(self.get(f"/api/config?andar={self.B}", "dono")[1]["equipe"]["cota"])   # o admin do prédio só lê
+
     def test_enviar_historico_lida_e_deltas_do_ao_vivo(self):
         m1 = self.envia("ana", "geral", "bom dia")
         m2 = self.envia("ana", "geral", "tudo bem?")
@@ -642,8 +649,14 @@ class Saguao(Http):
             self.assertEqual(self.get(rota, "dono")[0], 404, rota)
         self.assertEqual(self.post("/api/dm/abrir", "dono", {"com": "bia"})[0], 404)
         self.assertEqual(self.anexo("/api/anexo?canal=geral", "dono", b"oi", "x.txt")[0], 404)
+        # o membro: os POST de DM e anexo param na guarda (403 papel, a matriz da Onda 1), sem dizer que o saguão existe
+        for st, r in (self.post("/api/dm/abrir", "bia", {"com": "ana"}), self.post("/api/dm/entendi", "bia", {}),
+                      self.anexo("/api/anexo?canal=geral", "bia", b"oi", "x.txt")):
+            self.assertEqual((st, r["erro"]), (403, "papel"))
         cfg = self.get("/api/config", "bia")[1]["equipe"]
-        self.assertEqual((cfg["dm"], cfg["anexo"], cfg["mencao"], cfg["auditoria"]), (False, False, False, False))
+        self.assertEqual((cfg["dm"], cfg["anexo"], cfg["mencao"], cfg["auditoria"], cfg["cota"]),
+                         (False, False, False, False, None))
+        self.assertIsNone(self.get("/api/config", "dono")[1]["equipe"]["cota"])   # o saguão não tem anexo
 
     def test_admin_do_predio_modera_o_saguao(self):
         self.assertTrue(self.get("/api/config", "dono")[1]["equipe"]["pode_moderar"])

@@ -257,7 +257,9 @@ const Personalizar = (() => {
     aviso.setAttribute("role", "status");
     const salvar = criar("button", "botao", "Salvar o prazo"), rodape = criar("div", "acoes");
     salvar.type = "submit"; rodape.append(salvar);
-    form.append(campo, confirmar, aviso, rodape);
+    const cota = criar("p", "ajuda");   // a cota de 5 GB de anexos da empresa (D6 b), com o aviso a partir de 90%
+    cota.dataset.papel = "cota";
+    form.append(campo, cota, confirmar, aviso, rodape);
     const mostrar = (t, tipo) => { aviso.textContent = t; aviso.className = "aviso-form" + (tipo ? ` ${tipo}` : ""); };
     const atual = () => (ret.cfg.equipe && Number.isInteger(ret.cfg.equipe.retencao) ? ret.cfg.equipe.retencao : 365);
     const escolhido = () => Number((opcoes.find(r => r.checked) || {}).value || atual());
@@ -284,12 +286,24 @@ const Personalizar = (() => {
     });
     sim.addEventListener("click", () => enviarPrazo(escolhido()));
     nao.addEventListener("click", () => { confirmar.hidden = true; marcar(); mostrar(""); salvar.focus(); });
-    function marcar() { for (const r of opcoes) r.checked = Number(r.value) === atual(); }
+    function marcar() {
+      for (const r of opcoes) r.checked = Number(r.value) === atual();
+      const c = ret.cfg.equipe.cota, ok = c && Number.isFinite(c.usado) && Number.isFinite(c.total) && c.total > 0;
+      cota.hidden = !ok;
+      if (!ok) return;
+      const num = n => n.toLocaleString("pt-BR", { maximumFractionDigits: 1 }), cheia = c.usado >= 0.9 * c.total;
+      const tam = n => (n < 1024 ** 3 ? `${num(n / 1024 ** 2)} MB` : `${num(n / 1024 ** 3)} GB`);
+      cota.textContent = `Anexos: ${tam(c.usado)} de ${tam(c.total)} usados.` +
+        (cheia ? " A cota está quase cheia: apague arquivos antigos ou diminua o prazo, senão os novos anexos serão recusados." : "");
+      cota.className = cheia ? "aviso-form ruim" : "ajuda";
+      if (cheia) cota.setAttribute("role", "alert"); else cota.removeAttribute("role");
+    }
     $("form-marca").after(form);
     return { form, marcar };
   }
   function mostrarRetencao(cfg) {
-    const pode = !!cfg && !!cfg.equipe && Andar.perfil(cfg).admin;
+    // o mesmo critério do servidor (pode_moderar): o admin do prédio lê o andar de uma empresa, mas não muda o prazo dele
+    const pode = !!cfg && !!cfg.equipe && Andar.perfil(cfg).admin && cfg.equipe.pode_moderar === true;
     if (!pode) { if (ret) ret.form.hidden = true; return; }
     if (!ret) ret = { cfg };
     ret.cfg = cfg;
