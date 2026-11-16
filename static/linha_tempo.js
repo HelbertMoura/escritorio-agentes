@@ -12,7 +12,7 @@ const LinhaTempo = (() => {
   const FMT_DM = new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO, day: "2-digit", month: "2-digit" });
   const ESPEROU = { aprovacao: "aprovação", resposta: "resposta" };
   let json = null, agora = () => Date.now();
-  const cache = new Map();   // id do agente -> { em, itens | null (falhou) }
+  const cache = new Map();   // id do agente -> { em, itens (undefined: carregando; null: falhou), ol (o da tela) }
 
   const chave = andar => `escritorio:visita:${andar}`;
   function lerVisita(andar) {
@@ -98,6 +98,7 @@ const LinhaTempo = (() => {
   }
 
   function preencher(ol, itens) {
+    if (itens === undefined) { ol.replaceChildren(el("li", "lt-vazio", "Carregando…")); return; }
     if (itens === null) { ol.replaceChildren(el("li", "lt-vazio", "Não deu para carregar agora.")); return; }
     if (!itens.length) { ol.replaceChildren(el("li", "lt-vazio", "Nada registrado hoje.")); return; }
     ol.replaceChildren(...itens.slice(-8).map(t => {   // as 8 mais recentes
@@ -110,12 +111,14 @@ const LinhaTempo = (() => {
     const ol = el("ol", "lt-dia");
     ol.setAttribute("aria-label", "Linha do tempo de hoje");
     const c = cache.get(id);
-    if (c) preencher(ol, c.itens);
+    preencher(ol, c && c.itens);
+    if (c) c.ol = ol;   // a ficha é refeita a cada mudança: a resposta vai para o cartão que está na tela
     if (c && agora() - c.em < CACHE) return ol;
-    cache.set(id, { em: agora(), itens: c ? c.itens : [] });
+    const novo = { em: agora(), itens: c && c.itens, ol };
+    cache.set(id, novo);
     json(`api/linha?agente=${encodeURIComponent(id)}`)
       .then(r => (Array.isArray(r && r.itens) ? r.itens : null), () => null)
-      .then(itens => { cache.set(id, { em: agora(), itens }); preencher(ol, itens); });
+      .then(itens => { novo.itens = itens; novo.em = agora(); preencher(novo.ol, itens); });
     return ol;
   }
 

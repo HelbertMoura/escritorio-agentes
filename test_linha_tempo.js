@@ -132,6 +132,18 @@ const H = 3600 * 1000;
     assert.equal(urls.length, 2, "passado 1 min, pede de novo");
   }
 
+  {   // a ficha é refeita antes da resposta chegar: o cartão novo (o que está na tela) recebe a linha
+    const { LT } = carregar();
+    let solta;
+    LT.configurar({ json: () => new Promise(r => { solta = r; }), agora: () => AGORA });
+    const velho = LT.noCard("b1"), novo = LT.noCard("b1");
+    assert.deepEqual(novo.children.map(texto), ["Carregando…"]);
+    solta({ itens: [{ de: "livre", para: "trabalhando", em: Date.parse("2026-11-16T12:05:00Z") / 1000 }] });
+    await new Promise(r => setTimeout(r, 0));
+    assert.deepEqual(novo.children.map(texto), ["09:05 começou uma tarefa"]);
+    assert.ok(velho);
+  }
+
   {   // nada hoje, ou o pedido falhou
     const { LT } = carregar();
     LT.configurar({ json: async () => ({ itens: [] }), agora: () => AGORA });
