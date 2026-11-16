@@ -85,7 +85,11 @@ CREATE TRIGGER IF NOT EXISTS fts_trocou AFTER UPDATE OF texto ON mensagem BEGIN
 
 
 class SemAcesso(LookupError):
-    """Não existe ou não é de quem pediu (a mesma resposta para os dois: 404 na rota)."""
+    """Não existe ou não é de quem pediu (a mesma resposta para os dois: 404 na rota). A mensagem é uma só em todos os
+    casos, para não dizer o que existe."""
+
+    def __init__(self):
+        super().__init__("não encontrado")
 
 
 class CotaCheia(Exception):
@@ -185,10 +189,11 @@ class Equipe:
         self.vezes[(tipo, usuario)] = agora
 
     def _dm(self, id_canal, usuario):
-        """A DM, só para quem é uma das pontas."""
+        """A DM, só para quem é uma das pontas (a ponta que saiu fica None: None nunca é ponta)."""
+        usuario = _usuario(usuario)
         linha = self.con.execute("SELECT u1, u2 FROM canal WHERE id=? AND dm=1", (id_canal,)).fetchone()
         if linha is None or usuario not in linha:
-            raise SemAcesso("canal")
+            raise SemAcesso()
         return linha
 
     def _ler_canal(self, ref, usuario):
@@ -282,6 +287,21 @@ class Equipe:
         self.reservas = {t: r for t, r in self.reservas.items() if agora - r[2] < RESERVA_VIDA}
         return sum(r[1] for r in self.reservas.values())
 
+    def _limpar_temporarios(self, agora):
+        """Os .tmp-<token> sem reserva viva e com mais de RESERVA_VIDA: o envio que caiu ou o de antes de reiniciar."""
+        try:
+            nomes = os.listdir(self.pasta_anexos)
+        except FileNotFoundError:
+            return
+        for nome in nomes:
+            if nome.startswith(".tmp-") and nome[5:] not in self.reservas:
+                caminho = os.path.join(self.pasta_anexos, nome)
+                try:
+                    if agora - os.path.getmtime(caminho) > RESERVA_VIDA:
+                        os.unlink(caminho)
+                except OSError:   # sumiu ou está aberto (Windows): fica para a próxima varredura
+                    pass
+
     def _inserir(self, id_canal, autor, nome, texto, agora):
         cur = self.con.execute("INSERT INTO mensagem (canal, autor, nome, texto, em) VALUES (?, ?, ?, ?, ?)",
                                (id_canal, autor, nome, texto, agora))
@@ -319,7 +339,7 @@ class Equipe:
             linha = self.con.execute("SELECT m.autor, c.dm FROM mensagem m JOIN canal c ON c.id = m.canal "
                                      "WHERE m.id = ? AND m.texto IS NOT NULL", (id_mensagem,)).fetchone()
             if linha is None or not (linha[0] == usuario or moderador and not linha[1]):
-                raise SemAcesso("mensagem")
+                raise SemAcesso()
             with self.con:
                 tokens = [t for (t,) in self.con.execute("SELECT token FROM anexo WHERE mensagem=?", (id_mensagem,))]
                 self.con.execute("DELETE FROM anexo WHERE mensagem=?", (id_mensagem,))
@@ -359,7 +379,7 @@ class Equipe:
             linha = self.con.execute("SELECT c.id, c.dm FROM mensagem m JOIN canal c ON c.id = m.canal "
                                      "WHERE m.id = ? AND m.texto IS NOT NULL", (id_mensagem,)).fetchone()
             if linha is None:
-                raise SemAcesso("mensagem")
+                raise SemAcesso()
             if linha[1]:
                 self._dm(linha[0], usuario)
             with self.con:
@@ -401,7 +421,7 @@ class Equipe:
         with self.trava:
             linha = self.con.execute("SELECT autor FROM mural WHERE id=?", (id_aviso,)).fetchone()
             if linha is None or not (linha[0] == usuario or moderador):
-                raise SemAcesso("aviso")
+                raise SemAcesso()
             with self.con:
                 self.con.execute("DELETE FROM mural WHERE id=?", (id_aviso,))
 
@@ -410,7 +430,7 @@ class Equipe:
         """O canal da DM entre os dois ("dm:<n>"), criado na primeira vez. O escritorio.py confere que os dois têm papel
         no andar."""
         if self.saguao:
-            raise SemAcesso("dm")
+            raise SemAcesso()
         usuario, outro = _usuario(usuario), _usuario(outro)
         if usuario == outro:
             raise ValueError("DM com você mesmo")
@@ -475,7 +495,7 @@ class Equipe:
 
     def varrer(self):
         """A varredura diária: tira o que passou da retenção (e os anexos junto), o registro de acesso com mais de 1 ano
-        e, se ainda passar do teto, as mais antigas."""
+        e, se ainda passar do teto, as mais antigas. Os temporários de envio sem reserva viva também saem."""
         with self.trava:
             agora = self.relogio()
             prazo = agora - self._ajuste("retencao", RETENCAO_PADRAO) * DIA
@@ -485,6 +505,7 @@ class Equipe:
                 registros = self.con.execute("DELETE FROM acesso_dm WHERE quando < ?", (agora - REGISTRO_DIAS * DIA,)).rowcount
             self._apagar_arquivos(tokens)
             self._reservado(agora)
+            self._limpar_temporarios(agora)
             if ids or registros:
                 self._limpar_disco()
             return {"por_prazo": len(ids), "por_teto": self._cortar_pelo_teto(), "registros": registros}
@@ -533,7 +554,7 @@ class Equipe:
             agora = self.relogio()
             par = self.con.execute("SELECT u1, u2 FROM canal WHERE id=? AND dm=1", (id_dm,)).fetchone()
             if par is None:
-                raise SemAcesso("canal")
+                raise SemAcesso()
             self._por_vez("auditoria", admin, agora)
             msgs = self._mensagens("m.canal = ? AND m.id < ? AND m.texto IS NOT NULL ORDER BY m.id DESC LIMIT ?",
                                    (id_dm, antes or 2 ** 62, limite), admin)[::-1]
@@ -564,7 +585,7 @@ class Equipe:
     def reservar(self, usuario, tamanho):
         """Reserva o tamanho na cota da empresa antes de ler o corpo. Devolve o token do envio."""
         if self.saguao:
-            raise SemAcesso("anexo")
+            raise SemAcesso()
         usuario = _usuario(usuario)
         _inteiro(tamanho, 1, ANEXO_MAX, "tamanho inválido")
         with self.trava:
@@ -606,7 +627,7 @@ class Equipe:
             self._reservado(agora)
             reserva = self.reservas.get(token)
             if reserva is None or reserva[0] != usuario:
-                raise SemAcesso("reserva")
+                raise SemAcesso()
             _inteiro(tamanho, 1, reserva[1], "tamanho inválido")
             if os.path.getsize(temporario) != tamanho:
                 raise ValueError("tamanho inválido")
@@ -631,7 +652,7 @@ class Equipe:
                                      "JOIN mensagem m ON m.id = a.mensagem JOIN canal c ON c.id = m.canal WHERE a.id = ?",
                                      (id_anexo,)).fetchone()
             if linha is None:
-                raise SemAcesso("anexo")
+                raise SemAcesso()
             token, arquivo, tipo, tamanho, id_c, dm, chave = linha
             if dm:
                 self._dm(id_c, usuario)

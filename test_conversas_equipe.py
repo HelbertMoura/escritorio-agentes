@@ -300,6 +300,10 @@ class ExMembro(Base):
         with self.assertRaises(ValueError):
             self.eq.enviar(dm, "bia", "Bia", "ninguém lê")
         self.assertNotEqual(self.eq.abrir_dm("joao", "bia"), dm)
+        for chamada in (lambda: self.eq.historico(None, dm), lambda: self.eq.acessos_da_dm(None, dm),
+                        lambda: self.eq.marcar_lida(None, dm, 1)):   # a ponta que saiu ficou None: None não é ponta
+            with self.assertRaises(ValueError):
+                chamada()
 
 
 class AuditoriaDM(Base):
@@ -413,6 +417,37 @@ class Anexos(Base):
         eq.reservar("ana", 10)
         self.r.t += ce.RESERVA_VIDA + 1
         eq.reservar("bia", 10)
+
+    def test_varrer_tira_o_temporario_sem_reserva_viva(self):
+        vencida, orfao = self.eq.reservar("ana", 2), "e" * 32   # o órfão é de antes de reiniciar: sem reserva
+        self.r.t += ce.RESERVA_VIDA + 1
+        viva, recente = self.eq.reservar("ana", 2), "f" * 32   # o recente, sem reserva, pode ser um envio entrando
+        velho = self.r.t - ce.RESERVA_VIDA - 1
+        for token, quando in ((vencida, velho), (orfao, velho), (viva, velho), (recente, self.r.t)):
+            self.escreve(self.eq, token, b"ok")
+            os.utime(self.eq.temporario(token), (quando, quando))
+        self.eq.varrer()
+        self.assertEqual({t: os.path.exists(self.eq.temporario(t)) for t in (vencida, orfao, viva, recente)},
+                         {vencida: False, orfao: False, viva: True, recente: True})
+
+    def test_sem_acesso_tem_uma_mensagem_so(self):
+        """Inexistente ou de outro: a mesma mensagem, para não virar oráculo de existência."""
+        dm = self.eq.abrir_dm("ana", "bia")
+        token = self.eq.reservar("ana", 2)
+        self.escreve(self.eq, token, b"ok")
+        anexo = self.eq.anexar(token, "ana", "Ana", dm, "a.txt", "text/plain", 2, "00" * 32)
+        mensagens = set()
+        for chamada in (lambda: self.eq.arquivo_do_anexo("caio", anexo["anexo"]["id"]),
+                        lambda: self.eq.arquivo_do_anexo("caio", 999),
+                        lambda: self.eq.reagir("caio", anexo["id"], ce.EMOJIS[0], True),
+                        lambda: self.eq.reagir("caio", 999, ce.EMOJIS[0], True),
+                        lambda: self.eq.historico("caio", dm), lambda: self.eq.historico("caio", "dm:999"),
+                        lambda: self.eq.apagar(anexo["id"], "caio"), lambda: self.eq.apagar(999, "caio"),
+                        lambda: self.eq.desafixar(999, "caio")):
+            with self.assertRaises(SemAcesso) as cx:
+                chamada()
+            mensagens.add(str(cx.exception))
+        self.assertEqual(len(mensagens), 1)
 
     def test_anexo_de_dm_so_para_os_dois_e_retencao_apaga_o_arquivo(self):
         dm = self.eq.abrir_dm("ana", "bia")

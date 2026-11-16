@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -112,12 +113,13 @@ class IdaEVolta(Base):
         self.assertEqual(rel["pendentes"], ["misto"])
         self.assertEqual(rel["contas"], {"ana": "membro", "chefe": "admin", "velho": "admin"})
         diario = self.le(ms.ARQ_DIARIO)
-        self.assertEqual(diario["estado"], "feito")
-        for nome in ("usuarios.json", "andares.json"):   # o que é reescrito tem a cópia de antes no diário (0600)
-            self.assertEqual(diario["copia_de_antes"][nome], antes[(self.dados, nome)].decode("utf-8"))
+        self.assertEqual((diario["estado"], ms.estado(self.dados)), ("feito", "feito"))
+        self.assertNotIn("copia_de_antes", diario)   # terminada, a cópia sai (o backup do volume cobre)
         volta = self.migrar(desfazer=True)
         self.assertEqual(volta["resultado"], "desfeito")
         self.assertEqual(foto(self.dados, self.codigo), antes)
+        self.assertNotIn("copia_de_antes", self.le(ms.ARQ_DIARIO))
+        self.assertEqual(ms.estado(self.dados), "desfeito")
         self.assertEqual(andares.Andares(self.dados, ORG).lista, [{"id": EXTRA, "nome": "Empresa B", "org": ORG_B}])
         self.assertEqual(self.migrar(desfazer=True)["resultado"], "ja_desfeito")
         self.assertEqual(self.migrar()["resultado"], "migrado")   # e vai de novo depois de desfeita
@@ -200,7 +202,10 @@ class Refazer(Base):
         with mock.patch.object(ms, "_reverter", side_effect=KeyboardInterrupt), mock.patch.object(ms.os, "replace", cai):
             with self.assertRaises(KeyboardInterrupt):
                 self.migrar()
-        self.assertEqual(self.le(ms.ARQ_DIARIO)["estado"], "em_andamento")
+        diario = self.le(ms.ARQ_DIARIO)
+        self.assertEqual((diario["estado"], ms.estado(self.dados)), ("em_andamento", "em_andamento"))
+        for nome in ("usuarios.json", "andares.json"):   # no meio do caminho, a cópia de antes fica no diário (0600)
+            self.assertEqual(diario["copia_de_antes"][nome], antes[(self.dados, nome)].decode("utf-8"))
         rel = self.migrar()
         self.assertEqual(rel["resultado"], "migrado")
         self.assertEqual(rel["andar"], self.le(ms.ARQ_DIARIO)["andar"])
@@ -246,7 +251,17 @@ class DesfazerComDadoNovo(Base):
         self.recusa(conversa, conversas_equipe.ARQ)
 
     def test_anexo_no_andar_novo(self):
-        self.recusa(lambda pasta, _: os.makedirs(os.path.join(pasta, conversas_equipe.ANEXOS)), conversas_equipe.ANEXOS)
+        def anexo(pasta, _):
+            os.makedirs(os.path.join(pasta, conversas_equipe.ANEXOS))
+            self.escreve(os.path.join(pasta, conversas_equipe.ANEXOS, "0" * 32), "x")
+        self.recusa(anexo, conversas_equipe.ANEXOS)
+
+    def test_aviso_no_saguao(self):
+        def aviso(*_):
+            eq = conversas_equipe.Equipe(self.dados, saguao=True)
+            eq.fixar("geral", "bia", "Bia", "aviso do prédio")
+            eq.fechar()
+        self.recusa(aviso, "saguão")
 
     def test_conversa_no_saguao(self):
         def saguao(*_):
@@ -267,6 +282,28 @@ class DesfazerComDadoNovo(Base):
             contas["novata"] = {"andares": {novo: "membro"}}
             self.usuarios(contas)
         self.recusa(conta, "novata")
+
+    def test_subiu_nao_escreveu_desfaz(self):
+        """O serviço abriu as conversas do andar e do saguão (e um envio deixou anexos/ vazio), sem escrever: não é dado
+        novo, e o desfazer apaga os bancos vazios. Com e sem o chat da empresa de antes."""
+        for com_chat in (False, True):
+            with self.subTest(com_chat=com_chat):
+                if com_chat:
+                    eq = conversas_equipe.Equipe(self.dados)
+                    eq.enviar("geral", "ana", "Ana", "conversa interna")
+                    eq.fechar()
+                antes = foto(self.dados, self.codigo)
+                novo = self.migrar()["andar"]
+                pasta = os.path.join(self.dados, "andares", novo)
+                andar = conversas_equipe.Equipe(pasta)
+                saguao = conversas_equipe.Equipe(self.dados, saguao=True)
+                self.assertEqual(saguao.historico("bia", "geral"), [])
+                andar.liberar(andar.reservar("ana", 10))   # anexos/ criado, sem arquivo
+                andar.fechar()
+                saguao.fechar()
+                self.assertEqual(self.migrar(desfazer=True)["resultado"], "desfeito")
+                self.assertEqual(foto(self.dados, self.codigo), antes)
+                os.unlink(os.path.join(self.dados, ms.ARQ_DIARIO))
 
     def test_mudanca_que_volta_junto_nao_recusa(self):
         rel = self.migrar()
@@ -328,6 +365,19 @@ class Recusas(Base):
         with mock.patch.object(ms.os, "geteuid", create=True, return_value=dono):
             self.assertEqual(self.migrar()["resultado"], "migrado")
 
+    def test_estado_para_o_servico(self):
+        self.assertEqual(ms.estado(self.dados), "nenhum")
+        self.migrar()
+        diario = self.le(ms.ARQ_DIARIO)
+        for estado in ("desfazendo", "em_andamento"):
+            self.escreve(os.path.join(self.dados, ms.ARQ_DIARIO), json.dumps({**diario, "estado": estado}))
+            self.assertEqual(ms.estado(self.dados), estado)
+        for ruim in ("{", "[]", json.dumps({**diario, "estado": "outro"})):
+            with self.subTest(diario=ruim):
+                self.escreve(os.path.join(self.dados, ms.ARQ_DIARIO), ruim)
+                with self.assertRaises(MigracaoRecusada):
+                    ms.estado(self.dados)
+
     def test_predio_cheio(self):
         lista = [{"id": f"{i:08x}", "nome": f"E{i}", "org": f"{i:08x}-bbbb-cccc-dddd-eeeeeeeeeeee"}
                  for i in range(andares.MAX_EXTRAS)]
@@ -350,9 +400,18 @@ class Subcomando(Base):
         return codigo, saida.getvalue(), erro.getvalue()
 
     def test_ida_volta_e_uso(self):
+        agora = int(time.time())
+        self.escreve(os.path.join(self.dados, "convites.json"), json.dumps({
+            "c1": {"sha": "sha-secreto", "nome": "Convite da Duda", "andares": ["principal"], "expira": agora + 3600},
+            "c2": {"sha": "sha-secreto", "nome": "Convite do Extra", "andares": [EXTRA], "expira": agora + 3600},
+            "c3": {"sha": "sha-secreto", "nome": "Convite vencido", "andares": ["principal"], "expira": agora - 1}}))
         codigo, saida, erro = self.roda([])
         self.assertEqual((codigo, erro), (0, ""))
         self.assertIn("misto", saida)   # o login pendente aparece para o admin dar o andar pela tela
+        self.assertIn("Convite da Duda", saida)   # o convite que dá o principal, só pelo nome
+        self.assertNotIn("Convite do Extra", saida)
+        self.assertNotIn("Convite vencido", saida)
+        self.assertNotIn("sha-secreto", saida)
         self.assertNotIn(SEGREDO, saida)   # nunca o conteúdo dos arquivos
         self.assertEqual(self.roda(["--desfazer"])[0], 0)
         self.assertEqual(self.roda(["--qualquer"])[0], 2)

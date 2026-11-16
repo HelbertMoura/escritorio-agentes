@@ -17,20 +17,25 @@ O que a ida faz, tudo ou nada (E.1 do plano):
     login, para o admin dar o andar pela tela de Membros;
  5. o papel no principal fica como está: passa a ser o papel no prédio;
  6. grava o diário dados/migracao-saguao.json (0600, com a cópia de antes do usuarios.json e do andares.json, os dois
-    que são reescritos) antes de mexer em qualquer coisa e o marca como feito no fim.
+    que são reescritos, para voltar à mão no meio do caminho) antes de mexer em qualquer coisa e o marca como feito no
+    fim, já sem a cópia (o backup do volume cobre).
 Falhou no meio: desfaz o que fez e apaga o diário. Caiu no meio (o processo morreu): rodar de novo termina a ida, e
---desfazer volta. Rodar de novo depois de feita não muda nada.
+--desfazer volta. Rodar de novo depois de feita não muda nada. O serviço não sobe com o diário em_andamento ou
+desfazendo (estado(dados)). O relatório lista os convites esperando que dão o principal, para o admin reemitir.
 
 --desfazer devolve tudo (o andares.json de antes, os arquivos, os papéis) e recusa, sem mexer em nada, quando há dado
 novo que se perderia ou vazaria: arquivo no andar novo que não veio da migração (histórico, anexo), uma cópia mudada
 (a marca, o logo ou os times do andar), conversa no saguão, um arquivo movido que reapareceu na raiz ou uma conta nova no
-andar. O deploy faz backup do volume antes da ida.
+andar. O banco das conversas que o serviço só abriu (sem mensagem, aviso, anexo nem registro de acesso, e anexos/ sem
+arquivo) não é dado novo: o desfazer o apaga. O deploy faz backup do volume antes da ida.
 """
 import hashlib
 import json
 import os
+import pathlib
 import secrets
 import shutil
+import sqlite3
 import sys
 import time
 
@@ -45,9 +50,11 @@ else:
 
 ARQ_DIARIO = "migracao-saguao.json"
 ARQ_TRAVA = "servico.trava"
-ARQ_USUARIOS, ARQ_MARCA, ARQ_LOGO = "usuarios.json", "marca.json", "logo.img"
+ARQ_USUARIOS, ARQ_MARCA, ARQ_LOGO, ARQ_CONVITES = "usuarios.json", "marca.json", "logo.img", "convites.json"
+ESTADOS = ("em_andamento", "feito", "desfazendo", "desfeito")
 PRINCIPAL = andares.PRINCIPAL
 CONVERSAS = (conversas_equipe.ARQ, conversas_equipe.ARQ + "-wal", conversas_equipe.ARQ + "-shm", conversas_equipe.ANEXOS)
+COM_DADO = ("mensagem", "mural", "anexo", "acesso_dm")   # as tabelas que fazem do banco das conversas dado novo
 MOVER = (andares.OAUTH, andares.EQUIPE, andares.PLANTA, andares.PLACAR, andares.JORNAL, *CONVERSAS)
 NOME_PADRAO = "Minha empresa"   # o EMPRESA_PADRAO do escritorio.py: marca ausente ou fora do formato
 ESPACO_MIN = 64 * 1024 * 1024
@@ -117,6 +124,45 @@ def _texto(caminho):
             return f.read()
     except FileNotFoundError:
         return None
+
+
+def _ler_diario(caminho):
+    """O diário, ou None se não houver. Ilegível ou fora do formato: MigracaoRecusada."""
+    try:
+        plano = _ler_json(caminho)
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError, RecursionError):
+        raise MigracaoRecusada("o diário da migração não pode ser lido; restaure o backup") from None
+    if not isinstance(plano, dict) or plano.get("estado") not in ESTADOS:
+        raise MigracaoRecusada("o diário da migração está fora do formato; restaure o backup")
+    return plano
+
+
+def estado(dados):
+    """Para o serviço conferir ao subir: "nenhum" (sem diário), "em_andamento", "feito", "desfazendo" ou "desfeito".
+    Com "em_andamento" ou "desfazendo" o serviço não sobe (a ida ou o desfazer ficou pela metade). Diário ilegível ou
+    fora do formato: MigracaoRecusada (também não sobe)."""
+    plano = _ler_diario(os.path.join(dados, ARQ_DIARIO))
+    return "nenhum" if plano is None else plano["estado"]
+
+
+def _fechado(plano, estado_novo, relogio):
+    """O diário de uma ida ou volta terminada: sem a cópia de antes (o backup do volume cobre)."""
+    return {**{k: v for k, v in plano.items() if k != "copia_de_antes"}, "estado": estado_novo, "fim": _iso(relogio())}
+
+
+def _convites_do_principal(dados, agora):
+    """Os nomes sugeridos dos convites ainda valendo que dão o principal (nunca o sha)."""
+    try:
+        convites = _ler_json(os.path.join(dados, ARQ_CONVITES))
+    except (OSError, ValueError, RecursionError):
+        return []
+    if not isinstance(convites, dict):
+        return []
+    return sorted(c["nome"] for c in convites.values() if isinstance(c, dict) and isinstance(c.get("nome"), str)
+                  and isinstance(c.get("andares"), list) and PRINCIPAL in c["andares"]
+                  and isinstance(c.get("expira"), (int, float)) and c["expira"] > agora)
 
 
 def _ler_v2(dados):
@@ -203,7 +249,7 @@ def _planejar(dados, times, org, relogio):
             "pasta_andares_existia": os.path.isdir(os.path.join(dados, "andares")),
             "movidos": [n for n in MOVER if os.path.exists(os.path.join(dados, n))],
             "copiados": [{"nome": n, "origem": os.path.abspath(o), "sha256": _sha(o)} for n, o in copias],
-            "contas": contas, "pendentes": sorted(pendentes),
+            "contas": contas, "pendentes": sorted(pendentes), "convites": _convites_do_principal(dados, relogio()),
             # para voltar à mão se o desfazer for recusado (o desfazer em si só tira o que a ida pôs)
             "copia_de_antes": {ARQ_USUARIOS: _texto(os.path.join(dados, ARQ_USUARIOS)),
                                andares.ARQ: _texto(os.path.join(dados, andares.ARQ))}}
@@ -244,6 +290,10 @@ def _reverter(dados, plano, restantes):
     """A volta: os papéis, os arquivos e o andares.json de antes (v1 com os extras restantes, ou nenhum). Cada passo
     pode rodar de novo."""
     pasta = andares.pasta(dados, plano["andar"])
+    for onde, nomes, vazia in _conversas_novas(dados, plano):
+        if vazia:   # o serviço só abriu; a cheia o _dado_novo recusa, e numa volta sem ele a cheia para a volta abaixo
+            for nome in nomes:
+                (os.rmdir if os.path.isdir(os.path.join(onde, nome)) else os.unlink)(os.path.join(onde, nome))
     caminho = os.path.join(dados, ARQ_USUARIOS)
     if os.path.exists(caminho):
         usuarios, mudou = ler_usuarios(caminho), False
@@ -282,11 +332,52 @@ def _reverter(dados, plano, restantes):
         os.unlink(os.path.join(dados, andares.ARQ))
 
 
+def _conversa_vazia(onde, nomes):
+    """Se as conversas que o serviço abriu (nomes de CONVERSAS) não têm dado: anexos/ sem arquivo e o banco, aberto só
+    para leitura, sem linha em COM_DADO. O -wal e o -shm que a leitura cria saem no fim."""
+    if conversas_equipe.ANEXOS in nomes:
+        anexos = os.path.join(onde, conversas_equipe.ANEXOS)
+        if not os.path.isdir(anexos) or os.listdir(anexos):
+            return False
+    if conversas_equipe.ARQ not in nomes:
+        return not any(n.startswith(conversas_equipe.ARQ) for n in nomes)   # -wal ou -shm sem o banco
+    banco = os.path.join(onde, conversas_equipe.ARQ)
+    criados = [banco + s for s in ("-wal", "-shm") if not os.path.exists(banco + s)]
+    try:
+        con = sqlite3.connect(pathlib.Path(os.path.abspath(banco)).as_uri() + "?mode=ro", uri=True)
+        try:
+            tabelas = {n for (n,) in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+            return not any(con.execute(f"SELECT 1 FROM {t} LIMIT 1").fetchone() for t in COM_DADO if t in tabelas)
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return False
+    finally:
+        for c in criados:
+            if os.path.exists(c):
+                os.unlink(c)
+
+
+def _conversas_novas(dados, plano):
+    """As conversas que apareceram depois da ida, [(pasta, nomes, vazia)]: na raiz (o saguão; o nome movido que ainda
+    não foi para o andar é o de antes) e no andar novo (fora as que vieram)."""
+    pasta = andares.pasta(dados, plano["andar"])
+    na_raiz = [n for n in CONVERSAS if os.path.exists(os.path.join(dados, n))
+               and (n not in plano["movidos"] or os.path.exists(os.path.join(pasta, n)))]
+    no_andar = [n for n in CONVERSAS if n not in plano["movidos"] and os.path.exists(os.path.join(pasta, n))]
+    return [(onde, nomes, _conversa_vazia(onde, nomes)) for onde, nomes in ((dados, na_raiz), (pasta, no_andar)) if nomes]
+
+
 def _dado_novo(dados, plano):
     """O que se perderia ou vazaria ao desfazer (lista de motivos, só com nomes de arquivo e logins)."""
     pasta = andares.pasta(dados, plano["andar"])
     vieram = set(plano["movidos"]) | {c["nome"] for c in plano["copiados"]}
-    motivos = []
+    motivos, conversa = [], []
+    for onde, nomes, vazia in _conversas_novas(dados, plano):
+        if onde == pasta and vazia:
+            vieram |= set(nomes)   # o serviço só abriu: o desfazer apaga
+        elif onde == dados and not vazia:
+            conversa = nomes
     novos = sorted(set(os.listdir(pasta)) - vieram) if os.path.isdir(pasta) else []
     if novos:
         motivos.append("o andar novo já tem dado que não existia antes: " + ", ".join(novos))
@@ -294,10 +385,9 @@ def _dado_novo(dados, plano):
                or _sha(os.path.join(pasta, c["nome"])) != c["sha256"]]
     if mudadas:
         motivos.append("mudou no andar novo desde a migração: " + ", ".join(mudadas))
-    conversa = [n for n in CONVERSAS if n not in plano["movidos"] and os.path.exists(os.path.join(dados, n))]
     if conversa:
         motivos.append("o saguão já tem conversa: " + ", ".join(conversa))
-    voltaram = [n for n in plano["movidos"] if os.path.exists(os.path.join(dados, n))]
+    voltaram = [n for n in plano["movidos"] if n not in CONVERSAS and os.path.exists(os.path.join(dados, n))]
     if voltaram:
         motivos.append("reapareceu na raiz: " + ", ".join(voltaram))
     usuarios = ler_usuarios(os.path.join(dados, ARQ_USUARIOS))
@@ -312,7 +402,7 @@ def _relatorio(resultado, plano, caminho_diario):
     return {"resultado": resultado, "andar": plano["andar"], "nome": plano["nome"], "movidos": list(plano["movidos"]),
             "copiados": [c["nome"] for c in plano["copiados"]],
             "contas": {login: c["papel"] for login, c in plano["contas"].items()}, "pendentes": list(plano["pendentes"]),
-            "diario": caminho_diario}
+            "convites": list(plano.get("convites", [])), "diario": caminho_diario}
 
 
 def _ida(dados, times, org, plano, caminho, relogio):
@@ -329,7 +419,7 @@ def _ida(dados, times, org, plano, caminho, relogio):
         _gravar_json(caminho, plano)
     try:
         _aplicar(dados, plano)
-        plano = {**plano, "estado": "feito", "fim": _iso(relogio())}
+        plano = _fechado(plano, "feito", relogio)
         _gravar_json(caminho, plano)
     except BaseException:
         try:
@@ -358,7 +448,7 @@ def _volta(dados, plano, caminho, relogio):
         _gravar_json(caminho, plano)
     restantes = plano.get("restantes", plano["andares_antes"]["lista"])   # em_andamento: o que havia antes
     _reverter(dados, plano, restantes)
-    plano = {**plano, "estado": "desfeito", "fim": _iso(relogio())}
+    plano = _fechado(plano, "desfeito", relogio)
     _gravar_json(caminho, plano)
     return _relatorio("desfeito", plano, caminho)
 
@@ -366,7 +456,8 @@ def _volta(dados, plano, caminho, relogio):
 def migrar(dados, *, times, org, desfazer=False, relogio=time.time):
     """A ida (ou a volta, com desfazer=True) com a trava do volume. Devolve o relatório:
     {"resultado": "migrado" | "ja_migrado" | "desfeito" | "ja_desfeito", "andar", "nome", "movidos", "copiados",
-     "contas": {login: papel no andar novo}, "pendentes": [logins], "diario"}.
+     "contas": {login: papel no andar novo}, "pendentes": [logins],
+     "convites": [nomes dos convites que dão o principal], "diario"}.
     Recusa com MigracaoRecusada (ServicoRodando se o serviço estiver no ar); erro de disco no meio sobe como OSError,
     depois de desfazer o que já tinha feito."""
     if hasattr(os, "geteuid") and os.path.isdir(dados) and os.stat(dados).st_uid != os.geteuid():
@@ -375,12 +466,7 @@ def migrar(dados, *, times, org, desfazer=False, relogio=time.time):
     fd = travar(dados)
     try:
         caminho = os.path.join(dados, ARQ_DIARIO)
-        try:
-            plano = _ler_json(caminho)
-        except FileNotFoundError:
-            plano = None
-        except (OSError, ValueError):
-            raise MigracaoRecusada("o diário da migração não pode ser lido; restaure o backup") from None
+        plano = _ler_diario(caminho)
         return _volta(dados, plano, caminho, relogio) if desfazer else _ida(dados, times, org, plano, caminho, relogio)
     finally:
         soltar(fd)
@@ -410,6 +496,9 @@ def principal(argv, dados, times, org):
               "Contas com o andar: " + (", ".join(f"{u} ({p})" for u, p in rel["contas"].items()) or "nenhuma")]
     if rel["pendentes"]:
         linhas.append("Sem o andar (dê pela tela de Membros, se forem da empresa): " + ", ".join(rel["pendentes"]))
+    if rel["convites"]:
+        linhas.append("Convites esperando que dão o principal (revogue e reemita com o andar da empresa): "
+                      + ", ".join(rel["convites"]))
     linhas += [f"Diário: {rel['diario']}", "Suba o serviço de novo."]
     print("\n".join(linhas))
     return 0
