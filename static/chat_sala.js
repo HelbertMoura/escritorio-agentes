@@ -749,7 +749,7 @@ const ChatSala = (() => {
       return true;
     }
     async function abrirDM(usuario) {
-      if (tv() || !eq().dm || typeof usuario !== "string" || !usuario) return false;
+      if (tv() || !eq().dm || eq().pode_escrever === false || typeof usuario !== "string" || !usuario) return false;   // quem só lê não tem Diretas
       await mostrarPainel();
       await comecarDm(s.pessoas.find(p => p.usuario === usuario) || { usuario, nome: usuario });
       return true;

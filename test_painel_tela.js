@@ -357,8 +357,8 @@ const abas = p => achar(p, "chat-sala-aba").map(b => b.dataset.id);
       assert.equal(achar(painel, "chat-sala-entendi")[0].hidden, false);
       assert.equal(pedidos.some(p => p.rota === "api/dm/abrir"), false);
     }
-    // saguão (sem DM) e store desligado: abrirDM não faz nada
-    for (const config of [SAGUAO, { andar: "principal", equipe: null }]) {
+    // saguão (sem DM), store desligado e quem só lê (o admin do prédio no andar de uma empresa): abrirDM não faz nada
+    for (const config of [SAGUAO, { andar: "principal", equipe: null }, { ...ANDAR, papel: "admin", admin_predio: true, equipe: { ...EQUIPE, pode_escrever: false } }]) {
       const { pedidos, ChatSala } = carregar({ config, respostas: resp, sala: "cozinha" });
       assert.equal(await ChatSala.abrirDM("ana.lima"), false);
       assert.equal(pedidos.length, 0);
