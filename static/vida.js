@@ -1484,7 +1484,7 @@ const Vida = (() => {
       let p = vivo.pessoas.get(it.usuario);
       if (!p) { p = novaPessoa(it.usuario, it.x, it.y); vivo.pessoas.set(it.usuario, p); }
       p.nome = nomeDe(it.nome, "Alguém"); p.ap = apDe(it.aparencia, it.usuario);   // sem nome: "Alguém", nunca o usuario
-      p.parado = DIRECOES.has(it.olha) ? it.olha : "baixo";
+      p.parado = DIRECOES.has(it.olha) ? it.olha : "baixo"; p.sala = typeof it.sala === "string" ? it.sala : ""; p.status = statusDe(it.status);
       if (p.alvo && p.alvo[0] === alvo[0] && p.alvo[1] === alvo[1]) continue;
       p.alvo = alvo;   // destino novo: anda até lá (sem caminho, aparece direto)
       p.rota = (m && rotaAte(m, [p.x, p.y], alvo)) || [];
@@ -1493,8 +1493,13 @@ const Vida = (() => {
     for (const u of [...vivo.pessoas.keys()]) if (!vistos.has(u)) vivo.pessoas.delete(u);   // fechou o escritório (TTL) ou trocou de andar
   }
   const DIRECOES = new Set(["baixo", "cima", "esq", "dir"]);
-  const novaPessoa = (id, x, y) => ({ id: "pessoa:" + id, nome: "", ap: null, x, y, rota: [], alvo: null, sala: "", pose: "parado",
-    olha: "baixo", parado: "baixo", passos: 0, pausa: 0, semente: semente(id) });
+  // ref: a chave da pessoa fora daqui (lista do andar, ir até, aceno), um contador; o "usuario" (no saguão, o id opaco) não sai
+  let refs = 0;
+  const novaPessoa = (id, x, y) => ({ id: "pessoa:" + id, ref: "r" + ++refs, nome: "", ap: null, x, y, rota: [], alvo: null, sala: "", pose: "parado",
+    olha: "baixo", parado: "baixo", passos: 0, pausa: 0, aceno: 0, status: null, semente: semente(id) });
+  // 1.6 Onda 2: o status de cada pessoa (o ícone no boneco e na lista); fora da lista, sem status
+  const STATUS = Object.freeze(["disponivel", "ocupado", "reuniao", "ausente"]);
+  const statusDe = s => (STATUS.includes(s) ? s : null);
   const semente = txt => { let h = 7; for (const ch of txt) h = (h * 31 + ch.charCodeAt(0)) % 997; return h; };
 
   // de a até b, com o caminho dos agentes: dentro da sala, porta, corredor, porta e dentro da outra sala
@@ -1532,6 +1537,59 @@ const Vida = (() => {
     eu.rota = rota;
     enviarPresenca();
     return true;
+  }
+
+  const outraPessoa = ref => (typeof ref === "string" && [...vivo.pessoas.values()].find(p => p.ref === ref)) || null;
+  const salaDaChave = (m, chave) => [...m.predio.salas, ...m.predio.baixo].find(s => s.chave === chave) || null;
+
+  // a lista de quem está no andar (app.js): eu primeiro, depois por nome, com a sala pelo nome
+  function equipe(m) {
+    const nomeSala = p => { const s = p.sala && m && salaDaChave(m, p.sala); return s ? s.nome : "Corredor"; };
+    const outros = [...vivo.pessoas.values()].filter(p => p.x > -20)
+      .map(p => ({ chave: p.ref, nome: p.nome, sala: nomeSala(p), status: p.status, eu: false }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+    const eu = vivo.eu && vivo.perfil ? [{ chave: "eu", nome: vivo.perfil.nome, sala: nomeSala(vivo.eu), status: vivo.eu.status || null, eu: true }] : [];
+    return [...eu, ...outros];
+  }
+
+  // ir até a pessoa (a lista do andar): o meu boneco anda até um ponto livre ao lado dela, sem pisar nela
+  function irAtePessoa(m, ref) {
+    const eu = vivo.eu, p = outraPessoa(ref);
+    if (!eu || m !== vivo.m || !p) return false;
+    for (const [dx, dy] of [[14, 0], [-14, 0], [0, 12], [0, -12], [20, 8], [-20, 8]]) {
+      const alvo = pontoDoClique(m, p.x + dx, p.y + dy);
+      if (!alvo || Math.hypot(alvo[0] - p.x, alvo[1] - p.y) < 8) continue;
+      const rota = rotaAte(m, [eu.x, eu.y], alvo);
+      if (!rota || !rota.length) continue;
+      eu.rota = rota; eu.bater = null;
+      enviarPresenca();
+      return true;
+    }
+    return false;
+  }
+
+  // acenar ("aceno") ou bater na porta ("porta"): o meu boneco acena com um balão. Para bater, quem está em outra sala:
+  // o meu boneco vai até a porta dela e bate ao chegar; na minha sala ou no corredor, vira um aceno
+  const ACENO_SEG = 2, BALAO_SEG = 3;
+  function acenar(m, ref, tipo) {
+    const eu = vivo.eu, p = outraPessoa(ref);
+    if (!eu || m !== vivo.m || !p) return false;
+    const s = tipo === "porta" && p.sala && p.sala !== eu.sala ? salaDaChave(m, p.sala) : null;
+    if (s) {
+      const e = portaPerto(m, s, p.x), rota = rotaAte(m, [eu.x, eu.y], e.fora[0]);
+      if (rota && rota.length) {
+        eu.rota = rota; eu.bater = { olha: s.portas ? "baixo" : "cima" };
+        enviarPresenca();
+        return true;
+      }
+    }
+    gesto(eu, `Oi, ${p.nome}!`);
+    return true;
+  }
+  function gesto(p, fala, olha) {
+    const agora = performance.now() / 1000;
+    p.aceno = agora + ACENO_SEG; p.fala = fala; p.ate = agora + BALAO_SEG;
+    if (olha) p.olha = olha;
   }
 
   // entra pela rua até um canto livre da recepção
@@ -1592,18 +1650,20 @@ const Vida = (() => {
     const s = salaEm(m, eu.x, eu.y), sala = s && typeof s.chave === "string" ? s.chave : "";
     if (sala !== eu.sala) { eu.sala = sala; eu.salaNome = s ? s.nome : "Corredor"; enviarPresenca(); }
     else if ((andava && !eu.rota.length) || performance.now() - vivo.enviado > RENOVAR) enviarPresenca();   // chegou, ou renova
+    if (andava && !eu.rota.length && eu.bater) { gesto(eu, "Toc, toc!", eu.bater.olha); eu.bater = null; eu.pose = "acenando"; }   // chegou na porta: bate
   }
   function andarPessoa(m, p, dt, agora) {
     if (p.rota.length) andar(m, p, dt, agora);
-    if (!p.rota.length && !p.eu) p.olha = p.parado;   // parado: olha para onde a pessoa olha na tela dela
-    p.pose = p.rota.length ? "andando" : "parado"; p.chave = p.y + 0.5;
+    if (!p.rota.length && !p.eu && !(p.aceno > agora)) p.olha = p.parado;   // parado: olha para onde a pessoa olha na tela dela
+    if (p.fala && agora > p.ate) p.fala = null;
+    p.pose = p.rota.length ? "andando" : p.aceno > agora ? "acenando" : "parado"; p.chave = p.y + 0.5;
   }
   // modo econômico (laço do app.js): alguém andando, comemorando, acenando ou arremessando, ou uma cena social ou entrega no ar
   function mexendo(m) {
     const agora = performance.now() / 1000;
     if (m.cenaSocial || m.entrega) return true;
     for (const b of m.lista) if (b.rota.length || b.festa > agora || b.aceno > agora || b.arremesso > agora) return true;
-    return pessoas().some(p => p.rota.length);
+    return pessoas().some(p => p.rota.length || p.aceno > agora);
   }
   // intervalo mínimo entre quadros, em ms (0: a cada requestAnimationFrame). Só chuva, neve ou festa (animando): até 60 quadros/s.
   // Parado, 30 com foco e 20 sem foco (segundo monitor, TV): acima das animações paradas (monitores, digitando e café, até
@@ -1636,7 +1696,7 @@ const Vida = (() => {
     return n;
   }
 
-  return { criarMundo, sincronizar, passo, digitando, momento, objetoClicado, festaGeral, social, aoVivo, irAte, pessoas, olhando, textoGreve, horaExtra, mexendo, intervaloQuadro, FRASES };
+  return { criarMundo, sincronizar, passo, digitando, momento, objetoClicado, festaGeral, social, aoVivo, irAte, irAtePessoa, acenar, equipe, STATUS, pessoas, olhando, textoGreve, horaExtra, mexendo, intervaloQuadro, FRASES };
 })();
 
 window.Vida = Vida;
