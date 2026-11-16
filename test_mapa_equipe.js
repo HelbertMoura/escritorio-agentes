@@ -38,7 +38,7 @@ function carregar(globais = {}) {
   vm.runInNewContext(ANDAR + "\n" + VIDA, contexto);
   const json = (status, corpo) => ({ ok: status >= 200 && status < 300, status, json: async () => corpo });
   const t = {
-    Vida: contexto.Vida, pedidos, eventos,
+    Vida: contexto.Vida, contexto, pedidos, eventos,
     async responder(trecho, status, corpo) {
       const i = respostas.findIndex(p => p.url.includes(trecho));
       assert.ok(i >= 0, `sem pedido pendente para ${trecho}`);
@@ -227,6 +227,25 @@ async function montar(lista, eu = "eu") {
     assert.equal((await r).ok, true);
     assert.deepEqual([t.Vida.equipe(m)[0].status, t.Vida.pessoas().find(p => p.eu).status], ["reuniao", "reuniao"]);
     assert.equal(await t.Vida.mudarStatus("<b>", ""), null, "fora da lista nem sai");
+  }
+
+  // "Mensagem direta" na lista: o usuario da pessoa para ChatSala.abrirDM, só no andar da empresa com o store e a DM
+  // ligados e com o painel carregado; nunca no saguão, nunca para mim, nunca para quem não está no mapa
+  {
+    const com = { equipe: { dm: true }, noSaguao: false };
+    const { t, m } = await montar([pessoa("ana", "Ana", 150, 100, "recepcao")]);
+    const [eu, ana] = t.Vida.equipe(m);
+    assert.equal(t.Vida.dmCom(ana.chave, com), null, "sem o ChatSala, sem o botão");
+    const ctx = t.contexto;   // o window do vm: o painel entra depois, como no navegador
+    ctx.ChatSala = { abrir() {} };
+    assert.equal(t.Vida.dmCom(ana.chave, com), null, "ChatSala sem abrirDM");
+    ctx.ChatSala = { abrirDM() {} };
+    assert.equal(t.Vida.dmCom(ana.chave, com), "ana");
+    assert.equal(t.Vida.dmCom(eu.chave, com), null, "para mim, não");
+    assert.equal(t.Vida.dmCom("r999", com), null);
+    assert.equal(t.Vida.dmCom(ana.chave, { equipe: { dm: true }, noSaguao: true }), null, "no saguão, não");
+    assert.equal(t.Vida.dmCom(ana.chave, { equipe: { dm: false }, noSaguao: false }), null);
+    assert.equal(t.Vida.dmCom(ana.chave, { equipe: null, noSaguao: false }), null, "store desligado");
   }
 
   // o ícone do status (mapa.js): pixel art 9x9 desenhado em código, um desenho diferente por status (não só a cor), o

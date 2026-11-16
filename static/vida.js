@@ -1593,6 +1593,14 @@ const Vida = (() => {
     return [...eu, ...outros];
   }
 
+  // "Mensagem direta" da lista: o usuario da pessoa para o ChatSala.abrirDM (chat_sala.js). Só no andar da empresa, com o
+  // store e a DM ligados e o painel carregado; nunca no saguão (lá o usuario é o id opaco e não há DM) nem para mim
+  function dmCom(ref, { equipe, noSaguao } = {}) {
+    const p = outraPessoa(ref);
+    if (!p || noSaguao || !equipe || equipe.dm === false || !window.ChatSala || typeof ChatSala.abrirDM !== "function") return null;
+    return p.usuario;
+  }
+
   // ir até a pessoa (a lista do andar): o meu boneco anda até um ponto livre ao lado dela, sem pisar nela
   function irAtePessoa(m, ref) {
     const eu = vivo.eu, p = outraPessoa(ref);
@@ -1735,7 +1743,7 @@ const Vida = (() => {
     return n;
   }
 
-  return { criarMundo, sincronizar, passo, digitando, momento, objetoClicado, festaGeral, social, aoVivo, irAte, irAtePessoa, acenar, mudarStatus, equipe, STATUS,
+  return { criarMundo, sincronizar, passo, digitando, momento, objetoClicado, festaGeral, social, aoVivo, irAte, irAtePessoa, acenar, mudarStatus, equipe, dmCom, STATUS,
     muralV: canal => (Object.hasOwn(vivo.muralV, canal) ? vivo.muralV[canal] : null), noPredio: () => vivo.noPredio, pessoas, olhando, textoGreve, horaExtra, mexendo, intervaloQuadro, FRASES };
 })();
 

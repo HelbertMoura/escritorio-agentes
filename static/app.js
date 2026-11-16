@@ -2188,7 +2188,8 @@ function abrirEquipe(abre, foco) {
 function desenharEquipe() {
   if (!equipeAberta || !mundo || !config) return;
   const eq = config.equipe, lista = Vida.equipe(mundo), noSaguao = Andar.perfil(config).noSaguao, total = Vida.noPredio();
-  const assinatura = JSON.stringify([lista, !!eq, total, minhaSala]);
+  const dm = { equipe: eq, noSaguao }, comPainel = !!(window.ChatSala && ChatSala.abrirDM);   // o painel carrega depois do app.js
+  const assinatura = JSON.stringify([lista, !!eq, total, minhaSala, comPainel]);
   if (assinatura === equipeAssinatura) return;
   equipeAssinatura = assinatura;
   const comTotal = noSaguao && total !== null;   // só no saguão: o total do prédio, sem nome (D12 a)
@@ -2210,6 +2211,7 @@ function desenharEquipe() {
       const acoes = elem("span", "equipe-acoes");
       const botao = (acao, txt, rotulo) => { const b = elem("button", "botao fantasma", txt); b.type = "button"; b.dataset.acao = acao; b.setAttribute("aria-label", rotulo); return b; };
       acoes.append(botao("ir", "Ir até", `Ir até ${p.nome}`));
+      if (Vida.dmCom(p.chave, dm)) acoes.append(botao("dm", "Mensagem direta", `Mensagem direta para ${p.nome}`));   // só no andar da empresa
       if (eq && p.status !== "ocupado") {   // ocupado não recebe aceno
         acoes.append(botao("aceno", "Acenar", `Acenar para ${p.nome}`));
         if (p.sala !== "Corredor" && p.sala !== salaMinha) acoes.append(botao("porta", "Bater na porta", `Bater na porta de ${p.nome}, na ${p.sala}`));
@@ -2233,6 +2235,11 @@ $("equipe-lista").addEventListener("click", async ev => {
   const chave = b.closest("li").dataset.chave, acao = b.dataset.acao;
   textoSe($("equipe-aviso"), "");
   if (acao === "ir") { if (!Vida.irAtePessoa(mundo, chave)) textoSe($("equipe-aviso"), "Não achei um caminho até essa pessoa agora."); return; }
+  if (acao === "dm") {
+    const usuario = Vida.dmCom(chave, { equipe: config.equipe, noSaguao: Andar.perfil(config).noSaguao });
+    if (usuario) ChatSala.abrirDM(usuario); else textoSe($("equipe-aviso"), "Essa pessoa já saiu do andar.");
+    return;
+  }
   const r = Vida.acenar(mundo, chave, acao);
   if (!r) { textoSe($("equipe-aviso"), "Essa pessoa já saiu do andar."); return; }
   const res = await r;
