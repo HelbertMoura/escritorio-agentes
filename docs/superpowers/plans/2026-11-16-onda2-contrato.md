@@ -42,7 +42,7 @@ Campo novo `equipe` (`null` com o store desligado):
 "equipe": {"retencao": 365, "pode_moderar": false, "cota": null, "dm": true, "anexo": true, "mencao": true,
            "emojis": ["👍", "❤️", "😂", "🎉", "😮", "😢", "🙏", "👀"], "anexo_max": 26214400,
            "aviso_dm": "As mensagens diretas da <empresa> podem ser lidas pela administração da empresa.",
-           "aviso_dm_entendido": false, "auditoria": false, "mural": true,
+           "aviso_dm_entendido": false, "auditoria": false, "mural": true, "pode_escrever": true,
            "status": ["disponivel", "ocupado", "reuniao", "ausente"]}
 ```
 - `retencao`: os dias (365, 90 ou 30) da empresa (item 10). `pode_moderar`: apaga mensagem alheia em canal e tira aviso
@@ -54,6 +54,9 @@ Campo novo `equipe` (`null` com o store desligado):
   admin do prédio que não é admin do andar sai `false`).
 - `aviso_dm` (o texto fixo do topo de toda DM, E.3) e `aviso_dm_entendido` (o "Entendi" desta conta neste andar, item 6).
 - `mural: true` quando o store está ligado (Flynn: sem store, sem mural).
+- `pode_escrever`: `false` só para o admin do prédio sem papel no andar de uma empresa (decisão do Maestro na auditoria
+  final): ele lê o Geral, as salas e o mural, mas enviar, reagir, anexar e fixar dão 403 `papel`. O painel fica sem a
+  caixa de escrever, sem reagir e sem Diretas, e o mural sem o campo de fixar. No saguão e no andar dele, `true`.
 - Retenção: `POST /api/canal/retencao?andar=` `{"dias": 30|90|365}` → `{"retencao": dias}`. Só o admin da empresa (no
   saguão, o do prédio); a empresa só baixa de 1 ano (D3). Membro e admin do prédio no andar de uma empresa: 403 `papel`.
 
@@ -86,7 +89,7 @@ Campos novos (só com o store ligado):
 | Rota | Corpo | Resposta |
 |---|---|---|
 | `POST /api/canal/enviar` | `{"canal", "texto"}` (1 a 500 caracteres) | `{"mensagem": <mensagem>}` |
-| `GET /api/canal/historico?canal=&antes=<id>&limite=50` | — | `{"mensagens": [...], "mais": bool}` (em ordem; `mais`: há mais antigas) |
+| `GET /api/canal/historico?canal=&antes=<id>&limite=50` | — | `{"mensagens": [...], "mais": bool, "v": int}` (em ordem; `mais`: há mais antigas; `v`: a versão do canal lida antes das mensagens, a mesma do `aberto.v`: o painel parte dela e só pede o canal no `/api/ao-vivo` depois do histórico) |
 | `POST /api/canal/lida` | `{"canal", "ate": <id>}` | `{"ok": true}` |
 | `POST /api/canal/apagar` | `{"id"}` | `{"ok": true}` |
 | `POST /api/canal/reagir` | `{"id", "emoji", "ligar": bool}` | `{"mensagem": <mensagem>}` |
@@ -158,9 +161,11 @@ Download: `GET /api/anexo?andar=&id=<anexo.id>[&baixar=1]`
   `<img src>`). O botão "baixar" da imagem usa `&baixar=1`.
 - `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`,
   `Cache-Control: private, no-store`. Sem Range. Anexo que não existe ou de DM alheia: 404 `nao_existe`.
-- 4 downloads ao mesmo tempo por pessoa (o 5º: 429 `limite`).
+- 4 downloads (`baixar=1`) ao mesmo tempo por pessoa (o 5º: 429 `limite`); a prévia inline conta à parte, até 12. O
+  `<img>` tenta de novo uma vez no erro.
 - Na tela de auditoria, o anexo da DM baixa com `&auditoria=1` e o cabeçalho do painel (item 8): só o admin **deste**
-  andar (os outros: 404 de andar), e cada download entra no registro como uma leitura (`quantas: 1`).
+  andar (os outros: 404 de andar), e cada download entra no registro como uma leitura (`quantas: 1`). Por isso a
+  auditoria mostra só o "Baixar", sem `<img>` automático.
 
 ## 8. Auditoria de DM (E.3; só o admin **deste** andar; não existe no saguão)
 

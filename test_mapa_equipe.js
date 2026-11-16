@@ -98,8 +98,9 @@ async function montar(lista, eu = "eu") {
   {
     const { t, m, eu } = await montar([pessoa("bia", "Bia", 160, 260, "reuniao")]);
     const bia = t.Vida.equipe(m).find(p => p.nome === "Bia");
+    // a chegada ao ponto sorteado da recepção pode ter deixado o envio da presença adiado (ENVIO_MIN): sai antes de contar
+    t.agora += 1000; await t.timers(); await t.okPosts(); t.agora += 1000;
     const antes = t.pedidos.filter(p => p.url.startsWith("api/presenca")).length;
-    t.agora += 1000;
     assert.equal(t.Vida.irAtePessoa(m, bia.chave), true);
     const fim = eu.rota.at(-1);
     assert.ok(Math.hypot(fim[0] - 160, fim[1] - 260) <= 24 && Math.hypot(fim[0] - 160, fim[1] - 260) >= 8, `perto, sem pisar nela: ${fim}`);

@@ -218,7 +218,7 @@ No mapa, cada pessoa conectada aparece com o próprio nome e boneco, e cada sala
 - **A DM pode ser lida pela administração da empresa**, por uma tela de auditoria. Cada leitura fica registrada (sem o texto), e as duas pessoas da conversa veem a data. Toda DM avisa isso no topo, e a pessoa confirma antes da primeira.
 - **O aviso no celular mostra o começo da mensagem** (até 60 caracteres) na menção e na DM, e ele pode aparecer na tela bloqueada. Dá para desligar no perfil ou no ajuste de notificações do celular.
 - **Anexos de até 25 MB, ZIP incluído** (5 GB por empresa). O tipo sai do conteúdo, a foto perde a localização (GPS), e o ZIP é conferido sem nunca ser aberto no servidor. Não há antivírus.
-- **O admin do prédio lê o geral, as salas, o mural e os anexos de toda empresa** (a DM, não). Moderar (apagar mensagem de outra pessoa, tirar aviso do mural) e mudar a retenção é só de quem administra cada empresa; no saguão, do admin do prédio.
+- **O admin do prédio lê o geral, as salas, o mural e os anexos de toda empresa, sem escrever neles** (a DM, não). Moderar (apagar mensagem de outra pessoa, tirar aviso do mural) e mudar a retenção é só de quem administra cada empresa; no saguão, do admin do prédio.
 - O banco não é cifrado: quem opera o servidor lê tudo.
 
 Sem nenhuma conta, o chat continua só na memória, como antes. Os detalhes estão em [para onde vai cada dado](./docs/visitas-privadas-plano.md#conversas-da-equipe-no-disco-16).

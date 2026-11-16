@@ -111,16 +111,18 @@ const ChatSala = (() => {
   }
   const contagem = n => (!n ? "" : n > 9 ? "9+" : String(n));
   // as abas do painel pelo config.equipe: sem DM (o saguão) só o Geral; num andar, Geral, a sala onde estou e Diretas
+  // (quem só lê, o admin do prédio no andar de uma empresa, fica sem Diretas)
   function abas(eq, onde) {
     const saida = [{ id: "geral", rotulo: "Geral" }], canal = canalDaSala(onde && onde.sala);
     if (!eq || !eq.dm) return saida;
     if (canal && onde.nome) saida.push({ id: canal, rotulo: onde.nome });
-    return [...saida, { id: "diretas", rotulo: "Diretas" }];
+    return eq.pode_escrever === false ? saida : [...saida, { id: "diretas", rotulo: "Diretas" }];
   }
-  // o que a vista mostra: escrever só num canal; anexo e menção conforme o config.equipe (o saguão não tem); menção não
-  // faz sentido na DM; o botão da auditoria só na lista de Diretas e só para o admin do andar
+  // o que a vista mostra: escrever só num canal e só para quem pode (pode_escrever); anexo e menção conforme o
+  // config.equipe (o saguão não tem); menção não faz sentido na DM; o botão da auditoria só na lista de Diretas e só para
+  // o admin do andar
   function controles(eq, vista) {
-    const e = eq || {}, canal = vista === "geral" || vista.startsWith("sala:") || vista.startsWith("dm:");
+    const e = eq || {}, canal = (vista === "geral" || vista.startsWith("sala:") || vista.startsWith("dm:")) && e.pode_escrever !== false;
     return { escrever: canal, anexar: canal && !!e.anexo, mencionar: canal && !!e.mencao && !vista.startsWith("dm:"),
       auditoria: vista === "diretas" && !!e.auditoria };
   }
@@ -135,9 +137,9 @@ const ChatSala = (() => {
     if (texto != null) e.textContent = texto;
     return e;
   };
-  const urlAnexo = (andar, id, baixar) => Andar.com(`api/anexo?id=${id}${baixar ? "&baixar=1" : ""}`, andar);
+  const urlAnexo = (andar, id, baixar, auditoria) => Andar.com(`api/anexo?id=${id}${baixar ? "&baixar=1" : ""}${auditoria ? "&auditoria=1" : ""}`, andar);
   // uma mensagem do store na tela. ctx: {eu, logins (Set do andar), andar, moderar (admin do andar: apaga em canal, nunca em DM),
-  // ler (a auditoria: sem reagir nem apagar)}
+  // ler (sem reagir nem apagar: a auditoria e o admin do prédio no andar de uma empresa), auditoria (o anexo da DM lido pela administração)}
   function elMensagem(m, ctx) {
     const mim = deMim(m, ctx.eu), li = criar("li", "chat-sala-msg" + (mim ? " de-mim" : "") + (m.apagada ? " apagada" : ""));
     li.dataset.id = String(m.id);
@@ -152,8 +154,8 @@ const ChatSala = (() => {
         p.append(parte.mencao ? criar("span", "chat-sala-mencao" + (parte.mencao === ctx.eu ? " a-mim" : ""), parte.texto) : parte.texto);
       li.append(p);
     }
-    if (m.anexo && Number.isInteger(m.anexo.id)) li.append(elAnexo(m.anexo, ctx.andar));
-    if (ctx.ler) return li;   // a auditoria só lê
+    if (m.anexo && Number.isInteger(m.anexo.id)) li.append(elAnexo(m.anexo, ctx.andar, ctx.auditoria));
+    if (ctx.ler) return li;   // só lê
     const reacoes = criar("div", "chat-sala-reacoes");
     for (const r of Array.isArray(m.reacoes) ? m.reacoes : []) {
       const b = criar("button", "chat-sala-reacao", `${r.emoji} ${r.n}`);
@@ -173,18 +175,23 @@ const ChatSala = (() => {
     li.append(reacoes, acoes);
     return li;
   }
-  // imagem (só os 4 tipos) aparece; todo o resto é nome, tamanho e "Baixar" (o servidor manda como attachment)
-  function elAnexo(a, andar) {
+  // imagem (só os 4 tipos) aparece; todo o resto é nome, tamanho e "Baixar" (o servidor manda como attachment). Na
+  // auditoria, só o "Baixar": cada carga do anexo grava uma linha no registro, e a lista é redesenhada a cada leitura
+  function elAnexo(a, andar, auditoria) {
     const caixa = criar("div", "chat-sala-anexo"), nome = typeof a.nome === "string" ? a.nome : "arquivo";
-    if (ehImagem(a.tipo)) {
-      const img = criar("img", "chat-sala-previa");
-      img.src = urlAnexo(andar, a.id); img.alt = nome; img.loading = "lazy"; img.decoding = "async";
+    if (ehImagem(a.tipo) && !auditoria) {
+      const img = criar("img", "chat-sala-previa"), src = urlAnexo(andar, a.id);
+      img.src = src; img.alt = nome; img.loading = "lazy"; img.decoding = "async";
+      img.addEventListener("error", () => {   // o 429 do teto ou a rede: tenta de novo uma vez só
+        if (img.dataset.denovo) return;
+        img.dataset.denovo = "1"; setTimeout(() => { img.src = src; }, 1500);
+      });
       caixa.append(img);
     }
     const info = criar("p", "chat-sala-arquivo");
     info.append(criar("span", "chat-sala-arquivo-nome", nome), criar("span", "chat-sala-arquivo-tam", Number.isInteger(a.tamanho) ? tamanho(a.tamanho) : ""));
     const baixar = criar("a", "chat-sala-baixar", "Baixar");
-    baixar.href = urlAnexo(andar, a.id, true); baixar.setAttribute("download", "");
+    baixar.href = urlAnexo(andar, a.id, true, auditoria); baixar.setAttribute("download", "");
     baixar.setAttribute("aria-label", `Baixar ${nome}`);
     caixa.append(info, baixar);
     return caixa;
@@ -479,11 +486,11 @@ const ChatSala = (() => {
 
     // ---- canal: histórico paginado
     function desenharMsgs(rolarFim) {
-      const ctx = { eu: eu(), logins: new Set(s.pessoas.map(p => p.usuario)), andar: s.andar, moderar: !!eq().pode_moderar,
-        ler: s.vista.startsWith("auditoria:") };
+      const auditoria = s.vista.startsWith("auditoria:"), ctx = { eu: eu(), logins: new Set(s.pessoas.map(p => p.usuario)), andar: s.andar,
+        moderar: !!eq().pode_moderar, auditoria, ler: auditoria || eq().pode_escrever === false };
       const noFim = ui.corpo.scrollHeight - ui.corpo.scrollTop - ui.corpo.clientHeight < 40;   // quem rola é o corpo
       ui.lista.replaceChildren(...s.msgs.map(m => elMensagem(m, ctx)));
-      ui.vazio.textContent = ctx.ler ? "Nenhuma mensagem nesta conversa." : "Ninguém escreveu aqui ainda.";
+      ui.vazio.textContent = auditoria ? "Nenhuma mensagem nesta conversa." : "Ninguém escreveu aqui ainda.";
       ui.vazio.hidden = s.msgs.length > 0; ui.antes.hidden = !s.mais;
       if (rolarFim || noFim) ui.corpo.scrollTop = ui.corpo.scrollHeight;
     }
@@ -491,6 +498,7 @@ const ChatSala = (() => {
       const vista = s.vista, { ok, d } = await pedir(ROTAS.historico(vista, antes));
       if (vista !== s.vista || !ok || !d || !Array.isArray(d.mensagens)) return;
       if (antes || !s.msgs.length) s.mais = !!d.mais;
+      if (!antes && Number.isInteger(d.v)) s.v = d.v;   // a versão do canal na hora do histórico: o /api/ao-vivo parte dela
       s.msgs = mesclar(antes ? s.msgs : [], d.mensagens);
       desenharMsgs(!antes);
       if (vista.startsWith("dm:")) {   // a DM traz o aviso fixo e as datas em que a administração abriu (D10)
@@ -729,9 +737,10 @@ const ChatSala = (() => {
     const CANAL_OK = /^(geral|sala:.{1,80}|dm:[1-9][0-9]{0,17})$/;
     async function abrirCanal(canal) {
       if (tv() || typeof canal !== "string" || !CANAL_OK.test(canal) || (canal.startsWith("dm:") && !eq().dm)) return false;
-      if (canal.startsWith("dm:")) {
-        if (!(await entendido())) return false;
+      if (canal.startsWith("dm:")) {   // o "Entendi" mora no painel: ele abre antes, senão ninguém vê o diálogo
+        const jaAberto = aberto();
         await mostrarPainel();
+        if (!(await entendido())) { if (!jaAberto) irPara(s.vista, s.titulo, s.com); return false; }
         const { ok, d } = await pedir(ROTAS.dms), dm = ok && d && Array.isArray(d.dms) ? d.dms.find(x => x.canal === canal) : null;
         irPara(canal, dm ? (dm.outro ? dm.outro.nome || dm.outro.usuario : EX) : "Mensagem direta", dm && dm.outro ? dm.outro.usuario : "");
         if (dm && !dm.outro) { ui.form.hidden = true; mostrarAviso("A outra pessoa não está mais no andar. A conversa fica só para ler.", false); }
@@ -768,9 +777,8 @@ const ChatSala = (() => {
       s.naoLidas = d.nao_lidas && typeof d.nao_lidas === "object" ? { ...d.nao_lidas } : {};
       s.mencoes = d.mencoes && typeof d.mencoes === "object" ? { ...d.mencoes } : {};
       const a = d.aberto;
-      if (a && aberto() && a.canal === s.vista) {
-        if (s.v !== null && a.v !== s.v) { s.v = a.v; carregarCanal(); return; }   // apagaram ou reagiram: relê
-        s.v = a.v;
+      if (a && aberto() && a.canal === s.vista && s.v !== null) {   // com o histórico do canal ainda por chegar, nada
+        if (a.v !== s.v) { s.v = a.v; carregarCanal(); return; }   // apagaram ou reagiram: relê
         const chegaram = (Array.isArray(a.novas) ? a.novas : []).filter(m => m && Number.isInteger(m.id) && !s.msgs.some(x => x.id === m.id));
         if (chegaram.length) {
           s.msgs = mesclar(s.msgs, chegaram); desenharMsgs(false);
@@ -782,9 +790,10 @@ const ChatSala = (() => {
       if (aberto() && s.vista === "diretas" && Object.keys(s.naoLidas).filter(c => c.startsWith("dm:")).join() !== dmsAntes) carregarDiretas();
       contar();
     }
-    // o que o vida.js acrescenta ao pedido do /api/ao-vivo: o canal aberto e o maior id já na tela
+    // o que o vida.js acrescenta ao pedido do /api/ao-vivo: o canal aberto e o maior id já na tela. Antes do histórico
+    // do canal chegar, nada: o "depois" seria 0, e a resposta traria as mais antigas
     function paraAoVivo() {
-      if (!aberto() || !ehCanal(s.vista)) return "";
+      if (!aberto() || !ehCanal(s.vista) || s.v === null) return "";
       return `&canal=${encodeURIComponent(s.vista)}&depois=${s.msgs.length ? s.msgs[s.msgs.length - 1].id : 0}`;
     }
 
@@ -826,6 +835,10 @@ const ChatSala = (() => {
       else if (e.key === "Escape" || e.key === "Tab") { e.preventDefault(); e.stopPropagation(); fecharEmojis(true); }
     });
     painel.addEventListener("keydown", e => {
+      if (e.key === "Tab" && !ui.entendi.hidden) {   // o diálogo prende o foco: Tab e Shift+Tab ficam entre os dois botões
+        e.preventDefault(); (document.activeElement === ui.ok ? ui.agoraNao : ui.ok).focus();
+        return;
+      }
       if (e.key !== "Escape") return;
       e.stopPropagation();
       if (!ui.entendi.hidden) ui.agoraNao.click();

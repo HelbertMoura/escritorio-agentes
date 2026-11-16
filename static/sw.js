@@ -12,7 +12,7 @@ self.addEventListener("activate", ev => ev.waitUntil(self.clients.claim()));
 const TIPOS = { pediu_aprovacao: "pede a sua aprovação", pediu_resposta: "tem uma pergunta para você" };
 const PESSOAIS = new Set(["mencao", "dm", "aceno", "porta"]), GENERICO = "Toque para abrir o escritório.";
 const texto = (t, max) => (typeof t === "string" && t.length <= max ? t : null);
-const andarOk = a => (typeof a === "string" && /^[0-9a-f]{8}$/.test(a) ? a : null);
+const andarOk = a => (typeof a === "string" && /^([0-9a-f]{8}|principal)$/.test(a) ? a : null);   // o principal: a instalação de uma empresa só
 const canalOk = c => (typeof c === "string" && /^(geral|sala:[^\u0000-\u001f]{1,80}|dm:[1-9][0-9]{0,17})$/.test(c) ? c : null);   // o formato do contrato
 
 async function lerAviso() { // sem sessão (401), servidor fora ou resposta estranha: o aviso genérico

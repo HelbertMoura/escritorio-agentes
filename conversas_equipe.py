@@ -342,17 +342,18 @@ class Equipe:
                 self._cortar_pelo_teto()
             return msg
 
-    def historico(self, usuario, canal, antes=None, limite=LIMITE_PADRAO):
-        """As mensagens mais novas do canal (antes do id dado), em ordem."""
+    def historico(self, usuario, canal, antes=None, limite=LIMITE_PADRAO, com_versao=False):
+        """As mensagens mais novas do canal (antes do id dado), em ordem. com_versao: (mensagens, versão), a versão lida
+        antes do SELECT e sob a mesma trava (o painel parte dela para o /api/ao-vivo)."""
         _inteiro(limite, 1, LIMITE_MAX, "limite inválido")
         if antes is not None:
             _inteiro(antes, 1, 2 ** 62, "antes inválido")
         with self.trava:
+            v = self.base_versao + self.versoes.get(canal, 0)
             id_c = self._ler_canal(canal, usuario)
-            if id_c is None:
-                return []
             onde = "m.canal = ? AND m.id < ? ORDER BY m.id DESC LIMIT ?"
-            return self._mensagens(onde, (id_c, antes or 2 ** 62, limite), usuario)[::-1]
+            msgs = [] if id_c is None else self._mensagens(onde, (id_c, antes or 2 ** 62, limite), usuario)[::-1]
+        return (msgs, v) if com_versao else msgs
 
     def apagar(self, id_mensagem, usuario, moderador=False):
         """O autor apaga a própria; o moderador (admin da empresa no andar, do prédio no saguão) apaga qualquer uma em
@@ -635,9 +636,10 @@ class Equipe:
     def varrer(self):
         """A varredura diária: tira o que passou da retenção (as mensagens com os anexos, e os avisos do mural), o
         registro de acesso com mais de 1 ano e, se ainda passar do teto, as mais antigas. Os temporários de envio sem
-        reserva viva também saem, e a DM sem nenhuma mensagem (e não aberta no último dia) perde a linha, com as
-        leituras: o par deixa de constar no banco. A DM de id mais alto fica sempre, para o id de uma DM que saiu nunca
-        voltar noutro par (o SQLite reusa o maior rowid apagado, e o registro de acesso aponta para o id)."""
+        reserva viva também saem, e a DM sem nenhuma mensagem (e não aberta no último dia nem com acesso da auditoria
+        no registro) perde a linha, com as leituras: o par deixa de constar no banco. A DM de id mais alto fica sempre,
+        para o id de uma DM que saiu nunca voltar noutro par (o SQLite reusa o maior rowid apagado, e o registro de
+        acesso aponta para o id)."""
         with self.trava:
             agora = self.relogio()
             prazo = agora - self._ajuste("retencao", RETENCAO_PADRAO) * DIA
@@ -645,14 +647,15 @@ class Equipe:
                 ids = [i for (i,) in self.con.execute("SELECT id FROM mensagem WHERE em < ?", (prazo,))]
                 tokens = self._apagar_linhas(ids)
                 avisos = self.con.execute("DELETE FROM mural WHERE em < ?", (prazo,)).rowcount
+                registros = self.con.execute("DELETE FROM acesso_dm WHERE quando < ?", (agora - REGISTRO_DIAS * DIA,)).rowcount
                 self.dms_abertas = {i: q for i, q in self.dms_abertas.items() if q >= agora - DIA}
                 vazias = [i for (i,) in self.con.execute(
                     "SELECT id FROM canal c WHERE dm = 1 AND id < (SELECT MAX(id) FROM canal) "
-                    "AND NOT EXISTS (SELECT 1 FROM mensagem m WHERE m.canal = c.id)") if i not in self.dms_abertas]
+                    "AND NOT EXISTS (SELECT 1 FROM mensagem m WHERE m.canal = c.id) "
+                    "AND NOT EXISTS (SELECT 1 FROM acesso_dm a WHERE a.canal = c.id)") if i not in self.dms_abertas]
                 for i in vazias:
                     self.con.execute("DELETE FROM leitura WHERE canal = ?", (i,))
                     self.con.execute("DELETE FROM canal WHERE id = ?", (i,))
-                registros = self.con.execute("DELETE FROM acesso_dm WHERE quando < ?", (agora - REGISTRO_DIAS * DIA,)).rowcount
             self._apagar_arquivos(tokens)
             self._reservado(agora)
             self._limpar_temporarios(agora)

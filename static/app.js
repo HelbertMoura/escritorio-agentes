@@ -2269,6 +2269,8 @@ function abrirMural(canal, nomeSala) {
   muralCanal = canal; muralAbriu = document.activeElement;
   textoSe($("mural-titulo"), canal === "geral" ? (Andar.perfil(config).noSaguao ? "Mural do prédio" : "Mural do andar") : `Mural da ${nomeSala}`);
   $("mural-lista").replaceChildren(); $("mural-vazio").hidden = true; textoSe($("mural-aviso"), "Abrindo…"); $("mural-texto").value = "";
+  const soLe = !!(config.equipe && config.equipe.pode_escrever === false);   // o admin do prédio no andar de uma empresa só lê
+  for (const id of ["mural-rotulo", "mural-texto", "mural-fixar"]) $(id).hidden = soLe;
   if (!d.open) d.showModal();
   carregarMural();
 }

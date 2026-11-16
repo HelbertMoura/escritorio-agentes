@@ -131,6 +131,7 @@ function carregar({ hash = "", guardado = null, quebrado = false } = {}) {
   assert.deepEqual(de({ tipo: "aviso", andar: ID, canal: "dm:42" }), { andar: ID, canal: "dm:42" });
   assert.deepEqual(de({ tipo: "aviso", andar: ID, canal: "sala:time:Design & Arte" }), { andar: ID, canal: "sala:time:Design & Arte" });
   assert.deepEqual(de({ tipo: "aviso", andar: ID }), { andar: ID, canal: null }, "aceno e porta: só o andar");
+  assert.deepEqual(de({ tipo: "aviso", andar: "principal", canal: "dm:4" }), { andar: "principal", canal: "dm:4" }, "empresa só no principal");
   assert.deepEqual(de({ tipo: "aviso", andar: ID, canal: "dm:x" }), { andar: ID, canal: null });
   assert.deepEqual(de({ tipo: "aviso", andar: ID, canal: "sala:a\nb" }), { andar: ID, canal: null }, "controle não passa");
   assert.deepEqual(de({ tipo: "aviso", andar: ID, canal: "sala:" + "x".repeat(200) }), { andar: ID, canal: null });

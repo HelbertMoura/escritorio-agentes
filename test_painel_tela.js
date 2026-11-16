@@ -35,8 +35,9 @@ const todos = (e, saida = []) => { for (const f of e.children) { saida.push(f); 
 const visivel = e => { for (let x = e; x; x = x.pai) if (x.hidden) return false; return true; };
 // o evento sobe pela árvore, como no navegador
 function disparar(alvo, tipo, extra = {}) {
-  const ev = { target: alvo, key: extra.key, preventDefault() {}, stopPropagation() { ev.parou = true; } };
+  const ev = { target: alvo, key: extra.key, shiftKey: !!extra.shiftKey, preventDefault() { ev.evitou = true; }, stopPropagation() { ev.parou = true; } };
   for (let x = alvo; x && !ev.parou; x = x.pai) for (const f of x.ouvintes[tipo] || []) f(ev);
+  return ev;
 }
 const espera = () => new Promise(r => setImmediate(r));
 const achar = (raiz, classe) => todos(raiz).filter(x => x.classes.has(classe));
@@ -44,7 +45,7 @@ const porTexto = (raiz, texto) => todos(raiz).find(x => x.tagName === "BUTTON" &
 
 function carregar({ config, respostas = {}, sala = null }) {
   foco = null;
-  const ids = {}, pedidos = [];
+  const ids = {}, pedidos = [], timers = [];
   for (const id of ["chat-sala", "chat-sala-abrir", "chat-sala-painel", "chat-sala-n"]) ids[id] = elemento(id === "chat-sala-painel" ? "section" : "div");
   // o painel do chat da sala de sempre, como está no index.html
   for (const [id, tag] of [["chat-sala-titulo", "h2"], ["chat-sala-lista", "ol"], ["chat-sala-vazio", "p"], ["chat-sala-aviso", "p"],
@@ -68,14 +69,14 @@ function carregar({ config, respostas = {}, sala = null }) {
   const ouvintes = {};
   const window = { addEventListener: (t, f) => (ouvintes[t] ||= []).push(f) };
   const contexto = { window, document, fetch, location: { hash: config.andar && config.andar !== "principal" ? `#andar=${config.andar}` : "", href: "" },
-    localStorage: null, config, estado: { usuario: "joao" }, MutationObserver: class { observe() {} }, setTimeout: f => 0, clearTimeout() {},
+    localStorage: null, config, estado: { usuario: "joao" }, MutationObserver: class { observe() {} }, setTimeout: f => timers.push(f), clearTimeout() {},
     URLSearchParams, Intl, Date, JSON };
   vm.runInNewContext(fs.readFileSync("static/expediente.js", "utf8"), contexto);
   contexto.Andar = contexto.window.Andar;
   vm.runInNewContext(fs.readFileSync("static/chat_sala.js", "utf8"), contexto);
   const evento = (t, detail) => (ouvintes[t] || []).forEach(f => f({ detail }));
   evento("minha-sala", { sala, nome: sala ? "Cozinha" : null, andar: config.andar || "principal", seq: 1 });
-  return { ids, painel: ids["chat-sala-painel"], pedidos, evento, ChatSala: contexto.window.ChatSala };
+  return { ids, painel: ids["chat-sala-painel"], pedidos, evento, timers, ChatSala: contexto.window.ChatSala };
 }
 
 const ID = "a1b2c3d4";
@@ -85,7 +86,7 @@ const ANDAR = { andar: ID, papel: "membro", admin_predio: false, terreo: "saguao
 const SAGUAO = { andar: "principal", papel: "pessoa", terreo: "saguao", equipe: { ...EQUIPE, dm: false, anexo: false, mencao: false, aviso_dm: "" } };
 const MSG = (id, extra = {}) => ({ id, canal: "geral", usuario: "ana.lima", nome: "Ana", texto: `m${id}`, apagada: false, em: "2026-11-16T13:00:00Z", reacoes: [], anexo: null, ...extra });
 const RESP = {
-  "GET api/canal/historico": { status: 200, corpo: q => ({ mensagens: [MSG(1, { canal: q.get("canal") })], mais: false,
+  "GET api/canal/historico": { status: 200, corpo: q => ({ mensagens: [MSG(1, { canal: q.get("canal") })], mais: false, v: 5,
     ...(q.get("canal").startsWith("dm:") ? { aviso: EQUIPE.aviso_dm, acessos: ["2026-11-12T10:00:00Z"] } : {}) }) },
   "GET api/pessoas": { status: 200, corpo: { pessoas: [{ usuario: "ana.lima", nome: "Ana Lima" }] } },
   "GET api/dm": { status: 200, corpo: { dms: [] } },
@@ -97,7 +98,9 @@ const RESP = {
   "GET api/dm/auditoria/registro": { status: 200, corpo: { registro: [
     { canal: "dm:3", admin: "joao", u1: "ana.lima", u2: "bruno", quando: "2026-11-15T10:00:00Z", quantas: 4 },
     { canal: "dm:5", admin: "carla", u1: null, u2: "ana.lima", quando: "2026-11-14T10:00:00Z", quantas: 1 }] } },
-  "GET api/dm/auditoria": { status: 200, corpo: { mensagens: [MSG(7, { canal: "dm:3" })], mais: false,
+  "GET api/dm/auditoria": { status: 200, corpo: { mensagens: [MSG(7, { canal: "dm:3" }),
+    MSG(8, { canal: "dm:3", texto: "", anexo: { id: 31, nome: "foto.png", tipo: "image/png", tamanho: 2048 } }),
+    MSG(9, { canal: "dm:3", texto: "", anexo: { id: 32, nome: "contrato.pdf", tipo: "application/pdf", tamanho: 4096 } })], mais: false,
     lembrete: "O acesso a esta conversa fica registrado e as duas pessoas veem a data." } },
 };
 const abas = p => achar(p, "chat-sala-aba").map(b => b.dataset.id);
@@ -189,14 +192,65 @@ const abas = p => achar(p, "chat-sala-aba").map(b => b.dataset.id);
     porTexto(achar(painel, "chat-sala-itens")[0], "Ana Lima e Você").click(); await espera(); await espera();
     assert.equal(pedidos.find(p => p.rota === "api/dm/auditoria").q.get("canal"), "dm:3");
     assert.equal(achar(painel, "chat-sala-form")[0].hidden, true);
-    assert.equal(achar(painel, "chat-sala-msg").length, 1);
+    assert.equal(achar(painel, "chat-sala-msg").length, 3);
     assert.equal(achar(painel, "chat-sala-acoes").length + achar(painel, "chat-sala-reagir").length, 0, "na auditoria só se lê");
+    // o anexo da DM pela auditoria: só o "Baixar", com auditoria=1 (o admin não é ponta); nenhum <img> automático, que
+    // gravaria uma linha no registro a cada carga
+    assert.equal(achar(painel, "chat-sala-previa").length, 0);
+    assert.deepEqual(achar(painel, "chat-sala-baixar").map(a => a.href),
+      [`api/anexo?id=31&baixar=1&auditoria=1&andar=${ID}`, `api/anexo?id=32&baixar=1&auditoria=1&andar=${ID}`]);
     assert.match(achar(painel, "chat-sala-fixo")[0].textContent, /fica registrado/);
     // o cabeçalho próprio só nas rotas da auditoria
     const aud = pedidos.filter(p => p.rota.startsWith("api/dm/auditoria"));
     assert.deepEqual([...new Set(aud.map(p => p.rota))].sort(), ["api/dm/auditoria", "api/dm/auditoria/pares", "api/dm/auditoria/registro"]);
     for (const p of aud) assert.equal(p.cabecalhos["X-Escritorio"], "1", p.rota);
     for (const p of pedidos.filter(p => !p.rota.startsWith("api/dm/auditoria"))) assert.equal(p.cabecalhos["X-Escritorio"], undefined, p.rota);
+  }
+  // a prévia da imagem no canal: <img> sem auditoria; no erro (o 429 do teto, a rede) tenta de novo uma vez só
+  {
+    const resp = { ...RESP, "GET api/canal/historico": { status: 200, corpo: { mensagens: [MSG(4, { anexo: { id: 40, nome: "a.png", tipo: "image/png", tamanho: 10 } })], mais: false, v: 1 } } };
+    const { ids, painel, timers } = carregar({ config: ANDAR, respostas: resp });
+    ids["chat-sala-abrir"].click(); await espera(); await espera();
+    const img = achar(painel, "chat-sala-previa")[0];
+    assert.equal(img.src, `api/anexo?id=40&andar=${ID}`);
+    img.src = "quebrada"; const n = timers.length;
+    disparar(img, "error");
+    assert.equal(timers.length, n + 1, "agenda uma nova tentativa");
+    timers.at(-1)();
+    assert.equal(img.src, `api/anexo?id=40&andar=${ID}`);
+    disparar(img, "error");
+    assert.equal(timers.length, n + 1, "só uma vez");
+  }
+  // corrida entre o histórico e o /api/ao-vivo: a versão vem do histórico; enquanto ele não chega, o poll não leva o canal
+  // e uma resposta com o "aberto" fica de fora (ela traria as mais antigas, coladas nas mais novas)
+  {
+    let solta;
+    const pendente = new Promise(r => (solta = r));
+    const resp = { ...RESP, "GET api/canal/historico": { status: 200, corpo: () => pendente } };
+    const { ids, painel, pedidos, evento, ChatSala } = carregar({ config: ANDAR, respostas: resp, sala: "cozinha" });
+    ids["chat-sala-abrir"].click(); await espera(); await espera();
+    assert.equal(ChatSala.paraAoVivo(), "", "histórico pendente: o poll não leva o canal");
+    evento("aovivo", { eu: "joao", nao_lidas: {}, aberto: { canal: "sala:cozinha", novas: [MSG(1), MSG(2)], v: 7 } });
+    assert.equal(achar(painel, "chat-sala-msg").length, 0);
+    solta({ mensagens: [MSG(60), MSG(61)], mais: true, v: 7 }); await espera(); await espera(); await espera();
+    assert.deepEqual(achar(painel, "chat-sala-msg").map(li => li.dataset.id), ["60", "61"]);
+    assert.equal(ChatSala.paraAoVivo(), "&canal=sala%3Acozinha&depois=61");
+    // a reação entre o histórico e o 1º poll: a versão do poll difere da do histórico e o painel relê
+    const antes = pedidos.filter(p => p.rota === "api/canal/historico").length;
+    evento("aovivo", { eu: "joao", nao_lidas: {}, aberto: { canal: "sala:cozinha", novas: [], v: 8 } }); await espera();
+    assert.equal(pedidos.filter(p => p.rota === "api/canal/historico").length, antes + 1);
+  }
+  // o admin do prédio no andar de uma empresa só lê: sem caixa de escrever, sem reagir nem apagar, sem Diretas
+  {
+    const config = { ...ANDAR, papel: "admin", admin_predio: true, equipe: { ...EQUIPE, pode_escrever: false } };
+    const { ids, painel } = carregar({ config, respostas: RESP, sala: "cozinha" });
+    ids["chat-sala-abrir"].click(); await espera(); await espera();
+    assert.deepEqual(abas(painel), ["geral", "sala:cozinha"]);
+    assert.equal(achar(painel, "chat-sala-form")[0].hidden, true);
+    assert.equal(achar(painel, "chat-sala-msg").length, 1);
+    assert.equal(achar(painel, "chat-sala-reagir").length + achar(painel, "chat-sala-apagar").length, 0);
+    porTexto(achar(painel, "chat-sala-abas")[0], "Geral").click(); await espera();
+    assert.equal(achar(painel, "chat-sala-form")[0].hidden, true);
   }
   // menção: "@an" sugere só gente do andar; seta e Enter completam
   {
@@ -280,6 +334,21 @@ const abas = p => achar(p, "chat-sala-aba").map(b => b.dataset.id);
       assert.deepEqual(pedidos.filter(p => p.rota === "api/dm/abrir").at(-1).corpo, { com: "ana.lima" });
       assert.equal(todos(painel).find(x => x.id === "chat-sala-titulo").textContent, "Ana Lima");
       assert.equal(campo.value, segunda === 200 ? "" : "ainda está aí?", "o texto só sai do campo quando foi");
+    }
+    // o toque no aviso de DM com o "Entendi" pendente: o painel abre com o diálogo à vista; o Tab fica dentro dele
+    {
+      const { painel, ChatSala } = carregar({ config: { ...ANDAR, equipe: { ...EQUIPE, aviso_dm_entendido: false } }, respostas: resp });
+      const abriu = ChatSala.abrirCanal("dm:4"); for (let i = 0; i < 5; i++) await espera();
+      const dialogo = achar(painel, "chat-sala-entendi")[0], ok = porTexto(dialogo, "Entendi"), nao = porTexto(dialogo, "Agora não");
+      assert.ok(visivel(dialogo), "o diálogo aparece");
+      assert.equal(foco, ok);
+      assert.ok(disparar(ok, "keydown", { key: "Tab" }).evitou); assert.equal(foco, nao);
+      assert.ok(disparar(nao, "keydown", { key: "Tab", shiftKey: true }).evitou); assert.equal(foco, ok);
+      disparar(ok, "keydown", { key: "Tab", shiftKey: true }); assert.equal(foco, nao);
+      ok.click();
+      assert.equal(await abriu, true);
+      await espera(); await espera();
+      assert.equal(todos(painel).find(x => x.id === "chat-sala-titulo").textContent, "Ana Lima");
     }
     // sem o "Entendi" ainda: o aviso aparece antes de abrir
     {

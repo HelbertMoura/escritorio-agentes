@@ -289,6 +289,21 @@ class Retencao(Base):
         self.assertGreater(int(nova[3:]), int(ultima[3:]))
         self.assertNotIn(nova, (dm_velha, vazia))
 
+    def test_dm_vazia_com_acesso_da_auditoria_fica(self):
+        """A DM que a administração abriu não perde a linha quando a retenção leva as mensagens: as pontas continuam
+        vendo as datas do registro (D10), que dura 1 ano."""
+        dm = self.eq.abrir_dm("ana", "bia")
+        self.manda(self.eq, dm, "ana", "vai vencer")
+        self.eq.auditar_dm("beto", dm)
+        self.eq.abrir_dm("bia", "caio")   # a de id mais alto fica sempre: não pode ser ela a do teste
+        self.r.t += 370 * DIA
+        self.eq.auditar_dm("beto", dm)    # o registro mais novo ainda vale
+        self.r.t += 2 * DIA
+        rel = self.eq.varrer()
+        self.assertEqual((rel["por_prazo"], rel["dms_vazias"]), (1, 0))
+        self.assertEqual(self.eq.abrir_dm("ana", "bia"), dm)
+        self.assertEqual(len(self.eq.acessos_da_dm("ana", dm)), 1)
+
     def test_teto_do_banco_tira_as_mais_antigas_e_avisa(self):
         eq = self.abrir("teto", teto_banco=256 * 1024)
         ids = [self.manda(eq, "geral", "ana", f"m{i} " + "texto comprido " * 30)["id"] for i in range(600)]

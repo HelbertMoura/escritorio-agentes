@@ -302,6 +302,44 @@ class Canais(Predio):
         self.assertEqual(self.post(f"/api/canal/retencao?andar={self.B}", "cida", {"dias": 30})[0], 404)   # de C
         self.assertEqual(self.post(f"/api/mural/tirar?andar={self.B}", "beto", {"id": aviso["id"]})[0], 200)
 
+    def test_admin_do_predio_so_le_a_empresa(self):
+        """Decisão do Maestro (auditoria final da Onda 2): no andar de uma empresa o admin do prédio lê o Geral, as salas
+        e o mural; escrever (enviar, reagir, anexar, fixar) exige papel no andar. No andar dele escreve."""
+        m = self.envia("ana", "geral", "o dono só lê")
+        self.assertFalse(self.get(f"/api/config?andar={self.B}", "dono")[1]["equipe"]["pode_escrever"])
+        self.assertTrue(self.get(f"/api/config?andar={self.B}", "ana")[1]["equipe"]["pode_escrever"])
+        self.assertTrue(self.get("/api/config", "dono")[1]["equipe"]["pode_escrever"])
+        for rota, corpo in (("/api/canal/enviar", {"canal": "geral", "texto": "do dono"}),
+                            ("/api/canal/enviar", {"canal": "sala:cozinha", "texto": "do dono"}),
+                            ("/api/canal/reagir", {"id": m["id"], "emoji": "👍", "ligar": True}),
+                            ("/api/mural/fixar", {"canal": "geral", "texto": "do dono"})):
+            st, r = self.post(f"{rota}?andar={self.B}", "dono", corpo)
+            self.assertEqual((st, r["erro"]), (403, "papel"), rota)
+        st, r = self.anexo(f"/api/anexo?andar={self.B}&canal=geral", "dono", b"oi", "x.txt")
+        self.assertEqual((st, r["erro"]), (403, "papel"))
+        h = self.get(f"/api/canal/historico?andar={self.B}&canal=geral", "dono")[1]["mensagens"]
+        self.assertEqual(next(x for x in h if x["id"] == m["id"])["reacoes"], [])
+        self.assertNotIn("do dono", [x["texto"] for x in h])
+        self.assertNotIn("do dono", [a["texto"] for a in self.get(f"/api/mural?andar={self.B}&canal=geral", "dono")[1]["avisos"]])
+        self.assertEqual(self.post(f"/api/canal/lida?andar={self.B}", "dono", {"canal": "geral", "ate": m["id"]})[0], 200)
+        time.sleep(0.25)
+        st, r = self.post("/api/canal/enviar", "dono", {"canal": "geral", "texto": "no andar dele"})
+        self.assertEqual(st, 200, r)
+
+    def test_historico_traz_a_versao_do_ao_vivo(self):
+        """O painel guarda a versão do canal a partir do histórico (lida antes do SELECT, sob a mesma trava): a reação que
+        cai entre o histórico e o 1º /api/ao-vivo muda a versão e o painel relê."""
+        m = self.envia("ana", "sala:cozinha", "versão no histórico")
+        rota = f"/api/canal/historico?andar={self.B}&canal=sala:cozinha"
+        h = self.get(rota, "bia")[1]
+        vivo = lambda: self.get(f"/api/ao-vivo?andar={self.B}&canal=sala:cozinha&depois={m['id']}", "bia")[1]["aberto"]["v"]
+        self.assertIsInstance(h["v"], int)
+        self.assertEqual(h["v"], vivo())
+        self.assertEqual(self.post(f"/api/canal/reagir?andar={self.B}", "ana", {"id": m["id"], "emoji": "🎉", "ligar": True})[0], 200)
+        time.sleep(0.3)
+        self.assertNotEqual(vivo(), h["v"])
+        self.assertEqual(self.get(rota, "bia")[1]["v"], vivo())
+
     def test_busca(self):
         self.envia("ana", "sala:reuniao", "orçamento trimestral")
         time.sleep(1.1)
@@ -516,6 +554,25 @@ class Anexos(Predio):
         self.assertEqual((st, corpo), (200, b"contrato"))
         self.assertEqual(registro(), [("beto", "ana", "bia", 1)])
         self.assertEqual(len(self.get(f"/api/canal/historico?andar={self.B}&canal={canal}", "bia")[1]["acessos"]), 1)
+
+    def test_previa_fora_do_teto_dos_downloads(self):
+        """A prévia inline (o <img> do painel) tem teto próprio, maior: 5 imagens na tela não esbarram nos 4 downloads."""
+        st, r = self.anexo(f"/api/anexo?andar={self.B}&canal=geral", "beto", PNG_GPS, "previa.png")
+        self.assertEqual(st, 200, r)
+        rota = f"/api/anexo?andar={self.B}&id={r['mensagem']['anexo']['id']}"
+        self.srv.downloads["bia"] = e.DOWNLOADS_MAX
+        try:
+            self.assertEqual(self.req(rota, self.cab["bia"])[0], 200)
+            self.assertEqual(self.req(rota + "&baixar=1", self.cab["bia"])[0], 429)
+        finally:
+            del self.srv.downloads["bia"]
+        self.assertGreater(e.PREVIAS_MAX, e.DOWNLOADS_MAX)
+        self.srv.downloads[("previa", "bia")] = e.PREVIAS_MAX
+        try:
+            self.assertEqual(self.req(rota, self.cab["bia"])[0], 429)
+            self.assertEqual(self.req(rota + "&baixar=1", self.cab["bia"])[0], 200)
+        finally:
+            del self.srv.downloads[("previa", "bia")]
 
     def test_mencao_no_texto_do_anexo_grava(self):
         st, r = self.anexo(f"/api/anexo?andar={self.B}&canal=geral", "bia", b"oi", "x.txt", "@ana e @carlos, vejam")

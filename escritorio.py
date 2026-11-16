@@ -2157,9 +2157,9 @@ LOGO_MAX = 600_000
 CORPO_ANTES = 128 * 1024   # POST: corpo lido antes de qualquer resposta (do_POST); acima disso, só a rota que aceita lê
 # o anexo (E.5): o envio inteiro tem PRAZO_ANEXO segundos (o timeout de 15 s vale por bloco: sem o prazo, 1 byte a cada
 # 14 s seguraria a thread por dias); no máximo ENVIOS_MAX ao mesmo tempo no servidor e 1 por conta; DOWNLOADS_MAX por
-# conta. O piso de disco do prédio (bytes livres que o anexo nunca usa) sai de ESCRITORIO_PISO_DISCO_MB; sem ele,
+# conta, e a prévia inline (o <img> do painel) à parte, até PREVIAS_MAX por conta. O piso de disco do prédio (bytes livres que o anexo nunca usa) sai de ESCRITORIO_PISO_DISCO_MB; sem ele,
 # max(2 GB, 10% do volume)
-PRAZO_ANEXO, ENVIOS_MAX, DOWNLOADS_MAX, BLOCO_ANEXO = 120, 4, 4, 64 * 1024
+PRAZO_ANEXO, ENVIOS_MAX, DOWNLOADS_MAX, PREVIAS_MAX, BLOCO_ANEXO = 120, 4, 4, 12, 64 * 1024
 PISO_DISCO = int(os.environ["ESCRITORIO_PISO_DISCO_MB"]) * 1024 * 1024 if os.environ.get(
     "ESCRITORIO_PISO_DISCO_MB", "").isdigit() else None
 ACENO_VIDA, ACENO_ENTRE = 60, 30   # o aceno fica 60 s no /api/ao-vivo de quem recebe; 1 a cada 30 s por par
@@ -4270,6 +4270,17 @@ class Pagina(BaseHTTPRequestHandler):
         papel = getattr(self.server.acesso, "papel", None)
         return papel is not None and isinstance(login, str) and papel(login, andar.id) is not None
 
+    def _so_le(self, andar, usuario):
+        """No andar de uma empresa, o admin do prédio sem papel ali só lê o Geral, as salas e o mural (contrato da Onda
+        2): escrever (enviar, reagir, anexar, fixar) exige papel no andar. No saguão ele escreve; sem papéis no acesso,
+        todo logado escreve."""
+        papel = getattr(self.server.acesso, "papel", None)
+        return not andar.saguao and papel is not None and papel(usuario, andar.id) is None
+
+    def _so_le_recusa(self, rota):
+        log(evento="http", rota=rota[:40], resultado="so_le")
+        return self._json(*erro(403, "papel", "Neste andar você só lê as conversas."))
+
     def _mencionados(self, texto, andar, autor):
         """Os @login do texto que têm papel neste andar (quem é de fora não é achado). O saguão não tem menção."""
         if andar.saguao or not isinstance(texto, str):
@@ -4328,6 +4339,7 @@ class Pagina(BaseHTTPRequestHandler):
                 "aviso_dm": AVISO_DM.format(empresa=empresa) if tem_dm else None,
                 "aviso_dm_entendido": eq.entendeu_dm(usuario) if tem_dm else False,
                 "auditoria": tem_dm and (papel is None or papel(usuario, andar.id) == "admin"), "mural": True,
+                "pode_escrever": not self._so_le(andar, usuario),
                 "status": list(STATUS)}
 
     def _ao_vivo_equipe(self, andar, usuario, vivo, q):
@@ -4395,8 +4407,8 @@ class Pagina(BaseHTTPRequestHandler):
                 if not self._canal_ok(andar, canal):
                     return self._json(*erro(400, "pedido", "Pedido inválido."))
                 limite = self._inteiro(um("limite"), 50, 1, 200)
-                msgs = eq.historico(usuario, canal, self._inteiro(um("antes"), None, 1, 2 ** 62), limite)
-                r = {"mensagens": self._publicas(andar, msgs), "mais": len(msgs) == limite}
+                msgs, v = eq.historico(usuario, canal, self._inteiro(um("antes"), None, 1, 2 ** 62), limite, com_versao=True)
+                r = {"mensagens": self._publicas(andar, msgs), "mais": len(msgs) == limite, "v": v}
                 if canal.startswith("dm:"):   # o aviso fixo e as datas em que a administração abriu (E.3, D10 a)
                     r["aviso"] = AVISO_DM.format(empresa=config_publica(andar)["empresa"])
                     r["acessos"] = eq.acessos_da_dm(usuario, canal)
@@ -4452,14 +4464,16 @@ class Pagina(BaseHTTPRequestHandler):
 
     def _get_anexo(self, andar, eq, usuario, q):
         """O download (E.5): em blocos a partir do disco, sempre attachment (a imagem sem ?baixar=1 vai inline, para o
-        <img>), com o tipo da lista, nosniff, sandbox e sem cache. No máximo DOWNLOADS_MAX por conta ao mesmo tempo."""
+        <img>), com o tipo da lista, nosniff, sandbox e sem cache. No máximo DOWNLOADS_MAX por conta ao mesmo tempo; a
+        prévia (sem ?baixar=1) conta à parte, até PREVIAS_MAX: um canal com várias imagens na tela não esbarra no teto."""
         id_anexo = self._inteiro(q.get("id", [""])[0], None, 1, 2 ** 62)
         if id_anexo is None:
             raise ValueError("id")
+        chave, teto = (usuario, DOWNLOADS_MAX) if q.get("baixar") == ["1"] else (("previa", usuario), PREVIAS_MAX)
         with self.server.trava_anexos:
-            if self.server.downloads[usuario] >= DOWNLOADS_MAX:
+            if self.server.downloads[chave] >= teto:
                 return self._json(*erro(429, "limite", "Downloads demais ao mesmo tempo; espere um terminar."))
-            self.server.downloads[usuario] += 1
+            self.server.downloads[chave] += 1
         try:
             info = eq.arquivo_do_anexo(usuario, id_anexo, auditoria=q.get("auditoria") == ["1"])
             if info["auditoria"]:
@@ -4491,7 +4505,7 @@ class Pagina(BaseHTTPRequestHandler):
                     self.close_connection = True
         finally:
             with self.server.trava_anexos:
-                self.server.downloads[usuario] -= 1
+                self.server.downloads[chave] -= 1
 
     def _post_equipe(self, rota):
         """POST das conversas da equipe (a guarda já passou): Origin igual à BASE, sessão e JSON exato de até 2 KB. O
@@ -4516,6 +4530,8 @@ class Pagina(BaseHTTPRequestHandler):
         dados = self._json_pedido(2048)
         if dados is False:
             return self._json(*erro(415, "formato", "Envie JSON (application/json)."))
+        if rota in ("/api/canal/enviar", "/api/canal/reagir", "/api/mural/fixar") and self._so_le(andar, usuario):
+            return self._so_le_recusa(rota)
         formatos = {"/api/canal/enviar": {"canal", "texto"}, "/api/canal/apagar": {"id"}, "/api/canal/lida": {"canal", "ate"},
                     "/api/canal/reagir": {"id", "emoji", "ligar"}, "/api/dm/abrir": {"com"}, "/api/dm/entendi": set(),
                     "/api/mural/fixar": {"canal", "texto"}, "/api/mural/tirar": {"id"}, "/api/status": {"status", "texto"},
@@ -4617,6 +4633,8 @@ class Pagina(BaseHTTPRequestHandler):
         eq = self._equipe(andar)
         if eq is None:
             return self._desligado()
+        if self._so_le(andar, usuario):
+            return self._so_le_recusa("/api/anexo")
         canal = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("canal", [""])[0]
         if not self._canal_ok(andar, canal):
             return self._json(*erro(400, "pedido", "Pedido inválido."))

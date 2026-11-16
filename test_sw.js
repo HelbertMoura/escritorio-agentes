@@ -79,5 +79,14 @@ function carregar(resposta, abas = []) {
     await carregar({}, [aba]).tocar({ agente: "a1", andar: null, canal: null });
     assert.deepEqual(JSON.parse(JSON.stringify(recebidas)), [{ tipo: "agente", agente: "a1" }], "o aviso de agente continua o de sempre");
   }
+  // instalação de uma empresa só: o aviso pessoal vem do principal e o toque também leva ao canal
+  {
+    const n = await carregar({ aviso: { tipo: "dm", titulo: "Ana", corpo: "", andar: "principal", canal: "dm:4" } }).push();
+    assert.equal(n.data.andar, "principal");
+    assert.equal(await carregar({}).tocar({ agente: null, andar: "principal" }), "https://escritorio.exemplo/#andar=principal");
+    const recebidas = [], aba = { url: "https://escritorio.exemplo/", postMessage: m => recebidas.push(m), focus() {} };
+    await carregar({}, [aba]).tocar({ agente: null, andar: "principal", canal: "dm:4" });
+    assert.deepEqual(JSON.parse(JSON.stringify(recebidas)), [{ tipo: "aviso", andar: "principal", canal: "dm:4" }]);
+  }
   console.log("test_sw.js ok");
 })().catch(e => { console.error(e); process.exit(1); });

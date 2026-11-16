@@ -218,7 +218,7 @@ On the map, each signed-in person shows up with their own name and character, an
 - **The company's administrators can read DMs**, through an audit screen. Every read is logged (without the text), and both people in the conversation see the date. Every DM says so at the top, and people confirm it before their first one.
 - **Phone alerts show the start of the message** (up to 60 characters) for mentions and DMs, and it may show on the lock screen. It can be turned off in the profile or in the phone's notification settings.
 - **Attachments up to 25 MB, ZIP included** (5 GB per company). The type comes from the content, photos lose their location (GPS), and ZIP files are checked without ever being opened on the server. There is no antivirus.
-- **The building admin reads the general chat, the rooms, the board and the attachments of every company** (not DMs). Moderating (deleting someone else's message, taking a notice off the board) and changing the retention belong only to whoever runs each company; in the lobby, to the building admin.
+- **The building admin reads the general chat, the rooms, the board and the attachments of every company, without writing in them** (not DMs). Moderating (deleting someone else's message, taking a notice off the board) and changing the retention belong only to whoever runs each company; in the lobby, to the building admin.
 - The database is not encrypted: whoever runs the server can read everything.
 
 With no accounts, the chat stays in memory only, as before. Details in [where each piece of data goes](./docs/visitas-privadas-plano.md#conversas-da-equipe-no-disco-16) (in Portuguese).
