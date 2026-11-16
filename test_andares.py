@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import stat
+import sys
 import tempfile
 import threading
 import time
@@ -12,8 +13,19 @@ import urllib.parse
 import urllib.request
 
 PASTA = tempfile.mkdtemp(prefix="escritorio-teste-andares-")
-# no fim do processo, e não do módulo: rodando a suíte inteira, ela pode ser o ESCRITORIO_DADOS dos módulos seguintes
-atexit.register(shutil.rmtree, PASTA, ignore_errors=True)
+
+
+@atexit.register
+def _apagar_pasta():
+    """No fim do processo, e não do módulo: rodando a suíte inteira, ela é o ESCRITORIO_DADOS dos módulos seguintes. No
+    Windows, uma thread de fundo lendo o marca.json ou o times.json nessa hora segura o arquivo: tenta de novo."""
+    for _ in range(10):
+        shutil.rmtree(PASTA, ignore_errors=True)
+        if not os.path.exists(PASTA):
+            return
+        time.sleep(0.2)
+
+
 os.environ.setdefault("ESCRITORIO_DADOS", PASTA)   # rodando junto com o test_escritorio, vale a pasta dele
 if "ESCRITORIO_TIMES" not in os.environ:
     os.environ["ESCRITORIO_TIMES"] = os.path.join(PASTA, "times.json")
@@ -116,6 +128,37 @@ class Registro(unittest.TestCase):
         for ruim in ("../x", "AAAAAAAA", "aaaaaaa", "aaaaaaaa/..", None):
             with self.assertRaises(ValueError):
                 andares.pasta(self.dados, ruim)
+
+
+class Subcomando(unittest.TestCase):
+    """`escritorio.py saguao [--desfazer]`: só o despacho para o migracao_saguao.principal (a migração é da Trinity)."""
+
+    def test_despacha_os_argumentos_e_devolve_o_codigo(self):
+        chamadas = []
+        falso = type(sys)("migracao_saguao")
+        falso.principal = lambda argv, dados, times, org: chamadas.append((argv, dados, times, org)) or 7
+        antes = sys.modules.get("migracao_saguao")
+        sys.modules["migracao_saguao"] = falso
+        self.addCleanup(lambda: sys.modules.pop("migracao_saguao") if antes is None else
+                        sys.modules.__setitem__("migracao_saguao", antes))
+        self.assertEqual(e.despachar_saguao(["--desfazer"]), 7)
+        self.assertEqual(chamadas, [(["--desfazer"], e.DADOS, e.TIMES, e.ORG)])
+
+    def test_migracao_pela_metade_nao_deixa_subir(self):
+        """Uma queda no meio da migração (ou do desfazer) não pode subir o serviço no modo clássico sem o oauth.json na
+        raiz: a retomada é pelo subcomando. O nome da função de estado é PROVISÓRIO até a Trinity exportar a dela."""
+        falso = type(sys)("migracao_saguao")
+        for estado, recusa in (("em_andamento", True), ("desfazendo", True), ("concluida", False), (None, False)):
+            falso.estado = lambda dados, x=estado: x
+            motivo = e.motivo_da_migracao(falso, "/dados")
+            self.assertEqual(motivo is not None, recusa, estado)
+            if recusa:
+                self.assertIn("escritorio.py saguao", motivo)
+
+    def test_a_entrada_do_script_chama_o_despacho(self):
+        fonte = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "escritorio.py"), encoding="utf-8").read()
+        self.assertIn('sys.argv[1:2] == ["saguao"]', fonte)
+        self.assertIn("sys.exit(despachar_saguao(sys.argv[2:]))", fonte)
 
 
 class OutroWorkspace(unittest.TestCase):

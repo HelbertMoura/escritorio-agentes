@@ -4296,39 +4296,56 @@ def main():
     # o docker stop (e o systemctl stop) mandam SIGTERM; como PID 1 num container, o Python o ignoraria até o SIGKILL.
     # Toda gravação é atômica, então sair na hora não deixa arquivo pela metade
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
-    if not re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", ORG):
-        sys.exit("defina AGENTES_ORG com o id da sua organização no agentes.chat "
-                 "(o que vem depois de /org/ no endereço do app)")
     try:  # antes de ler o agentes.chat e de abrir a porta: usuarios.json ilegível não sobe nada
         contas = Acesso(DADOS)
         registro = Andares(DADOS, ORG)   # andares.json ilegível também não: um andar não some calado
     except (UsuariosIlegiveis, AndaresIlegiveis) as x:
         sys.exit(str(x))
-    cred = Credenciais(ARQ_TOKEN)
-    leitor = Leitor(cred)
-    clima = Clima(lambda: clima_vigente()[0])   # nasce sempre: a cidade pode chegar pela tela depois
-    # jornal da semana: só ids e números, gravado de forma atômica; o clima do meio-dia sai do mesmo Clima da página
-    leitor.jornal = Jornal(log, FUSO, lambda dados: gravar(ARQ_JORNAL, dados), ler_jornal(),
-                           lambda: (clima.foto() or {}).get("tipo"), lambda: config_publica()["expediente"])
-    leitor.avisos = criar_avisos()   # aviso no celular: a thread dele fala com os serviços de push, nunca com o agentes.chat
-    if leitor.avisos:   # o "Não perturbe" de cada conta e o expediente do escritório (o do Personalizar, lido na hora)
-        leitor.avisos.preferencia, leitor.avisos.expediente = contas.avisos_de, lambda: config_publica()["expediente"]
-        leitor.avisos.start()
-    leitor.start()
+    # no modo saguão (o v2 da migração) o térreo não tem conexão: o AGENTES_ORG só é obrigatório no modo clássico
+    if not registro.saguao and not re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", ORG):
+        sys.exit("defina AGENTES_ORG com o id da sua organização no agentes.chat "
+                 "(o que vem depois de /org/ no endereço do app)")
+    import migracao_saguao   # a trava do serviço (dados/servico.trava): a migração não roda com o serviço de pé
+    try:
+        trava = migracao_saguao.travar(DADOS)   # fica presa pela vida do processo
+    except migracao_saguao.ServicoRodando as x:
+        sys.exit(str(x))
+    motivo = motivo_da_migracao(migracao_saguao, DADOS)
+    if motivo:
+        sys.exit(motivo)
     srv = Servidor((BIND, PORTA), Pagina)  # 127.0.0.1: a Tailscale (serve) publica só na rede privada
-    srv.cred, srv.leitor, srv.acesso = cred, leitor, contas
-    srv.conversas = Conversas(leitor)
-    srv.respostas = Respostas(leitor, srv.conversas)
-    srv.jornal, srv.avisos = leitor.jornal, leitor.avisos
-    # vida social: na memória, sem rede; só o placar semanal vai para o disco, pelo gravar() atômico
-    srv.social = Social(leitor, config_publica, log, FUSO, guardar=lambda dados: gravar(ARQ_PLACAR, dados), placar=ler_placar(),
-                        contar_jornal=srv.jornal.contar)
-    srv.social.start()
+    srv.trava_servico, srv.acesso, srv.registro_andares = trava, contas, registro
+    clima = Clima(lambda: clima_vigente()[0])   # nasce sempre: a cidade pode chegar pela tela depois
+    # aviso no celular: um só no prédio (a fila e a VAPID), e a thread dele fala com os serviços de push, nunca com o
+    # agentes.chat. Cada andar põe os pedidos dele; o aviso vai só para quem tem papel no andar, conferido no envio
+    avisos = srv.avisos = criar_avisos()
+    if avisos:   # o "Não perturbe" de cada conta e o expediente do andar (o do Personalizar, lido na hora)
+        avisos.preferencia, avisos.pode = contas.avisos_de, lambda conta, andar: recebe_avisos(srv, conta, andar)
+        avisos.expediente = lambda andar=ANDAR_PRINCIPAL: config_publica(
+            srv.andares.get(andar) or AndarPrincipal(srv))["expediente"]
+        avisos.start()
+    srv.cred = srv.leitor = srv.conversas = srv.respostas = srv.jornal = srv.social = None   # o saguão não tem nada disso
+    if not registro.saguao:
+        cred = Credenciais(ARQ_TOKEN)
+        leitor = Leitor(cred)
+        # jornal da semana: só ids e números, gravado de forma atômica; o clima do meio-dia sai do mesmo Clima da página
+        leitor.jornal = Jornal(log, FUSO, lambda dados: gravar(ARQ_JORNAL, dados), ler_jornal(),
+                               lambda: (clima.foto() or {}).get("tipo"), lambda: config_publica()["expediente"])
+        leitor.avisos = avisos.do_andar(ANDAR_PRINCIPAL) if avisos else None
+        leitor.start()
+        srv.cred, srv.leitor = cred, leitor
+        srv.conversas = Conversas(leitor)
+        srv.respostas = Respostas(leitor, srv.conversas)
+        srv.jornal = leitor.jornal
+        # vida social: na memória, sem rede; só o placar semanal vai para o disco, pelo gravar() atômico
+        srv.social = Social(leitor, config_publica, log, FUSO, guardar=lambda dados: gravar(ARQ_PLACAR, dados),
+                            placar=ler_placar(), contar_jornal=srv.jornal.contar)
+        srv.social.start()
+        srv.visitantes = Visitantes()
     srv.planta = Planta(ARQ_PLANTA, log, lambda dados: gravar(ARQ_PLANTA, dados))   # planta ilegível sobe vazia, com 1 log
-    srv.visitantes = Visitantes()
     # andares extras: cada um com o seu Leitor, começando escalonados dentro do intervalo (o principal sai na hora)
-    srv.registro_andares = registro
-    srv.andares = {reg["id"]: Andar(reg, DADOS, atraso=INTERVALO * (i + 1) / (len(registro.lista) + 1), clima=clima)
+    srv.andares = {reg["id"]: Andar(reg, DADOS, atraso=INTERVALO * (i + 1) / (len(registro.lista) + 1), clima=clima,
+                                    avisos=avisos)
                    for i, reg in enumerate(registro.lista)}
     for andar in srv.andares.values():
         andar.iniciar()
@@ -4341,12 +4358,38 @@ def main():
     srv.clima_mundo.start()
     # agente na sala de visitas: a ponte só chama o agentes.chat por sala criada com um anfitrião, e o recepcionista
     # (com o canal) pode chegar pela tela depois
-    srv.ponte_visitas = PonteVisitas(srv.salas_visitas, leitor, lambda: recepcao_da_ponte(cred))
+    # agente na sala de visitas pelo andar que atende a recepção (D11 a), resolvido a cada passo: andar removido ou sem
+    # conexão deixa a ponte desligada, e as mensagens esperam na fila com teto
+    def recepcao():
+        andar = andar_da_recepcao(srv)
+        if andar is None:
+            return set(), "", "desligada"
+        return recepcao_da_ponte(andar.cred, andar.times if andar.id != ANDAR_PRINCIPAL else None)
+    srv.ponte_visitas = PonteVisitas(srv.salas_visitas, None, recepcao,
+                                     atendente=lambda: getattr(andar_da_recepcao(srv), "leitor", None))
     srv.ponte_visitas.start()
     if BIND == "0.0.0.0":
         log(evento="inicio", aviso="use só em container, atrás de um proxy HTTPS")
-    log(evento="inicio", versao=VERSAO, onde=f"{BIND}:{PORTA}", base=BASE)
+    log(evento="inicio", versao=VERSAO, onde=f"{BIND}:{PORTA}", base=BASE, terreo="saguao" if registro.saguao else "classico")
     srv.serve_forever()
+
+
+def motivo_da_migracao(mod, dados):
+    """Por que o serviço não sobe por causa da migração para o saguão (ou None): o diário (dados/migracao-saguao.json)
+    ficou em andamento ou desfazendo, numa queda no meio. Subir assim abriria o modo clássico sem o oauth.json na raiz e
+    travaria a retomada. PROVISÓRIO: o nome e o retorno da função de estado saem do migracao_saguao.py (Trinity)."""
+    estado = mod.estado(dados)
+    if estado in ("em_andamento", "desfazendo"):
+        return (f"a migração para o saguão ficou pela metade ({estado}): rode de novo `python3 -I escritorio.py saguao`"
+                " (ou `saguao --desfazer`) com o serviço parado antes de subir")
+    return None
+
+
+def despachar_saguao(argv):
+    """Subcomando `saguao [--desfazer]`: a migração para o saguão (migracao_saguao.py), com o serviço parado. Explícito,
+    nunca automático. Devolve o código de saída dela (0 deu certo, 1 recusada, 2 uso)."""
+    import migracao_saguao
+    return migracao_saguao.principal(argv, DADOS, TIMES, ORG)
 
 
 def mostrar_codigo():
@@ -4372,5 +4415,7 @@ def mostrar_codigo():
 if __name__ == "__main__":
     if sys.argv[1:] == ["codigo"]:
         mostrar_codigo()
+    elif sys.argv[1:2] == ["saguao"]:
+        sys.exit(despachar_saguao(sys.argv[2:]))
     else:
         main()

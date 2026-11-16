@@ -123,6 +123,9 @@ Base: andares @ 9080bab. Vale o plano 2026-11-15-escritorio-da-equipe.md (ONDA 1
   `argv` = os argumentos depois de `saguao`; o código de saída é o que ela devolve (0 deu certo, 1 recusada, 2 uso).
 - Trava do serviço: o `main()` chama `migracao_saguao.travar(DADOS)` depois de ler contas e andares e antes de abrir a
   porta, e guarda o retorno pela vida do processo; `ServicoRodando` encerra a subida com a mensagem.
+- Diário pela metade: logo depois da trava, o `main()` recusa subir se o diário estiver `em_andamento` ou `desfazendo`
+  (`motivo_da_migracao`). PROVISÓRIO: chama `migracao_saguao.estado(dados)`, que devolve o estado em texto; o nome e o
+  retorno trocam quando a Trinity exportar a função dela.
 - O v2 gravado: `{"v": 2, "terreo": "saguao", "andares": [...]}`, a Dev Maniac's primeiro, com `org` = AGENTES_ORG.
 - No andar: `oauth.json`, `equipe.json`, `planta.json`, `placar.json`, `jornal.json` (movidos) e `times.json`,
   `marca.json`, `logo.img` (copiados, com o nome da raiz). O escritório lê a marca, o logo e os times do andar com esses
