@@ -55,6 +55,7 @@ async function iniciar() {
   await buscar();
   ligarAoVivo();
   irAoAgentePedido();
+  irReuniaoPedida();
   ligarTV();
   if (!souMembro() && !Andar.perfil(config).noSaguao) Assistente.talvez(config, () => estado);   // nome de exemplo ou sem conexão: o assistente (uma vez por sessão, e na volta do OAuth)
   setInterval(buscar, 10000);
@@ -72,6 +73,8 @@ function aplicarConfig() {
   aplicarMarca();
   mostrarElevador();
   aplicarPapel();
+  Reunioes.configurar(config);   // o menu e os links de reunião do andar (reunioes.js)
+  if (location.hash === "#reunioes" && telaAtual !== "reunioes") rota();   // abriu direto na agenda: ela só existe depois do config
 }
 
 // O papel da conta NO ANDAR ("admin" | "membro" | "pessoa", a pessoa do prédio no saguão) vem no /api/config; sem o campo
@@ -314,6 +317,7 @@ function desenharCena(t) {
   for (const v of visitas) cena.push({ chave: v.chave ?? v.y + 0.5, desenha: () => Avatar.boneco(ctx, v, t, escala) });
   cena.sort((a, b) => a.chave - b.chave).forEach(c => c.desenha());
   desenharPortas(t);
+  for (const s of [...predio.salas, ...predio.baixo]) if (Vida.emReuniao(s.chave)) Mapa.desenharPlacaReuniao(ctx, s);   // a placa "em reunião" na porta (mapa.js)
   Clima.desenhar(ctx, predio, dtQuadro, t, Som.ligado ? Som : null);
   desenharLuzes(dt0(t), ceu);
   Efeitos.luzesNoite(ctx, ceu);
@@ -328,8 +332,9 @@ function desenharCena(t) {
   for (const b of visiveis) Efeitos.emote(ctx, b, t, ceu.escuro);
   const faixa = Efeitos.faixaVencedor(ctx, mundo, t); if (faixa) ocupadas.push(faixa);   // os balões desviam da faixa do vencedor
   const faixaEntrega = Efeitos.entregaAr(ctx, mundo.entrega, t); if (faixaEntrega) ocupadas.push(faixaEntrega);   // e da faixa do pedido atendido
-  for (const b of visiveis.filter(b => b.fala).sort((a, b) => b.y - a.y || a.x - b.x)) desenharBalao(b, ocupadas);
-  for (const v of visitas) if (v.fala) desenharBalao(v, ocupadas);   // o aceno e o "Toc, toc!" das pessoas (vida.js)
+  const baloes = !(window.Apresentacao && Apresentacao.ligado());   // na apresentação, sem balão de fala
+  if (baloes) for (const b of visiveis.filter(b => b.fala).sort((a, b) => b.y - a.y || a.x - b.x)) desenharBalao(b, ocupadas);
+  if (baloes) for (const v of visitas) if (v.fala) desenharBalao(v, ocupadas);   // o aceno e o "Toc, toc!" das pessoas (vida.js)
   Brincar.desenhar(ctx);   // realce, reações dos objetos e a festa do Konami
 }
 
@@ -904,7 +909,7 @@ function montarSalas() {
     const ic = elem("span", "sala-ic", "#"); ic.setAttribute("aria-hidden", "true"); ic.style.color = clarear(corDaSala(s), 0.25);
     b.append(ic, elem("span", "sala-nome", s.nome), elem("span", "sala-n"));
     b.addEventListener("click", () => { irParaEscritorio(); fecharFicha(); focarSala(s); if (innerWidth <= 760) $("palco-cartao").scrollIntoView({ block: "start", behavior: menosMovimento.matches ? "auto" : "smooth" }); });
-    li.append(b); return li;
+    li.append(b, Reunioes.entrar(s.chave, s.nome)); return li;   // o "Entrar na reunião" da sala, ao lado (reunioes.js)
   }));
   atualizarSalas();
 }
@@ -1873,6 +1878,8 @@ $("abas-aprov").addEventListener("keydown", ev => {   // abas: setas, Home e End
 });
 $("ver-historico").addEventListener("click", () => escolherAba("resolvidos", true));
 $("busca-pedidos").addEventListener("input", () => { if (estado) desenharPainel(); });
+// modo apresentação (apresentacao.js) ligado ou desligado: a lista de agentes troca os nomes na hora, sem esperar a leitura
+addEventListener("apresentacao", () => { if (estado) desenharPainel(); });
 
 let eventosTodos = false;   // "Ver tudo": 5 linhas fechado, 15 aberto
 function desenharEventos() {
@@ -2253,12 +2260,19 @@ $("status-salvar").addEventListener("click", async () => {
 $("status-txt").addEventListener("keydown", ev => { if (ev.key === "Enter") { ev.preventDefault(); $("status-salvar").click(); } });
 $("equipe-mural").addEventListener("click", () => { const m = muralDaMinhaSala(); abrirMural(m.canal, m.nome); });
 
-// aceno recebido (vida.js): uma faixa curta, lida pelo leitor de tela (role=status)
+// aceno recebido e convocação para a reunião geral (vida.js): uma faixa curta, lida pelo leitor de tela (role=status)
 let acenoTimer = 0;
+function faixaAviso(texto) {
+  const el = $("aceno-aviso");
+  el.textContent = texto; el.hidden = false; clearTimeout(acenoTimer); acenoTimer = setTimeout(() => { el.hidden = true; }, 6000);
+}
 addEventListener("aceno", ev => {
-  const d = ev.detail || {}, el = $("aceno-aviso");
-  el.textContent = d.tipo === "porta" ? `${d.nome} bateu na porta` : `${d.nome} acenou para você`;
-  el.hidden = false; clearTimeout(acenoTimer); acenoTimer = setTimeout(() => { el.hidden = true; }, 6000);
+  const d = ev.detail || {};
+  faixaAviso(d.tipo === "porta" ? `${d.nome} bateu na porta` : `${d.nome} acenou para você`);
+});
+addEventListener("convocacao", ev => {
+  const d = ev.detail || {};
+  faixaAviso(`${d.nome} chamou a equipe para ${d.sala ? `a ${d.sala}` : "uma reunião"}`);
 });
 
 // o mural (GET /api/mural; fixar e tirar): só texto (textContent); relê quando o mural_v do canal no /api/ao-vivo muda
@@ -2545,15 +2559,17 @@ let telaAtual = "";
 function rota() {
   if (gavetaAberta()) { fecharGaveta(); $("principal").focus({ preventScroll: true }); }   // item do menu na gaveta: o foco vai ao conteúdo
   const r = (location.hash || "#escritorio").slice(1);
-  const TELAS = ["escritorio", "conversas", "aprovacoes", "jornal", "personalizar", "novidades", "ajuda"];
+  const TELAS = ["escritorio", "conversas", "aprovacoes", "jornal", "reunioes", "personalizar", "novidades", "ajuda"];
   // na demonstração o Personalizar não existe: ele grava a marca no servidor de verdade
-  const valida = TELAS.includes(r) && !(r === "personalizar" && Brincar.demo) && Andar.telaLiberada(r, config) ? r : "escritorio";
+  // reuniões só com config.equipe.reunioes (fora do saguão, com o store ligado)
+  const valida = TELAS.includes(r) && !(r === "personalizar" && Brincar.demo) && !(r === "reunioes" && !Reunioes.ligado(config)) && Andar.telaLiberada(r, config) ? r : "escritorio";
   for (const v of TELAS) $(`v-${v}`).hidden = v !== valida;
   // outra tela começa no topo (sem isso, voltar do Personalizar ao Escritório deixava o mapa fora de vista); o pulo para
   // uma âncora da mesma tela (#principal, #aviso-greve) não troca de tela e fica como está
   if (telaAtual && valida !== telaAtual) scrollTo({ top: 0, behavior: "instant" });
   telaAtual = valida;
-  if (valida === "personalizar" && window.Personalizar) { Personalizar.abrir(config); if (window.Ajustes) Ajustes.abrir(config); }
+  if (valida === "personalizar" && window.Personalizar) { Personalizar.abrir(config); if (window.Ajustes) Ajustes.abrir(config); Reunioes.ajustes(config); }
+  if (valida === "reunioes") Reunioes.abrir();
   if (valida === "conversas") paginaConversas();
   if (valida === "jornal") Jornal.abrir();
   if (valida === "novidades") Novidades.abrir(); else Novidades.fechar();
@@ -2617,7 +2633,22 @@ function irAoAgentePedido() {
   u.searchParams.delete("agente"); history.replaceState(history.state, "", u);   // recarregar não volta a abrir
   irAoAgente(id);
 }
+// o toque no aviso de reunião (sw.js): troca de andar e abre a agenda com o foco nessa reunião. Sem a aba aberta, o sw.js
+// abre /?reuniao=<id>#andar=<id>
+async function abrirReuniao(andar, id) {
+  if (andar !== Andar.atual) await trocarAndar(andar);
+  if (andar !== Andar.atual) return;   // a troca falhou: fica onde está
+  Reunioes.destacar(id);
+  if (location.hash === "#reunioes") rota(); else location.hash = "#reunioes";
+}
+function irReuniaoPedida() {
+  const u = new URL(location.href), id = Number(u.searchParams.get("reuniao"));
+  if (!u.searchParams.has("reuniao")) return;
+  u.searchParams.delete("reuniao"); history.replaceState(history.state, "", u);   // recarregar não volta a abrir
+  if (Number.isSafeInteger(id) && id > 0) abrirReuniao(Andar.atual, id);
+}
 Avisar.iniciar({ demo: () => Brincar.demo });
+Reunioes.iniciar({ salas: () => (predio ? [...predio.salas, ...predio.baixo] : []) });
 Timelapse.iniciar({
   fotografar,
   podeGravar: () => !!predio && !naSimulacao() && !Brincar.demo && !Expediente.fora(Ceu.agora().h),
@@ -2655,7 +2686,9 @@ if ("serviceWorker" in navigator) {
   // toque no aviso com esta aba aberta: o sw.js foca a aba e manda ir ao agente, ou (aviso pessoal: menção, DM, aceno,
   // porta) o andar e o canal: troca para o andar e abre o canal no painel (chat_sala.js)
   navigator.serviceWorker.addEventListener("message", ev => {
-    if (ev.data && ev.data.tipo === "agente" && typeof ev.data.agente === "string") irAoAgente(ev.data.agente);
+    const d = ev.data;
+    if (d && d.tipo === "reuniao" && Andar.valido(d.andar) && Number.isSafeInteger(d.reuniao) && d.reuniao > 0) abrirReuniao(d.andar, d.reuniao);
+    else if (ev.data && ev.data.tipo === "agente" && typeof ev.data.agente === "string") irAoAgente(ev.data.agente);
     else abrirAviso(Andar.doAviso(ev.data));
   });
 }

@@ -43,7 +43,7 @@ const espera = () => new Promise(r => setImmediate(r));
 const achar = (raiz, classe) => todos(raiz).filter(x => x.classes.has(classe));
 const porTexto = (raiz, texto) => todos(raiz).find(x => x.tagName === "BUTTON" && x.textContent.startsWith(texto));
 
-function carregar({ config, respostas = {}, sala = null }) {
+function carregar({ config, respostas = {}, sala = null, reunioes = null }) {
   foco = null;
   const ids = {}, pedidos = [], timers = [];
   for (const id of ["chat-sala", "chat-sala-abrir", "chat-sala-painel", "chat-sala-n"]) ids[id] = elemento(id === "chat-sala-painel" ? "section" : "div");
@@ -67,7 +67,7 @@ function carregar({ config, respostas = {}, sala = null }) {
     return { status: r.status, ok: r.status < 300, json: async () => corpo };
   };
   const ouvintes = {};
-  const window = { addEventListener: (t, f) => (ouvintes[t] ||= []).push(f) };
+  const window = { addEventListener: (t, f) => (ouvintes[t] ||= []).push(f), Reunioes: reunioes || undefined };
   const contexto = { window, document, fetch, location: { hash: config.andar && config.andar !== "principal" ? `#andar=${config.andar}` : "", href: "" },
     localStorage: null, config, estado: { usuario: "joao" }, MutationObserver: class { observe() {} }, setTimeout: f => timers.push(f), clearTimeout() {},
     URLSearchParams, Intl, Date, JSON };
@@ -357,8 +357,8 @@ const abas = p => achar(p, "chat-sala-aba").map(b => b.dataset.id);
       assert.equal(achar(painel, "chat-sala-entendi")[0].hidden, false);
       assert.equal(pedidos.some(p => p.rota === "api/dm/abrir"), false);
     }
-    // saguão (sem DM) e store desligado: abrirDM não faz nada
-    for (const config of [SAGUAO, { andar: "principal", equipe: null }]) {
+    // saguão (sem DM), store desligado e quem só lê (o admin do prédio no andar de uma empresa): abrirDM não faz nada
+    for (const config of [SAGUAO, { andar: "principal", equipe: null }, { ...ANDAR, papel: "admin", admin_predio: true, equipe: { ...EQUIPE, pode_escrever: false } }]) {
       const { pedidos, ChatSala } = carregar({ config, respostas: resp, sala: "cozinha" });
       assert.equal(await ChatSala.abrirDM("ana.lima"), false);
       assert.equal(pedidos.length, 0);
@@ -373,6 +373,41 @@ const abas = p => achar(p, "chat-sala-aba").map(b => b.dataset.id);
     ids["chat-sala-abrir"].click(); await espera();
     assert.equal(painel.hidden, false);
     assert.equal(pedidos.length, 0);
+  }
+  // reuniões (Onda 3): na sala, o "Entrar na reunião" no topo do painel (quem decide se aparece é o reunioes.js, pelo link
+  // da sala); fora da sala, sem sala. E o modo apresentação: o título, a lista, os itens e o campo com data-sensivel
+  {
+    let pintou = 0;
+    const reunioes = { entrar: (chave, nome) => { const a = elemento("a"); a.className = "sala-entrar"; a.dataset.sala = chave; a.dataset.nome = nome; return a; },
+      pintar: () => { pintou++; } };
+    const { ids, painel } = carregar({ config: ANDAR, respostas: RESP, sala: "cozinha", reunioes });
+    ids["chat-sala-abrir"].click(); await espera(); await espera();
+    const a = achar(painel, "sala-entrar");
+    assert.equal(a.length, 1, "um link só, no topo");
+    assert.equal(a[0].pai.tagName, "HEADER");
+    assert.equal(a[0].dataset.sala, "cozinha");
+    assert.equal(a[0].dataset.nome, "Cozinha");
+    const antes = pintou;
+    porTexto(achar(painel, "chat-sala-abas")[0], "Geral").click(); await espera();
+    assert.equal(a[0].dataset.sala, "", "no Geral, sem sala");
+    assert.ok(pintou > antes, "pede para repintar");
+    for (const classe of ["chat-sala-lista", "chat-sala-itens", "chat-sala-sugestoes"]) assert.ok("data-sensivel" in achar(painel, classe)[0].attrs, classe);
+    assert.ok("data-sensivel" in ids["chat-sala-titulo"].attrs || "data-sensivel" in todos(painel).find(x => x.id === "chat-sala-titulo").attrs);
+    assert.ok("data-sensivel" in todos(painel).find(x => x.id === "chat-sala-campo").attrs);
+  }
+  // sem o reunioes.js (a página da construção, servidor antigo): o painel segue sem o link
+  {
+    const { ids, painel } = carregar({ config: ANDAR, respostas: RESP, sala: "cozinha" });
+    ids["chat-sala-abrir"].click(); await espera(); await espera();
+    assert.equal(achar(painel, "sala-entrar").length, 0);
+  }
+  // o chat da sala de sempre (store desligado): nome e texto com data-sensivel
+  {
+    const { ids, evento } = carregar({ config: { andar: "principal", equipe: null }, respostas: RESP, sala: "cozinha" });
+    evento("aovivo", { mensagens: [{ seq: 2, usuario: "ana", nome: "Ana", texto: "oi", em: "2026-11-16T13:00:00Z" }] }); await espera();
+    const li = ids["chat-sala-lista"].children[0];
+    assert.ok("data-sensivel" in achar(li, "chat-sala-texto")[0].attrs);
+    assert.ok("data-sensivel" in todos(li).find(x => x.tagName === "STRONG").attrs);
   }
   console.log("test_painel_tela.js ok");
 })().catch(e => { console.error(e); process.exit(1); });
