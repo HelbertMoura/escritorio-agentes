@@ -6,10 +6,12 @@ D4 b, D5 b, D6 b, D8 a, D10 a, D12 a) e o contrato da Onda 1 (perfis, `?andar=`,
 
 ## 0. Regras comuns
 
-- **Store ligado**: as conversas persistentes existem só quando o prédio tem `dados/andares.json` (v1 ou v2). Sem ele
-  (a instalação de um andar só), tudo fica igual a hoje: `config.equipe` sai `null`, as rotas desta onda dão 404
+- **Store ligado** (ajuste do Maestro, 16/11): as conversas persistentes (histórico, DM, mural, status, anexo) ligam
+  quando o escritório tem **pelo menos 1 conta** no sistema de contas **ou** um `dados/andares.json` (v1 ou v2). Vale
+  também para quem roda com uma empresa só. Sem nenhum dos dois (a instalação antes do primeiro acesso, ou a prévia),
+  tudo fica igual a hoje: `config.equipe` sai `null`, as rotas desta onda dão 404
   `{"erro": "desligado", "mensagem": "As conversas da equipe estão desligadas neste escritório."}` e o `/api/ao-vivo` não
-  ganha nenhum campo novo.
+  ganha nenhum campo novo. Com o store ligado, as respostas antigas não mudam: só ganham campos novos.
 - Toda rota leva `?andar=` (ausente = o principal/saguão, como na Onda 1). Andar alheio ou inexistente: o 404 de andar.
 - **POST**: `Origin` igual à BASE (senão 403 `origem`), sessão, `Content-Type: application/json` (senão 415 `formato`),
   objeto JSON com as chaves exatas (senão 400 `pedido`). A exceção é o envio de anexo (corpo cru, item 8).
