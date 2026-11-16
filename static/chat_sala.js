@@ -93,7 +93,10 @@ const ChatSala = (() => {
     achou.n += achou.eu ? -1 : 1; achou.eu = !achou.eu;
     return r.filter(x => x.n > 0);
   }
-  const textoRetencao = dias => `As mensagens ficam guardadas por ${!Number.isInteger(dias) || dias >= 365 ? "1 ano" : `${dias} dias`}.`;
+  const prazo = dias => (!Number.isInteger(dias) || dias >= 365 ? "1 ano" : `${dias} dias`);
+  const textoRetencao = dias => `As mensagens ficam guardadas por ${prazo(dias)}.`;
+  // a sala do andar e o Geral do saguão ficam guardados e quem chega lê o que foi dito antes: o aviso fixo no canal
+  const avisoHistorico = (dias, predio) => `Esta conversa fica guardada por ${prazo(dias)} e todo o ${predio ? "prédio" : "andar"} pode ler.`;
   const avisoDM = empresa => `As mensagens diretas ${empresa ? `da ${empresa}` : "desta empresa"} podem ser lidas pela administração da empresa.`;
   const data = em => { const d = new Date(em); return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("pt-BR", { timeZone: "UTC" }); };
   function linhaAcessos(datas) {   // D10: as duas pontas veem quando a administração abriu a DM (as 3 últimas)
@@ -122,7 +125,7 @@ const ChatSala = (() => {
       auditoria: vista === "diretas" && !!e.auditoria };
   }
   const puro = { abas, controles, daSala, validar, limpar, novas, euDe, deMim, TEXTO_MAX, EMOJIS, canalDaSala, mesclar, maisAntiga, mencaoEmCurso,
-    sugestoes, completarMencao, partes, tamanho, conferirArquivo, ehImagem, alternarReacao, textoRetencao, avisoDM, linhaAcessos, contagem };
+    sugestoes, completarMencao, partes, tamanho, conferirArquivo, ehImagem, alternarReacao, textoRetencao, avisoHistorico, avisoDM, linhaAcessos, contagem };
 
   if (typeof document === "undefined") return puro;
 
@@ -308,6 +311,8 @@ const ChatSala = (() => {
       pessoas: "api/pessoas", dms: "api/dm", abrirDm: "api/dm/abrir", entendi: "api/dm/entendi",
       pares: "api/dm/auditoria/pares", registro: "api/dm/auditoria/registro", auditoria: (canal, antes) => `api/dm/auditoria?canal=${encodeURIComponent(canal)}&limite=50${antes ? `&antes=${antes}` : ""}`,
       anexo: canal => `api/anexo?canal=${encodeURIComponent(canal)}`,
+      // o cabeçalho que o back exige nas rotas da auditoria das DMs (o formato final vem do back; muda só aqui)
+      cabecalhos: rota => (rota.startsWith("api/dm/auditoria") ? { "X-Escritorio": "1" } : {}),
     };
     const svg = d => {   // ícone de traço, decorativo
       const NS = "http://www.w3.org/2000/svg", s = document.createElementNS(NS, "svg"), p = document.createElementNS(NS, "path");
@@ -342,7 +347,7 @@ const ChatSala = (() => {
     ui.termo = atributos(criar("input"), { enterkeyhint: "search" });
     Object.assign(ui.termo, { id: "chat-sala-termo", type: "search", maxLength: 100, autocomplete: "off", placeholder: "Buscar nas conversas…" });
     ui.busca.append(rotBusca, ui.termo);
-    ui.fixo = criar("p", "chat-sala-fixo"); ui.fixo.hidden = true;               // o aviso da DM e o lembrete da auditoria
+    ui.fixo = criar("p", "chat-sala-fixo"); ui.fixo.hidden = true;               // o aviso da DM, o do histórico da sala e o lembrete da auditoria
     ui.registro = criar("p", "chat-sala-registro"); ui.registro.hidden = true;   // D10: quando a administração abriu a DM
     ui.auditar = botao("chat-sala-auditar", null, null, "Auditoria das diretas"); ui.auditar.hidden = true;
     ui.antes = botao("chat-sala-antes", null, null, "Ver mensagens anteriores"); ui.antes.hidden = true;
@@ -402,7 +407,7 @@ const ChatSala = (() => {
       let r = null, d = null;
       try {
         r = await fetch(Andar.com(rota, s.andar), { method: metodo, cache: "no-store", credentials: "same-origin",
-          headers: corpo === undefined ? {} : { "Content-Type": "application/json" }, body: corpo === undefined ? undefined : JSON.stringify(corpo) });
+          headers: { ...ROTAS.cabecalhos(rota), ...(corpo === undefined ? {} : { "Content-Type": "application/json" }) }, body: corpo === undefined ? undefined : JSON.stringify(corpo) });
         d = await r.json().catch(() => null);
       } catch (e) { r = null; }
       if (r && r.status === 401) { location.href = "/entrar"; return { ok: false, d: null }; }
@@ -455,9 +460,11 @@ const ChatSala = (() => {
       ui.voltar.hidden = !(dm || vista === "busca" || vista.startsWith("auditoria"));
       ui.busca.hidden = vista !== "busca"; ui.buscar.setAttribute("aria-expanded", String(vista === "busca"));
       ui.form.hidden = !c.escrever; ui.anexar.hidden = !c.anexar; ui.auditar.hidden = !c.auditoria;
-      ui.fixo.textContent = dm ? (eq().aviso_dm || avisoDM(cfg() && cfg().empresa)) : "";
+      const predio = vista === "geral" && Andar.perfil(cfg()).noSaguao,
+        historico = vista.startsWith("sala:") || predio ? avisoHistorico(eq().retencao, predio) : "";
+      ui.fixo.textContent = dm ? (eq().aviso_dm || avisoDM(cfg() && cfg().empresa)) : historico;
       ui.fixo.hidden = !ui.fixo.textContent; ui.registro.hidden = true; ui.registro.textContent = "";
-      ui.retencao.textContent = mensagens ? textoRetencao(eq().retencao) : ""; ui.retencao.hidden = !mensagens;
+      ui.retencao.textContent = mensagens && !historico ? textoRetencao(eq().retencao) : ""; ui.retencao.hidden = !ui.retencao.textContent;
       ui.lista.hidden = !mensagens; ui.itens.hidden = mensagens;
       ui.lista.replaceChildren(); ui.itens.replaceChildren(); ui.antes.hidden = true; ui.vazio.hidden = true;
       ui.campo.placeholder = `Escreva para ${dm ? s.titulo || "a pessoa" : tituloDa(vista)}…`;

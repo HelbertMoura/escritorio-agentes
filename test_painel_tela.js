@@ -59,7 +59,8 @@ function carregar({ config, respostas = {}, sala = null }) {
     body: elemento("body"), get activeElement() { return foco; } };
   const fetch = async (url, op = {}) => {
     const [rota, q] = url.split("?");
-    pedidos.push({ rota, q: new URLSearchParams(q || ""), metodo: op.method || "GET", corpo: op.body ? JSON.parse(op.body) : null });
+    pedidos.push({ rota, q: new URLSearchParams(q || ""), metodo: op.method || "GET", corpo: op.body ? JSON.parse(op.body) : null,
+      cabecalhos: op.headers || {} });
     const r = respostas[`${op.method || "GET"} ${rota}`] || { status: 404, corpo: {} };
     const corpo = typeof r.corpo === "function" ? r.corpo(new URLSearchParams(q || "")) : r.corpo;
     return { status: r.status, ok: r.status < 300, json: async () => corpo };
@@ -115,8 +116,17 @@ const abas = p => achar(p, "chat-sala-aba").map(b => b.dataset.id);
     assert.equal(h.q.get("canal"), "sala:cozinha");
     assert.equal(h.q.get("andar"), ID);
     assert.equal(achar(painel, "chat-sala-msg").length, 1);
-    assert.equal(achar(painel, "chat-sala-retencao")[0].textContent, "As mensagens ficam guardadas por 1 ano.");
+    // a sala fica guardada e o andar todo lê, inclusive quem chega depois: o aviso fixo no lugar da linha da retenção
+    assert.equal(achar(painel, "chat-sala-fixo")[0].textContent, "Esta conversa fica guardada por 1 ano e todo o andar pode ler.");
+    assert.ok(visivel(achar(painel, "chat-sala-fixo")[0]));
+    assert.equal(achar(painel, "chat-sala-retencao")[0].hidden, true);
     assert.ok(visivel(achar(painel, "chat-sala-anexar")[0]));
+    // o Geral do andar: só a linha da retenção
+    porTexto(achar(painel, "chat-sala-abas")[0], "Geral").click(); await espera();
+    assert.equal(achar(painel, "chat-sala-fixo")[0].hidden, true);
+    assert.equal(achar(painel, "chat-sala-retencao")[0].textContent, "As mensagens ficam guardadas por 1 ano.");
+    assert.equal(achar(painel, "chat-sala-retencao")[0].hidden, false);
+    porTexto(achar(painel, "chat-sala-abas")[0], "Cozinha").click(); await espera();
     // Escape fecha e devolve o foco à pílula
     disparar(achar(painel, "chat-sala-lista")[0], "keydown", { key: "Escape" });
     assert.equal(painel.hidden, true);
@@ -133,6 +143,8 @@ const abas = p => achar(p, "chat-sala-aba").map(b => b.dataset.id);
     assert.equal(achar(painel, "chat-sala-titulo").length + todos(painel).filter(x => x.id === "chat-sala-titulo").length > 0, true);
     assert.equal(todos(painel).find(x => x.id === "chat-sala-titulo").textContent, "Geral do prédio");
     assert.equal(pedidos.find(p => p.rota === "api/canal/historico").q.has("andar"), false, "o saguão é o principal");
+    assert.equal(achar(painel, "chat-sala-fixo")[0].textContent, "Esta conversa fica guardada por 1 ano e todo o prédio pode ler.");
+    assert.equal(achar(painel, "chat-sala-fixo")[0].hidden, false);
   }
   // DM: o "Entendi" antes da primeira; depois, o aviso fixo da empresa e a linha do registro de acesso (D10)
   {
@@ -180,6 +192,11 @@ const abas = p => achar(p, "chat-sala-aba").map(b => b.dataset.id);
     assert.equal(achar(painel, "chat-sala-msg").length, 1);
     assert.equal(achar(painel, "chat-sala-acoes").length + achar(painel, "chat-sala-reagir").length, 0, "na auditoria só se lê");
     assert.match(achar(painel, "chat-sala-fixo")[0].textContent, /fica registrado/);
+    // o cabeçalho próprio só nas rotas da auditoria
+    const aud = pedidos.filter(p => p.rota.startsWith("api/dm/auditoria"));
+    assert.deepEqual([...new Set(aud.map(p => p.rota))].sort(), ["api/dm/auditoria", "api/dm/auditoria/pares", "api/dm/auditoria/registro"]);
+    for (const p of aud) assert.equal(p.cabecalhos["X-Escritorio"], "1", p.rota);
+    for (const p of pedidos.filter(p => !p.rota.startsWith("api/dm/auditoria"))) assert.equal(p.cabecalhos["X-Escritorio"], undefined, p.rota);
   }
   // menção: "@an" sugere só gente do andar; seta e Enter completam
   {
@@ -232,6 +249,7 @@ const abas = p => achar(p, "chat-sala-aba").map(b => b.dataset.id);
       assert.equal(await ChatSala.abrirCanal("sala:reuniao"), true); await espera();
       assert.equal(painel.hidden, false);
       assert.equal(pedidos.filter(p => p.rota === "api/canal/historico").at(-1).q.get("canal"), "sala:reuniao");
+      assert.equal(achar(painel, "chat-sala-fixo")[0].textContent, "Esta conversa fica guardada por 1 ano e todo o andar pode ler.", "vindo do mapa também");
       assert.equal(await ChatSala.abrirCanal("dm:4"), true); await espera(); await espera();
       assert.equal(todos(painel).find(x => x.id === "chat-sala-titulo").textContent, "Ana Lima", "o nome sai do GET /api/dm");
       assert.equal(achar(painel, "chat-sala-fixo")[0].hidden, false);
