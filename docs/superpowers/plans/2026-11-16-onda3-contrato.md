@@ -74,7 +74,7 @@ Reunião:
 - Sala ocupada no mesmo horário (outra reunião cruzando): 409 `sala_ocupada` "Já tem reunião nessa sala nesse horário."
 - Editar e cancelar: quem marcou ou o admin **deste** andar; os outros (e reunião que não existe ou já saiu): 404
   `nao_existe`. Mudar o `inicio` rearma o aviso de 5 min.
-- Até 500 reuniões futuras por andar (409 `agenda_cheia`). Marcar/editar/cancelar: 1/s com rajada de 5 por pessoa (429).
+- Até 500 reuniões futuras por andar (409 `agenda_cheia`). Marcar/editar/cancelar: 2/s com rajada de 5 por pessoa (429); gravar link, igual.
 - A agenda segue a retenção do andar: reunião que terminou antes do prazo sai na varredura diária. Conta que sai do
   andar: some dos convidados; as que ela marcou ficam como "ex-membro" (só o admin muda).
 - `.ics`: `Content-Type: text/calendar; charset=utf-8`, sempre `Content-Disposition: attachment; filename="reuniao.ics"`,

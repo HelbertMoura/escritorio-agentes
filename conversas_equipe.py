@@ -1001,6 +1001,13 @@ class Equipe:
             del self.reservas[token]
             return self._mensagens("m.id = ?", (id_m,), usuario)[0]
 
+    def tipo_do_anexo(self, id_anexo):
+        """Só o tipo gravado (None se não existe), para o escritorio.py escolher o teto antes de servir; o acesso é
+        conferido depois, no arquivo_do_anexo."""
+        with self.trava:
+            linha = self.con.execute("SELECT tipo FROM anexo WHERE id = ?", (id_anexo,)).fetchone()
+        return linha[0] if linha else None
+
     def arquivo_do_anexo(self, usuario, id_anexo, auditoria=False):
         """Para servir: o caminho no disco e os metadados. Anexo de DM só para as duas pontas, ou para o admin pela
         auditoria (auditoria=True; o escritorio.py só passa para o admin da empresa no andar): aí o download entra no

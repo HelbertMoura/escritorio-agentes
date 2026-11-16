@@ -53,7 +53,8 @@ from ajustes import (ACESSORIOS, CLIMA_BYTES, CORES, EQUIPE_BYTES, FESTAS_BYTES,
 from avisos import (CORPO_MAX as PUSH_CORPO, PUSH_BYTES, Avisos, EndpointInvalido, validar_arquivo as validar_push,  # noqa: E402
                     validar_assinatura, validar_preferencia, validar_saida, comeco, mostra_comeco)
 import anexos  # noqa: E402
-from conversas_equipe import (ANEXO_MAX, EMOJIS, STATUS, CotaCheia, Equipe, SemAcesso)  # noqa: E402
+from conversas_equipe import (ANEXO_MAX, AVISO_ANTES, CONVIDADOS_MAX, DURACAO_MAX, DURACAO_MIN, EMOJIS, STATUS,  # noqa: E402
+                              TITULO_MAX, AgendaCheia, CotaCheia, Equipe, SalaOcupada, SemAcesso, hosts_reuniao)
 from jornal import JORNAL_BYTES, Jornal, validar as validar_jornal  # noqa: E402
 from novidades import Novidades  # noqa: E402
 from planta import PLANTA_BYTES, Planta, validar_planta  # noqa: E402
@@ -177,6 +178,8 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "jornal.js": "text/javascript; charset=utf-8", "timelapse.js": "text/javascript; charset=utf-8",
     "avisar.js": "text/javascript; charset=utf-8", "resposta_rapida.js": "text/javascript; charset=utf-8",
     "novidades.js": "text/javascript; charset=utf-8",
+    "reunioes.js": "text/javascript; charset=utf-8", "reunioes.css": "text/css; charset=utf-8",
+    "apresentacao.js": "text/javascript; charset=utf-8",
     "manifest.webmanifest": "application/manifest+json", "icone-180.png": "image/png", "icone-192.png": "image/png",
     "icone-512.png": "image/png", "icone-mascara-512.png": "image/png",
 }
@@ -2166,6 +2169,11 @@ ACENO_VIDA, ACENO_ENTRE = 60, 30   # o aceno fica 60 s no /api/ao-vivo de quem r
 AVISO_DM = "As mensagens diretas da {empresa} podem ser lidas pela administração da empresa."
 LEMBRETE_AUDITORIA = "O acesso a esta conversa fica registrado e as duas pessoas veem a data."
 MENCAO = re.compile(r"@([a-z0-9][a-z0-9._-]{2,31})", re.I)
+# Onda 3 (B4): o Jitsi próprio da instalação (um host exato) entra na lista de hosts do link da sala
+JITSI_REUNIAO = (lambda h: h if re.fullmatch(r"[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+", h) else None)(
+    os.environ.get("ESCRITORIO_JITSI", "").strip().lower())
+CONVOCACAO_VIDA, CONVOCACAO_ENTRE = 120, 60   # a convocação fica 2 min no /api/ao-vivo; 1 por minuto por andar
+SALAS_NOMES = {"recepcao": "Recepção", "reuniao": "Sala de reunião", "cozinha": "Cozinha", "lounge": "Lounge"}
 
 
 def tipo_imagem(dados):
@@ -2431,8 +2439,17 @@ def resolver_de_avisos(srv):
         if andar is None or andar.saguao:
             return None
         de, tipo = item.get("de") or "Alguém", item["tipo"]
-        corpo = ""
-        if tipo in ("aceno", "porta"):
+        corpo, extra, comeco_ok = "", {}, mostra_comeco(srv.acesso.avisos_de(conta))
+        if tipo == "reuniao":   # 5 min antes (Onda 3): cancelada antes do GET, o aviso some
+            reuniao = srv.equipe_de(andar).reuniao(item["reuniao"])
+            if reuniao is None:
+                return None
+            titulo = f"Reunião em 5 min · {reuniao['titulo']}" if comeco_ok else "Reunião em 5 min"
+            corpo, extra = nome_da_sala(reuniao["sala"]), {"sala": reuniao["sala"], "reuniao": reuniao["id"]}
+        elif tipo == "convocacao":
+            titulo, corpo, extra = f"{de} chamou a equipe", f"Reunião geral agora · {nome_da_sala(item['sala'])}", \
+                {"sala": item["sala"]}
+        elif tipo in ("aceno", "porta"):
             titulo = f"{de} acenou para você" if tipo == "aceno" else f"{de} bateu na porta"
         else:
             info = srv.equipe_de(andar).para_aviso(item["msg"])
@@ -2448,10 +2465,45 @@ def resolver_de_avisos(srv):
                 corpo = info["texto"]
         if len(srv.acesso.andares_da_conta(conta)) > 1:   # quem está em mais de uma empresa vê de qual
             titulo += f" · {config_publica(andar)['empresa']}"
-        if not mostra_comeco(srv.acesso.avisos_de(conta)):
+        if not comeco_ok:
             corpo = ""
-        return {"tipo": tipo, "titulo": comeco(titulo), "corpo": comeco(corpo), "canal": item.get("canal")}
+        return {"tipo": tipo, "titulo": comeco(titulo), "corpo": comeco(corpo), "canal": item.get("canal"), **extra}
     return resolver
+
+
+def nome_da_sala(chave):
+    """"Sala de reunião", "Cozinha" ou o nome do time: o que vai no aviso e no .ics."""
+    return SALAS_NOMES.get(chave) or (chave[5:] if chave.startswith("time:") else chave)
+
+
+def _ics_texto(s):
+    return s.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\r", "").replace("\n", "\\n")
+
+
+def _ics_dobrar(linha):
+    """RFC 5545: linhas de até 75 octetos, a continuação começa com espaço; o corte nunca cai no meio de um caractere."""
+    b, partes = linha.encode("utf-8"), []
+    while len(b) > 75:
+        corte = 75 if not partes else 74
+        while (b[corte] & 0xC0) == 0x80:
+            corte -= 1
+        partes.append(b[:corte])
+        b = b[corte:]
+    partes.append(b)
+    return b"\r\n ".join(partes).decode("utf-8")
+
+
+def ics_da_reuniao(reuniao, id_andar, convidados, link, agora):
+    """O .ics de uma reunião (um VEVENT, horários em UTC), só com o que é deste andar: título, sala, os nomes dos
+    convidados que ainda são do andar e o link fixo da sala."""
+    utc = lambda t: time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(t))
+    descricao = "Convidados: " + (", ".join(convidados) or "ninguém") + (f"\nLink: {link}" if link else "")
+    linhas = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Escritorio de agentes//Reunioes//PT", "CALSCALE:GREGORIAN",
+              "METHOD:PUBLISH", "BEGIN:VEVENT", f"UID:reuniao-{reuniao['id']}-{id_andar}@escritorio",
+              f"DTSTAMP:{utc(agora)}", f"DTSTART:{utc(reuniao['inicio'])}", f"DTEND:{utc(reuniao['fim'])}",
+              "SUMMARY:" + _ics_texto(reuniao["titulo"]), "LOCATION:" + _ics_texto(nome_da_sala(reuniao["sala"])),
+              *([f"URL:{link}"] if link else []), "DESCRIPTION:" + _ics_texto(descricao), "END:VEVENT", "END:VCALENDAR"]
+    return "".join(_ics_dobrar(linha) + "\r\n" for linha in linhas).encode("utf-8")
 
 
 def festas_salvas():
@@ -2676,6 +2728,11 @@ EQUIPE_POST = frozenset({"/api/canal/enviar", "/api/canal/apagar", "/api/canal/l
                          "/api/dm/abrir", "/api/dm/entendi", "/api/mural/fixar", "/api/mural/tirar", "/api/status",
                          "/api/aceno", "/api/anexo"})
 AUDITORIA_GET = frozenset({"/api/dm/auditoria", "/api/dm/auditoria/pares", "/api/dm/auditoria/registro"})
+# 1.6 Onda 3: a agenda e o link por sala (todo mundo do andar lê e marca; o link e a convocação, só o admin do andar)
+REUNIAO_GET = frozenset({"/api/reunioes", "/api/reunioes/ics", "/api/reunioes/links"})
+REUNIAO_POST = frozenset({"/api/reunioes/marcar", "/api/reunioes/editar", "/api/reunioes/cancelar"})
+REUNIAO_ADMIN_POST = frozenset({"/api/reunioes/link", "/api/reunioes/convocar"})
+EQUIPE_GET, EQUIPE_POST = EQUIPE_GET | REUNIAO_GET, EQUIPE_POST | REUNIAO_POST
 MEMBRO_GET = frozenset({"/", "", "/api/estado", "/api/config", "/api/social", "/api/social/placar", "/api/jornal",
                         "/api/novidades", "/api/avisos", "/api/push/chave", "/api/perfil", "/api/ao-vivo"}) | EQUIPE_GET
 MEMBRO_POST = frozenset({"/sair", "/api/sair-todos", "/api/push/assinar", "/api/push/sair", "/api/perfil",
@@ -2690,7 +2747,7 @@ ADMIN_EMPRESA_GET = MEMBRO_GET | {"/api/membros", "/api/conversa", "/oauth/conec
 ADMIN_EMPRESA_POST = MEMBRO_POST | {"/api/membros", "/api/planta", "/api/equipe", "/api/marca", "/api/logo",
                                     "/api/logo/remover", "/api/social/briga", "/api/social/greve/atender",
                                     "/api/conversa/modo", "/api/conversa/modo/fechar", "/api/conversa/responder",
-                                    "/oauth/desconectar", "/api/canal/retencao"}
+                                    "/oauth/desconectar", "/api/canal/retencao"} | REUNIAO_ADMIN_POST
 # no saguão: o geral do prédio, o mural, o status e o aceno; sem DM, anexo, pessoas nem auditoria (os GET dão 404)
 SAGUAO_GET = PREDIO_GET | {"/api/estado", "/api/config", "/api/ao-vivo", "/api/canal/historico", "/api/canal/busca",
                            "/api/mural"}
@@ -2698,7 +2755,7 @@ SAGUAO_POST = PREDIO_POST | {"/api/presenca", "/api/sala/enviar", "/api/canal/en
                              "/api/canal/lida", "/api/canal/reagir", "/api/mural/fixar", "/api/mural/tirar",
                              "/api/status", "/api/aceno"}
 SAGUAO_NAO_TEM = frozenset({"/api/social", "/api/social/placar", "/api/jornal", "/api/conversa", "/oauth/conectar",
-                            "/api/dm", "/api/pessoas", "/api/anexo"}) | AUDITORIA_GET   # 404
+                            "/api/dm", "/api/pessoas", "/api/anexo"}) | AUDITORIA_GET | REUNIAO_GET   # 404
 SALAS_FIXAS = frozenset({"", "recepcao", "reuniao", "cozinha", "lounge"})   # "": o corredor (mapa.js: chave de cada sala)
 
 
@@ -4290,12 +4347,7 @@ class Pagina(BaseHTTPRequestHandler):
     def _avisar(self, conta, andar, item, push=True):
         """O aviso pessoal (E.4): sempre na tela (GET /api/avisos); push só se a pessoa não está "ocupada" neste andar
         nem com o escritório aberto. O saguão não tem aviso."""
-        avisos = getattr(self.server, "avisos", None)
-        if not avisos or andar.saguao:
-            return
-        push = push and self.server.equipe_de(andar).status_de(conta)["status"] != "ocupado" \
-            and not self.server.presenca.aberto(conta)
-        avisos.pessoal(conta, andar.id, item, time.time(), push=push)
+        self.server.avisar_pessoa(conta, andar, item, push)
 
     def _depois_de_enviar(self, andar, eq, usuario, nome, msg, mencoes):
         canal = msg["canal"]
@@ -4340,7 +4392,16 @@ class Pagina(BaseHTTPRequestHandler):
                 "aviso_dm_entendido": eq.entendeu_dm(usuario) if tem_dm else False,
                 "auditoria": tem_dm and (papel is None or papel(usuario, andar.id) == "admin"), "mural": True,
                 "pode_escrever": not self._so_le(andar, usuario),
-                "status": list(STATUS)}
+                "status": list(STATUS), "reunioes": None if andar.saguao else self._config_reunioes(andar, usuario)}
+
+    def _config_reunioes(self, andar, usuario):
+        """O config.equipe.reunioes (contrato da Onda 3, item 1): a lista de hosts que o servidor aceita e o que a
+        pessoa pode fazer neste andar."""
+        escreve = not self._so_le(andar, usuario)
+        admin = escreve and self._moderador(andar.id)
+        return {"hosts": hosts_reuniao(JITSI_REUNIAO), "pode_marcar": escreve, "pode_link": admin, "pode_convocar": admin,
+                "duracao_min": DURACAO_MIN, "duracao_max": DURACAO_MAX, "titulo_max": TITULO_MAX,
+                "convidados_max": CONVIDADOS_MAX, "aviso_min": AVISO_ANTES // 60}
 
     def _ao_vivo_equipe(self, andar, usuario, vivo, q):
         """Os campos novos do /api/ao-vivo com o store ligado: status, acenos, versão do mural, não lidas, menções, as
@@ -4350,12 +4411,26 @@ class Pagina(BaseHTTPRequestHandler):
             return vivo
         mostra = self._mascara(andar)
         status = {mostra(u): eq.status_de(u) for u in self.server.presenca.quem_esta(andar.id)}
+        # Onda 3: quem não pôs status e está na sala de uma reunião em andamento aparece "em reunião" (fora do saguão)
+        em_reuniao = set() if andar.saguao else eq.salas_em_reuniao(time.time())
+        auto = lambda s, sala: s == {"status": STATUS[0], "texto": ""} and sala in em_reuniao
         for p in vivo["pessoas"]:
             s = status.get(p["usuario"]) or {"status": STATUS[0], "texto": ""}
             p["status"], p["status_texto"] = s["status"], s["texto"]
+            if not andar.saguao:
+                p["status_auto"] = auto(s, p["sala"])
+                if p["status_auto"]:
+                    p["status"] = "reuniao"
         vivo["meu_status"] = eq.status_de(usuario)
         desde = q.get("desde", ["0"])[0]
         desde = int(desde) if desde.isdigit() else 0
+        if not andar.saguao:
+            vivo["meu_status"]["em_reuniao"] = auto(vivo["meu_status"], self.server.presenca.sala_de(andar.id, usuario))
+            vivo["reunioes_v"] = eq.versao_reunioes()
+            with self.server.trava_acenos:
+                convocacao = self.server.convocacoes.get(andar.id)
+            if convocacao and convocacao[4] > desde and time.monotonic() - convocacao[0] < CONVOCACAO_VIDA:
+                vivo["convocacao"] = dict(zip(("sala", "de", "nome", "seq"), convocacao[1:]))
         agora = time.monotonic()
         with self.server.trava_acenos:
             chave = (andar.id, usuario)
@@ -4422,6 +4497,8 @@ class Pagina(BaseHTTPRequestHandler):
                     return self._json(*erro(400, "pedido", "Pedido inválido."))
                 return self._json(200, self._mural(andar, eq, um("canal"), usuario))
             contas = {c["usuario"]: c["nome"] for c in self.server.acesso.contas_do_andar(andar.id)}
+            if rota in REUNIAO_GET:
+                return self._get_reunioes(rota, andar, eq, usuario, um, contas)
             if rota == "/api/pessoas":
                 return self._json(200, {"pessoas": [{"usuario": u, "nome": n} for u, n in contas.items() if u != usuario]})
             if rota == "/api/dm":
@@ -4452,6 +4529,95 @@ class Pagina(BaseHTTPRequestHandler):
         except ValueError:
             return self._json(*erro(400, "pedido", "Pedido inválido."))
 
+    # ------------------------------------------------------------ reuniões (1.6 Onda 3)
+
+    def _links(self, andar, eq):
+        """Os links fixos das salas que ainda estão no mapa do andar."""
+        salas = salas_do_andar(andar)
+        return {s: u for s, u in eq.links().items() if s in salas}
+
+    def _reuniao_publica(self, andar, r, usuario, contas, links, agora):
+        """A reunião como a tela mostra: os convidados que ainda são do andar, com nome, e o que a pessoa pode fazer."""
+        meu = r["usuario"] is not None and r["usuario"] == usuario
+        return {**r, "convidados": [{"usuario": u, "nome": contas[u]} for u in r["convidados"] if u in contas],
+                "meu": meu, "pode_mudar": not self._so_le(andar, usuario) and (meu or self._moderador(andar.id)),
+                "link": links.get(r["sala"]), "agora": r["inicio"] <= agora < r["fim"]}
+
+    def _get_reunioes(self, rota, andar, eq, usuario, um, contas):
+        agora = time.time()
+        links = self._links(andar, eq)
+        if rota == "/api/reunioes/links":
+            return self._json(200, {"links": links})
+        if rota == "/api/reunioes":
+            de = self._inteiro(um("de"), int(agora), 0, 2 ** 40)
+            dias = self._inteiro(um("dias"), 7, 1, 31)
+            v = eq.versao_reunioes()   # lida antes da lista: a mudança no meio aparece no próximo reunioes_v
+            return self._json(200, {"reunioes": [self._reuniao_publica(andar, r, usuario, contas, links, agora)
+                                                 for r in eq.reunioes(de, de + dias * 86400)], "v": v})
+        # o .ics, só com o que é deste andar: o id de uma reunião de outro andar não existe aqui (outro banco)
+        reuniao = eq.reuniao(self._inteiro(um("id"), None, 1, 2 ** 62) or 0)
+        if reuniao is None:
+            return self._nao_existe()
+        nomes = [contas[u] for u in reuniao["convidados"] if u in contas]
+        corpo = ics_da_reuniao(reuniao, andar.id, nomes, links.get(reuniao["sala"]), agora)
+        # o nosniff e a CSP da página saem do _envia; a CSP com sandbox soma-se a ela (vale a mais restrita)
+        return self._envia(200, corpo, "text/calendar; charset=utf-8", cache="private, no-store", extra={
+            "Content-Disposition": 'attachment; filename="reuniao.ics"',
+            "Content-Security-Policy": "default-src 'none'; sandbox"})
+
+    def _post_reuniao(self, rota, andar, eq, usuario, dados):
+        """Os POST da Onda 3 (a guarda, a origem, o JSON exato e o "só lê" já passaram)."""
+        baldes = self.server.baldes
+        if rota in ("/api/reunioes/link", "/api/reunioes/convocar") and not self._moderador(andar.id):
+            return self._proibido(rota)
+        if "sala" in dados and not (isinstance(dados["sala"], str) and dados["sala"]
+                                    and dados["sala"] in salas_do_andar(andar)):
+            return self._json(*erro(400, "pedido", "Pedido inválido."))
+        if rota == "/api/reunioes/link":
+            baldes.gastar(("link", usuario), 2, 5)
+            if not isinstance(dados["url"], str):
+                return self._json(*erro(400, "pedido", "Pedido inválido."))
+            try:
+                eq.definir_link(dados["sala"], dados["url"].strip(), JITSI_REUNIAO)
+            except ValueError:
+                return self._json(*erro(400, "link", "Use um link https de Meet, Zoom, Jitsi, Teams ou Whereby, sem "
+                                                     "senha no endereço."))
+            log(evento="equipe", resultado="link_sala", andar=andar.id)   # sem o link
+            return self._json(200, {"links": self._links(andar, eq)})
+        if rota == "/api/reunioes/convocar":
+            baldes.gastar(("convocar", andar.id), 1 / CONVOCACAO_ENTRE, 1)
+            seq, nome = self.server.presenca.tocar(andar.id), self._nome_publico(usuario, andar)
+            with self.server.trava_acenos:
+                self.server.convocacoes[andar.id] = (time.monotonic(), dados["sala"], usuario, nome, seq)
+            for conta in self.server.acesso.contas_do_andar(andar.id):
+                if conta["usuario"] != usuario:
+                    self._avisar(conta["usuario"], andar, {"tipo": "convocacao", "de": nome, "sala": dados["sala"]})
+            log(evento="equipe", resultado="convocacao", andar=andar.id)
+            return self._json(200, {"ok": True, "seq": seq})
+        baldes.gastar(("agenda", usuario), 2, 5)
+        if rota == "/api/reunioes/cancelar":
+            eq.cancelar(dados["id"], usuario, self._moderador(andar.id))
+            return self._json(200, {"ok": True})
+        convidados = dados["convidados"]
+        if not isinstance(convidados, list) or not all(isinstance(u, str) for u in convidados) \
+                or type(dados["inicio"]) is not int or type(dados["duracao"]) is not int:
+            return self._json(*erro(400, "pedido", "Pedido inválido."))
+        if not all(self._do_andar(u, andar) for u in convidados):   # de fora do andar e inexistente: a mesma resposta
+            return self._json(*erro(400, "convidado", "Só dá para convidar quem é do andar."))
+        campos = (dados["titulo"], dados["sala"], dados["inicio"], dados["duracao"], convidados)
+        try:
+            if rota == "/api/reunioes/marcar":
+                r = eq.marcar(usuario, self._nome_publico(usuario, andar), *campos)
+            else:
+                r = eq.editar(dados["id"], usuario, self._moderador(andar.id), *campos)
+        except SalaOcupada:
+            return self._json(*erro(409, "sala_ocupada", "Já tem reunião nessa sala nesse horário."))
+        except AgendaCheia:
+            return self._json(*erro(409, "agenda_cheia", "A agenda do andar está cheia; cancele reuniões antigas."))
+        contas = {c["usuario"]: c["nome"] for c in self.server.acesso.contas_do_andar(andar.id)}
+        return self._json(200, {"reuniao": self._reuniao_publica(andar, r, usuario, contas, self._links(andar, eq),
+                                                                 time.time())})
+
     def _do_painel(self):
         """O pedido veio do próprio painel, não de um <img>, link ou formulário de outro site (a auditoria grava acesso
         a cada leitura): Sec-Fetch-Site same-origin, que o navegador põe e a página não forja, ou o X-Escritorio: 1, que
@@ -4469,7 +4635,9 @@ class Pagina(BaseHTTPRequestHandler):
         id_anexo = self._inteiro(q.get("id", [""])[0], None, 1, 2 ** 62)
         if id_anexo is None:
             raise ValueError("id")
-        chave, teto = (usuario, DOWNLOADS_MAX) if q.get("baixar") == ["1"] else (("previa", usuario), PREVIAS_MAX)
+        # a prévia é só a imagem sem ?baixar=1 (pelo tipo gravado, não pela falta do parâmetro); o resto é download
+        previa = q.get("baixar") != ["1"] and eq.tipo_do_anexo(id_anexo) in anexos.IMAGENS
+        chave, teto = (("previa", usuario), PREVIAS_MAX) if previa else (usuario, DOWNLOADS_MAX)
         with self.server.trava_anexos:
             if self.server.downloads[chave] >= teto:
                 return self._json(*erro(429, "limite", "Downloads demais ao mesmo tempo; espere um terminar."))
@@ -4522,7 +4690,8 @@ class Pagina(BaseHTTPRequestHandler):
             return self._sem_andar()
         if rota == "/api/anexo":
             return self._post_anexo(andar, usuario)
-        if andar.saguao and rota in ("/api/dm/abrir", "/api/dm/entendi"):
+        if andar.saguao and (rota in ("/api/dm/abrir", "/api/dm/entendi") or rota in REUNIAO_POST
+                             or rota in REUNIAO_ADMIN_POST):
             return self._sem_andar()
         eq = self._equipe(andar)
         if eq is None:
@@ -4530,17 +4699,25 @@ class Pagina(BaseHTTPRequestHandler):
         dados = self._json_pedido(2048)
         if dados is False:
             return self._json(*erro(415, "formato", "Envie JSON (application/json)."))
-        if rota in ("/api/canal/enviar", "/api/canal/reagir", "/api/mural/fixar") and self._so_le(andar, usuario):
+        # o admin do prédio sem papel no andar só lê: nem acena (reconferência do Spock) nem mexe na agenda
+        if (rota in ("/api/canal/enviar", "/api/canal/reagir", "/api/mural/fixar", "/api/aceno") or rota in REUNIAO_POST
+                or rota in REUNIAO_ADMIN_POST) and self._so_le(andar, usuario):
             return self._so_le_recusa(rota)
         formatos = {"/api/canal/enviar": {"canal", "texto"}, "/api/canal/apagar": {"id"}, "/api/canal/lida": {"canal", "ate"},
                     "/api/canal/reagir": {"id", "emoji", "ligar"}, "/api/dm/abrir": {"com"}, "/api/dm/entendi": set(),
                     "/api/mural/fixar": {"canal", "texto"}, "/api/mural/tirar": {"id"}, "/api/status": {"status", "texto"},
-                    "/api/aceno": {"para", "tipo"}, "/api/canal/retencao": {"dias"}}
+                    "/api/aceno": {"para", "tipo"}, "/api/canal/retencao": {"dias"},
+                    "/api/reunioes/marcar": {"titulo", "sala", "inicio", "duracao", "convidados"},
+                    "/api/reunioes/editar": {"id", "titulo", "sala", "inicio", "duracao", "convidados"},
+                    "/api/reunioes/cancelar": {"id"}, "/api/reunioes/link": {"sala", "url"},
+                    "/api/reunioes/convocar": {"sala"}}
         if dados is None or set(dados) != formatos[rota] or \
                 any(type(dados[k]) is not int for k in ("id", "ate", "dias") if k in dados):
             return self._json(*erro(400, "pedido", "Pedido inválido."))
         baldes = self.server.baldes
         try:
+            if rota in REUNIAO_POST or rota in REUNIAO_ADMIN_POST:
+                return self._post_reuniao(rota, andar, eq, usuario, dados)
             if rota == "/api/canal/enviar":
                 if not self._canal_ok(andar, dados["canal"]):
                     return self._json(*erro(400, "pedido", "Pedido inválido."))
@@ -4752,7 +4929,7 @@ class Pagina(BaseHTTPRequestHandler):
             return self._post_perfil(rota)
         if rota in ("/api/presenca", "/api/sala/enviar"):
             return self._post_presenca(rota)
-        if rota in EQUIPE_POST or rota == "/api/canal/retencao":
+        if rota in EQUIPE_POST or rota in REUNIAO_ADMIN_POST or rota == "/api/canal/retencao":
             return self._post_equipe(rota)
         if rota == "/api/membros":
             return self._post_membros(rota)
@@ -4857,6 +5034,8 @@ class Servidor(ThreadingHTTPServer):
         # as conversas da equipe (conversas_equipe.py): um store por andar, aberto no primeiro pedido que precisa dele
         self.dados, self.equipes, self.trava_equipes = DADOS, {}, threading.Lock()
         self.acenos, self.trava_acenos = {}, threading.Lock()   # (andar, login) -> [(instante, seq, de, nome, tipo)]
+        self.convocacoes = {}   # andar -> (instante, sala, de, nome, seq): a última reunião geral (sob a trava_acenos)
+        self._proxima_reuniao = time.monotonic() + 15
         self.baldes = Baldes()
         self.envios, self.downloads, self.trava_anexos = collections.Counter(), collections.Counter(), threading.Lock()
         self.proxy_visitas = proxy_visitas(PROXY_VISITAS)
@@ -4880,6 +5059,36 @@ class Servidor(ThreadingHTTPServer):
         if agora >= self._proxima_varredura:   # a retenção e o teto das conversas, 1 vez por dia
             self._proxima_varredura = agora + 86400
             self.varrer_equipes()
+        if agora >= self._proxima_reuniao:   # o aviso 5 min antes das reuniões, conferido a cada 15 s
+            self._proxima_reuniao = agora + 15
+            self.avisar_reunioes()
+
+    def avisar_pessoa(self, conta, andar, item, push=True):
+        """O aviso pessoal (E.4): sempre na tela (GET /api/avisos); push só se a pessoa não está "ocupada" neste andar
+        nem com o escritório aberto (o "Não perturbe" e o papel ficam com o Avisos). O saguão não tem aviso."""
+        avisos = getattr(self, "avisos", None)
+        if not avisos or andar.saguao:
+            return
+        push = push and self.equipe_de(andar).status_de(conta)["status"] != "ocupado" and not self.presenca.aberto(conta)
+        avisos.pessoal(conta, andar.id, item, time.time(), push=push)
+
+    def avisar_reunioes(self, agora=None):
+        """O aviso 5 min antes (Onda 3), uma vez por reunião, a quem marcou e aos convidados que ainda têm papel no
+        andar. Só abre o store que já existe; o saguão não tem reunião."""
+        if not equipe_ligada(self):
+            return
+        agora = time.time() if agora is None else agora
+        papel = getattr(self.acesso, "papel", None)
+        for andar in [AndarPrincipal(self), *self.andares.values()]:
+            if andar.saguao or not (andar.id in self.equipes or os.path.exists(os.path.join(andar.pasta, "equipe.db"))):
+                continue
+            try:
+                for r in self.equipe_de(andar).a_avisar(agora):
+                    for conta in sorted({*r["convidados"], *([r["usuario"]] if r["usuario"] else [])}):
+                        if papel is None or papel(conta, andar.id) is not None:
+                            self.avisar_pessoa(conta, andar, {"tipo": "reuniao", "reuniao": r["id"]})
+            except Exception as x:   # nunca derruba o servidor; o título nunca vai ao log
+                log(evento="equipe", resultado="aviso_reuniao_erro", detalhe=type(x).__name__)
 
     def varrer_equipes(self):
         """Varre todo andar que tem conversas: o store já aberto e o equipe.db de andar que ninguém abriu desde o boot."""

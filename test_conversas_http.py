@@ -373,7 +373,7 @@ class Canais(Predio):
         vivo = self.get(f"/api/ao-vivo?andar={self.B}", "ana")[1]
         bia = next(p for p in vivo["pessoas"] if p["usuario"] == "bia")
         self.assertEqual((bia["status"], bia["status_texto"]), ("reuniao", "1:1"))
-        self.assertEqual(vivo["meu_status"], {"status": "disponivel", "texto": ""})
+        self.assertEqual(vivo["meu_status"], {"status": "disponivel", "texto": "", "em_reuniao": False})   # Onda 3: em_reuniao
         seq = vivo["seq"]
         self.assertEqual(self.post(f"/api/aceno?andar={self.B}", "ana", {"para": "bia", "tipo": "porta"}), (200, {"ok": True}))
         self.assertEqual(self.post(f"/api/aceno?andar={self.B}", "ana", {"para": "bia", "tipo": "aceno"})[0], 429)

@@ -85,7 +85,8 @@ AG =[{"id": "a1", "name": "Pixel", "handle": "pixel", "role": "Conteúdo"},
 ORG_URL = f"https://app.agentes.chat/org/{e.ORG}/c/11111111-2222-4333-8444-555555555555"
 # arquivos da lista fechada que chegam com o land do floor das telas (uau-telas); até lá, o servidor responde 404
 PWA = {"manifest.webmanifest", "sw.js", "icone-180.png", "icone-192.png", "icone-512.png", "icone-mascara-512.png"}
-DO_FRONT = {"tv.js", "jornal.js", "timelapse.js", "avisar.js", "novidades.js"} | PWA
+DO_FRONT = {"tv.js", "jornal.js", "timelapse.js", "avisar.js", "novidades.js",
+            "reunioes.js", "reunioes.css", "apresentacao.js"} | PWA   # Onda 3: chegam dos floors do front e do mapa
 
 
 def servidos():
