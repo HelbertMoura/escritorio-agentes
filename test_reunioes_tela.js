@@ -34,7 +34,7 @@ function elemento(tag) {
 const casa = (x, sel) => (sel.startsWith(".") ? x.classes.has(sel.slice(1)) : sel.startsWith("[") ? sel.slice(1, -1).split("=")[0] in x.attrs : x.tagName === sel.toUpperCase());
 const todos = (e, saida = []) => { for (const f of e.children) { saida.push(f); todos(f, saida); } return saida; };
 function disparar(alvo, tipo, extra = {}) {
-  const ev = { target: alvo, key: extra.key, preventDefault() { ev.evitou = true; }, stopPropagation() { ev.parou = true; } };
+  const ev = { type: tipo, target: alvo, key: extra.key, preventDefault() { ev.evitou = true; }, stopPropagation() { ev.parou = true; } };
   for (let x = alvo; x && !ev.parou; x = x.pai) for (const f of x.ouvintes[tipo] || []) f(ev);
   return ev;
 }
@@ -95,7 +95,7 @@ function carregar({ config = CONFIG, respostas = RESP, agora = AGORA } = {}) {
   const R = contexto.window.Reunioes;
   R.iniciar({ salas: () => SALAS });
   const evento = (t, detail) => (ouvintes[t] || []).forEach(f => f({ detail }));
-  return { ids, pedidos, evento, timers, R, corpo };
+  return { ids, pedidos, evento, timers, R, corpo, window };
 }
 
 (async () => {
@@ -308,6 +308,45 @@ function carregar({ config = CONFIG, respostas = RESP, agora = AGORA } = {}) {
     assert.equal(ids["reuniao-entrar"].rel, "noopener noreferrer");
     evento("minha-sala", { sala: "cozinha", nome: "Cozinha", andar: ID }); await espera();
     assert.equal(ids["reuniao-entrar"].hidden, true);
+  }
+
+  // modo apresentação: todo "Entrar" visível (lateral, painel, pílula e o cartão da agenda) fica sem href, para a barra de
+  // status não mostrar o link (o do Zoom pode ter ?pwd=); clique e Enter abrem pelo window.open. Fora do modo, o href volta
+  {
+    const { ids, R, evento, window, corpo } = carregar();
+    const abertos = [];
+    let liga = false;
+    window.Apresentacao = { ligado: () => liga };
+    window.open = (...a) => { abertos.push(a); return null; };
+    const lateral = R.entrar("reuniao", "Reunião"); corpo.append(lateral);
+    R.configurar(CONFIG); await R.abrir(); await espera();
+    evento("minha-sala", { sala: "reuniao", nome: "Sala de reunião", andar: ID }); await espera();
+    const cartao = achar(ids["reunioes-dias"], "reuniao-entrar-bt")[0];
+    const todosEntrar = [lateral, ids["reuniao-entrar"], cartao];
+    for (const a of todosEntrar) assert.equal(a.href, "https://meet.google.com/abc-defg-hij");
+    liga = true; evento("apresentacao", { ligado: true });
+    for (const a of todosEntrar) {
+      assert.equal(a.hidden, false, "continua visível");
+      assert.equal(a.hasAttribute("href"), false, "sem href no modo");
+      assert.ok(!/meet\.google|https:/.test(JSON.stringify(a.attrs) + JSON.stringify(a.dataset) + a.textContent), "o link em nenhum atributo");
+      assert.equal(a.attrs.role, "button"); assert.equal(a.attrs.tabindex, "0");
+    }
+    const clique = disparar(lateral, "click");
+    assert.equal(clique.evitou, true);
+    assert.deepEqual(abertos.pop(), ["https://meet.google.com/abc-defg-hij", "_blank", "noopener,noreferrer"]);
+    disparar(cartao, "keydown", { key: "Enter" });
+    assert.equal(abertos.length, 1, "o Enter também abre");
+    disparar(cartao, "keydown", { key: "Tab" });
+    assert.equal(abertos.length, 1, "outra tecla não abre");
+    R.pintar();   // repintar no modo (links novos, troca de sala) não devolve o href
+    assert.equal(lateral.hasAttribute("href"), false);
+    liga = false; evento("apresentacao", { ligado: false });
+    for (const a of todosEntrar) {
+      assert.equal(a.href, "https://meet.google.com/abc-defg-hij", "fora do modo, o href volta");
+      assert.equal(a.hasAttribute("role") || a.hasAttribute("tabindex"), false);
+    }
+    assert.equal(disparar(lateral, "click").evitou, undefined, "fora do modo, o clique é o do link");
+    assert.equal(abertos.length, 1);
   }
 
   // aviso de 5 min na tela: a minha ou a que me convidou; uma vez só; com o link da sala

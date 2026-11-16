@@ -121,12 +121,32 @@ const Reunioes = (() => {
   const mensagem = (r, padrao) => (r.d && typeof r.d.mensagem === "string" ? r.d.mensagem : r.status ? `${padrao} (HTTP ${r.status}).` : "Sem conexão. Tente de novo.");
   const avisar = (el, texto, ruim = false) => { el.textContent = texto; el.classList.toggle("ruim", ruim); el.classList.toggle("ok", !!texto && !ruim); };
 
-  // ---- "Entrar na reunião": sempre em aba nova, sem opener nem referrer; só link que passa na lista de hosts
+  // ---- "Entrar na reunião": sempre em aba nova, sem opener nem referrer; só link que passa na lista de hosts.
+  // No modo apresentação o link sai do href (a barra de status mostraria o ?pwd= do Zoom) e o clique abre pelo JS
+  const urls = new WeakMap();
+  const apresentando = () => !!(window.Apresentacao && window.Apresentacao.ligado());
+  function abrirPorClique(ev) {
+    const a = ev.currentTarget || ev.target, url = urls.get(a);
+    if (!url || a.hasAttribute("href") || (ev.type === "keydown" && ev.key !== "Enter" && ev.key !== " ")) return;
+    ev.preventDefault();
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+  function aplicarHref(a) {
+    const url = urls.get(a), oculto = !!url && apresentando();
+    if (url && !oculto) a.setAttribute("href", url); else a.removeAttribute("href");
+    if (oculto) { a.setAttribute("role", "button"); a.setAttribute("tabindex", "0"); }   // sem href, o <a> sairia do Tab
+    else { a.removeAttribute("role"); a.removeAttribute("tabindex"); }
+  }
   function pintarLink(a, url, nome) {
     const ok = !!url && linkValido(url, lim().hosts).ok;
     a.target = "_blank"; a.rel = "noopener noreferrer";
     a.hidden = !ok;
-    if (ok) a.setAttribute("href", url); else a.removeAttribute("href");
+    if (ok) urls.set(a, url); else urls.delete(a);
+    if (!a.hasAttribute("data-entrar")) {
+      a.setAttribute("data-entrar", "");
+      a.addEventListener("click", abrirPorClique); a.addEventListener("keydown", abrirPorClique);
+    }
+    aplicarHref(a);
     a.setAttribute("aria-label", `Entrar na reunião${nome ? ` da ${nome}` : ""} (abre em outra aba)`);
     return a;
   }
@@ -407,6 +427,7 @@ const Reunioes = (() => {
     $("rc-nao").addEventListener("click", () => $("dlg-reuniao-confirmar").close());
     $("dlg-reuniao-confirmar").addEventListener("close", () => { if (s.fim) s.fim(false); devolverFoco(); });
     $("reuniao-aviso-fechar").addEventListener("click", () => { $("reuniao-aviso").hidden = true; });
+    window.addEventListener("apresentacao", () => { for (const a of document.querySelectorAll("[data-entrar]")) aplicarHref(a); });
     window.addEventListener("minha-sala", e => { const d = e.detail || {}; s.onde = { sala: typeof d.sala === "string" ? d.sala : "", nome: typeof d.nome === "string" ? d.nome : "" }; pintarTodos(); });
     window.addEventListener("aovivo", e => {
       const v = (e.detail || {}).reunioes_v;
