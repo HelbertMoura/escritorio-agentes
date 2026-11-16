@@ -149,6 +149,9 @@ function carregar({ guardado = null, semStorage = false, semControles = false } 
     "[data-sensivel]",
   ];
   for (const s of SENSIVEIS) assert.ok(cobertos.has(s), `escondido no modo apresentação: ${s}`);
+  assert.ok(cobertos.has("#reuniao-aviso-entrar") && html.includes('id="reuniao-aviso-entrar"'), "o Entrar do aviso de 5 min some");
+  assert.match(css, /^\.reuniao-aviso-generico \{ display: none; \}/m, "o texto genérico do aviso fica escondido fora do modo");
+  assert.match(css, /^html\.apresentacao \.reuniao-aviso-generico \{ display: block; \}/m, "e aparece no modo apresentação");
   assert.ok(!cobertos.has(".agora"), "o cartão da reunião em andamento (li.reuniao.agora) não some inteiro, só o título e os nomes");
   for (const s of SENSIVEIS) if (s.startsWith("#")) assert.ok(html.includes(`id="${s.slice(1).split(" ")[0]}"`), `${s} existe no index.html`);
 }

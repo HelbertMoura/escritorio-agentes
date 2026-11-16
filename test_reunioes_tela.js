@@ -321,6 +321,11 @@ function carregar({ config = CONFIG, respostas = RESP, agora = AGORA } = {}) {
     assert.equal(ids["reuniao-aviso"].hidden, false);
     assert.equal(ids["reuniao-aviso-txt"].textContent, "Planejamento começa em 4 min, na Sala de reunião.");
     assert.ok("data-sensivel" in ids["reuniao-aviso-txt"].attrs);
+    // no modo apresentação, só o texto genérico (sem data-sensivel) e o X: a ordem do aviso é texto, genérico, Entrar, X
+    const generico = ids["reuniao-aviso"].children[1];
+    assert.equal(generico.textContent, "Uma reunião começa em breve");
+    assert.ok(generico.classes.has("reuniao-aviso-generico") && !("data-sensivel" in generico.attrs));
+    assert.deepEqual(ids["reuniao-aviso"].children.map(c => c.id || c.className), ["reuniao-aviso-txt", "reuniao-aviso-generico", "reuniao-aviso-entrar", "reuniao-aviso-fechar"]);
     assert.equal(ids["reuniao-aviso-entrar"].href, "https://meet.google.com/abc-defg-hij");
     assert.equal(ids["reuniao-aviso-entrar"].rel, "noopener noreferrer");
     ids["reuniao-aviso-fechar"].click();

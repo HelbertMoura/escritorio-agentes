@@ -389,6 +389,9 @@ const Reunioes = (() => {
   }
   function iniciar(op) {
     opcoes = { ...opcoes, ...op };
+    // o aviso no modo apresentação: o texto de sempre some (data-sensivel) e fica este, sem dado; o Entrar some (estilo.css)
+    $("reuniao-aviso").replaceChildren($("reuniao-aviso-txt"), criar("p", "reuniao-aviso-generico", "Uma reunião começa em breve"),
+      $("reuniao-aviso-entrar"), $("reuniao-aviso-fechar"));
     $("reunioes-marcar").addEventListener("click", () => abrirForm(null, $("reunioes-marcar")));
     $("reunioes-geral").addEventListener("click", convocar);
     $("reunioes-antes").addEventListener("click", () => { s.semana--; carregarSemana(); });
