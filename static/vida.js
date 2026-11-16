@@ -1421,6 +1421,7 @@ const Vida = (() => {
   const vivo = { ger: 0, ligado: false, lido: false, andar: null, seq: 0, falhas: 0, timer: 0, envio: 0, enviado: -1e9, perfilEm: -1e9,
     invisivel: () => true, perfil: null, m: null, eu: null, avisada: null,   // avisada: a última sala do evento "minha-sala"
     status: null, muralV: {}, noPredio: null,   // 1.6 Onda 2 (só com o store ligado): o meu status, a versão do mural por canal e o total do prédio
+    reunioesV: null, reunioes: [], convocada: null, convocacao: null,   // 1.6 Onda 3: a agenda (só sala e horário) e a reunião geral
     pessoas: new Map() };   // pessoas: os outros, pelo "usuario" da lista (só chave: no saguão é um id opaco, nunca vai para a tela)
 
   // liga (ou religa, ao trocar de andar) o polling; null desliga. invisivel(): a TV e quem desligou "Aparecer" só leem
@@ -1429,6 +1430,7 @@ const Vida = (() => {
     if (vivo.eu) { vivo.eu = null; avisarSala(null); }
     vivo.pessoas.clear(); vivo.seq = 0; vivo.falhas = 0; vivo.avisada = null; vivo.lido = false; vivo.ligado = !!opcoes;
     vivo.status = null; vivo.muralV = {}; vivo.noPredio = null;
+    vivo.reunioesV = null; vivo.reunioes = []; vivo.convocada = null; vivo.convocacao = null;
     if (!opcoes) return;
     vivo.andar = Andar.atual; vivo.invisivel = opcoes.invisivel || (() => false);
     lerPerfil(vivo.ger);
@@ -1519,6 +1521,42 @@ const Vida = (() => {
       if (p) gesto(p, a.tipo === "porta" ? "Toc, toc!" : "Oi!");
       window.dispatchEvent(new CustomEvent("aceno", { detail: { nome: nomeDe(a.nome, "Alguém"), tipo: a.tipo } }));   // a tela avisa (textContent)
     }
+    // 1.6 Onda 3: a agenda mudou (marcar, editar, cancelar): relê; a convocação nova espera o meu boneco (passoPessoas)
+    if (Number.isInteger(d.reunioes_v) && d.reunioes_v !== vivo.reunioesV) { vivo.reunioesV = d.reunioes_v; lerReunioes(vivo.ger); }
+    const c = d.convocacao;
+    if (c && typeof c === "object" && Number.isInteger(c.seq) && typeof c.sala === "string" && c.seq !== vivo.convocada) {
+      vivo.convocada = c.seq; vivo.convocacao = { sala: c.sala, nome: nomeDe(c.nome, "Alguém") };
+    }
+  }
+
+  // a agenda de hoje em diante (GET /api/reunioes, um dia): só sala, início e fim, para a placa "Em reunião" na porta
+  function lerReunioes(ger) {
+    fetch(Andar.com("api/reunioes?dias=1", vivo.andar), { cache: "no-store", credentials: "same-origin" })
+      .then(r => (r.ok ? r.json() : null)).then(d => {
+        if (ger !== vivo.ger || !d || !Array.isArray(d.reunioes)) return;
+        vivo.reunioes = d.reunioes.filter(r => r && typeof r.sala === "string" && Number.isInteger(r.inicio) && Number.isInteger(r.fim))
+          .slice(0, 500).map(r => ({ sala: r.sala, inicio: r.inicio, fim: r.fim }));
+      }).catch(() => {});
+  }
+  // a sala (a chave do mapa, sem "sala:") tem reunião acontecendo agora
+  function emReuniao(chave) {
+    const agora = Date.now() / 1000;
+    return vivo.reunioes.some(r => r.sala === chave && r.inicio <= agora && agora < r.fim);
+  }
+
+  // reunião geral: o meu boneco vai até um canto livre da sala (com "reduzir movimento", aparece lá) e todos no andar
+  // mostram o balão. Sala fora do mapa: nada
+  function convocar(m, { sala, nome }) {
+    const s = salaDaChave(m, sala), eu = vivo.eu;
+    if (!s) return;
+    for (const p of [...vivo.pessoas.values(), eu]) falar(p, "Reunião geral", 4);
+    window.dispatchEvent(new CustomEvent("convocacao", { detail: { nome, sala: s.nome } }));
+    if (eu.sala === sala) return;
+    const alvo = pontoDeVisita(m, s), rota = alvo && rotaAte(m, [eu.x, eu.y], alvo.p);
+    if (!rota || !rota.length) return;
+    if (calmo.matches) { [eu.x, eu.y] = alvo.p; eu.rota = []; } else eu.rota = rota;
+    eu.bater = null;
+    enviarPresenca();
   }
   function meuStatus() { if (vivo.eu && vivo.status) { vivo.eu.status = vivo.status.status; vivo.eu.texto = vivo.status.texto; } }
 
@@ -1706,6 +1744,7 @@ const Vida = (() => {
     if (!vivo.eu && vivo.perfil && !vivo.invisivel()) nascer(m);
     const eu = vivo.eu;
     if (!eu) return;
+    if (vivo.convocacao) { convocar(m, vivo.convocacao); vivo.convocacao = null; }
     const andava = eu.rota.length > 0;
     andarPessoa(m, eu, dt, agora);
     const s = salaEm(m, eu.x, eu.y), sala = s && typeof s.chave === "string" ? s.chave : "";
@@ -1757,7 +1796,7 @@ const Vida = (() => {
     return n;
   }
 
-  return { criarMundo, sincronizar, passo, renomear, digitando, momento, objetoClicado, festaGeral, social, aoVivo, irAte, irAtePessoa, acenar, mudarStatus, equipe, dmCom, STATUS,
+  return { criarMundo, sincronizar, passo, renomear, digitando, momento, objetoClicado, festaGeral, social, aoVivo, irAte, irAtePessoa, acenar, mudarStatus, equipe, dmCom, emReuniao, STATUS,
     muralV: canal => (Object.hasOwn(vivo.muralV, canal) ? vivo.muralV[canal] : null), noPredio: () => vivo.noPredio, pessoas, olhando, textoGreve, horaExtra, mexendo, intervaloQuadro, FRASES };
 })();
 
