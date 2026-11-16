@@ -644,6 +644,111 @@ class Onda2(Base):
         self.assertIsNone(self.eq.para_aviso(999))
 
 
+class Reunioes(Base):
+    """Onda 3: o link fixo por sala (lista fechada de hosts), a agenda do andar e o aviso 5 min antes."""
+
+    def marca(self, eq=None, autor="ana", sala="reuniao", inicio=None, duracao=30, convidados=("bia",), titulo="Plan"):
+        inicio = self.r.t + 3600 if inicio is None else inicio
+        return (eq or self.eq).marcar(autor, autor.title(), titulo, sala, int(inicio), duracao, list(convidados))
+
+    def test_link_so_https_na_lista_sem_credencial(self):
+        bons = ["https://meet.google.com/abc-defg-hij", "https://us02web.zoom.us/j/123?pwd=x", "https://zoom.us/j/1",
+                "https://meet.jit.si/SalaDaEquipe", "https://teams.microsoft.com/l/meetup-join/19%3a",
+                "https://whereby.com/equipe", "https://MEET.google.com/abc"]
+        for url in bons:
+            self.assertEqual(ce.validar_link(url), url, url)
+        ruins = ["http://meet.google.com/abc", "https://evil.com/meet.google.com", "https://meet.google.com.evil.com/x",
+                 "https://user:senha@meet.google.com/x", "https://a@meet.google.com/x", "https://meet.google.com:8443/x",
+                 "javascript:alert(1)", "https://evilzoom.us/j/1", "https://meet.google.com/a b",
+                 "https://meet.google.com/a\b", "https://meet.google.com/‮", "https://meet.google.com/" + "a" * 500,
+                 "", "https://jitsi.minha.com/x", None, 7, "https://meet.google.com/<script>"]
+        for url in ruins:
+            with self.assertRaises(ValueError, msg=repr(url)):
+                ce.validar_link(url)
+        self.assertEqual(ce.validar_link("https://jitsi.minha.com/x", "jitsi.minha.com"), "https://jitsi.minha.com/x")
+        self.assertEqual(ce.hosts_reuniao("jitsi.minha.com")[-1], "jitsi.minha.com")
+        self.assertEqual(ce.hosts_reuniao(None), list(ce.HOSTS_REUNIAO))
+
+    def test_links_por_sala_e_por_andar(self):
+        self.eq.definir_link("reuniao", "https://meet.google.com/abc-defg-hij")
+        self.eq.definir_link("lounge", "https://meet.jit.si/x")
+        self.assertEqual(self.eq.links(), {"reuniao": "https://meet.google.com/abc-defg-hij", "lounge": "https://meet.jit.si/x"})
+        self.eq.definir_link("lounge", "")
+        self.assertEqual(list(self.eq.links()), ["reuniao"])
+        self.assertEqual(self.abrir("b").links(), {})   # outro andar, outro arquivo
+        with self.assertRaises(ValueError):
+            self.eq.definir_link("reuniao", "https://evil.com/x")
+
+    def test_marcar_listar_editar_cancelar(self):
+        r = self.marca(convidados=["bia", "beto"])
+        self.assertEqual((r["titulo"], r["sala"], r["duracao"], r["fim"] - r["inicio"]), ("Plan", "reuniao", 30, 1800))
+        self.assertEqual((r["usuario"], r["nome"], r["convidados"]), ("ana", "Ana", ["beto", "bia"]))
+        self.assertEqual([x["id"] for x in self.eq.reunioes(self.r.t, self.r.t + 7 * DIA)], [r["id"]])
+        self.assertEqual(self.eq.reunioes(self.r.t + 2 * 3600, self.r.t + DIA), [])
+        v = self.eq.versao_reunioes()
+        with self.assertRaises(SemAcesso):   # nem quem marcou nem admin
+            self.eq.editar(r["id"], "bia", False, "x", "reuniao", r["inicio"], 30, [])
+        e = self.eq.editar(r["id"], "bia", True, "Novo", "lounge", r["inicio"] + 60, 45, ["bia"])
+        self.assertEqual((e["titulo"], e["sala"], e["duracao"], e["convidados"], e["usuario"]),
+                         ("Novo", "lounge", 45, ["bia"], "ana"))
+        self.assertNotEqual(self.eq.versao_reunioes(), v)
+        with self.assertRaises(SemAcesso):
+            self.eq.cancelar(r["id"], "bia", False)
+        self.eq.cancelar(r["id"], "ana", False)
+        self.assertIsNone(self.eq.reuniao(r["id"]))
+        with self.assertRaises(SemAcesso):
+            self.eq.cancelar(r["id"], "ana", True)
+
+    def test_validacao(self):
+        agora = self.r.t
+        for k in ({"titulo": ""}, {"titulo": "x" * 81}, {"titulo": "a‮b"}, {"duracao": 4}, {"duracao": 481},
+                  {"duracao": True}, {"inicio": agora - 120}, {"inicio": agora + 367 * DIA},
+                  {"convidados": ["bia", "bia"]}, {"convidados": ["Nao Login"]}, {"convidados": ["u%d" % i for i in range(51)]}):
+            with self.assertRaises(ValueError, msg=k):
+                self.marca(**k)
+        self.marca(inicio=agora - 30)   # a tolerância de 60 s
+
+    def test_sala_ocupada_e_agenda_cheia(self):
+        r = self.marca(inicio=self.r.t + 3600, duracao=60)
+        with self.assertRaises(ce.SalaOcupada):
+            self.marca(inicio=self.r.t + 3600 + 1800)
+        self.marca(sala="lounge", inicio=self.r.t + 3600 + 1800)   # outra sala
+        self.marca(inicio=self.r.t + 3600 + 3600)   # logo depois
+        self.eq.editar(r["id"], "ana", False, "Plan", "reuniao", r["inicio"], 60, [])   # a própria não conflita
+        with unittest.mock.patch.object(ce, "REUNIOES_MAX", 3):
+            with self.assertRaises(ce.AgendaCheia):
+                self.marca(sala="cozinha")
+
+    def test_aviso_5_min_antes_uma_vez_e_rearma_ao_mudar_o_horario(self):
+        r = self.marca(inicio=self.r.t + 600, convidados=["bia"])
+        self.assertEqual(self.eq.a_avisar(self.r.t + 299), [])   # ainda faltam mais de 5 min
+        devidas = self.eq.a_avisar(r["inicio"] - 300)
+        self.assertEqual([(x["id"], x["usuario"], x["convidados"]) for x in devidas], [(r["id"], "ana", ["bia"])])
+        self.assertEqual(self.eq.a_avisar(r["inicio"] - 200), [])   # uma vez só
+        self.eq.editar(r["id"], "ana", False, "Plan", "reuniao", r["inicio"] + 600, 30, ["bia"])
+        self.assertEqual(self.eq.a_avisar(r["inicio"] - 200), [])
+        self.assertEqual(len(self.eq.a_avisar(r["inicio"] + 600 - 120)), 1)
+        self.assertEqual(self.eq.a_avisar(r["inicio"] + 600 + 1), [])   # já começou: não avisa mais
+
+    def test_salas_em_reuniao(self):
+        r = self.marca(inicio=self.r.t + 60, duracao=30)
+        self.assertEqual(self.eq.salas_em_reuniao(self.r.t), set())
+        self.assertEqual(self.eq.salas_em_reuniao(r["inicio"]), {"reuniao"})
+        self.assertEqual(self.eq.salas_em_reuniao(r["fim"]), set())
+
+    def test_ex_membro_e_retencao(self):
+        r = self.marca(convidados=["bia", "beto"])
+        self.eq.remover_conta("ana")
+        self.eq.remover_conta("bia")
+        x = self.eq.reuniao(r["id"])
+        self.assertEqual((x["usuario"], x["nome"], x["convidados"]), (None, ce.EX_MEMBRO, ["beto"]))
+        with self.assertRaises(SemAcesso):   # o login de volta não herda
+            self.eq.cancelar(r["id"], "ana", False)
+        self.r.t = r["fim"] + 365 * DIA + 1
+        self.eq.varrer()
+        self.assertIsNone(self.eq.reuniao(r["id"]))
+
+
 class SemTextoNoLog(unittest.TestCase):
     def test_modulo_nao_imprime_nem_loga(self):
         """O texto das conversas só vai para o banco: nada de print, log nem logging no módulo."""

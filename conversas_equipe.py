@@ -19,7 +19,10 @@ e nome saem da conta, nunca do cliente). Aqui ficam os limites, as fronteiras de
   nunca o texto; ler pela auditoria não marca como lida; os dois participantes veem as datas.
 - Anexos: só os metadados ficam no banco; o arquivo fica em anexos/<token> (token_hex(16), sem o nome do cliente). A cota
   da empresa é reservada antes de ler o corpo (reservar), e o envio confirma (anexar) ou devolve (liberar).
-- O saguão não tem DM nem anexo.
+- Reuniões (Onda 3): o link fixo de cada sala (só https, host numa lista fechada, sem credencial no endereço) e a
+  agenda do andar (título, sala, início, duração, convidados). O aviso 5 min antes sai uma vez por reunião (mudar o
+  horário rearma). A agenda segue a retenção do andar.
+- O saguão não tem DM, anexo nem reunião.
 """
 import os
 import re
@@ -28,6 +31,7 @@ import sqlite3
 import threading
 import time
 import unicodedata
+import urllib.parse
 
 from acesso import USUARIO_OK
 from presenca import Limite, limpar_texto
@@ -56,6 +60,13 @@ SHA_OK = re.compile(r"[0-9a-f]{64}")
 TIPO_OK = re.compile(r"[a-z]+/[a-z0-9.+-]{1,80}")
 DM_OK = re.compile(r"dm:([1-9][0-9]{0,17})")
 PALAVRA = re.compile(r"\w+")
+# Onda 3 (B4, D9 a): o link externo fixo por sala e a agenda
+HOSTS_REUNIAO = ("meet.google.com", "*.zoom.us", "meet.jit.si", "teams.microsoft.com", "whereby.com")
+LINK_MAX = 500
+LINK_OK = re.compile(r"[!#-;=?-\[\]_a-z~]+")   # ASCII visível (minúsculo) sem espaço, aspas, < > \ ^ crase { | }
+TITULO_MAX, DURACAO_MIN, DURACAO_MAX, CONVIDADOS_MAX = 80, 5, 480, 50
+REUNIOES_MAX = 500   # reuniões por vir, por andar
+AVISO_ANTES = 300    # o aviso pessoal sai 5 min antes
 
 ESQUEMA = """
 CREATE TABLE IF NOT EXISTS ajuste (chave TEXT PRIMARY KEY, valor INTEGER NOT NULL);
@@ -78,6 +89,13 @@ CREATE TABLE IF NOT EXISTS acesso_dm (id INTEGER PRIMARY KEY, canal INTEGER NOT 
 CREATE TABLE IF NOT EXISTS mencao (mensagem INTEGER NOT NULL, usuario TEXT NOT NULL, PRIMARY KEY (mensagem, usuario));
 CREATE INDEX IF NOT EXISTS mencao_usuario ON mencao (usuario, mensagem);
 CREATE TABLE IF NOT EXISTS status (usuario TEXT PRIMARY KEY, status TEXT NOT NULL, texto TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS sala_link (sala TEXT PRIMARY KEY, url TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS reuniao (id INTEGER PRIMARY KEY AUTOINCREMENT, titulo TEXT NOT NULL, sala TEXT NOT NULL,
+                                    inicio INTEGER NOT NULL, duracao INTEGER NOT NULL, autor TEXT, nome TEXT,
+                                    avisada INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX IF NOT EXISTS reuniao_inicio ON reuniao (inicio);
+CREATE TABLE IF NOT EXISTS convidado (reuniao INTEGER NOT NULL, usuario TEXT NOT NULL, PRIMARY KEY (reuniao, usuario));
+CREATE INDEX IF NOT EXISTS convidado_usuario ON convidado (usuario);
 CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(texto, content='mensagem', content_rowid='id',
                                                   tokenize='unicode61 remove_diacritics 2');
 CREATE TRIGGER IF NOT EXISTS fts_novo AFTER INSERT ON mensagem WHEN new.texto IS NOT NULL BEGIN
@@ -100,6 +118,14 @@ class SemAcesso(LookupError):
 
 class CotaCheia(Exception):
     """A cota de anexos da empresa não comporta o envio."""
+
+
+class SalaOcupada(Exception):
+    """Outra reunião cruza o mesmo horário na mesma sala."""
+
+
+class AgendaCheia(Exception):
+    """O andar já tem REUNIOES_MAX reuniões por vir."""
 
 
 def _iso(t):
@@ -148,6 +174,41 @@ def _nome_arquivo(nome):
     return nome
 
 
+def hosts_reuniao(extra=None):
+    """Os hosts aceitos no link da sala: a lista fechada e, no fim, o Jitsi próprio da instalação (um host exato)."""
+    return [*HOSTS_REUNIAO, *([extra] if extra else [])]
+
+
+def validar_link(url, extra=None):
+    """O link fixo da sala: https, host da lista (o *.zoom.us vale para zoom.us e os subdomínios), sem usuário nem senha
+    no endereço, sem porta e só ASCII visível. Devolve a URL como veio; fora disso, ValueError."""
+    if not isinstance(url, str) or not 1 <= len(url) <= LINK_MAX or not LINK_OK.fullmatch(url.lower()):
+        raise ValueError("link")
+    partes = urllib.parse.urlsplit(url)
+    if partes.scheme.lower() != "https" or "@" in partes.netloc or ":" in partes.netloc:
+        raise ValueError("link")
+    host = partes.netloc.lower()
+    for aceito in hosts_reuniao(extra):
+        if host == aceito or (aceito.startswith("*.") and (host == aceito[2:] or host.endswith(aceito[1:]))):
+            return url
+    raise ValueError("link")
+
+
+def _titulo(titulo):
+    if not isinstance(titulo, str):
+        raise ValueError("título inválido")
+    titulo = titulo.strip()
+    if not 1 <= len(titulo) <= TITULO_MAX or not _visivel(titulo):
+        raise ValueError(f"O título vai de 1 a {TITULO_MAX} caracteres, sem símbolos invisíveis.")
+    return titulo
+
+
+def _convidados(lista):
+    if not isinstance(lista, list) or len(lista) > CONVIDADOS_MAX or len(set(map(str, lista))) != len(lista):
+        raise ValueError(f"Até {CONVIDADOS_MAX} convidados, sem repetir.")
+    return sorted(_usuario(u) for u in lista)
+
+
 class Equipe:
     def __init__(self, pasta, relogio=time.time, teto_banco=TETO_BANCO, cota_anexos=COTA_ANEXOS, saguao=False):
         self.relogio, self.teto_banco, self.cota_anexos, self.saguao = relogio, teto_banco, cota_anexos, saguao
@@ -182,6 +243,7 @@ class Equipe:
         # a versão de cada canal (muda ao apagar e ao reagir): só na memória, com uma base sorteada para não repetir um
         # valor de antes de reiniciar
         self.base_versao, self.versoes = secrets.randbelow(2 ** 40), {}
+        self.versao_agenda = 0   # muda a cada marcar, editar ou cancelar (o reunioes_v do /api/ao-vivo)
 
     def fechar(self):
         with self.trava:
@@ -647,6 +709,9 @@ class Equipe:
                 ids = [i for (i,) in self.con.execute("SELECT id FROM mensagem WHERE em < ?", (prazo,))]
                 tokens = self._apagar_linhas(ids)
                 avisos = self.con.execute("DELETE FROM mural WHERE em < ?", (prazo,)).rowcount
+                self.con.execute("DELETE FROM convidado WHERE reuniao IN "
+                                 "(SELECT id FROM reuniao WHERE inicio + duracao * 60 < ?)", (prazo,))
+                self.con.execute("DELETE FROM reuniao WHERE inicio + duracao * 60 < ?", (prazo,))
                 registros = self.con.execute("DELETE FROM acesso_dm WHERE quando < ?", (agora - REGISTRO_DIAS * DIA,)).rowcount
                 self.dms_abertas = {i: q for i, q in self.dms_abertas.items() if q >= agora - DIA}
                 vazias = [i for (i,) in self.con.execute(
@@ -684,11 +749,139 @@ class Equipe:
                 self.con.execute("DELETE FROM leitura WHERE usuario = ?", (usuario,))
                 self.con.execute("DELETE FROM mencao WHERE usuario = ?", (usuario,))
                 self.con.execute("DELETE FROM status WHERE usuario = ?", (usuario,))
+                self.con.execute("UPDATE reuniao SET autor = NULL, nome = NULL WHERE autor = ?", (usuario,))
+                self.con.execute("DELETE FROM convidado WHERE usuario = ?", (usuario,))
                 self.con.execute("DELETE FROM ajuste WHERE chave = ?", ("dm_aviso:" + usuario,))
                 self.con.execute("UPDATE canal SET u1 = NULL, chave = NULL WHERE dm = 1 AND u1 = ?", (usuario,))
                 self.con.execute("UPDATE canal SET u2 = NULL, chave = NULL WHERE dm = 1 AND u2 = ?", (usuario,))
             self.status.pop(usuario, None)
             self.reservas = {t: r for t, r in self.reservas.items() if r[0] != usuario}
+
+    # --- reuniões (Onda 3): o link fixo por sala e a agenda do andar
+    def links(self):
+        """{sala: url} das salas com link."""
+        with self.trava:
+            return dict(self.con.execute("SELECT sala, url FROM sala_link ORDER BY sala"))
+
+    def definir_link(self, sala, url, extra=None):
+        """Grava o link da sala (a sala já vem conferida contra o mapa); url "" tira."""
+        if not isinstance(sala, str) or not 1 <= len(sala) <= SALA_MAX:
+            raise ValueError("sala inválida")
+        if url != "":
+            url = validar_link(url, extra)
+        with self.trava:
+            with self.con:
+                if url == "":
+                    self.con.execute("DELETE FROM sala_link WHERE sala = ?", (sala,))
+                else:
+                    self.con.execute("INSERT INTO sala_link (sala, url) VALUES (?, ?) ON CONFLICT (sala) "
+                                     "DO UPDATE SET url = excluded.url", (sala, url))
+
+    def _reunioes(self, onde, params):
+        linhas = self.con.execute("SELECT id, titulo, sala, inicio, duracao, autor, nome FROM reuniao "
+                                  f"WHERE {onde} ORDER BY inicio, id", params).fetchall()
+        convidados = {}
+        if linhas:
+            marcas = ",".join("?" * len(linhas))
+            for r, u in self.con.execute(f"SELECT reuniao, usuario FROM convidado WHERE reuniao IN ({marcas}) "
+                                         "ORDER BY usuario", [linha[0] for linha in linhas]):
+                convidados.setdefault(r, []).append(u)
+        return [{"id": i, "titulo": t, "sala": sala, "inicio": ini, "duracao": d, "fim": ini + d * 60, "usuario": autor,
+                 "nome": nome if autor is not None else EX_MEMBRO, "convidados": convidados.get(i, [])}
+                for i, t, sala, ini, d, autor, nome in linhas]
+
+    def _conferir_reuniao(self, titulo, sala, inicio, duracao, convidados, agora):
+        titulo, convidados = _titulo(titulo), _convidados(convidados)
+        if not isinstance(sala, str) or not 1 <= len(sala) <= SALA_MAX:
+            raise ValueError("sala inválida")
+        _inteiro(duracao, DURACAO_MIN, DURACAO_MAX, f"A duração vai de {DURACAO_MIN} a {DURACAO_MAX} minutos.")
+        _inteiro(inicio, int(agora) - 60, int(agora) + 366 * DIA, "O início vai de agora até um ano à frente.")
+        return titulo, convidados
+
+    def _sem_choque(self, sala, inicio, duracao, menos=None):
+        if self.con.execute("SELECT 1 FROM reuniao WHERE sala = ? AND inicio < ? AND inicio + duracao * 60 > ? "
+                            "AND id IS NOT ?", (sala, inicio + duracao * 60, inicio, menos)).fetchone():
+            raise SalaOcupada()
+
+    def marcar(self, usuario, nome, titulo, sala, inicio, duracao, convidados):
+        """Uma reunião do andar. Sala e convidados já vêm conferidos pelo escritorio.py (o mapa e quem tem papel no
+        andar)."""
+        usuario, nome = _usuario(usuario), _nome(nome)
+        with self.trava:
+            agora = self.relogio()
+            titulo, convidados = self._conferir_reuniao(titulo, sala, inicio, duracao, convidados, agora)
+            if self.con.execute("SELECT COUNT(*) FROM reuniao WHERE inicio + duracao * 60 > ?",
+                                (agora,)).fetchone()[0] >= REUNIOES_MAX:
+                raise AgendaCheia()
+            self._sem_choque(sala, inicio, duracao)
+            with self.con:
+                id_r = self.con.execute("INSERT INTO reuniao (titulo, sala, inicio, duracao, autor, nome) VALUES "
+                                        "(?, ?, ?, ?, ?, ?)", (titulo, sala, inicio, duracao, usuario, nome)).lastrowid
+                self.con.executemany("INSERT INTO convidado (reuniao, usuario) VALUES (?, ?)",
+                                     [(id_r, u) for u in convidados])
+            self.versao_agenda += 1
+            return self._reunioes("id = ?", (id_r,))[0]
+
+    def _minha(self, id_reuniao, usuario, moderador):
+        """A reunião, para quem marcou ou o moderador; os outros (e a que não existe): SemAcesso."""
+        linha = self.con.execute("SELECT autor FROM reuniao WHERE id = ?", (id_reuniao,)).fetchone()
+        if linha is None or not (moderador or (linha[0] is not None and linha[0] == usuario)):
+            raise SemAcesso()
+
+    def editar(self, id_reuniao, usuario, moderador, titulo, sala, inicio, duracao, convidados):
+        """Quem marcou ou o moderador (o admin do andar). Mudar o início rearma o aviso de 5 min."""
+        with self.trava:
+            agora = self.relogio()
+            self._minha(id_reuniao, usuario, moderador)
+            titulo, convidados = self._conferir_reuniao(titulo, sala, inicio, duracao, convidados, agora)
+            self._sem_choque(sala, inicio, duracao, menos=id_reuniao)
+            with self.con:
+                self.con.execute("UPDATE reuniao SET titulo = ?, sala = ?, duracao = ?, "
+                                 "avisada = CASE WHEN inicio = ? THEN avisada ELSE 0 END, inicio = ? WHERE id = ?",
+                                 (titulo, sala, duracao, inicio, inicio, id_reuniao))
+                self.con.execute("DELETE FROM convidado WHERE reuniao = ?", (id_reuniao,))
+                self.con.executemany("INSERT INTO convidado (reuniao, usuario) VALUES (?, ?)",
+                                     [(id_reuniao, u) for u in convidados])
+            self.versao_agenda += 1
+            return self._reunioes("id = ?", (id_reuniao,))[0]
+
+    def cancelar(self, id_reuniao, usuario, moderador):
+        with self.trava:
+            self._minha(id_reuniao, usuario, moderador)
+            with self.con:
+                self.con.execute("DELETE FROM convidado WHERE reuniao = ?", (id_reuniao,))
+                self.con.execute("DELETE FROM reuniao WHERE id = ?", (id_reuniao,))
+            self.versao_agenda += 1
+
+    def reuniao(self, id_reuniao):
+        with self.trava:
+            achadas = self._reunioes("id = ?", (id_reuniao,))
+        return achadas[0] if achadas else None
+
+    def reunioes(self, de, ate):
+        """As reuniões que cruzam [de, ate), por início."""
+        with self.trava:
+            return self._reunioes("inicio < ? AND inicio + duracao * 60 > ?", (ate, de))
+
+    def versao_reunioes(self):
+        with self.trava:
+            return self.base_versao + self.versao_agenda
+
+    def a_avisar(self, agora):
+        """As reuniões que começam nos próximos 5 min e ainda não avisaram, já marcadas como avisadas (uma vez só)."""
+        with self.trava:
+            devidas = self._reunioes("avisada = 0 AND inicio > ? AND inicio <= ?", (agora, agora + AVISO_ANTES))
+            if devidas:
+                with self.con:
+                    self.con.executemany("UPDATE reuniao SET avisada = 1 WHERE id = ?", [(r["id"],) for r in devidas])
+            return devidas
+
+    def salas_em_reuniao(self, agora):
+        """As salas com reunião em andamento agora (o status automático "em reunião")."""
+        with self.trava:
+            return {sala for (sala,) in self.con.execute(
+                "SELECT sala FROM reuniao WHERE inicio <= ? AND inicio > ? AND inicio + duracao * 60 > ?",
+                (agora, agora - DURACAO_MAX * 60, agora))}
 
     # --- auditoria de DM (D4 b, D10 a): o escritorio.py só chama para o admin da empresa no andar
     def pares_dm(self):
