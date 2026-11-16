@@ -252,5 +252,38 @@ async function montar(lista, eu = "eu") {
     assert.equal(nada.length, 0);
   }
 
+  // o mural na parede (mapa.js): só com config.equipe.mural; num trecho de parede que sobrou livre (sem porta, janela,
+  // placa, logo, quadro, móvel alto), sem mudar mais nada do prédio. A recepção mostra o "geral"; cada sala, o dela
+  {
+    const ctx = new Proxy({}, { get: (o, k) => (k === "measureText" ? t => ({ width: String(t).length * 4 }) : k in o ? o[k] : () => {}), set: (o, k, v) => { o[k] = v; return true; } });
+    const c = { console, getComputedStyle: () => ({ getPropertyValue: () => "" }), document: { documentElement: {}, createElement: () => ({ getContext: () => ctx }) } };
+    c.window = c;
+    vm.runInNewContext(fs.readFileSync("static/mapa.js", "utf8"), c);
+    const atlas = { json: JSON.parse(fs.readFileSync("static/tema/atlas.json", "utf8")), img: {} };
+    const times = [{ nome: "Dev", tipo: "mesas", parede: 2, piso: 3, handles: ["a", "b", "c"] }, { nome: "Arte", tipo: "mesas", parede: 1, piso: 2, handles: ["d"] }];
+    const resumo = p => JSON.stringify({ o: p.objetos.map(o => [o.nome || o.tipo, o.x, o.y]), q: p.quadros, v: p.vagas.map(v => [v.x, v.y, v.tipo]), j: p.janelas,
+      s: [...p.salas, ...p.baixo].map(s => [s.chave, s.px, s.py, s.pw, s.ph, s.placa]) });
+    for (const grupos of [[], times]) {
+      const sem = c.Mapa.montarPredio(atlas, { empresa: "X" }, grupos, null);
+      const nulo = c.Mapa.montarPredio(atlas, { empresa: "X", equipe: null }, grupos, null);
+      const com = c.Mapa.montarPredio(atlas, { empresa: "X", equipe: { mural: true } }, grupos, null);
+      const salas = p => [...p.salas, ...p.baixo];
+      assert.ok(salas(sem).every(s => !s.mural) && salas(nulo).every(s => !s.mural), "sem store, sem mural");
+      assert.equal(resumo(nulo), resumo(sem));
+      assert.equal(resumo(com), resumo(sem), "o mural não mexe em mais nada do prédio");
+      assert.ok(salas(com).filter(s => s.mural).length >= salas(com).length - 1, "no máximo uma sala sem lugar na parede");
+      for (const s of salas(com)) {
+        const q = s.mural;
+        if (!q) { assert.notEqual(s.tipo, "recepcao", "a recepção sempre tem o mural"); continue; }   // parede cheia (a cozinha): sem quadro
+        assert.equal(q.canal, s.tipo === "recepcao" ? "geral" : "sala:" + s.chave);
+        assert.ok(q.x >= s.px + 4 && q.x + q.w <= s.px + s.pw - 4 && q.y >= s.py + 2 && q.y + q.h <= s.chao - 2, `${s.chave}: na parede da sala`);
+        const bate = r => r && q.x < r.x + r.w && q.x + q.w > r.x && q.y < r.y + r.h && q.y + q.h > r.y;
+        assert.ok(!com.quadros.some(bate) && !com.janelas.some(bate), `${s.chave}: sem cobrir quadro nem janela`);
+        assert.ok(!bate(s.placaLogo) && !bate(s.logo) && !(s.placa && bate({ x: s.placa.x, y: s.placa.y, w: s.placa.total, h: 12 })), `${s.chave}: sem cobrir placa nem logo`);
+        assert.ok((s.portas || []).every(px => q.x > px + 18 || q.x + q.w < px - 18), `${s.chave}: longe da porta`);
+      }
+    }
+  }
+
   console.log("test_mapa_equipe: ok");
 })().catch(e => { console.error(e); process.exit(1); });

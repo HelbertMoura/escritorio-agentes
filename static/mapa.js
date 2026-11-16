@@ -154,6 +154,15 @@ function pintarRingue(c, x, y, w, h, abertura, corP) {
 
 // quadro do placar do ringue: moldura e fundo; o título, o top 3 e o campeão anterior são do efeitos.js (mudam a cada leitura)
 const QUADRO_PLACAR = { w: 64, h: 40 };
+// mural da sala (1.6): quadro de cortiça com moldura de madeira; os avisos (app.js) entram por cima, presos com tachinha
+const MURAL = { w: 24, h: 16 };
+function pintarMural(c, x, y) {
+  pintaPx(c, x, y, MURAL.w, MURAL.h, "#4a3220"); pintaPx(c, x + 1, y + 1, MURAL.w - 2, MURAL.h - 2, "#6e4a2c");
+  pintaPx(c, x + 2, y + 2, MURAL.w - 4, MURAL.h - 4, "#c08a52");
+  pontosPx(c, x + 2, y + 2, [[2, 1], [7, 3], [12, 1], [17, 4], [4, 7], [10, 9], [15, 8], [1, 10], [18, 10], [8, 6]], "#a8703c");
+  pintaPx(c, x + 2, y + 2, MURAL.w - 4, 1, "#d6a36c");
+  pintaPx(c, x + 1, y + MURAL.h, MURAL.w - 2, 1, "rgba(0,0,0,.25)");   // sombra na parede
+}
 function pintarQuadroPlacar(c, x, y, w, h) {
   pintaPx(c, x + 1, y + h, w, 1, "rgba(0,0,0,.25)");                                    // sombra na parede
   pintaPx(c, x, y, w, h, "#4a3020"); pintaPx(c, x + 1, y + 1, w - 2, h - 2, "#7a5232"); pintaPx(c, x + 2, y + 2, w - 4, h - 4, "#171a24");
@@ -1123,6 +1132,23 @@ function montar(atlas, config, grupos, planta) {
       pintaPx(c, px - T, s.py - 3, 2 * T, 4, "#d6cfbf"); pintaPx(c, px - T, s.py + 1, 2 * T, 1, "#b5ad9c"); pintaPx(c, px - T, s.py + 2, 2 * T, 2, "rgba(36,20,8,.16)");
       portas.push({ tipo: s.tipo === "cozinha" ? "vaivem" : "vidro", x: px - T, y: s.py - 3, w: 2 * T, h: PAREDE * T + 3, abre: 0 });
     }
+  }
+  // F) mural de cada sala (1.6, só com o store: config.equipe.mural), no trecho de parede que sobrou livre, da direita
+  // para a esquerda, sem mexer em mais nada. A recepção mostra o canal "geral" (no saguão, o mural do prédio)
+  if (config.equipe && config.equipe.mural) for (const s of [...salas, ...baixo]) {
+    const { w, h } = MURAL;
+    const ocupados = [...janelas, ...quadros, ...reservas, ...paredeOcupada.map(o => ({ ...o, h: 20 })), ...objetos.filter(o => o.w && o.h),
+      ...animados.filter(a => a.w && a.h), s.placaLogo, s.logo, s.placa && { x: s.placa.x, y: s.placa.y, w: s.placa.total, h: PLACA_H }];
+    const cabe = (x, y) => (s.portas || []).every(p => x > p + 18 || x + w < p - 18) && !ocupados.some(r => r && sobre({ x: x - 3, y: y - 2, w: w + 6, h: h + 4 }, r));
+    let lugar = null;
+    for (const y of [s.chao - 33, s.chao - 21]) {   // na altura dos quadros; senão, mais embaixo
+      for (let x = s.px + s.pw - 6 - w; x >= s.px + 6 && !lugar; x -= 2) if (cabe(x, y)) lugar = { x, y };
+      if (lugar) break;
+    }
+    if (!lugar) continue;   // parede cheia: a sala fica sem o quadro (o mural continua na lista do andar)
+    pintarMural(c, lugar.x, lugar.y);
+    s.mural = { ...lugar, w, h, canal: s.tipo === "recepcao" ? "geral" : "sala:" + s.chave };
+    paredeOcupada.push({ x: lugar.x - 4, w: w + 8, y: lugar.y });
   }
   // caminho da entrada lateral até a calçada fica livre (nenhuma árvore ou banco no meio)
   pegadas.push({ x: predioRet.x - 46, y: corredor.ty * T - 10, w: 62, h: predioRet.y + predioRet.h + 24 - corredor.ty * T, livre: true });
