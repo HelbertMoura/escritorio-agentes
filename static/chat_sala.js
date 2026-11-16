@@ -107,7 +107,21 @@ const ChatSala = (() => {
     return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   }
   const contagem = n => (!n ? "" : n > 9 ? "9+" : String(n));
-  const puro = { daSala, validar, limpar, novas, euDe, deMim, TEXTO_MAX, EMOJIS, canalDaSala, mesclar, maisAntiga, mencaoEmCurso,
+  // as abas do painel: no saguão só o Geral (sem DM entre empresas); num andar, Geral, a sala onde estou e Diretas
+  function abas(perfil, onde) {
+    const saida = [{ id: "geral", rotulo: "Geral" }], canal = canalDaSala(onde && onde.sala);
+    if (perfil.noSaguao) return saida;
+    if (canal && onde.nome) saida.push({ id: canal, rotulo: onde.nome });
+    return [...saida, { id: "diretas", rotulo: "Diretas" }];
+  }
+  // o que a vista mostra: escrever só num canal; anexo e menção nunca no saguão; menção não faz sentido na DM; o botão da
+  // auditoria só na lista de Diretas e só para o admin do andar
+  function controles(perfil, vista) {
+    const canal = vista === "geral" || vista.startsWith("sala:") || vista.startsWith("dm:");
+    return { escrever: canal, anexar: canal && !perfil.noSaguao, mencionar: canal && !perfil.noSaguao && !vista.startsWith("dm:"),
+      auditoria: vista === "diretas" && !!perfil.admin && !perfil.noSaguao };
+  }
+  const puro = { abas, controles, daSala, validar, limpar, novas, euDe, deMim, TEXTO_MAX, EMOJIS, canalDaSala, mesclar, maisAntiga, mencaoEmCurso,
     sugestoes, completarMencao, partes, tamanho, conferirArquivo, ehImagem, alternarReacao, textoRetencao, avisoDM, linhaAcessos, contagem };
 
   if (typeof document === "undefined") return puro;

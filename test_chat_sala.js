@@ -112,4 +112,17 @@ assert.equal(P.linhaAcessos(["2026-11-12T13:00:00Z"]), "A administração da emp
 assert.equal(P.linhaAcessos(["2026-11-10T13:00:00Z", "2026-11-12T13:00:00Z", "x"]), "A administração da empresa abriu esta conversa em 10/11/2026 e 12/11/2026.");
 assert.equal(P.contagem(0), "");
 assert.equal(P.contagem(12), "9+");
+// as abas por perfil e lugar: no saguão só o Geral; num andar, Geral, a sala onde estou (se estou numa) e Diretas
+igual(P.abas({ noSaguao: true }, { sala: "recepcao", nome: "Recepção" }), [{ id: "geral", rotulo: "Geral" }]);
+igual(P.abas({ noSaguao: false }, { sala: "", nome: "" }), [{ id: "geral", rotulo: "Geral" }, { id: "diretas", rotulo: "Diretas" }]);
+igual(P.abas({ noSaguao: false }, { sala: "cozinha", nome: "Cozinha" }),
+  [{ id: "geral", rotulo: "Geral" }, { id: "sala:cozinha", rotulo: "Cozinha" }, { id: "diretas", rotulo: "Diretas" }]);
+// o que cada vista mostra: o saguão nunca tem anexo, menção nem DM; auditoria e listas não têm caixa de escrever
+igual(P.controles({ noSaguao: true, admin: true }, "geral"), { escrever: true, anexar: false, mencionar: false, auditoria: false });
+igual(P.controles({ noSaguao: false, admin: false }, "sala:x"), { escrever: true, anexar: true, mencionar: true, auditoria: false });
+igual(P.controles({ noSaguao: false, admin: false }, "dm:3"), { escrever: true, anexar: true, mencionar: false, auditoria: false });
+igual(P.controles({ noSaguao: false, admin: true }, "diretas"), { escrever: false, anexar: false, mencionar: false, auditoria: true });
+igual(P.controles({ noSaguao: false, admin: false }, "diretas"), { escrever: false, anexar: false, mencionar: false, auditoria: false });
+igual(P.controles({ noSaguao: false, admin: true }, "auditoria"), { escrever: false, anexar: false, mencionar: false, auditoria: false });
+igual(P.controles({ noSaguao: false, admin: true }, "busca"), { escrever: false, anexar: false, mencionar: false, auditoria: false });
 console.log("test_chat_sala.js ok");
