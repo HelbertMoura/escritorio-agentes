@@ -107,19 +107,19 @@ const ChatSala = (() => {
     return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   }
   const contagem = n => (!n ? "" : n > 9 ? "9+" : String(n));
-  // as abas do painel: no saguão só o Geral (sem DM entre empresas); num andar, Geral, a sala onde estou e Diretas
-  function abas(perfil, onde) {
+  // as abas do painel pelo config.equipe: sem DM (o saguão) só o Geral; num andar, Geral, a sala onde estou e Diretas
+  function abas(eq, onde) {
     const saida = [{ id: "geral", rotulo: "Geral" }], canal = canalDaSala(onde && onde.sala);
-    if (perfil.noSaguao) return saida;
+    if (!eq || !eq.dm) return saida;
     if (canal && onde.nome) saida.push({ id: canal, rotulo: onde.nome });
     return [...saida, { id: "diretas", rotulo: "Diretas" }];
   }
-  // o que a vista mostra: escrever só num canal; anexo e menção nunca no saguão; menção não faz sentido na DM; o botão da
-  // auditoria só na lista de Diretas e só para o admin do andar
-  function controles(perfil, vista) {
-    const canal = vista === "geral" || vista.startsWith("sala:") || vista.startsWith("dm:");
-    return { escrever: canal, anexar: canal && !perfil.noSaguao, mencionar: canal && !perfil.noSaguao && !vista.startsWith("dm:"),
-      auditoria: vista === "diretas" && !!perfil.admin && !perfil.noSaguao };
+  // o que a vista mostra: escrever só num canal; anexo e menção conforme o config.equipe (o saguão não tem); menção não
+  // faz sentido na DM; o botão da auditoria só na lista de Diretas e só para o admin do andar
+  function controles(eq, vista) {
+    const e = eq || {}, canal = vista === "geral" || vista.startsWith("sala:") || vista.startsWith("dm:");
+    return { escrever: canal, anexar: canal && !!e.anexo, mencionar: canal && !!e.mencao && !vista.startsWith("dm:"),
+      auditoria: vista === "diretas" && !!e.auditoria };
   }
   const puro = { abas, controles, daSala, validar, limpar, novas, euDe, deMim, TEXTO_MAX, EMOJIS, canalDaSala, mesclar, maisAntiga, mencaoEmCurso,
     sugestoes, completarMencao, partes, tamanho, conferirArquivo, ehImagem, alternarReacao, textoRetencao, avisoDM, linhaAcessos, contagem };
@@ -133,7 +133,8 @@ const ChatSala = (() => {
     return e;
   };
   const urlAnexo = (andar, id, baixar) => Andar.com(`api/anexo?id=${id}${baixar ? "&baixar=1" : ""}`, andar);
-  // uma mensagem do store na tela. ctx: {eu, logins (Set do andar), andar, moderar (admin do andar: apaga em canal, nunca em DM)}
+  // uma mensagem do store na tela. ctx: {eu, logins (Set do andar), andar, moderar (admin do andar: apaga em canal, nunca em DM),
+  // ler (a auditoria: sem reagir nem apagar)}
   function elMensagem(m, ctx) {
     const mim = deMim(m, ctx.eu), li = criar("li", "chat-sala-msg" + (mim ? " de-mim" : "") + (m.apagada ? " apagada" : ""));
     li.dataset.id = String(m.id);
@@ -149,6 +150,7 @@ const ChatSala = (() => {
       li.append(p);
     }
     if (m.anexo && Number.isInteger(m.anexo.id)) li.append(elAnexo(m.anexo, ctx.andar));
+    if (ctx.ler) return li;   // a auditoria só lê
     const reacoes = criar("div", "chat-sala-reacoes");
     for (const r of Array.isArray(m.reacoes) ? m.reacoes : []) {
       const b = criar("button", "chat-sala-reacao", `${r.emoji} ${r.n}`);
@@ -185,115 +187,617 @@ const ChatSala = (() => {
     return caixa;
   }
 
+  // ---- na página. Do index.html vêm a caixa, a pílula e o painel do chat da sala. Com o store desligado (config.equipe
+  // null) o painel é o chat da sala de sempre; ligado, vira o painel de conversa da equipe, montado aqui dentro do mesmo
+  // <section>. Quem decide é o primeiro /api/config: os dois modos não convivem na mesma página.
   const $ = id => document.getElementById(id);
-  const caixa = $("chat-sala"), abrir = $("chat-sala-abrir"), painel = $("chat-sala-painel"), titulo = $("chat-sala-titulo"),
-    contador = $("chat-sala-n"), lista = $("chat-sala-lista"), vazio = $("chat-sala-vazio"), form = $("chat-sala-form"),
-    campo = $("chat-sala-campo"), enviar = $("chat-sala-enviar"), aviso = $("chat-sala-aviso"), fechar = $("chat-sala-fechar");
+  const caixa = $("chat-sala"), abrir = $("chat-sala-abrir"), painel = $("chat-sala-painel"), contador = $("chat-sala-n");
   if (!caixa) return { ...puro, elMensagem };
-
-  let sala = "", nomeSala = "", andar = "", desde = 0, vistos = new Set(), naoLidas = 0, enviando = false, avisoTempo = 0;
   const tv = () => !!(window.TV && TV.invisivel) || document.body.classList.contains("tv");
+  const cfg = () => (typeof config !== "undefined" ? config : null);   // app.js
   const login = () => (typeof estado !== "undefined" && estado && typeof estado.usuario === "string" ? estado.usuario : null);   // app.js
-  let euAoVivo = null;   // o "eu" da última leitura do /api/ao-vivo
+  let euAoVivo = null;   // o "eu" da última leitura do /api/ao-vivo (no saguão, o id opaco)
   const eu = () => euDe({ eu: euAoVivo }, login());
   const aberto = () => !painel.hidden;
 
-  function mostrarAviso(texto, ruim = true) {
-    clearTimeout(avisoTempo);
-    aviso.textContent = texto; aviso.classList.toggle("ruim", ruim); aviso.hidden = !texto;
-    if (texto && !ruim) avisoTempo = setTimeout(() => mostrarAviso(""), 4000);
-  }
-  function contar() {
-    contador.textContent = naoLidas > 9 ? "9+" : String(naoLidas);
-    contador.hidden = !naoLidas || aberto();
-    abrir.setAttribute("aria-label", naoLidas && !aberto() ? `Chat da sala ${nomeSala}, ${naoLidas} mensagens novas` : `Chat da sala ${nomeSala}`);
-  }
-  function esvaziar() {   // quem chega não vê histórico
-    vistos = new Set(); naoLidas = 0; lista.replaceChildren(); vazio.hidden = false; mostrarAviso(""); contar();
-  }
-  function por(m, minha = false) {
-    vistos.add(m.seq);
-    const mim = minha || deMim(m, eu());
-    const li = document.createElement("li"), cabeca = document.createElement("p"), quem = document.createElement("strong"),
-      quando = document.createElement("time"), texto = document.createElement("p");
-    li.className = "chat-sala-msg" + (mim ? " de-mim" : "");
-    cabeca.className = "chat-sala-cabeca"; texto.className = "chat-sala-texto";
-    quem.textContent = mim ? "Você" : (typeof m.nome === "string" && m.nome ? m.nome : "Alguém");
-    quando.textContent = hora(m.em); if (typeof m.em === "string") quando.dateTime = m.em;
-    texto.textContent = m.texto;
-    cabeca.append(quem, quando); li.append(cabeca, texto);
-    const noFim = lista.scrollHeight - lista.scrollTop - lista.clientHeight < 40;
-    lista.append(li);
-    while (lista.children.length > GUARDAR) lista.firstElementChild.remove();
-    vazio.hidden = true;
-    if (noFim || mim) lista.scrollTop = lista.scrollHeight;
-    if (!mim && !aberto()) naoLidas++;
-  }
-  function atualizar() {   // sem sala (corredor), na TV ou no modo foto o painel some
-    const pode = !!sala && !tv();
-    caixa.hidden = !pode;
-    if (!pode) { painel.hidden = true; abrir.hidden = false; abrir.setAttribute("aria-expanded", "false"); return; }
-    titulo.textContent = nomeSala;
-    contar();
-  }
-  function abrirPainel() {
-    painel.hidden = false; abrir.setAttribute("aria-expanded", "true"); abrir.hidden = true;
-    naoLidas = 0; contar(); lista.scrollTop = lista.scrollHeight; campo.focus();
-  }
-  function fecharPainel(focar = true) {
-    painel.hidden = true; abrir.setAttribute("aria-expanded", "false"); abrir.hidden = false; contar();
-    if (focar) abrir.focus();
+  // ======== o chat da sala de sempre (store desligado): só na memória, só quem está na sala
+  function classico() {
+    const titulo = $("chat-sala-titulo"), lista = $("chat-sala-lista"), vazio = $("chat-sala-vazio"), form = $("chat-sala-form"),
+      campo = $("chat-sala-campo"), enviar = $("chat-sala-enviar"), aviso = $("chat-sala-aviso"), fechar = $("chat-sala-fechar");
+    let sala = "", nomeSala = "", andar = "", desde = 0, vistos = new Set(), naoLidas = 0, enviando = false, avisoTempo = 0;
+
+    function mostrarAviso(texto, ruim = true) {
+      clearTimeout(avisoTempo);
+      aviso.textContent = texto; aviso.classList.toggle("ruim", ruim); aviso.hidden = !texto;
+      if (texto && !ruim) avisoTempo = setTimeout(() => mostrarAviso(""), 4000);
+    }
+    function contar() {
+      contador.textContent = naoLidas > 9 ? "9+" : String(naoLidas);
+      contador.hidden = !naoLidas || aberto();
+      abrir.setAttribute("aria-label", naoLidas && !aberto() ? `Chat da sala ${nomeSala}, ${naoLidas} mensagens novas` : `Chat da sala ${nomeSala}`);
+    }
+    function esvaziar() {   // quem chega não vê histórico
+      vistos = new Set(); naoLidas = 0; lista.replaceChildren(); vazio.hidden = false; mostrarAviso(""); contar();
+    }
+    function por(m, minha = false) {
+      vistos.add(m.seq);
+      const mim = minha || deMim(m, eu());
+      const li = document.createElement("li"), cabeca = document.createElement("p"), quem = document.createElement("strong"),
+        quando = document.createElement("time"), texto = document.createElement("p");
+      li.className = "chat-sala-msg" + (mim ? " de-mim" : "");
+      cabeca.className = "chat-sala-cabeca"; texto.className = "chat-sala-texto";
+      quem.textContent = mim ? "Você" : (typeof m.nome === "string" && m.nome ? m.nome : "Alguém");
+      quando.textContent = hora(m.em); if (typeof m.em === "string") quando.dateTime = m.em;
+      texto.textContent = m.texto;
+      cabeca.append(quem, quando); li.append(cabeca, texto);
+      const noFim = lista.scrollHeight - lista.scrollTop - lista.clientHeight < 40;
+      lista.append(li);
+      while (lista.children.length > GUARDAR) lista.firstElementChild.remove();
+      vazio.hidden = true;
+      if (noFim || mim) lista.scrollTop = lista.scrollHeight;
+      if (!mim && !aberto()) naoLidas++;
+    }
+    function atualizar() {   // sem sala (corredor), na TV ou no modo foto o painel some
+      const pode = !!sala && !tv();
+      caixa.hidden = !pode;
+      if (!pode) { painel.hidden = true; abrir.hidden = false; abrir.setAttribute("aria-expanded", "false"); return; }
+      titulo.textContent = nomeSala;
+      contar();
+    }
+    function abrirPainel() {
+      painel.hidden = false; abrir.setAttribute("aria-expanded", "true"); abrir.hidden = true;
+      naoLidas = 0; contar(); lista.scrollTop = lista.scrollHeight; campo.focus();
+    }
+    function fecharPainel(focar = true) {
+      painel.hidden = true; abrir.setAttribute("aria-expanded", "false"); abrir.hidden = false; contar();
+      if (focar) abrir.focus();
+    }
+    async function mandar() {
+      if (enviando) return;
+      const problema = validar(campo.value);
+      if (problema) { mostrarAviso(problema); campo.focus(); return; }
+      enviando = true; enviar.disabled = true;
+      const texto = limpar(campo.value), salaDoEnvio = sala, andarDoEnvio = andar;
+      let r = null, d = null;
+      try {
+        r = await fetch(Andar.com("api/sala/enviar", andarDoEnvio || Andar.atual), { method: "POST", cache: "no-store", credentials: "same-origin",
+          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ texto }) });
+        d = await r.json().catch(() => null);
+      } catch (e) { r = null; }
+      enviando = false; enviar.disabled = false;
+      if (r && r.status === 401) { location.href = "/entrar"; return; }
+      if (!r) { mostrarAviso("Sem conexão. A mensagem não foi."); return; }
+      if (r.status === 429) { mostrarAviso("Devagar: espere um segundo para mandar outra."); return; }
+      if (!r.ok) { mostrarAviso(d && typeof d.mensagem === "string" ? d.mensagem : `Não deu para mandar (HTTP ${r.status}).`); return; }
+      campo.value = ""; mostrarAviso("");
+      // a minha aparece já; a próxima leitura do /api/ao-vivo traz a mesma (pelo seq) e não repete
+      if (sala === salaDoEnvio && andar === andarDoEnvio && d && Number.isInteger(d.seq) && !vistos.has(d.seq))
+        por({ seq: d.seq, texto, em: new Date().toISOString() }, true);
+      contar();
+    }
+    function minhaSala(d) {
+      const nova = daSala(d), novoAndar = typeof d.andar === "string" ? d.andar : "";
+      if (nova.sala === sala && novoAndar === andar) { if (nova.nome !== nomeSala) { nomeSala = nova.nome; atualizar(); } return; }
+      const estavaAberto = aberto() && caixa.contains(document.activeElement);
+      sala = nova.sala; nomeSala = nova.nome; andar = novoAndar; desde = Number.isInteger(d.seq) && d.seq > 0 ? d.seq : 0;
+      esvaziar(); atualizar();
+      if (estavaAberto && caixa.hidden) $("tela")?.focus();   // o foco não fica perdido num painel que sumiu
+    }
+    function aoVivo(d) {
+      if (!sala || tv()) return;
+      const chegaram = novas(d.mensagens, vistos, desde);
+      for (const m of chegaram) por(m);
+      if (chegaram.length) contar();
+    }
+    abrir.addEventListener("click", abrirPainel);
+    fechar.addEventListener("click", () => fecharPainel());
+    form.addEventListener("submit", e => { e.preventDefault(); mandar(); });
+    campo.addEventListener("input", () => { if (!aviso.hidden && aviso.classList.contains("ruim")) mostrarAviso(""); });
+    painel.addEventListener("keydown", e => { if (e.key === "Escape") { e.stopPropagation(); fecharPainel(); } });
+    return { minhaSala, aoVivo, atualizar, paraAoVivo: () => "", abrir: abrirPainel, fechar: fecharPainel };
   }
 
-  async function mandar() {
-    if (enviando) return;
-    const problema = validar(campo.value);
-    if (problema) { mostrarAviso(problema); campo.focus(); return; }
-    enviando = true; enviar.disabled = true;
-    const texto = limpar(campo.value), salaDoEnvio = sala, andarDoEnvio = andar;
-    let r = null, d = null;
-    try {
-      r = await fetch(Andar.com("api/sala/enviar", andarDoEnvio || Andar.atual), { method: "POST", cache: "no-store", credentials: "same-origin",
-        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ texto }) });
-      d = await r.json().catch(() => null);
-    } catch (e) { r = null; }
-    enviando = false; enviar.disabled = false;
-    if (r && r.status === 401) { location.href = "/entrar"; return; }
-    if (!r) { mostrarAviso("Sem conexão. A mensagem não foi."); return; }
-    if (r.status === 429) { mostrarAviso("Devagar: espere um segundo para mandar outra."); return; }
-    if (!r.ok) { mostrarAviso(d && typeof d.mensagem === "string" ? d.mensagem : `Não deu para mandar (HTTP ${r.status}).`); return; }
-    campo.value = ""; mostrarAviso("");
-    // a minha aparece já; a próxima leitura do /api/ao-vivo traz a mesma (pelo seq) e não repete
-    if (sala === salaDoEnvio && andar === andarDoEnvio && d && Number.isInteger(d.seq) && !vistos.has(d.seq))
-      por({ seq: d.seq, texto, em: new Date().toISOString() }, true);
-    contar();
+  // ======== o painel de conversa da equipe (store ligado; contrato da Onda 2)
+  function equipe() {
+    // as rotas do back: todas aqui, e só aqui
+    const ROTAS = {
+      historico: (canal, antes) => `api/canal/historico?canal=${encodeURIComponent(canal)}&limite=50${antes ? `&antes=${antes}` : ""}`,
+      enviar: "api/canal/enviar", lida: "api/canal/lida", reagir: "api/canal/reagir", apagar: "api/canal/apagar",
+      busca: termo => `api/canal/busca?q=${encodeURIComponent(termo)}&limite=20`,
+      pessoas: "api/pessoas", dms: "api/dm", abrirDm: "api/dm/abrir", entendi: "api/dm/entendi",
+      pares: "api/dm/auditoria/pares", auditoria: (canal, antes) => `api/dm/auditoria?canal=${encodeURIComponent(canal)}&limite=50${antes ? `&antes=${antes}` : ""}`,
+      anexo: canal => `api/anexo?canal=${encodeURIComponent(canal)}`,
+    };
+    const svg = d => {   // ícone de traço, decorativo
+      const NS = "http://www.w3.org/2000/svg", s = document.createElementNS(NS, "svg"), p = document.createElementNS(NS, "path");
+      for (const [k, v] of Object.entries({ width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": 2,
+        "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" })) s.setAttribute(k, v);
+      p.setAttribute("d", d); s.append(p);
+      return s;
+    };
+    const botao = (classe, rotulo, icone, texto) => {
+      const b = criar("button", classe, texto);
+      b.type = "button";
+      if (rotulo) b.setAttribute("aria-label", rotulo);
+      if (icone) b.prepend(svg(icone));
+      return b;
+    };
+    const atributos = (e, a) => { for (const [k, v] of Object.entries(a)) e.setAttribute(k, v); return e; };
+    const ICONE = { voltar: "M15 6l-6 6 6 6", buscar: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4", fechar: "M6 6l12 12M18 6 6 18",
+      enviar: "M4 12 20 4l-6 16-3-7z", anexar: "M20 11l-8.5 8.5a5 5 0 0 1-7-7L13 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L14 7" };
+
+    // ---- montar
+    const ui = {};
+    ui.voltar = botao("chat-sala-icone", "Voltar", ICONE.voltar); ui.voltar.hidden = true;
+    ui.sobre = criar("p", "chat-sala-sobre", "Conversas da equipe");
+    ui.titulo = criar("h2", null, "Geral"); ui.titulo.id = "chat-sala-titulo";
+    const nomes = criar("div"); nomes.append(ui.sobre, ui.titulo);
+    ui.buscar = botao("chat-sala-icone", "Buscar nas conversas", ICONE.buscar);
+    ui.fechar = botao("chat-sala-icone", "Fechar as conversas", ICONE.fechar);
+    const topo = criar("header", "chat-sala-topo"); topo.append(ui.voltar, nomes, ui.buscar, ui.fechar);
+    ui.abas = atributos(criar("nav", "chat-sala-abas"), { "aria-label": "Canais" });
+    ui.busca = atributos(criar("form", "chat-sala-busca"), { role: "search" }); ui.busca.hidden = true;
+    const rotBusca = criar("label", "oculto", "Buscar nas conversas"); rotBusca.htmlFor = "chat-sala-termo";
+    ui.termo = atributos(criar("input"), { enterkeyhint: "search" });
+    Object.assign(ui.termo, { id: "chat-sala-termo", type: "search", maxLength: 100, autocomplete: "off", placeholder: "Buscar nas conversas…" });
+    ui.busca.append(rotBusca, ui.termo);
+    ui.fixo = criar("p", "chat-sala-fixo"); ui.fixo.hidden = true;               // o aviso da DM e o lembrete da auditoria
+    ui.registro = criar("p", "chat-sala-registro"); ui.registro.hidden = true;   // D10: quando a administração abriu a DM
+    ui.auditar = botao("chat-sala-auditar", null, null, "Auditoria das diretas"); ui.auditar.hidden = true;
+    ui.antes = botao("chat-sala-antes", null, null, "Ver mensagens anteriores"); ui.antes.hidden = true;
+    ui.vazio = criar("p", "chat-sala-vazio"); ui.vazio.hidden = true;
+    ui.lista = atributos(criar("ol", "chat-sala-lista"), { "aria-label": "Mensagens" }); ui.lista.tabIndex = 0;
+    ui.itens = criar("ul", "chat-sala-itens"); ui.itens.hidden = true;
+    ui.corpo = criar("div", "chat-sala-corpo"); ui.corpo.append(ui.auditar, ui.antes, ui.vazio, ui.lista, ui.itens);
+    ui.retencao = criar("p", "chat-sala-retencao");
+    ui.anuncio = atributos(criar("p", "oculto"), { role: "status" });   // a mensagem que chegou, para o leitor de tela
+    ui.aviso = atributos(criar("p", "chat-sala-aviso"), { role: "status" }); ui.aviso.hidden = true;
+    ui.progresso = criar("div", "chat-sala-progresso"); ui.progresso.hidden = true;
+    ui.barraRot = criar("label", null, "Enviando…"); ui.barraRot.htmlFor = "chat-sala-barra";
+    ui.barra = criar("progress"); ui.barra.id = "chat-sala-barra"; ui.barra.max = 100; ui.barra.value = 0;
+    ui.cancelar = botao("chat-sala-cancelar", null, null, "Cancelar");
+    ui.progresso.append(ui.barraRot, ui.barra, ui.cancelar);
+    ui.sugestoes = atributos(criar("ul", "chat-sala-sugestoes"), { role: "listbox", "aria-label": "Pessoas do andar" });
+    ui.sugestoes.id = "chat-sala-sugestoes"; ui.sugestoes.hidden = true;
+    ui.form = criar("form", "chat-sala-form");
+    ui.anexar = botao("chat-sala-anexar", "Anexar um arquivo (até 25 MB)", ICONE.anexar);
+    ui.arquivo = criar("input"); ui.arquivo.type = "file"; ui.arquivo.hidden = true; ui.arquivo.tabIndex = -1;
+    const rotCampo = criar("label", "oculto", "Mensagem"); rotCampo.htmlFor = "chat-sala-campo";
+    ui.campo = atributos(criar("input"), { enterkeyhint: "send", role: "combobox", "aria-autocomplete": "list", "aria-controls": "chat-sala-sugestoes", "aria-expanded": "false" });
+    Object.assign(ui.campo, { id: "chat-sala-campo", type: "text", maxLength: TEXTO_MAX, autocomplete: "off" });
+    ui.enviar = botao("chat-sala-enviar", "Enviar", ICONE.enviar); ui.enviar.type = "submit";
+    ui.form.append(ui.anexar, ui.arquivo, rotCampo, ui.campo, ui.enviar);
+    ui.emojis = atributos(criar("div", "chat-sala-emojis"), { role: "menu", "aria-label": "Reagir" }); ui.emojis.hidden = true;
+    for (const e of EMOJIS) {
+      const b = atributos(botao("chat-sala-emoji", `Reagir com ${e}`, null, e), { role: "menuitem" });
+      b.dataset.emoji = e; b.tabIndex = -1;
+      ui.emojis.append(b);
+    }
+    // antes da 1ª DM de cada conta em cada andar (E.3): o aviso com "Entendi"
+    ui.entendi = atributos(criar("div", "chat-sala-entendi"), { role: "alertdialog", "aria-modal": "true",
+      "aria-labelledby": "chat-sala-entendi-t", "aria-describedby": "chat-sala-entendi-d" });
+    ui.entendi.hidden = true;
+    const et = criar("h3", null, "Antes da sua primeira mensagem direta"); et.id = "chat-sala-entendi-t";
+    ui.entendiTexto = criar("p"); ui.entendiTexto.id = "chat-sala-entendi-d";
+    ui.agoraNao = botao("botao secundario", null, null, "Agora não"); ui.ok = botao("botao", null, null, "Entendi");
+    const acoes = criar("div", "acoes"); acoes.append(ui.agoraNao, ui.ok);
+    ui.entendi.append(et, ui.entendiTexto, acoes);
+    painel.classList.add("equipe");
+    painel.replaceChildren(topo, ui.abas, ui.busca, ui.fixo, ui.registro, ui.corpo, ui.retencao, ui.anuncio, ui.aviso, ui.progresso,
+      ui.sugestoes, ui.form, ui.emojis, ui.entendi);
+    const rot = abrir.querySelector(".chat-sala-rot");
+    if (rot) rot.textContent = "Conversas";
+
+    // ---- estado
+    const s = { andar: Andar.atual, onde: { sala: "", nome: "" }, vista: "geral", anterior: "geral", titulo: "", msgs: [], mais: false,
+      v: null, pessoas: [], naoLidas: {}, mencoes: {}, soLer: false, enviando: false, envio: null, opcao: -1, mencao: null, alvo: null,
+      entendiFim: null, avisoTempo: 0, buscaTempo: 0 };
+    const eq = () => (cfg() && cfg().equipe) || {};
+    const ehCanal = v => v === "geral" || v.startsWith("sala:") || v.startsWith("dm:");
+    const EX = "ex-membro";
+    const nomeDe = u => { if (!u) return EX; const p = s.pessoas.find(x => x.usuario === u); return p && p.nome ? p.nome : u === eu() ? "Você" : u; };
+
+    async function pedir(rota, { metodo = "GET", corpo } = {}) {
+      let r = null, d = null;
+      try {
+        r = await fetch(Andar.com(rota, s.andar), { method: metodo, cache: "no-store", credentials: "same-origin",
+          headers: corpo === undefined ? {} : { "Content-Type": "application/json" }, body: corpo === undefined ? undefined : JSON.stringify(corpo) });
+        d = await r.json().catch(() => null);
+      } catch (e) { r = null; }
+      if (r && r.status === 401) { location.href = "/entrar"; return { ok: false, d: null }; }
+      if (!r) mostrarAviso("Sem conexão. Tente de novo.");
+      else if (!r.ok) mostrarAviso(d && typeof d.mensagem === "string" ? d.mensagem : `Não deu certo (HTTP ${r.status}).`);
+      return { ok: !!r && r.ok, status: r ? r.status : 0, d };
+    }
+    function mostrarAviso(texto, ruim = true) {
+      clearTimeout(s.avisoTempo);
+      ui.aviso.textContent = texto; ui.aviso.classList.toggle("ruim", ruim); ui.aviso.hidden = !texto;
+      if (texto && !ruim) s.avisoTempo = setTimeout(() => mostrarAviso(""), 4000);
+    }
+    const somaDe = (o, filtro = () => true) => Object.entries(o).filter(([c]) => filtro(c)).reduce((a, [, n]) => a + (Number.isInteger(n) ? n : 0), 0);
+    function contar() {
+      const n = somaDe(s.naoLidas), m = somaDe(s.mencoes);
+      contador.textContent = contagem(n); contador.hidden = !n || aberto();
+      abrir.setAttribute("aria-label", n && !aberto()
+        ? `Conversas, ${n} ${n === 1 ? "mensagem nova" : "mensagens novas"}${m ? `, ${m} ${m === 1 ? "menção" : "menções"} a você` : ""}` : "Conversas");
+      for (const b of ui.abas.children) {
+        const id = b.dataset.id, k = id === "diretas" ? somaDe(s.naoLidas, c => c.startsWith("dm:")) : s.naoLidas[id] || 0, marca = b.querySelector(".chat-sala-aba-n");
+        marca.textContent = s.mencoes[id] ? "@" : contagem(k); marca.hidden = !k && !s.mencoes[id];
+        b.setAttribute("aria-label", `${b.dataset.rotulo}${k ? `, ${k} não ${k === 1 ? "lida" : "lidas"}` : ""}${s.mencoes[id] ? ", com menção a você" : ""}`);
+      }
+    }
+
+    // ---- vistas
+    function desenharAbas() {
+      const atual = s.vista.startsWith("dm:") || s.vista.startsWith("auditoria") ? "diretas" : s.vista;
+      ui.abas.replaceChildren(...abas(eq(), s.onde).map(a => {
+        const b = botao("chat-sala-aba", null, null, a.rotulo), n = atributos(criar("span", "chat-sala-aba-n"), { "aria-hidden": "true" });
+        b.dataset.id = a.id; b.dataset.rotulo = a.rotulo; n.hidden = true; b.append(n);
+        if (a.id === atual) b.setAttribute("aria-current", "true");
+        return b;
+      }));
+      contar();
+    }
+    function tituloDa(vista) {
+      if (vista === "geral") return Andar.perfil(cfg()).noSaguao ? "Geral do prédio" : "Geral";
+      if (vista.startsWith("sala:")) return s.onde.nome || vista.slice(5);
+      return { diretas: "Diretas", busca: "Busca", auditoria: "Auditoria das diretas" }[vista] || s.titulo || "Conversa";
+    }
+    function irPara(vista, titulo = "") {
+      if (vista !== s.vista && ehCanal(s.vista)) s.anterior = s.vista;
+      Object.assign(s, { vista, titulo, msgs: [], mais: false, v: null, soLer: false });
+      fecharEmojis(); fecharSugestoes();
+      const dm = vista.startsWith("dm:"), ler = vista.startsWith("auditoria:"), c = controles(eq(), ler ? "auditoria" : vista), mensagens = ehCanal(vista) || ler;
+      ui.titulo.textContent = tituloDa(vista);
+      ui.sobre.textContent = dm ? "Mensagem direta" : vista.startsWith("auditoria") ? "Administração da empresa" : "Conversas da equipe";
+      ui.voltar.hidden = !(dm || vista === "busca" || vista.startsWith("auditoria"));
+      ui.busca.hidden = vista !== "busca"; ui.buscar.setAttribute("aria-expanded", String(vista === "busca"));
+      ui.form.hidden = !c.escrever; ui.anexar.hidden = !c.anexar; ui.auditar.hidden = !c.auditoria;
+      ui.fixo.textContent = dm ? (eq().aviso_dm || avisoDM(cfg() && cfg().empresa)) : "";
+      ui.fixo.hidden = !ui.fixo.textContent; ui.registro.hidden = true; ui.registro.textContent = "";
+      ui.retencao.textContent = mensagens ? textoRetencao(eq().retencao) : ""; ui.retencao.hidden = !mensagens;
+      ui.lista.hidden = !mensagens; ui.itens.hidden = mensagens;
+      ui.lista.replaceChildren(); ui.itens.replaceChildren(); ui.antes.hidden = true; ui.vazio.hidden = true;
+      ui.campo.placeholder = `Escreva para ${dm ? s.titulo || "a pessoa" : tituloDa(vista)}…`;
+      ui.campo.setAttribute("aria-label", `Mensagem para ${dm ? s.titulo || "a pessoa" : tituloDa(vista)}`);
+      desenharAbas();
+      if (ehCanal(vista)) carregarCanal();
+      else if (vista === "diretas") carregarDiretas();
+      else if (vista === "auditoria") carregarPares();
+      else if (ler) carregarAuditoria();
+      else if (vista === "busca") ui.termo.focus();
+    }
+
+    // ---- canal: histórico paginado
+    function desenharMsgs(rolarFim) {
+      const ctx = { eu: eu(), logins: new Set(s.pessoas.map(p => p.usuario)), andar: s.andar, moderar: !!eq().pode_moderar,
+        ler: s.vista.startsWith("auditoria:") };
+      const noFim = ui.lista.scrollHeight - ui.lista.scrollTop - ui.lista.clientHeight < 40;
+      ui.lista.replaceChildren(...s.msgs.map(m => elMensagem(m, ctx)));
+      ui.vazio.textContent = ctx.ler ? "Nenhuma mensagem nesta conversa." : "Ninguém escreveu aqui ainda.";
+      ui.vazio.hidden = s.msgs.length > 0; ui.antes.hidden = !s.mais;
+      if (rolarFim || noFim) ui.lista.scrollTop = ui.lista.scrollHeight;
+    }
+    async function carregarCanal(antes) {
+      const vista = s.vista, { ok, d } = await pedir(ROTAS.historico(vista, antes));
+      if (vista !== s.vista || !ok || !d || !Array.isArray(d.mensagens)) return;
+      if (antes || !s.msgs.length) s.mais = !!d.mais;
+      s.msgs = mesclar(antes ? s.msgs : [], d.mensagens);
+      desenharMsgs(!antes);
+      if (vista.startsWith("dm:")) {   // a DM traz o aviso fixo e as datas em que a administração abriu (D10)
+        if (typeof d.aviso === "string" && d.aviso) { ui.fixo.textContent = d.aviso; ui.fixo.hidden = false; }
+        ui.registro.textContent = linhaAcessos(d.acessos); ui.registro.hidden = !ui.registro.textContent;
+      }
+      if (!antes) marcarLida();
+    }
+    function marcarLida() {
+      const ultima = s.msgs.length ? s.msgs[s.msgs.length - 1].id : 0;
+      if (!ultima || !aberto() || !ehCanal(s.vista)) return;
+      const tinha = s.naoLidas[s.vista] || s.mencoes[s.vista];
+      delete s.naoLidas[s.vista]; delete s.mencoes[s.vista]; contar();
+      if (tinha || s.lida !== `${s.vista}:${ultima}`) { s.lida = `${s.vista}:${ultima}`; pedir(ROTAS.lida, { metodo: "POST", corpo: { canal: s.vista, ate: ultima } }); }
+    }
+
+    // ---- diretas, auditoria e busca: listas de botões
+    function item(rotulo, detalhe, acao, n = 0) {
+      const li = criar("li"), b = botao("chat-sala-item", null, null, null);
+      b.append(criar("span", "chat-sala-item-nome", rotulo));
+      if (detalhe) b.append(criar("span", "chat-sala-item-det", detalhe));
+      if (n) b.append(atributos(criar("span", "chat-sala-n", contagem(n)), { "aria-label": `${n} não ${n === 1 ? "lida" : "lidas"}` }));
+      b.addEventListener("click", acao);
+      li.append(b);
+      return li;
+    }
+    async function carregarDiretas() {
+      const { ok, d } = await pedir(ROTAS.dms);
+      if (s.vista !== "diretas" || !ok || !d || !Array.isArray(d.dms)) return;
+      const com = new Set(d.dms.map(x => x.outro && x.outro.usuario));
+      const minhas = d.dms.map(x => {
+        const nome = x.outro ? x.outro.nome || x.outro.usuario : EX;
+        return item(nome, x.ultima ? `Última em ${data(x.ultima)}` : "", () => abrirDm(x.canal, nome, !x.outro), x.nao_lidas);
+      });
+      const novas = s.pessoas.filter(p => !com.has(p.usuario)).map(p => item(p.nome || p.usuario, "Começar uma conversa", () => comecarDm(p)));
+      ui.itens.replaceChildren(...minhas, ...novas);
+      ui.vazio.textContent = "Ainda não há mais ninguém neste andar."; ui.vazio.hidden = minhas.length + novas.length > 0;
+    }
+    function entendido() {   // E.3: resolve true quando pode seguir para a DM
+      if (eq().aviso_dm_entendido) return Promise.resolve(true);
+      return new Promise(resolve => {
+        ui.entendiTexto.textContent = `${eq().aviso_dm || avisoDM(cfg() && cfg().empresa)} Quando a administração abre uma conversa, fica registrado, e as duas pessoas veem a data.`;
+        ui.entendi.hidden = false; ui.ok.focus();
+        s.entendiFim = async aceitou => {
+          s.entendiFim = null; ui.entendi.hidden = true;
+          if (!aceitou) { ui.itens.querySelector("button")?.focus(); resolve(false); return; }
+          const r = await pedir(ROTAS.entendi, { metodo: "POST", corpo: {} });
+          if (r.ok && cfg() && cfg().equipe) cfg().equipe.aviso_dm_entendido = true;
+          resolve(r.ok);
+        };
+      });
+    }
+    async function comecarDm(p) {
+      if (!(await entendido())) return;
+      const { ok, d } = await pedir(ROTAS.abrirDm, { metodo: "POST", corpo: { com: p.usuario } });
+      if (ok && d && typeof d.canal === "string") irPara(d.canal, p.nome || p.usuario);
+    }
+    async function abrirDm(canal, nome, soLer) {
+      if (!(await entendido())) return;
+      irPara(canal, nome);
+      if (soLer) { s.soLer = true; ui.form.hidden = true; mostrarAviso("A outra pessoa não está mais no andar. A conversa fica só para ler.", false); }
+    }
+    async function carregarPares() {
+      const { ok, d } = await pedir(ROTAS.pares);
+      if (s.vista !== "auditoria" || !ok || !d || !Array.isArray(d.pares)) return;
+      ui.fixo.textContent = typeof d.lembrete === "string" && d.lembrete ? d.lembrete : "O acesso a esta conversa fica registrado e as duas pessoas veem a data.";
+      ui.fixo.hidden = false;
+      ui.itens.replaceChildren(...d.pares.map(x => {
+        const nome = `${nomeDe(x.u1)} e ${nomeDe(x.u2)}`;
+        return item(nome, `${x.mensagens} ${x.mensagens === 1 ? "mensagem" : "mensagens"}, a última em ${data(x.ultima)}`, () => irPara(`auditoria:${x.canal}`, nome));
+      }));
+      ui.vazio.textContent = "Nenhuma conversa direta neste andar."; ui.vazio.hidden = d.pares.length > 0;
+    }
+    async function carregarAuditoria(antes) {
+      const vista = s.vista, { ok, d } = await pedir(ROTAS.auditoria(vista.slice("auditoria:".length), antes));
+      if (vista !== s.vista || !ok || !d || !Array.isArray(d.mensagens)) return;
+      if (typeof d.lembrete === "string" && d.lembrete) { ui.fixo.textContent = d.lembrete; ui.fixo.hidden = false; }
+      s.mais = !!d.mais; s.msgs = mesclar(s.msgs, d.mensagens);
+      desenharMsgs(!antes);
+    }
+    const rotuloCanal = c => (c === "geral" ? "Geral" : c === `sala:${s.onde.sala}` ? s.onde.nome : c.startsWith("sala:") ? c.slice(5) : "Mensagem direta");
+    async function buscar() {
+      const termo = ui.termo.value.trim();
+      if (!termo) { ui.itens.replaceChildren(); ui.vazio.hidden = true; return; }
+      const { ok, d } = await pedir(ROTAS.busca(termo));
+      if (s.vista !== "busca" || !ok || !d || !Array.isArray(d.mensagens)) return;
+      ui.itens.replaceChildren(...d.mensagens.map(m => item(`${deMim(m, eu()) ? "Você" : m.nome || EX}: ${m.texto || ""}`,
+        `${rotuloCanal(m.canal)} · ${data(m.em)} ${hora(m.em)}`, () => (m.canal.startsWith("dm:") ? abrirDm(m.canal, "Mensagem direta") : irPara(m.canal)))));
+      ui.vazio.textContent = `Nada encontrado para “${termo}”.`; ui.vazio.hidden = d.mensagens.length > 0;
+    }
+
+    // ---- escrever, menção e anexo
+    async function mandar() {
+      if (s.enviando) return;
+      const problema = validar(ui.campo.value);
+      if (problema) { mostrarAviso(problema); ui.campo.focus(); return; }
+      s.enviando = true; ui.enviar.disabled = true;
+      const canal = s.vista, { ok, d } = await pedir(ROTAS.enviar, { metodo: "POST", corpo: { canal, texto: limpar(ui.campo.value) } });
+      s.enviando = false; ui.enviar.disabled = false;
+      if (!ok) return;
+      ui.campo.value = ""; mostrarAviso("");
+      if (canal === s.vista && d && d.mensagem && Number.isInteger(d.mensagem.id)) { s.msgs = mesclar(s.msgs, [d.mensagem]); desenharMsgs(true); marcarLida(); }
+    }
+    function fecharSugestoes() {
+      ui.sugestoes.hidden = true; ui.sugestoes.replaceChildren(); s.opcao = -1;
+      ui.campo.setAttribute("aria-expanded", "false"); ui.campo.removeAttribute("aria-activedescendant");
+    }
+    function sugerir() {
+      const em = controles(eq(), s.vista).mencionar ? mencaoEmCurso(ui.campo.value, ui.campo.selectionStart ?? ui.campo.value.length) : null;
+      const lista = em ? sugestoes(em.termo, s.pessoas, eu()) : [];
+      if (!lista.length) { fecharSugestoes(); return; }
+      s.mencao = em; s.opcao = 0;
+      ui.sugestoes.replaceChildren(...lista.map((p, i) => {
+        const li = atributos(criar("li", "chat-sala-sugestao"), { role: "option" });
+        li.id = `chat-sala-sug-${i}`; li.dataset.usuario = p.usuario;
+        li.append(criar("span", null, p.nome || p.usuario), criar("span", "chat-sala-sugestao-login", `@${p.usuario}`));
+        li.addEventListener("mousedown", e => { e.preventDefault(); escolher(p.usuario); });
+        return li;
+      }));
+      ui.sugestoes.hidden = false; ui.campo.setAttribute("aria-expanded", "true");
+      marcarOpcao();
+    }
+    function marcarOpcao() {
+      [...ui.sugestoes.children].forEach((li, i) => li.setAttribute("aria-selected", String(i === s.opcao)));
+      ui.campo.setAttribute("aria-activedescendant", `chat-sala-sug-${s.opcao}`);
+    }
+    function escolher(usuario) {
+      const r = completarMencao(ui.campo.value, s.mencao.inicio, ui.campo.selectionStart ?? ui.campo.value.length, usuario);
+      ui.campo.value = r.texto; ui.campo.setSelectionRange(r.cursor, r.cursor);
+      fecharSugestoes(); ui.campo.focus();
+    }
+    function teclaNoCampo(e) {
+      if (ui.sugestoes.hidden) return;
+      const n = ui.sugestoes.children.length;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); s.opcao = (s.opcao + (e.key === "ArrowDown" ? 1 : n - 1)) % n; marcarOpcao(); }
+      else if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); escolher(ui.sugestoes.children[s.opcao].dataset.usuario); }
+      else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fecharSugestoes(); }
+    }
+    // o anexo sobe por XHR (o fetch não conta o progresso do envio); o tipo quem decide é o servidor, pelos bytes
+    function anexar(arquivo) {
+      const problema = conferirArquivo(arquivo);
+      if (problema) { mostrarAviso(problema); ui.arquivo.value = ""; return; }
+      const canal = s.vista, texto = limpar(ui.campo.value), x = new XMLHttpRequest();
+      s.envio = x;
+      x.open("POST", Andar.com(ROTAS.anexo(canal), s.andar));
+      x.setRequestHeader("Content-Type", "application/octet-stream");
+      x.setRequestHeader("X-Nome", encodeURIComponent(arquivo.name));
+      if (texto && !validar(texto)) x.setRequestHeader("X-Texto", encodeURIComponent(texto));
+      x.upload.onprogress = e => { if (e.lengthComputable) ui.barra.value = Math.round(100 * e.loaded / e.total); };
+      const fim = () => { s.envio = null; ui.progresso.hidden = true; ui.anexar.disabled = false; ui.arquivo.value = ""; ui.campo.focus(); };
+      x.onload = () => {
+        fim();
+        let d = null; try { d = JSON.parse(x.responseText); } catch (e) { d = null; }
+        if (x.status === 401) { location.href = "/entrar"; return; }
+        if (x.status < 200 || x.status >= 300) { mostrarAviso(d && typeof d.mensagem === "string" ? d.mensagem : `O arquivo não foi (HTTP ${x.status}).`); return; }
+        if (texto) ui.campo.value = "";
+        mostrarAviso("Arquivo enviado.", false);
+        if (canal === s.vista && d && d.mensagem && Number.isInteger(d.mensagem.id)) { s.msgs = mesclar(s.msgs, [d.mensagem]); desenharMsgs(true); marcarLida(); }
+      };
+      x.onerror = () => { fim(); mostrarAviso("Sem conexão. O arquivo não foi."); };
+      x.onabort = () => { fim(); mostrarAviso("Envio cancelado.", false); };
+      ui.barraRot.textContent = `Enviando ${arquivo.name} (${tamanho(arquivo.size)})`;
+      ui.barra.value = 0; ui.progresso.hidden = false; ui.anexar.disabled = true; ui.cancelar.focus();
+      x.send(arquivo);
+    }
+
+    // ---- reações e apagar
+    function fecharEmojis(focar) {
+      if (ui.emojis.hidden) return;
+      ui.emojis.hidden = true;
+      if (focar && s.alvo && s.alvo.isConnected !== false) s.alvo.focus();
+      s.alvo = null;
+    }
+    async function reagir(id, emoji) {
+      const m = s.msgs.find(x => x.id === id);
+      if (!m || m.apagada) return;
+      const antes = Array.isArray(m.reacoes) ? m.reacoes : [], ligar = !antes.some(r => r.emoji === emoji && r.eu);
+      s.msgs = mesclar(s.msgs, [{ ...m, reacoes: alternarReacao(antes, emoji) }]); desenharMsgs(false);
+      const { ok, d } = await pedir(ROTAS.reagir, { metodo: "POST", corpo: { id, emoji, ligar } });
+      s.msgs = mesclar(s.msgs, [ok && d && d.mensagem && d.mensagem.id === id ? d.mensagem : m]); desenharMsgs(false);
+    }
+    async function apagar(id) {
+      const { ok } = await pedir(ROTAS.apagar, { metodo: "POST", corpo: { id } });
+      const m = s.msgs.find(x => x.id === id);
+      if (ok && m) { s.msgs = mesclar(s.msgs, [{ ...m, texto: null, apagada: true, anexo: null, reacoes: [] }]); desenharMsgs(false); mostrarAviso("Mensagem apagada.", false); }
+    }
+
+    // ---- abrir, fechar e o que vem do mapa
+    function atualizar() {   // na TV e no modo foto o painel some; fora de sala ainda há o Geral e as Diretas
+      const pode = !tv() && !!cfg();
+      caixa.hidden = !pode;
+      if (!pode) { painel.hidden = true; abrir.hidden = false; abrir.setAttribute("aria-expanded", "false"); return; }
+      if (s.vista.startsWith("sala:") && !abas(eq(), s.onde).some(a => a.id === s.vista) && aberto()) irPara("geral");
+      else desenharAbas();
+    }
+    async function carregarPessoas() {
+      if (!eq().dm && !eq().mencao) { s.pessoas = []; return; }   // o saguão não tem lista de pessoas
+      const { ok, d } = await pedir(ROTAS.pessoas);
+      if (ok && d && Array.isArray(d.pessoas)) s.pessoas = d.pessoas.filter(p => p && typeof p.usuario === "string");
+    }
+    async function abrirPainel() {
+      painel.hidden = false; abrir.setAttribute("aria-expanded", "true"); abrir.hidden = true;
+      await carregarPessoas();
+      const sala = canalDaSala(s.onde.sala), daSalaOk = sala && abas(eq(), s.onde).some(a => a.id === sala);
+      irPara(daSalaOk ? sala : s.vista.startsWith("dm:") ? s.vista : "geral", s.titulo);
+      ui.campo.focus();
+    }
+    function fecharPainel(focar = true) {
+      fecharEmojis(); fecharSugestoes();
+      painel.hidden = true; abrir.setAttribute("aria-expanded", "false"); abrir.hidden = false; contar();
+      if (focar) abrir.focus();
+    }
+    function minhaSala(d) {
+      const novoAndar = typeof d.andar === "string" && d.andar ? d.andar : Andar.atual;
+      if (novoAndar !== s.andar) {   // outro andar, outra empresa: nada do andar de antes fica na tela
+        const estavaAberto = aberto();
+        Object.assign(s, { andar: novoAndar, naoLidas: {}, mencoes: {}, pessoas: [], vista: "geral", titulo: "", msgs: [] });
+        if (s.envio) s.envio.abort();
+        if (estavaAberto) fecharPainel(false);
+      }
+      s.onde = daSala(d);
+      atualizar();
+    }
+    // o /api/ao-vivo: não lidas, menções e as mensagens novas do canal aberto
+    function aoVivo(d) {
+      if (tv()) return;
+      const dmsAntes = Object.keys(s.naoLidas).filter(c => c.startsWith("dm:")).join();
+      s.naoLidas = d.nao_lidas && typeof d.nao_lidas === "object" ? { ...d.nao_lidas } : {};
+      s.mencoes = d.mencoes && typeof d.mencoes === "object" ? { ...d.mencoes } : {};
+      const a = d.aberto;
+      if (a && aberto() && a.canal === s.vista) {
+        if (s.v !== null && a.v !== s.v) { s.v = a.v; carregarCanal(); return; }   // apagaram ou reagiram: relê
+        s.v = a.v;
+        const chegaram = (Array.isArray(a.novas) ? a.novas : []).filter(m => m && Number.isInteger(m.id) && !s.msgs.some(x => x.id === m.id));
+        if (chegaram.length) {
+          s.msgs = mesclar(s.msgs, chegaram); desenharMsgs(false);
+          const delas = chegaram.filter(m => !deMim(m, eu()) && !m.apagada);
+          if (delas.length) ui.anuncio.textContent = delas.map(m => `${m.nome || EX}: ${m.texto || "enviou um arquivo"}`).join(". ");
+        }
+      }
+      if (aberto() && ehCanal(s.vista)) marcarLida();
+      if (aberto() && s.vista === "diretas" && Object.keys(s.naoLidas).filter(c => c.startsWith("dm:")).join() !== dmsAntes) carregarDiretas();
+      contar();
+    }
+    // o que o vida.js acrescenta ao pedido do /api/ao-vivo: o canal aberto e o maior id já na tela
+    function paraAoVivo() {
+      if (!aberto() || !ehCanal(s.vista)) return "";
+      return `&canal=${encodeURIComponent(s.vista)}&depois=${s.msgs.length ? s.msgs[s.msgs.length - 1].id : 0}`;
+    }
+
+    abrir.addEventListener("click", abrirPainel);
+    ui.fechar.addEventListener("click", () => fecharPainel());
+    ui.voltar.addEventListener("click", () => irPara(s.vista.startsWith("dm:") || s.vista === "auditoria" ? "diretas"
+      : s.vista.startsWith("auditoria:") ? "auditoria" : s.anterior, s.anterior.startsWith("dm:") ? s.titulo : ""));
+    ui.buscar.addEventListener("click", () => (s.vista === "busca" ? ui.voltar.click() : irPara("busca")));
+    ui.abas.addEventListener("click", e => { const b = e.target.closest("button"); if (b && b.dataset.id) irPara(b.dataset.id); });
+    ui.auditar.addEventListener("click", () => irPara("auditoria"));
+    ui.ok.addEventListener("click", () => s.entendiFim?.(true));
+    ui.agoraNao.addEventListener("click", () => s.entendiFim?.(false));
+    ui.antes.addEventListener("click", () => (s.vista.startsWith("auditoria:") ? carregarAuditoria : carregarCanal)(s.msgs.length ? s.msgs[0].id : undefined));
+    ui.busca.addEventListener("submit", e => { e.preventDefault(); clearTimeout(s.buscaTempo); buscar(); });
+    ui.termo.addEventListener("input", () => { clearTimeout(s.buscaTempo); s.buscaTempo = setTimeout(buscar, 1100); });   // a busca é 1 por segundo
+    ui.form.addEventListener("submit", e => { e.preventDefault(); if (ui.sugestoes.hidden) mandar(); });
+    ui.campo.addEventListener("input", () => { if (!ui.aviso.hidden && ui.aviso.classList.contains("ruim")) mostrarAviso(""); sugerir(); });
+    ui.campo.addEventListener("keydown", teclaNoCampo);
+    ui.campo.addEventListener("blur", () => setTimeout(fecharSugestoes, 150));
+    ui.anexar.addEventListener("click", () => ui.arquivo.click());
+    ui.arquivo.addEventListener("change", () => { if (ui.arquivo.files && ui.arquivo.files[0]) anexar(ui.arquivo.files[0]); });
+    ui.cancelar.addEventListener("click", () => { if (s.envio) s.envio.abort(); });
+    ui.lista.addEventListener("click", e => {
+      const b = e.target.closest("button"), li = b && b.closest("li");
+      if (!b || !li) return;
+      const id = Number(li.dataset.id);
+      if (b.classList.contains("chat-sala-reacao")) reagir(id, b.dataset.emoji);
+      else if (b.classList.contains("chat-sala-apagar")) apagar(id);
+      else if (b.classList.contains("chat-sala-reagir")) { s.alvo = b; ui.emojis.dataset.id = String(id); ui.emojis.hidden = false; ui.emojis.firstElementChild.focus(); }
+    });
+    ui.emojis.addEventListener("click", e => {
+      const b = e.target.closest("button");
+      if (b) { reagir(Number(ui.emojis.dataset.id), b.dataset.emoji); fecharEmojis(true); }
+    });
+    ui.emojis.addEventListener("keydown", e => {   // menu: as setas andam; Escape e Tab voltam ao "Reagir"
+      const bs = [...ui.emojis.children], i = bs.indexOf(document.activeElement);
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); bs[(i + 1) % bs.length].focus(); }
+      else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); bs[(i + bs.length - 1) % bs.length].focus(); }
+      else if (e.key === "Escape" || e.key === "Tab") { e.preventDefault(); e.stopPropagation(); fecharEmojis(true); }
+    });
+    painel.addEventListener("keydown", e => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      if (!ui.entendi.hidden) ui.agoraNao.click();
+      else if (s.vista === "busca") ui.voltar.click();
+      else fecharPainel();
+    });
+    return { minhaSala, aoVivo, atualizar, paraAoVivo, abrir: abrirPainel, fechar: fecharPainel };
   }
 
-  window.addEventListener("minha-sala", e => {
-    const d = e.detail || {}, nova = daSala(d), novoAndar = typeof d.andar === "string" ? d.andar : "";
-    if (nova.sala === sala && novoAndar === andar) { if (nova.nome !== nomeSala) { nomeSala = nova.nome; atualizar(); } return; }
-    const estavaAberto = aberto() && caixa.contains(document.activeElement);
-    sala = nova.sala; nomeSala = nova.nome; andar = novoAndar; desde = Number.isInteger(d.seq) && d.seq > 0 ? d.seq : 0;
-    esvaziar(); atualizar();
-    if (estavaAberto && caixa.hidden) $("tela")?.focus();   // o foco não fica perdido num painel que sumiu
-  });
+  // ---- qual dos dois: decide no primeiro evento depois do /api/config
+  let modo = null, ultimaSala = null;
+  function escolher() {
+    if (!modo && cfg()) {
+      modo = cfg().equipe ? equipe() : classico();
+      if (ultimaSala) modo.minhaSala(ultimaSala);
+      modo.atualizar();
+    }
+    return modo;
+  }
+  window.addEventListener("minha-sala", e => { ultimaSala = e.detail || {}; escolher()?.minhaSala(ultimaSala); });
   window.addEventListener("aovivo", e => {
-    if (!sala || tv()) return;
     const d = e.detail || {};
     euAoVivo = typeof d.eu === "string" ? d.eu : null;
-    const chegaram = novas(d.mensagens, vistos, desde);
-    for (const m of chegaram) por(m);
-    if (chegaram.length) contar();
+    escolher()?.aoVivo(d);
   });
+  new MutationObserver(() => escolher()?.atualizar()).observe(document.body, { attributes: true, attributeFilter: ["class"] });   // entrar e sair da TV
+  escolher();
 
-  abrir.addEventListener("click", abrirPainel);
-  fechar.addEventListener("click", () => fecharPainel());
-  form.addEventListener("submit", e => { e.preventDefault(); mandar(); });
-  campo.addEventListener("input", () => { if (!aviso.hidden && aviso.classList.contains("ruim")) mostrarAviso(""); });
-  painel.addEventListener("keydown", e => { if (e.key === "Escape") { e.stopPropagation(); fecharPainel(); } });
-  new MutationObserver(atualizar).observe(document.body, { attributes: true, attributeFilter: ["class"] });   // entrar e sair da TV
-  atualizar();
-
-  return { daSala, validar, limpar, novas, TEXTO_MAX, abrir: abrirPainel, fechar: fecharPainel };
+  return { ...puro, elMensagem, paraAoVivo: () => (modo ? modo.paraAoVivo() : ""), abrir: () => escolher()?.abrir(), fechar: f => modo?.fechar(f) };
 })();
 if (typeof window !== "undefined") window.ChatSala = ChatSala;
