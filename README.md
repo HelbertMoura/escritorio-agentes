@@ -18,7 +18,7 @@
   <img src="./docs/demo.gif" alt="Animated demo of the office in demo mode, with fictional agents: the pixel-art map by day with agents walking and working, the camera zooming in on an agent with a '?' question bubble, then the pointer moves to a request in the Waiting for you list (one click takes you to that agent). Short captions in Portuguese explain each step." width="900">
 </picture>
 
-[Features](#features) · [Screenshots](#screenshots) · [Install](#install) · [Floors](#floors-several-workspaces-in-one-building) · [Team](#team) · [Customize](#customize-white-label) · [Social life](#social-life) · [Construction mode](#construction-mode) · [TV mode](#tv-mode) · [Installable app](#installable-app-pwa) · [Visitors](#visitors) · [Visits by invitation](#visits-by-invitation) · [Newspaper](#newspaper) · [Time-lapse](#time-lapse) · [Phone alerts](#phone-alerts) · [Security](#security) · [Architecture](#architecture) · [Development](#development) · [Changelog](./CHANGELOG.md) · [Contributing](./CONTRIBUTING.md) · [Code of Conduct](./CODE_OF_CONDUCT.md)
+[Features](#features) · [Screenshots](#screenshots) · [Install](#install) · [Floors](#floors-several-workspaces-in-one-building) · [Team](#team) · [Customize](#customize-white-label) · [Social life](#social-life) · [Construction mode](#construction-mode) · [TV mode](#tv-mode) · [Presentation mode](#presentation-mode) · [Installable app](#installable-app-pwa) · [Visitors](#visitors) · [Visits by invitation](#visits-by-invitation) · [Newspaper](#newspaper) · [Time-lapse](#time-lapse) · [Phone alerts](#phone-alerts) · [Security](#security) · [Architecture](#architecture) · [Development](#development) · [Changelog](./CHANGELOG.md) · [Contributing](./CONTRIBUTING.md) · [Code of Conduct](./CODE_OF_CONDUCT.md)
 
 🎬 **[Launch video](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2026.11.06)** (narrated in Brazilian Portuguese, with subtitles), attached to the release. 🌎 **[Video of the world and the visits](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.3.0)** (1.3.0), also narrated in Portuguese, with subtitles.
 
@@ -328,6 +328,13 @@ For keeping the office on a wall TV or a second monitor. Open it with the **Modo
 - **Sound and motion:** the TV has no sound of its own and follows whatever is on in the sound panel. With reduced motion on in the system, the camera cuts instead of gliding and the ticker does not animate.
 - **Time-lapse:** while on, the TV takes over recording that browser's [time-lapse](#time-lapse).
 
+## Presentation mode
+
+For showing the screen on a call with a client or posting a screenshot without leaking anything. Turn it on with the button on the camera bar or with `Alt+Shift+P`; it is remembered per tab until the tab closes.
+
+- **What changes:** the avatars stay, but the names become "Agente 1", "Pessoa 2" and "Você" (you), numbered in the order they show up; the speech bubbles disappear; and the screen hides whatever shows a person's or agent's name, task title, conversation, room chat, mural, status note, the scoreboard, the Conversas, Aprovações and Jornal pages, the meeting titles and guests, and the meeting room links in **Personalizar** (a Zoom link can carry the password in `?pwd=`). The 5-minute meeting alert only says "Uma reunião começa em breve".
+- **Screen only, not access control:** the mode only hides things on this screen. Whoever holds the session still reads everything through the API and the browser DevTools, and the server answers the same. Do not hand a signed-in browser to someone who should not see the data.
+
 ## Installable app (PWA)
 
 The office can go on a phone's home screen or become an app on a computer, with its own icon and no browser bar.
@@ -556,7 +563,7 @@ escritorio.py ── 127.0.0.1:737 ── tailscale serve (HTTPS, tailnet only) 
 
 ### Transition log
 
-On every read (30 s), the server compares tasks with the previous read, by `run_id`, and keeps in memory since when each one has been in its current status. That produces the recent events (at most 50): `comecou`, `pediu_aprovacao`, `pediu_resposta`, `voltou_a_trabalhar` and `terminou`, with time, agent handle and `run_id`, without any conversation content. The first read after starting is only the baseline, with no events. Nothing goes to disk: restarting the service clears the log, and "since" starts again at the first read.
+On every read (30 s), the server compares tasks with the previous read, by `run_id`, and keeps in memory since when each one has been in its current status. That produces the recent events (at most 50): `comecou`, `pediu_aprovacao`, `pediu_resposta`, `voltou_a_trabalhar` and `terminou`, with time, agent handle and `run_id`, without any conversation content. The first read after starting is only the baseline, with no events. The log itself stays in memory: restarting the service clears it, and "since" starts again at the first read. What goes to disk is the agent timeline (1.6): only the agent id, the state and the time of each change, in `dados/linha/` (or `dados/andares/<id>/linha/`), for 14 days and up to 5,000 lines a day.
 
 ## Development
 

@@ -150,6 +150,10 @@ function carregar({ guardado = null, semStorage = false, semControles = false } 
   ];
   for (const s of SENSIVEIS) assert.ok(cobertos.has(s), `escondido no modo apresentação: ${s}`);
   assert.ok(cobertos.has("#reuniao-aviso-entrar") && html.includes('id="reuniao-aviso-entrar"'), "o Entrar do aviso de 5 min some");
+  // os links das salas no Personalizar: o do Zoom pode levar a senha (?pwd=); a lista inteira some, com os campos
+  assert.ok(cobertos.has("#reunioes-links"), "os campos com os links das salas somem");
+  assert.match(html, /<section id="a-reunioes"[^>]*>[\s\S]*?<ul id="reunioes-links"[\s\S]*?<\/section>/, "a lista dos links fica no cartão do Personalizar");
+  assert.match(css, /^html\.apresentacao #a-reunioes::after \{ content: "[^"]*escondid/m, "o cartão diz por que está vazio");
   assert.match(css, /^\.reuniao-aviso-generico \{ display: none; \}/m, "o texto genérico do aviso fica escondido fora do modo");
   assert.match(css, /^html\.apresentacao \.reuniao-aviso-generico \{ display: block; \}/m, "e aparece no modo apresentação");
   assert.ok(!cobertos.has(".agora"), "o cartão da reunião em andamento (li.reuniao.agora) não some inteiro, só o título e os nomes");

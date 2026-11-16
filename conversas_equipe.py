@@ -64,6 +64,7 @@ PALAVRA = re.compile(r"\w+")
 HOSTS_REUNIAO = ("meet.google.com", "*.zoom.us", "meet.jit.si", "teams.microsoft.com", "whereby.com")
 LINK_MAX = 500
 LINK_OK = re.compile(r"[!#-;=?-\[\]_a-z~]+")   # ASCII visível (minúsculo) sem espaço, aspas, < > \ ^ crase { | }
+ROTULO_OK = re.compile(r"[a-z0-9]([a-z0-9-]*[a-z0-9])?")   # cada pedaço do host entre os pontos
 TITULO_MAX, DURACAO_MIN, DURACAO_MAX, CONVIDADOS_MAX = 80, 5, 480, 50
 REUNIOES_MAX = 500   # reuniões por vir, por andar
 AVISO_ANTES = 300    # o aviso pessoal sai 5 min antes
@@ -182,12 +183,16 @@ def hosts_reuniao(extra=None):
 def validar_link(url, extra=None):
     """O link fixo da sala: https, host da lista (o *.zoom.us vale para zoom.us e os subdomínios), sem usuário nem senha
     no endereço, sem porta e só ASCII visível. Devolve a URL como veio; fora disso, ValueError."""
-    if not isinstance(url, str) or not 1 <= len(url) <= LINK_MAX or not LINK_OK.fullmatch(url.lower()):
+    if not isinstance(url, str) or not 1 <= len(url) <= LINK_MAX or not url.isascii():
+        raise ValueError("link")   # isascii antes do lower: o K de kelvin (U+212A) vira "k"
+    if not LINK_OK.fullmatch(url.lower()):
         raise ValueError("link")
     partes = urllib.parse.urlsplit(url)
     if partes.scheme.lower() != "https" or "@" in partes.netloc or ":" in partes.netloc:
         raise ValueError("link")
     host = partes.netloc.lower()
+    if not all(ROTULO_OK.fullmatch(rotulo) for rotulo in host.split(".")):
+        raise ValueError("link")
     for aceito in hosts_reuniao(extra):
         if host == aceito or (aceito.startswith("*.") and (host == aceito[2:] or host.endswith(aceito[1:]))):
             return url
@@ -790,12 +795,15 @@ class Equipe:
                  "nome": nome if autor is not None else EX_MEMBRO, "convidados": convidados.get(i, [])}
                 for i, t, sala, ini, d, autor, nome in linhas]
 
-    def _conferir_reuniao(self, titulo, sala, inicio, duracao, convidados, agora):
+    def _conferir_reuniao(self, titulo, sala, inicio, duracao, convidados, agora, inicio_antes=None):
+        """inicio_antes: na edição, o início gravado; se não mudou, a janela de início não vale (dá para estender ou
+        corrigir o título da reunião em andamento)."""
         titulo, convidados = _titulo(titulo), _convidados(convidados)
         if not isinstance(sala, str) or not 1 <= len(sala) <= SALA_MAX:
             raise ValueError("sala inválida")
         _inteiro(duracao, DURACAO_MIN, DURACAO_MAX, f"A duração vai de {DURACAO_MIN} a {DURACAO_MAX} minutos.")
-        _inteiro(inicio, int(agora) - 60, int(agora) + 366 * DIA, "O início vai de agora até um ano à frente.")
+        if type(inicio) is not int or inicio != inicio_antes:   # type(): o 3600.0 não passa por igual
+            _inteiro(inicio, int(agora) - 60, int(agora) + 366 * DIA, "O início vai de agora até um ano à frente.")
         return titulo, convidados
 
     def _sem_choque(self, sala, inicio, duracao, menos=None):
@@ -833,7 +841,8 @@ class Equipe:
         with self.trava:
             agora = self.relogio()
             self._minha(id_reuniao, usuario, moderador)
-            titulo, convidados = self._conferir_reuniao(titulo, sala, inicio, duracao, convidados, agora)
+            antes = self.con.execute("SELECT inicio FROM reuniao WHERE id = ?", (id_reuniao,)).fetchone()[0]
+            titulo, convidados = self._conferir_reuniao(titulo, sala, inicio, duracao, convidados, agora, antes)
             self._sem_choque(sala, inicio, duracao, menos=id_reuniao)
             with self.con:
                 self.con.execute("UPDATE reuniao SET titulo = ?, sala = ?, duracao = ?, "

@@ -68,6 +68,20 @@ class Linha:
                 self.log(evento="linha", resultado="erro_disco", detalhe=type(x).__name__)
             self.falhou = True
 
+    def limpar(self, agora):
+        """A varredura diária do servidor: tira os dias com mais de 14 dias mesmo sem gravação nova (o andar parado).
+        Nunca levanta."""
+        try:
+            with self.trava:
+                self._limpar(self.dia_de(agora))
+        except OSError:
+            pass
+
+    def dia_ok(self, dia, agora):
+        """O dia (date) está entre hoje-13 e hoje: o que a rota aceita."""
+        hoje = self.dia_de(agora)
+        return hoje - datetime.timedelta(days=DIAS - 1) <= dia <= hoje
+
     def _contar(self, dia):
         os.makedirs(self.pasta, exist_ok=True)
         try:

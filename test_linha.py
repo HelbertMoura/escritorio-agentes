@@ -76,6 +76,20 @@ class Registro(unittest.TestCase):
         self.linha.gravar([("a1", "livre", "trabalhando")], instante("2026-11-16 10:00"))
         self.assertEqual(self.arquivos(), ["2026-11-16.jsonl", "leia-me.txt"])
 
+    def test_limpar_sem_gravacao_nova(self):
+        """A varredura diária tira os dias velhos do andar parado; sem a pasta, não levanta."""
+        self.linha.limpar(instante("2026-11-16 10:00"))
+        os.makedirs(os.path.join(self.pasta, "linha"))
+        for nome in ("2026-11-02.jsonl", "2026-11-03.jsonl", "2026-11-16.jsonl"):
+            open(os.path.join(self.pasta, "linha", nome), "w").close()
+        self.linha.limpar(instante("2026-11-16 10:00"))
+        self.assertEqual(self.arquivos(), ["2026-11-03.jsonl", "2026-11-16.jsonl"])   # hoje e os 13 antes
+
+    def test_dia_ok_so_os_14_dias(self):
+        agora, dia = instante("2026-11-16 10:00"), datetime.date.fromisoformat
+        self.assertEqual([self.linha.dia_ok(dia(d), agora) for d in ("2026-11-02", "2026-11-03", "2026-11-16", "2026-11-17")],
+                         [False, True, True, False])
+
     def test_teto_de_linhas_por_dia(self):
         linha = Linha(self.pasta, FUSO, teto=3)
         t = instante("2026-11-16 10:00")
@@ -239,6 +253,31 @@ class Rotas(unittest.TestCase):
                      f"/api/fora{q}&desde=-5"):
             with self.subTest(rota=rota):
                 self.assertEqual(self.get(rota, self.cab["membrob"])[0], 400)
+
+    def test_dia_fora_dos_14_dias(self):
+        q, hoje = f"?andar={self.B}&agente=b1", datetime.datetime.now(FUSO).date()
+        for d, st in ((hoje - datetime.timedelta(days=14), 400), (hoje + datetime.timedelta(days=1), 400),
+                      (hoje - datetime.timedelta(days=13), 200)):
+            with self.subTest(dia=d):
+                self.assertEqual(self.get(f"/api/linha{q}&dia={d.isoformat()}", self.cab["membrob"])[0], st)
+
+    def setUp(self):   # cada teste com o balde da linha cheio
+        baldes = self.srv.baldes
+        baldes.baldes = {k: v for k, v in baldes.baldes.items() if k[0] != "linha"}
+
+    def test_balde_por_conta(self):
+        sts = [self.get(f"/api/fora?andar={self.B}&desde=0", self.cab["adminb"])[0] for _ in range(20)]
+        self.assertEqual(sts[:10], [200] * 10, sts)
+        self.assertIn(429, sts)
+        self.assertEqual(self.get(f"/api/fora?andar={self.B}&desde=0", self.cab["membrob"])[0], 200)   # outra conta
+
+    def test_varredura_diaria_limpa_a_linha(self):
+        pasta = os.path.join(self.srv.andares[self.B].pasta, "linha")
+        velho = (datetime.datetime.now(FUSO).date() - datetime.timedelta(days=20)).isoformat() + ".jsonl"
+        open(os.path.join(pasta, velho), "w").close()
+        self.srv.varrer_equipes()
+        self.assertNotIn(velho, os.listdir(pasta))
+        self.assertIn(self.hoje + ".jsonl", os.listdir(pasta))
 
     def test_outra_empresa_404(self):
         for rota in (f"/api/linha?andar={self.B}&agente=b1", f"/api/fora?andar={self.B}&desde=0"):

@@ -666,6 +666,13 @@ class Reunioes(Base):
             with self.assertRaises(ValueError, msg=repr(url)):
                 ce.validar_link(url)
         self.assertEqual(ce.validar_link("https://jitsi.minha.com/x", "jitsi.minha.com"), "https://jitsi.minha.com/x")
+        # o K de kelvin (U+212A) vira "k" no lower(); e cada rótulo do host tem só letra, número e hífen no meio
+        for url in ["https://meet.jit.si/K", "https://Koom.us/j/1", "https://-x.zoom.us/j/1",
+                    "https://x-.zoom.us/j/1", "https://a..zoom.us/j/1", "https://a_b.zoom.us/j/1", "https://.zoom.us/j/1",
+                    "https://a%2e.zoom.us/j/1", "https://a!b.zoom.us/j/1"]:
+            with self.assertRaises(ValueError, msg=repr(url)):
+                ce.validar_link(url)
+        self.assertEqual(ce.validar_link("https://us-02web.zoom.us/j/1"), "https://us-02web.zoom.us/j/1")
         self.assertEqual(ce.hosts_reuniao("jitsi.minha.com")[-1], "jitsi.minha.com")
         self.assertEqual(ce.hosts_reuniao(None), list(ce.HOSTS_REUNIAO))
 
@@ -707,6 +714,16 @@ class Reunioes(Base):
             with self.assertRaises(ValueError, msg=k):
                 self.marca(**k)
         self.marca(inicio=agora - 30)   # a tolerância de 60 s
+
+    def test_editar_reuniao_em_andamento(self):
+        """Sem mudar o início, a janela de início não vale: dá para estender ou corrigir o título já começada."""
+        r = self.marca(inicio=self.r.t, duracao=30)
+        self.r.t += 20 * 60
+        e = self.eq.editar(r["id"], "ana", False, "Plan certo", "reuniao", r["inicio"], 60, ["bia"])
+        self.assertEqual((e["titulo"], e["duracao"], e["inicio"]), ("Plan certo", 60, r["inicio"]))
+        for inicio in (r["inicio"] + 60, float(r["inicio"])):   # mudar o início (ou mandá-lo como float) confere de novo
+            with self.assertRaises(ValueError, msg=inicio):
+                self.eq.editar(r["id"], "ana", False, "Plan", "reuniao", inicio, 60, [])
 
     def test_sala_ocupada_e_agenda_cheia(self):
         r = self.marca(inicio=self.r.t + 3600, duracao=60)

@@ -1183,7 +1183,8 @@ html.apresentacao #greve-motivo, html.apresentacao #tv-legenda, html.apresentaca
 html.apresentacao #meu-status, html.apresentacao #equipe-mural, html.apresentacao #equipe-aviso, html.apresentacao #aceno-aviso,
 html.apresentacao #mural-lista, html.apresentacao #placar-tabela, html.apresentacao #ringue-lista, html.apresentacao #ringue-texto,
 html.apresentacao .widgets, html.apresentacao section.agora, html.apresentacao #v-conversas > *, html.apresentacao #v-aprovacoes > *,
-html.apresentacao #v-jornal > *, html.apresentacao #reuniao-aviso-entrar, html.apresentacao [data-sensivel] { display: none !important; }
+html.apresentacao #v-jornal > *, html.apresentacao #reuniao-aviso-entrar, html.apresentacao #reunioes-links, html.apresentacao [data-sensivel] { display: none !important; }
+html.apresentacao #a-reunioes::after { content: "Modo apresentação ligado: os links ficam escondidos (podem ter senha)."; display: block; color: var(--suave); font-size: 13px; }
 .reuniao-aviso-generico { display: none; }   /* o aviso de 5 min no modo apresentação (reunioes.js): só este texto e o X */
 html.apresentacao .reuniao-aviso-generico { display: block; }
 html.apresentacao :is(#v-conversas, #v-aprovacoes, #v-jornal)::before { content: "Modo apresentação ligado: esta página fica escondida."; display: block; padding: 24px 0; color: var(--suave); }

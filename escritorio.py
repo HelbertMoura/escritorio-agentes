@@ -2454,8 +2454,8 @@ def resolver_de_avisos(srv):
         corpo, extra, comeco_ok = "", {}, mostra_comeco(srv.acesso.avisos_de(conta))
         if tipo == "reuniao":   # 5 min antes (Onda 3): cancelada antes do GET, o aviso some
             reuniao = srv.equipe_de(andar).reuniao(item["reuniao"])
-            if reuniao is None:
-                return None
+            if reuniao is None or (conta not in reuniao["convidados"] and conta != reuniao["usuario"]):
+                return None   # tirada da lista depois do aviso: não vê mais nem o título
             titulo = f"Reunião em 5 min · {reuniao['titulo']}" if comeco_ok else "Reunião em 5 min"
             corpo, extra = nome_da_sala(reuniao["sala"]), {"sala": reuniao["sala"], "reuniao": reuniao["id"]}
         elif tipo == "convocacao":
@@ -3611,19 +3611,22 @@ class Pagina(BaseHTTPRequestHandler):
                 return self._sem_andar()
             if not linha:
                 return self._json(*erro(404, "linha_desligada", "A linha do tempo está desligada neste escritório."))
+            try:   # cada pedido relê o JSONL do disco: um balde por conta, como a agenda
+                self.server.baldes.gastar(("linha", usuario), 2, 10)
+            except LimitePresenca as x:
+                return self._json(*erro(429, "limite", str(x)))
             if rota == "/api/fora":   # o resumo desde a última visita (o navegador guarda quando foi)
                 desde = q.get("desde", [""])[0]
                 if not re.fullmatch(r"[0-9]{1,12}", desde):
                     return self._json(*erro(400, "pedido", "Informe desde, em segundos."))
                 return self._json(200, linha.fora(int(desde), agora))
             agente, dia = q.get("agente", [""])[0], q.get("dia", [""])[0] or linha.dia_de(agora).isoformat()
-            try:
-                datetime.date.fromisoformat(dia)
-                dia_ok = re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", dia) is not None
+            try:   # só os 14 dias que a linha guarda: de hoje-13 a hoje
+                dia_ok = re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", dia) is not None                     and linha.dia_ok(datetime.date.fromisoformat(dia), agora)
             except ValueError:
                 dia_ok = False
             if not dia_ok or not LINHA_AGENTE.fullmatch(agente):
-                return self._json(*erro(400, "pedido", "Informe o agente e o dia (AAAA-MM-DD)."))
+                return self._json(*erro(400, "pedido", "Informe o agente e um dia dos últimos 14 (AAAA-MM-DD)."))
             return self._json(200, {"agente": agente, "dia": dia, "itens": linha.do_dia(agente, dia)})
         if rota == "/api/novidades":   # do disco, sem chamar o agentes.chat; ausente ou ilegível sai com entradas: []
             return self._json(200, {"versao": VERSAO, "entradas": NOVIDADES.publico()})
@@ -5126,8 +5129,11 @@ class Servidor(ThreadingHTTPServer):
                 log(evento="equipe", resultado="aviso_reuniao_erro", detalhe=type(x).__name__)
 
     def varrer_equipes(self):
-        """Varre todo andar que tem conversas: o store já aberto e o equipe.db de andar que ninguém abriu desde o boot."""
+        """Varre todo andar que tem conversas: o store já aberto e o equipe.db de andar que ninguém abriu desde o boot.
+        E a linha do tempo de cada andar perde os dias com mais de 14 dias (mesmo o andar parado, sem gravação nova)."""
         for andar in [AndarPrincipal(self), *self.andares.values()]:
+            if andar.linha:
+                andar.linha.limpar(time.time())
             if andar.id not in self.equipes and not os.path.exists(os.path.join(andar.pasta, "equipe.db")):
                 continue
             try:

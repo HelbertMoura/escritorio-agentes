@@ -156,6 +156,13 @@ class Aviso(Reunioes):
         self.assertEqual(a.fila.get_nowait()[3], "bia")   # push só para a conta dela
         self.srv.avisar_reunioes(agora=inicio - 200)   # uma vez só
         self.assertTrue(a.fila.empty())
+        # tirada da lista depois do aviso (o início não muda, o aviso não rearma): não vê mais nem o título
+        editar = {"id": r["reuniao"]["id"], "titulo": "Retro", "sala": "reuniao", "inicio": inicio, "duracao": 30}
+        self.assertEqual(self.post(f"/api/reunioes/editar?andar={self.B}", "ana", {**editar, "convidados": []})[0], 200)
+        self.assertIsNone(self.avisos_de("bia"))
+        self.assertEqual(self.avisos_de("ana")["tipo"], "reuniao")
+        self.assertEqual(self.post(f"/api/reunioes/editar?andar={self.B}", "ana", {**editar, "convidados": ["bia"]})[0], 200)
+        self.assertEqual(self.avisos_de("bia")["titulo"], "Reunião em 5 min · Retro")
         # o "Não perturbe" segura o envio (o push vazio nunca sai para o aparelho dela)
         self.post("/api/perfil", "bia", {"avisos": {"modo": "silencio", "de": "00:00", "ate": "23:59"}})
         antes = len(self.enviados)
