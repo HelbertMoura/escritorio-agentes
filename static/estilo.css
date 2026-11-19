@@ -493,6 +493,8 @@ button.linha-resolvido:hover { background: rgba(255, 255, 255, .04); }
 .form-marca input[name=empresa]:focus, .form-bv input[name=empresa]:focus { outline: none; border-color: color-mix(in srgb, var(--destaque) 60%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--destaque) 35%, transparent); }
 .ajuda { margin: 0; color: var(--suave); font-size: 13px; }
 .ajuda.ruim { color: var(--ambar-texto); }
+.ponte-passos { margin: 10px 0 12px; padding-left: 20px; display: grid; gap: 6px; }
+.ponte-comando { display: block; margin-top: 4px; padding: 6px 8px; border-radius: var(--r-item); background: var(--campo); color: var(--texto); overflow-wrap: anywhere; user-select: all; }
 .marcar { display: flex; align-items: flex-start; gap: 10px; min-height: 44px; padding-top: 4px; font-size: 14px; cursor: pointer; }   /* caixa de marcar do Personalizar */
 .marcar input { flex: none; width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--destaque); }
 .paleta { display: flex; flex-wrap: wrap; gap: 8px; }

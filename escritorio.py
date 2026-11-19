@@ -159,6 +159,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "index.html": "text/html; charset=utf-8", "app.js": "text/javascript; charset=utf-8",
     "avatar.js": "text/javascript; charset=utf-8", "mapa.js": "text/javascript; charset=utf-8",
     "vida.js": "text/javascript; charset=utf-8", "som.js": "text/javascript; charset=utf-8",
+    "sprites.js": "text/javascript; charset=utf-8", "ponte.js": "text/javascript; charset=utf-8",
     "ceu.js": "text/javascript; charset=utf-8", "clima.js": "text/javascript; charset=utf-8",
     "festas.js": "text/javascript; charset=utf-8", "efeitos.js": "text/javascript; charset=utf-8",
     "estilo.css": "text/css; charset=utf-8", "tema/atlas.png": "image/png", "tema/atlas.json": "application/json",
@@ -3009,7 +3010,7 @@ class Pagina(BaseHTTPRequestHandler):
             self.send_header("Strict-Transport-Security", "max-age=31536000")
         self.send_header("Content-Security-Policy",
                          "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; "
-                         "connect-src 'self'; frame-ancestors " + ("'self'" if moldura else "'none'") +
+                         "connect-src 'self' ws://127.0.0.1:47820; frame-ancestors " + ("'self'" if moldura else "'none'") +
                          "; base-uri 'none'; form-action 'self'")
 
     def _envia(self, status, corpo=b"", tipo="text/plain; charset=utf-8", extra=None, cache="no-store", moldura=False):

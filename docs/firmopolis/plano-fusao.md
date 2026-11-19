@@ -20,9 +20,15 @@ O site (`site/`) está em https://firmopolis.devmaniacs.com.br desde 19/11/2026,
 ## Onda 2: a ponte local como segunda fonte
 Objetivo: o mapa mostrar também os terminais da máquina (Claude Code, Codex, agy, OpenCode, MiniMax e o Maestri), lidos pela ponte da Vivo.
 
-- A ponte vem para `ponte/` deste repositório. O nome da pasta de config muda de `EscritorioVivo` para `Firmopolis`, os hooks mudam de `escritorio-vivo` para `firmopolis`, e o `setup --aplicar` migra os nomes antigos.
-- **Decisão em aberto (arquitetura):** quem lê a ponte. Opção A: o navegador fala direto com `ws://127.0.0.1:47820`, o que pede o Origin do app na guarda da ponte, `connect-src` na CSP e o token colado uma vez. Opção B: a ponte empurra para o servidor do escritório, que vira a fonte única, mas aí os dados locais saem da máquina. A recomendação é a A: os terminais locais não saem do computador, o que segue a regra "só leitura, na sua máquina" do site.
-- Critério de aceite: com a ponte ligada, cada terminal vivo aparece no mapa como terminalzinho, e o estado dele (ocupado, esperando você ou livre) bate com o da ponte em até 3 s. Com a ponte desligada, nada quebra e nenhum erro aparece.
+**2a (feita, 19/11/2026), opção A:** o navegador lê a ponte direto, e os terminais locais não saem do computador.
+- A ponte veio para `ponte/` (módulo `firmopolis/ponte`). A pasta de config virou `Firmopolis`; a `EscritorioVivo` antiga é renomeada sozinha na primeira execução (se uma ponte antiga ainda a segura no Windows, segue na antiga).
+- `ponte setup --aplicar --origem https://<endereço do Firmópolis>` grava a origem em `origens.txt` e mostra o token. A guarda segue recusando qualquer Origin, menos um GET /ws de uma origem da lista; o token vai no subprotocolo (`firmopolis.v1` e `token.<hex>`), porque o navegador não manda Authorization no WebSocket. A lista é relida a cada pedido (não precisa reiniciar).
+- No app, `static/ponte.js` liga só depois de a pessoa colar o token em Personalizar > Ponte local (fica no localStorage daquele navegador). A CSP ganhou `ws://127.0.0.1:47820` no `connect-src`.
+- No mapa (`vida.js` e `app.js`), os terminaizinhos (`static/sprites.js`, o mesmo do site, que agora é symlink) são figurantes como as pessoas: ocupado trabalha na sala do primeiro time, esperando você vai para a recepção com o "!" ou o "?", e livre fica na sala comunal ou na cozinha. A carinha e o selo mudam na hora; a sala muda depois de o estado durar 4 s. A etiqueta leva o programa ("Ada · Codex").
+- Com a ponte desligada, o app tenta de novo com espera crescente até 1 minuto. O próprio navegador escreve no console a falha de conexão do WebSocket; o app não mostra erro.
+- No Chrome, a primeira conexão de um site público para 127.0.0.1 pode pedir a permissão "acesso à rede local". O Safari pode recusar `ws://` vindo de página https.
+
+**2b (pendente):** trocar a marca dos hooks de `escritorio-vivo` para `firmopolis` (entrada do agy, plugin do OpenCode, plugin do MiniMax, backups e o autostart do Windows), com o `setup --aplicar` migrando as entradas antigas e testes próprios.
 
 ## Onda 3: as três espécies no app
 - Os **bichinhos de feltro** já existem (`avatar.js`) e representam os agentes do agentes.chat.

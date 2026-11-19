@@ -627,6 +627,7 @@ const Vida = (() => {
     }
     if ((m.proxRobo -= dt) <= 0) { m.proxRobo = 1; verRobo(m, agora); }
     passoPessoas(m, dt, agora);
+    passoTerminais(m, dt, agora);
     jogosSozinho(m, dt);
     if (!m.fora) brincadeiras(m, dt, agora);
     papo(m, dt, agora);
@@ -1588,7 +1589,7 @@ const Vida = (() => {
   // ligou ou desligou (o apresentacao.js chama): renomeia quem já está no mapa
   function renomear() {
     const m = vivo.m;
-    for (const b of [...(m ? m.lista : []), ...vivo.pessoas.values(), ...(vivo.eu ? [vivo.eu] : [])]) mostrar(b, b.nomeReal ?? b.nome);
+    for (const b of [...(m ? m.lista : []), ...vivo.pessoas.values(), ...(vivo.eu ? [vivo.eu] : []), ...term.lista.values()]) mostrar(b, b.nomeReal ?? b.nome);
   }
   const semente = txt => { let h = 7; for (const ch of txt) h = (h * 31 + ch.charCodeAt(0)) % 997; return h; };
 
@@ -1758,12 +1759,75 @@ const Vida = (() => {
     if (p.fala && agora > p.ate) p.fala = null;
     p.pose = p.rota.length ? "andando" : p.aceno > agora ? "acenando" : "parado"; p.chave = p.y + 0.5;
   }
+  // --- terminaizinhos (Firmópolis, onda 2): os terminais deste computador, lidos pela ponte local (ponte.js) -------
+  // Figurantes como as pessoas: fora do m.bonecos, das vagas e da vida social, e só nesta tela (nada vai ao servidor).
+  // Entram pela rua e vão para a sala do estado: ocupado trabalha na sala do primeiro time, esperando você (aprovação,
+  // pergunta ou erro) vai para a recepção, livre fica na sala comunal ou na cozinha. Mudou o estado, muda de sala.
+  const term = { v: -1, m: null, lista: new Map() };
+  const TERM_ESPERA = new Set(["aprovacao", "pergunta", "erro"]);
+  // o estado do terminal no vocabulário dos agentes (app.js: ESTADOS): o erro pede você, como uma aprovação ("!")
+  const TERM_TRABALHO = { ocupado: "running", aprovacao: "waiting_approval", erro: "waiting_approval", pergunta: "waiting_input" };
+  function salaDoTerminal(m, d) {
+    const salas = m.predio.salas, recepcao = salas.find(s => s.tipo === "recepcao");
+    if (d.estado === "ocupado") return salas.find(s => typeof s.chave === "string" && s.chave.startsWith("time:")) || recepcao;
+    if (TERM_ESPERA.has(d.estado)) return recepcao;
+    const comuns = (m.predio.baixo || []).filter(s => s.tipo === "lounge" || s.tipo === "cozinha");
+    return comuns.length ? comuns[semente(d.id) % comuns.length] : recepcao;
+  }
+  const TERM_FIRME = 4;   // s: o estado precisa durar isso para o terminal trocar de sala (a carinha e o selo mudam na hora)
+  function passoTerminais(m, dt, agora) {
+    if (!window.Ponte) return;
+    if (term.m !== m) { // o app.js remontou o prédio: quem andava chega direto e escolhe a sala de novo
+      for (const t of term.lista.values()) { const fim = t.rota[t.rota.length - 1]; if (fim) { t.x = fim[0]; t.y = fim[1]; t.rota = []; } t.salaT = null; t.direto = true; t.mudou = -Infinity; }
+      term.m = m; term.v = -1;
+    }
+    if (Ponte.versao() !== term.v) {
+      const direto = term.v === -1;   // a primeira leitura (página aberta, prédio remontado): cada um já está na sua sala
+      term.v = Ponte.versao();
+      const vistos = new Set(), e = m.predio.entrada;
+      let fila = 0;   // terminais novos entram pela rua um de cada vez
+      for (const d of Ponte.terminais()) {
+        vistos.add(d.id);
+        let t = term.lista.get(d.id);
+        if (!t) {
+          t = { ...novaPessoa("terminal:" + d.id, e.x - 22, e.calcadaY), id: "terminal:" + d.id, terminal: true, salaT: null, cor: semente(d.id), lado: 1, anda: 0, direto, mudou: -Infinity };
+          if (!direto) t.pausa = agora + 0.9 * fila++;
+          term.lista.set(d.id, t);
+        }
+        if (!t.dado || t.dado.estado !== d.estado) t.mudou = t.salaT ? agora : -Infinity;   // o primeiro destino sai já
+        t.dado = d; mostrar(t, d.nome === d.provedor ? d.nome : `${d.nome} · ${d.provedor}`);   // o programa no nome: não confunde com um agente
+        t.trabalho = Object.hasOwn(TERM_TRABALHO, d.estado) ? { status: TERM_TRABALHO[d.estado] } : null;   // filtros, busca e o selo "!" ou "?" da etiqueta
+      }
+      for (const id of [...term.lista.keys()]) if (!vistos.has(id)) term.lista.delete(id);   // fechou o terminal ou a ponte caiu
+    }
+    for (const t of term.lista.values()) {
+      if (t.mudou !== null && agora - t.mudou >= TERM_FIRME) irSalaTerminal(m, t);
+      const x0 = t.x, y0 = t.y;
+      andarPessoa(m, t, dt, agora);
+      if (t.x !== x0) t.lado = t.x < x0 ? -1 : 1;
+      t.anda += Math.hypot(t.x - x0, t.y - y0);   // o passo do desenho (app.js)
+    }
+  }
+  function irSalaTerminal(m, t) {
+    const s = salaDoTerminal(m, t.dado);
+    if (s === t.salaT) { t.mudou = null; return; }
+    const alvo = s && pontoDeVisita(m, s);
+    if (!alvo) { t.mudou = performance.now() / 1000 - TERM_FIRME + 2; return; }   // sem lugar livre agora: tenta de novo em 2 s
+    t.mudou = null;
+    const e = m.predio.entrada, cy = m.predio.corredorY, naRua = t.y >= e.calcadaY - 1;
+    t.salaT = s;
+    t.rota = t.direto ? [] : naRua ? [[e.x - 22, cy], [e.x, cy], ...alvo.r] : rotaAte(m, [t.x, t.y], alvo.p) || [];
+    t.direto = false;
+    if (!t.rota.length) { t.x = alvo.p[0]; t.y = alvo.p[1]; }
+  }
+  const terminais = () => [...term.lista.values()].filter(t => t.x > -20);
+
   // modo econômico (laço do app.js): alguém andando, comemorando, acenando ou arremessando, ou uma cena social ou entrega no ar
   function mexendo(m) {
     const agora = performance.now() / 1000;
     if (m.cenaSocial || m.entrega) return true;
     for (const b of m.lista) if (b.rota.length || b.festa > agora || b.aceno > agora || b.arremesso > agora) return true;
-    return pessoas().some(p => p.rota.length || p.aceno > agora);
+    return pessoas().some(p => p.rota.length || p.aceno > agora) || terminais().some(t => t.rota.length);
   }
   // intervalo mínimo entre quadros, em ms (0: a cada requestAnimationFrame). Só chuva, neve ou festa (animando): até 60 quadros/s.
   // Parado, 30 com foco e 20 sem foco (segundo monitor, TV): acima das animações paradas (monitores, digitando e café, até
@@ -1797,7 +1861,7 @@ const Vida = (() => {
   }
 
   return { criarMundo, sincronizar, passo, renomear, digitando, momento, objetoClicado, festaGeral, social, aoVivo, irAte, irAtePessoa, acenar, mudarStatus, equipe, dmCom, emReuniao, STATUS,
-    muralV: canal => (Object.hasOwn(vivo.muralV, canal) ? vivo.muralV[canal] : null), noPredio: () => vivo.noPredio, pessoas, olhando, textoGreve, horaExtra, mexendo, intervaloQuadro, FRASES };
+    muralV: canal => (Object.hasOwn(vivo.muralV, canal) ? vivo.muralV[canal] : null), noPredio: () => vivo.noPredio, pessoas, terminais, olhando, textoGreve, horaExtra, mexendo, intervaloQuadro, FRASES };
 })();
 
 window.Vida = Vida;

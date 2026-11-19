@@ -317,6 +317,8 @@ function desenharCena(t) {
   for (const b of mundo.bonecos.values()) if (visivel(b) && !naNuvem(b)) cena.push({ chave: b.chave ?? b.y + 0.5, desenha: () => desenharBoneco(b, t) });
   const visitas = Vida.pessoas();   // as pessoas da equipe neste andar e o meu boneco (vida.js: /api/ao-vivo)
   for (const v of visitas) cena.push({ chave: v.chave ?? v.y + 0.5, desenha: () => Avatar.boneco(ctx, v, t, escala) });
+  const terminais = window.Sprites ? Vida.terminais() : [];   // os terminais deste computador, pela ponte local (ponte.js)
+  for (const k of terminais) cena.push({ chave: k.chave ?? k.y + 0.5, desenha: () => desenharTerminal(k, ta) });
   cena.sort((a, b) => a.chave - b.chave).forEach(c => c.desenha());
   desenharPortas(t);
   for (const s of [...predio.salas, ...predio.baixo]) if (Vida.emReuniao(s.chave)) Mapa.desenharPlacaReuniao(ctx, s);   // a placa "em reunião" na porta (mapa.js)
@@ -331,6 +333,7 @@ function desenharCena(t) {
   const ocupadas = Efeitos.placas(ctx, mundo, t);   // plaquinhas da greve: os nomes e os balões desviam delas
   visiveis.sort((a, b) => b.y - a.y || a.x - b.x).forEach(b => desenharEtiqueta(b, t, ocupadas));
   for (const v of visitas) desenharEtiqueta(v, t, ocupadas);   // depois dos agentes: o nome deles tem a preferência
+  for (const k of terminais) desenharEtiqueta(k, t, ocupadas);
   for (const b of visiveis) Efeitos.emote(ctx, b, t, ceu.escuro);
   const faixa = Efeitos.faixaVencedor(ctx, mundo, t); if (faixa) ocupadas.push(faixa);   // os balões desviam da faixa do vencedor
   const faixaEntrega = Efeitos.entregaAr(ctx, mundo.entrega, t); if (faixaEntrega) ocupadas.push(faixaEntrega);   // e da faixa do pedido atendido
@@ -474,6 +477,17 @@ function desenharBoneco(b, t) {
   Efeitos.chapeu(ctx, b, x, y, festa);
   if (est && est.classe === "aprovacao") maoLevantada(b, x, y, t);
   if (selecionado === b.id || realce === b.id) { ctx.strokeStyle = Mapa.cor("destaque"); ctx.lineWidth = Math.max(2, escala); ctx.strokeRect((x + 3) * escala, (y + 6) * escala, 16 * escala, 16 * escala); }
+  ctx.globalAlpha = 1;
+}
+
+// terminalzinho da ponte local (sprites.js): andando, dá o passo; parado, a telinha mostra o estado (código subindo
+// quando ocupado, "!" âmbar quando espera você, olhos quando livre). t: o relógio dos objetos (parado com menos movimento)
+function desenharTerminal(k, t) {
+  const d = k.dado, acao = k.rota.length ? "andar" : d.estado === "ocupado" ? "parar" : d.estado === "livre" ? "ficar" : "esperar";
+  ctx.globalAlpha = combina(k) ? 1 : 0.3;
+  if (escala !== 1) { ctx.save(); ctx.scale(escala, escala); }
+  Sprites.terminal(ctx, Math.round(k.x - 6), Math.round(k.y), Math.floor(k.anda / 4) % 4, k.lado < 0, k.cor, t, acao);
+  if (escala !== 1) ctx.restore();
   ctx.globalAlpha = 1;
 }
 
