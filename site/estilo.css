@@ -2,8 +2,8 @@
  * Layout: a página é um prédio visto de fora. Céu e rua no topo, andares descendo com um elevador que acompanha
  * a rolagem, a TV da recepção, o mural de avisos e a rua à noite no rodapé.
  * Pixel art de verdade: cantos em degrau, sombra dura (é a linguagem do jogo), nada de desfoque. Tema escuro fixo, por escolha. */
-@font-face { font-family: "Pixeloid"; src: url("fontes/PixeloidSans.ttf") format("truetype"); font-display: swap; }
-@font-face { font-family: "Figtree"; src: url("fontes/figtree.ttf") format("truetype"); font-weight: 300 900; font-display: swap; }
+@font-face { font-family: "Pixeloid"; src: url("fontes/PixeloidSans.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: "Figtree"; src: url("fontes/figtree.woff2") format("woff2"); font-weight: 300 900; font-display: swap; }
 
 :root {
   color-scheme: dark;
@@ -119,10 +119,11 @@ h1 em { font-style: normal; color: var(--ambar); text-shadow: 4px 4px 0 #6b3f00;
 .crachas { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; list-style: none; margin: 28px 0 0; padding: 0; }
 .crachas li { display: flex; }
 .cracha { position: relative; width: 150px; height: 112px; padding: 0; background: none; border: 0; cursor: pointer; perspective: 600px;
-  animation: balancar 3.2s ease-in-out infinite; transform-origin: top center; }
+  animation: balancar 3.2s ease-in-out infinite; transform-origin: top center; will-change: transform; }
 .crachas li:nth-child(2n) .cracha { animation-delay: -1.1s; }
 .crachas li:nth-child(3n) .cracha { animation-delay: -2.2s; }
-@keyframes balancar { 0%, 100% { rotate: -2deg; } 50% { rotate: 2deg; } }
+@keyframes balancar { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }   /* transform: roda na GPU */
+.cracha.longe { animation-play-state: paused; }   /* fora da tela, o crachá para de balançar */
 .cracha-frente, .cracha-verso { position: absolute; inset: 0; display: grid; align-content: center; justify-items: center; gap: 4px; padding: 14px 12px;
   backface-visibility: hidden; transition: transform .35s var(--passo); }
 .cracha-frente { background: var(--creme); color: var(--noite); box-shadow: inset 0 -8px 0 var(--indigo); }

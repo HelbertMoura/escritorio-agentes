@@ -8,20 +8,40 @@
   var CONTORNO = '#14131f';
 
   // Desenha a grade em (x, y) = canto superior esquerdo; espelha para a esquerda; contorno de 1 px em volta.
+  // Cada combinação de grade, paleta e lado é pintada uma vez num canvas guardado; depois é só um drawImage.
+  var prontos = new Map(), idPaleta = new WeakMap(), proximaPaleta = 1, paletas = new Map();
+  function paleta(chave, fazer) {   // a mesma paleta (mesmo objeto) para a mesma chave, para o cache acertar
+    var p = paletas.get(chave);
+    if (!p) { p = fazer(); paletas.set(chave, p); }
+    return p;
+  }
   function sprite(c, linhas, cores, x, y, esquerda) {
+    var id = idPaleta.get(cores);
+    if (!id) { id = proximaPaleta++; idPaleta.set(cores, id); }
+    var chave = id + (esquerda ? '<' : '>') + linhas.join('|'), pronto = prontos.get(chave);
+    if (!pronto) {
+      if (prontos.size > 900) prontos.clear();
+      pronto = pintarSprite(linhas, cores, esquerda);
+      prontos.set(chave, pronto);
+    }
+    c.drawImage(pronto, x - 1, y - 1);
+  }
+  function pintarSprite(linhas, cores, esquerda) {
     var h = linhas.length, w = 0, i, j, ch;
     for (i = 0; i < h; i++) w = Math.max(w, linhas[i].length);
+    var cv = document.createElement('canvas'); cv.width = w + 2; cv.height = h + 2;
+    var c = cv.getContext('2d');
     var cel = function (i, j) { return linhas[i] && linhas[i][esquerda ? w - 1 - j : j]; };
     c.fillStyle = CONTORNO;
     for (i = 0; i < h; i++) for (j = 0; j < w; j++) {
       ch = cel(i, j); if (!ch || ch === '.') continue;
-      c.fillRect(x + j - 1, y + i, 1, 1); c.fillRect(x + j + 1, y + i, 1, 1);
-      c.fillRect(x + j, y + i - 1, 1, 1); c.fillRect(x + j, y + i + 1, 1, 1);
+      c.fillRect(j, i + 1, 3, 1); c.fillRect(j + 1, i, 1, 3);
     }
     for (i = 0; i < h; i++) for (j = 0; j < w; j++) {
       ch = cel(i, j); if (!ch || ch === '.') continue;
-      c.fillStyle = cores[ch] || CONTORNO; c.fillRect(x + j, y + i, 1, 1);
+      c.fillStyle = cores[ch] || CONTORNO; c.fillRect(j + 1, i + 1, 1, 1);
     }
+    return cv;
   }
   function sombra(c, x, pes, w) { c.fillStyle = 'rgba(0,0,0,.28)'; c.fillRect(x, pes, w, 1); c.fillRect(x + 1, pes + 1, w - 2, 1); }
   function trocar(linha, j, ch) { return linha.slice(0, j) + ch + linha.slice(j + 1); }
@@ -57,9 +77,9 @@
   function gente(c, x, pes, f, esquerda, v, acao, agora) {
     acao = acao || 'andar'; agora = agora || 0;
     var cab = CABELOS[v % 6], roupa = ROUPAS[(v >> 1) % 7], calca = CALCAS[(v >> 3) % 4];
-    var cores = { h: cab, H: clarear(cab), s: PELES[(v >> 2) % 4], o: '#1b1a2b', k: '#ff9aa5', m: '#b5615a',
+    var cores = paleta('g' + v, function () { return { h: cab, H: clarear(cab), s: PELES[(v >> 2) % 4], o: '#1b1a2b', k: '#ff9aa5', m: '#b5615a',
       c: roupa, C: clarear(roupa), w: '#fff4dc', l: '#f5b83d', y: '#fff4dc', a: escurecer(roupa), P: calca, p: escurecer(calca),
-      z: '#1b1a2b', g: '#9fd3ff' };
+      z: '#1b1a2b', g: '#9fd3ff' }; });
     var t = agora + v * 1311, cabeca = CABECA.slice(), corpo, sobe = 0;
     if ((t % 4200) < 130) cabeca[4] = trocar(cabeca[4], 7, 's');             // piscou
     if (acao === 'andar') { corpo = CORPO[CICLO[f % 4]]; sobe = f % 2; }       // sobe 1 px na passagem
@@ -123,9 +143,9 @@
     var g = MOLDURAS[v % 5], t = agora + v * 997;
     var piscando = (t % 3600) < 140, cursor = Math.floor(t / 420) % 2;
     var tela = '#0b1a12', verde = '#4ade80';
-    var cores = { G: clarear(g), g: g, d: escurecer(g), '#': tela, x: '#10261a', r: '#c8ffd9', S: '#5f8f70',
+    var cores = paleta('t' + (v % 5) + piscando + cursor, function () { return { G: clarear(g), g: g, d: escurecer(g), '#': tela, x: '#10261a', r: '#c8ffd9', S: '#5f8f70',
       E: piscando ? tela : verde, e: verde, u: cursor ? verde : tela, w: '#f5b83d', k: '#7a8196', K: '#b5bccc',
-      b: escurecer(g), B: g, y: '#fff4dc', a: escurecer(escurecer(g)), P: '#3b3b47', p: '#2b2b35', z: '#14131f' };
+      b: escurecer(g), B: g, y: '#fff4dc', a: escurecer(escurecer(g)), P: '#3b3b47', p: '#2b2b35', z: '#14131f' }; });
     var cara = acao === 'acenar' ? TELAS.feliz : acao === 'esperar' ? TELAS.espera : acao === 'parar' ? telaDigitando(t)
       : (t % 6000) > 5200 ? TELAS.olhaLado : TELAS.olhos;
     var monitor = MONITOR.map(function (l, i) { return i >= 1 && i <= 6 ? l.slice(0, 2) + cara[i - 1] + l.slice(10) : l; });
@@ -174,9 +194,10 @@
     coracao:['wwwwwwwww', 'wwrrwrrww', 'wwrrrrrww', 'wwwrrrwww', 'wwwwrwwww', 'wwwwwwwww', '.ww......', '.w.......'],
     nota:   ['wwwwwwwww', 'wwwwwnnww', 'wwwwwnwnw', 'wwnnnwwww', 'wwnnnwwww', 'wwwwwwwww', '.ww......', '.w.......'],
     cafe:   ['wwwwwwwww', 'wwwswswww', 'wwmmmmmww', 'wwmmmmwmw', 'wwwmmmwww', 'wwwwwwwww', '.ww......', '.w.......']};
+  var CORES_BALAO = { w: '#fff4dc', r: '#e8574a', n: '#3d4f9e', m: '#8a5a3a', s: '#b5bccc' };
   function balao(c, tipo, x, y) {
     var g = ICONES[tipo]; if (!g) return;
-    sprite(c, g, { w: '#fff4dc', r: '#e8574a', n: '#3d4f9e', m: '#8a5a3a', s: '#b5bccc' }, x, y, false);
+    sprite(c, g, CORES_BALAO, x, y, false);
   }
 
   /* ---------- Veículos ---------- */
@@ -210,8 +231,8 @@
     var linhas = tipo === 'van' ? VAN : tipo === 'moto' ? MOTO : CARRO;
     // as rodas giram: o miolo da calota alterna
     var gira = Math.floor((agora || 0) / 90) % 2;
-    var cores = { C: tipo === 'moto' ? '#e8574a' : cor, L: clarear(tipo === 'moto' ? '#e8574a' : cor), D: escurecer(cor), w: '#9fd3ff', W: '#1b1a2b',
-      h: gira ? '#9aa3b8' : '#5b6275', R: '#ff4f4f', Y: noite ? '#fff1a8' : '#ffe9a0', A: '#f5b83d', s: '#f2c9a0' };
+    var cores = paleta('v' + tipo + (v % PINTURAS.length) + gira + !!noite, function () { return { C: tipo === 'moto' ? '#e8574a' : cor, L: clarear(tipo === 'moto' ? '#e8574a' : cor), D: escurecer(cor), w: '#9fd3ff', W: '#1b1a2b',
+      h: gira ? '#9aa3b8' : '#5b6275', R: '#ff4f4f', Y: noite ? '#fff1a8' : '#ffe9a0', A: '#f5b83d', s: '#f2c9a0' }; });
     var sobe = tipo === 'moto' ? 0 : (Math.floor((agora || 0) / 260 + v) % 7 === 0 ? 1 : 0);   // um solavanco de vez em quando
     c.fillStyle = 'rgba(0,0,0,.28)'; c.fillRect(x + 2, rodas, linhas[0].length - 4, 1);
     sprite(c, linhas, cores, x, rodas - linhas.length - sobe, esquerda);

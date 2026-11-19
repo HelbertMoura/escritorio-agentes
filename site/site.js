@@ -6,6 +6,37 @@
   var parado = window.matchMedia('(prefers-reduced-motion: reduce)').matches || /[?&]estatico\b/.test(location.search);
   var COR = A ? A.COR : {};
 
+  /* ---------- Um laço só para todas as animações ----------
+   * Cada cena roda no próprio ritmo (fps) e só enquanto o canvas está na tela e a aba está aberta.
+   * Com movimento reduzido, cada cena é desenhada uma vez e fica parada. */
+  var cenas = [], laco = 0;
+  function cena(el, fps, desenhar) {
+    var c = { el: el, passo: 1000 / fps - 2, ultimo: -1e9, desenhar: desenhar, visivel: !('IntersectionObserver' in window) };
+    cenas.push(c);
+    if (parado) { desenhar(0, 16); return c; }
+    if (!c.visivel) new IntersectionObserver(function (es) { c.visivel = es[es.length - 1].isIntersecting; acordar(); }, { rootMargin: '80px' }).observe(el);
+    acordar();
+    return c;
+  }
+  function rodar(agora) {
+    laco = 0;
+    var algum = false;
+    for (var i = 0; i < cenas.length; i++) {
+      var c = cenas[i];
+      if (!c.visivel) continue;
+      algum = true;
+      if (agora - c.ultimo < c.passo) continue;
+      var dt = Math.min(agora - c.ultimo, 100); c.ultimo = agora;
+      c.desenhar(agora, dt);
+    }
+    if (algum && !document.hidden) laco = requestAnimationFrame(rodar);
+  }
+  function acordar() { if (!laco && !parado && !document.hidden) laco = requestAnimationFrame(rodar); }
+  function depois(fn) { var t = 0; return function () { clearTimeout(t); t = setTimeout(fn, 120); }; }   // resize sem tremer
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { cancelAnimationFrame(laco); laco = 0; } else acordar();
+  });
+
   /* ---------- Mascote ---------- */
   var OLHOS = [9, 18];
   var JANELAS = [[21, 25, 2, 2], [9, 22, 2, 2], [18, 22, 2, 2], [21, 22, 2, 2], [14, 26, 4, 4]];
@@ -66,6 +97,7 @@
     }, { passive: true });
     botaoMascote.addEventListener('click', function () { felizAte = performance.now() + 900; falar(); });
 
+    var ultimoDesenho = '';
     var quadro = function (agora) {
       var t = agora - inicio;
       var sobe = parado ? 1 : Math.min(1, t / 700); sobe = sobe * sobe * (3 - 2 * sobe);
@@ -77,11 +109,13 @@
       else est.olho = 'aberto';
       if (t > piscada + 130) piscada = t + 2200 + Math.random() * 2600;
       if (!falou && t > 1500) { falou = true; if (!parado) falar('Bom dia, firma!'); }
+      var chave = est.janelas + est.olho + est.dx + est.dy + est.antena + sobe.toFixed(2);   // só repinta quando algo muda
+      if (chave === ultimoDesenho) return;
+      ultimoDesenho = chave;
       ctx.clearRect(0, 0, tela.width, tela.height);
       pintar(ctx, grade(est), 10, sobe);
-      requestAnimationFrame(quadro);
     };
-    requestAnimationFrame(quadro);
+    if (parado) quadro(performance.now()); else cena(tela, 30, quadro);
   }
 
   /* ---------- Céu do hero ---------- */
@@ -112,11 +146,10 @@
           c2.fillRect(j[0], j[1], 1, 2);
         });
       });
-      if (!parado) requestAnimationFrame(desenharCeu);
     };
     montarCeu();
-    addEventListener('resize', function () { montarCeu(); if (parado) desenharCeu(0); });
-    requestAnimationFrame(desenharCeu);
+    addEventListener('resize', depois(function () { montarCeu(); if (parado) desenharCeu(0); }));
+    cena(ceu, 12, desenharCeu);
   }
 
   /* ---------- Ruas (hero e rodapé à noite): os três tipos de morador na calçada, carros, van e o motoboy da pizza ---------- */
@@ -147,11 +180,11 @@
   var PARADAS = { gente: ['parar', 'celular', 'celular'], terminal: ['parar', 'parar', 'esperar'], bichinho: ['parar'] };
   var BALOES = ['oi', 'oi', 'coracao', 'nota', 'cafe'];
   var ALTURA = { gente: 30, terminal: 28, bichinho: 34 };
-  Rua.prototype.viver = function (agora) {
+  Rua.prototype.viver = function (agora, k) {
     var gente = this.coisas.filter(function (o) { return o.f != null; });
     gente.forEach(function (o) {
       if (o.ate && agora > o.ate) { o.acao = 'andar'; o.ate = 0; o.balao = null; }
-      if (o.acao === 'andar' && Math.random() < 0.0018) {
+      if (o.acao === 'andar' && Math.random() < 0.0018 * k) {
         var ops = PARADAS[o.tipo]; o.acao = ops[(Math.random() * ops.length) | 0]; o.ate = agora + 1500 + Math.random() * 1800;
         if (o.tipo === 'bichinho' && Math.random() < 0.5) o.balao = 'cafe';
       }
@@ -164,10 +197,17 @@
       a.balao = BALOES[(Math.random() * BALOES.length) | 0]; b.balao = Math.random() < 0.6 ? 'oi' : null;
     }
   };
-  Rua.prototype.desenhar = function (agora) {
-    var c = this.ctx, W = this.c.width, H = this.c.height, noite = this.noite;
+  // o cenário (bairro, calçada e asfalto) fica pintado num canvas à parte; o bairro só repinta quando as janelas mudam
+  Rua.prototype.fundo = function (agora) {
+    var W = this.c.width, H = this.c.height, quando = parado ? 0 : Math.floor(agora / 400);
+    var mesmoTamanho = this.cenario && this.cenario.width === W && this.cenario.height === H;
+    if (mesmoTamanho && (!this.noite || this.cenarioQuando === quando)) return this.cenario;
+    if (!mesmoTamanho) {
+      this.cenario = document.createElement('canvas'); this.cenario.width = W; this.cenario.height = H;
+    }
+    var c = this.cenario.getContext('2d');
     c.clearRect(0, 0, W, H);
-    if (noite) desenharBairro(c, this.predios, W, H, agora);
+    if (this.noite) desenharBairro(c, this.predios, W, H, quando * 400);
     c.fillStyle = '#7a8196'; c.fillRect(0, H - 33, W, 2);            // calçada
     c.fillStyle = '#5b6275'; c.fillRect(0, H - 31, W, 8);
     c.fillStyle = '#4e5468'; for (var x0 = 0; x0 < W; x0 += 12) c.fillRect(x0, H - 31, 1, 8);
@@ -175,13 +215,21 @@
     c.fillStyle = '#2b2b35'; c.fillRect(0, H - 21, W, 21);           // asfalto
     c.fillStyle = 'rgba(255,244,220,.7)';
     for (var x = 4; x < W; x += 20) c.fillRect(x, H - 11, 10, 1);
+    this.cenarioQuando = quando;
+    return this.cenario;
+  };
+  Rua.prototype.desenhar = function (agora, dt) {
+    var c = this.ctx, W = this.c.width, H = this.c.height, k = (dt || 16.7) / 16.7;   // k: passos de 60 Hz neste quadro
+    c.clearRect(0, 0, W, H);
+    c.drawImage(this.fundo(agora), 0, 0);
+    if (this.noite) dorminhoco(c, W, H, agora);
     if (!parado && agora > this.proxima) { this.nova(); this.proxima = agora + 700 + Math.random() * 1800; }
-    if (!parado) this.viver(agora);
+    if (!parado) this.viver(agora, k);
     var self = this, t = parado ? 0 : agora;
     this.coisas.sort(function (a, b) { return a.z - b.z; });
     this.coisas = this.coisas.filter(function (o) {
       var anda = o.f == null || o.acao === 'andar';
-      if (!parado && anda) { o.x += o.v * (o.esq ? -1 : 1); if (o.f != null) o.f += o.v; }
+      if (!parado && anda) { o.x += o.v * k * (o.esq ? -1 : 1); if (o.f != null) o.f += o.v * k; }
       var px = Math.round(o.x), passo = o.f != null ? Math.floor(o.f / 2.6) % 4 : 0, acao = parado ? 'andar' : o.acao || 'andar';
       if (o.tipo === 'gente') S.gente(c, px, o.y, passo, o.esq, o.n, acao, t);
       else if (o.tipo === 'terminal') S.terminal(c, px, o.y, passo, o.esq, o.n, t, acao);
@@ -210,9 +258,18 @@
         c.fillStyle = acesa ? '#f5b83d' : '#2c2e5a'; c.fillRect(j[0], j[1], 2, 2);
       });
     });
+  }
+  // o prédio-mascote dormindo no meio do bairro, com zzz (as duas poses da antena ficam prontas em canvas)
+  var dormindo = [];
+  function dorminhoco(c, W, H, agora) {
     if (!A) return;
-    // o prédio-mascote dormindo no meio do bairro, com zzz
-    pintar(c, grade({ janelas: 2, olho: 'fechado', dx: 1, dy: 1, antena: !parado && Math.floor(agora / 900) % 2 === 0 }), 2, 1, ox, oy);
+    var ox = Math.round(W * 0.5 - 32), oy = H - 33 - 60, antena = !parado && Math.floor(agora / 900) % 2 === 0 ? 1 : 0;
+    if (!dormindo[antena]) {
+      var cv = document.createElement('canvas'); cv.width = 64; cv.height = 60;   // a base fica atrás da calçada
+      pintar(cv.getContext('2d'), grade({ janelas: 2, olho: 'fechado', dx: 1, dy: 1, antena: !!antena }), 2, 1);
+      dormindo[antena] = cv;
+    }
+    c.drawImage(dormindo[antena], ox, oy);
     var z = parado ? 1 : (agora / 600) % 3;
     c.fillStyle = 'rgba(255,244,220,.85)';
     var zx = ox + 54 + Math.floor(z * 3), zy = oy + 10 - Math.floor(z * 5);
@@ -220,12 +277,8 @@
   }
   if (S) document.querySelectorAll('.rua, .rua-noite').forEach(function (cv) { ruas.push(new Rua(cv, cv.classList.contains('rua-noite'))); });
   if (ruas.length) {
-    addEventListener('resize', function () { ruas.forEach(function (r) { r.medir(); if (parado) r.desenhar(0); }); });
-    var loopRuas = function (agora) {
-      ruas.forEach(function (r) { r.desenhar(agora); });
-      if (!parado) requestAnimationFrame(loopRuas);
-    };
-    requestAnimationFrame(loopRuas);
+    addEventListener('resize', depois(function () { ruas.forEach(function (r) { r.medir(); r.cenario = null; if (parado) r.desenhar(0); }); }));
+    ruas.forEach(function (r) { cena(r.c, 60, function (agora, dt) { r.desenhar(agora, dt); }); });
   }
 
   /* ---------- Quem mora aqui: cada espécie num ciclo de anda, acena e para; passar o mouse faz acenar ---------- */
@@ -248,9 +301,8 @@
       if (esp === 'gente') S.gente(cx, 15, 31, passo, false, 3, acao, ag);
       else if (esp === 'terminal') S.terminal(cx, 14, 31, passo, false, i + 1, ag, acao);
       else S.bichinho(cx, 10, 32, passo, false, 7, ag, acao);
-      if (!parado) requestAnimationFrame(loop);
     };
-    requestAnimationFrame(loop);
+    cena(cv, 20, loop);
   });
 
   addEventListener('keydown', function (e) {
@@ -264,19 +316,26 @@
   var poco = document.querySelector('.poco'), elevador = document.querySelector('.elevador'), visor = document.querySelector('.elevador-visor');
   var miniEl = document.querySelector('.elevador-mascote');
   if (miniEl && A) pintar(miniEl.getContext('2d'), grade({ janelas: 5, olho: 'aberto', dx: 1, dy: 1, antena: true }), 1, 1);
+  var andarAtual = null, pocoVisivel = false, elevadorPedido = 0;
+  function medirPoco() { pocoVisivel = !!(poco && elevador && getComputedStyle(poco).display !== 'none'); }
   function moverElevador() {
+    elevadorPedido = 0;
     var meio = innerHeight * 0.45, atual = null;
     andares.forEach(function (a) { var ar = a.getBoundingClientRect(); if (ar.top < meio && ar.bottom > meio) atual = a; });
-    andares.forEach(function (a) { a.classList.toggle('ativo', a === atual); });
-    if (!poco || !elevador || getComputedStyle(poco).display === 'none') return;
+    if (atual !== andarAtual) {   // só mexe nas classes quando troca de andar
+      if (andarAtual) andarAtual.classList.remove('ativo');
+      if (atual) atual.classList.add('ativo');
+      andarAtual = atual;
+    }
+    if (!pocoVisivel) return;
     var r = poco.getBoundingClientRect();
     var y = Math.max(0, Math.min(r.height - 64, meio - r.top - 32));
     elevador.style.transform = 'translateY(' + Math.round(y) + 'px)';
     if (atual && visor.textContent !== atual.dataset.andar) visor.textContent = atual.dataset.andar;
   }
-  addEventListener('scroll', function () { requestAnimationFrame(moverElevador); }, { passive: true });
-  addEventListener('resize', moverElevador);
-  moverElevador();
+  addEventListener('scroll', function () { if (!elevadorPedido) elevadorPedido = requestAnimationFrame(moverElevador); }, { passive: true });
+  addEventListener('resize', depois(function () { medirPoco(); moverElevador(); }));
+  medirPoco(); moverElevador();
 
   if ('IntersectionObserver' in window && !parado) {
     var obs = new IntersectionObserver(function (es) {
@@ -288,6 +347,10 @@
   }
 
   /* ---------- Crachás viram com toque ---------- */
+  if ('IntersectionObserver' in window && !parado) {
+    var longe = new IntersectionObserver(function (es) { es.forEach(function (e) { e.target.classList.toggle('longe', !e.isIntersecting); }); });
+    document.querySelectorAll('.cracha').forEach(function (b) { longe.observe(b); });
+  }
   document.querySelectorAll('.cracha').forEach(function (b) {
     b.addEventListener('click', function () { b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'); });
   });
@@ -326,25 +389,21 @@
   });
   var natal = document.querySelector('[data-festa="natal"]');
   if (natal) { falas = natal.dataset.falas.split('|'); falaN = 1; if (parado) festaImg.src = gravacao('festa-natal'); }
-  if (festaFala && !parado) setInterval(function () { if (!document.hidden) mostrarFala(); }, 3200);
+  if (festaFala && !parado) {   // as falas só trocam com a folhinha na tela
+    var falaNaTela = !('IntersectionObserver' in window);
+    if (!falaNaTela) new IntersectionObserver(function (es) { falaNaTela = es[es.length - 1].isIntersecting; }).observe(festaFala);
+    setInterval(function () { if (falaNaTela && !document.hidden) mostrarFala(); }, 3200);
+  }
 
   /* ---------- TV com chiado (só enquanto está na tela) ---------- */
   var chiado = document.querySelector('.tv-chiado');
   if (chiado) {
     chiado.width = 160; chiado.height = 90;
-    var tctx = chiado.getContext('2d'), img = tctx.createImageData(160, 90), noAr = false, ultimo = -1000;
-    var chiar = function (agora) {
-      if (agora - ultimo > 70) {
-        ultimo = agora;
-        for (var i = 0; i < img.data.length; i += 4) { var v = Math.random() * 255 | 0; img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255; }
-        tctx.putImageData(img, 0, 0);
-      }
-      if (noAr && !parado) requestAnimationFrame(chiar);
-    };
-    chiar(0);
-    if ('IntersectionObserver' in window && !parado) new IntersectionObserver(function (es) {
-      var antes = noAr; noAr = es[0].isIntersecting; if (noAr && !antes) requestAnimationFrame(chiar);
-    }).observe(chiado);
+    var tctx = chiado.getContext('2d'), img = tctx.createImageData(160, 90), px32 = new Uint32Array(img.data.buffer);
+    cena(chiado, 14, function () {
+      for (var i = 0; i < px32.length; i++) px32[i] = 0xff000000 | (Math.random() * 255 | 0) * 0x10101;
+      tctx.putImageData(img, 0, 0);
+    });
   }
 
   /* ---------- Copiar comando ---------- */
