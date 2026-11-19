@@ -21,32 +21,64 @@
     }
   }
 
-  /* ---------- Gente (você e as visitas) ---------- */
-  var GENTE_CORPO = ['..hhhh..', '.hhhhhs.', '.hhssos.', '..ssss..', '...ss...', '..cccc..', '.cccccc.', '.sccccs.', '..cccc..', '..pppp..'];
-  var GENTE_PERNAS = [['..p..p..', '.p....p.', '.p....p.', 'bb....bb'], ['...pp...', '...pp...', '...pp...', '..bbb...']];
-  var CABELOS = ['#3b2a20', '#1b1a2b', '#c98a1e', '#8a3b2a', '#d9d2c0'];
-  var PELES = ['#f2c9a0', '#d8a47a', '#a8714a', '#7a4b2e'];
-  var ROUPAS = ['#e8574a', '#4ade80', '#5fa8ff', '#f5b83d', '#c38bff', '#ff7a8a'];
+  /* ---------- Gente (você e as visitas): cabelo com brilho, crachá no cordão, braços e pernas no passo ---------- */
+  var GENTE = [
+    '...hhhh...',
+    '..hHHhhh..',
+    '.hHhhhhhh.',
+    '.hhhsssss.',
+    '.hhssssos.',
+    '.hhsssssk.',
+    '..hsssss..',
+    '...sssm...',
+    '....ss....',
+    '..cwwlcc..',
+    '.cCCclccc.'];
+  var GENTE_PASSO = [
+    ['acCCcyycca', 'a.cccyyc.a', 's.cccccc.s', '..pppppp..', '..pp..pp..', '.pp....pp.', '.pp....pp.', 'zzz....zzz'],
+    ['.acCcyyca.', '.acccyyca.', '.sccccccs.', '..pppppp..', '...pppp...', '...pp.pp..', '...pp.pp..', '..zzzzzz..']];
+  var CABELOS = ['#3b2a20', '#1b1a2b', '#c98a1e', '#8a3b2a', '#d9d2c0', '#5b3a7a'];
+  var PELES = ['#f6d2ae', '#e0ad84', '#b07a52', '#7a4b2e'];
+  var ROUPAS = ['#e8574a', '#3fb35c', '#3a92e6', '#f5b83d', '#9566e6', '#ff7a8a', '#33b3a0'];
+  var CALCAS = ['#2c3a78', '#3b3b47', '#5a4632', '#1f2650'];
   function gente(c, x, pes, f, esquerda, v) {
-    var cores = { h: CABELOS[v % 5], s: PELES[(v >> 2) % 4], o: '#1b1a2b', c: ROUPAS[(v >> 1) % 6], p: '#2c3a78', b: '#1b1a2b' };
-    var linhas = GENTE_CORPO.concat(GENTE_PERNAS[f % 2]);
-    sprite(c, linhas, cores, x, pes - linhas.length + (f % 2 ? 0 : 0), esquerda);
+    var cab = CABELOS[v % 6], roupa = ROUPAS[(v >> 1) % 7];
+    var cores = { h: cab, H: clarear(cab), s: PELES[(v >> 2) % 4], o: '#1b1a2b', k: '#ff9aa5', m: '#b5615a',
+      c: roupa, C: clarear(roupa), w: '#fff4dc', l: '#f5b83d', y: '#fff4dc', a: escurecer(roupa), p: CALCAS[(v >> 3) % 4], z: '#1b1a2b' };
+    var linhas = GENTE.concat(GENTE_PASSO[f % 2]);
+    sprite(c, linhas, cores, x, pes - linhas.length - (f % 2), esquerda);
   }
 
-  /* ---------- Terminaizinhos (terminais locais) ---------- */
-  var TERM_CORPO = ['gggggggggg', 'g########g', 'g#e####e#g', 'g########g', 'g###uu###g', 'gggggggggg', '....kk....', '..bbbbbb..', '.bbbbbbbb.', '.kbbbbbbk.', '..bbbbbb..'];
-  var TERM_PERNAS = [['..k....k..', '.k......k.', 'kk......kk'], ['....kk....', '....kk....', '...kkk....']];
+  /* ---------- Terminaizinhos (terminais locais): monitor CRT de cabeça, olhos que piscam, cursor de boca, crachá ---------- */
+  var TERM = [
+    '.GGGGGGGGGG.',
+    'GgrS######gd',
+    'Gg#EE##EE#gd',
+    'Gg#ee##ee#gd',
+    'Ggxxxxxxxxgd',
+    'Gg###uu###gd',
+    'Gg########gd',
+    '.dddddddddd.',
+    '....kKKk....',
+    '..bBBbbbbb..',
+    '.bBBbbbyybb.'];
+  var TERM_PASSO = [
+    ['abBbbbbyyba.', 'k.bbbbbbbb.k', '..bbbbbbbb..', '..pp....pp..', '.pp......pp.', 'zzz......zzz'],
+    ['.abbbbbyyba.', '.kbbbbbbbbk.', '..bbbbbbbb..', '...pp..pp...', '...pp..pp...', '..zzz..zzz..']];
   var MOLDURAS = ['#e8794a', '#5fa8ff', '#9be15d', '#c38bff', '#ffd166'];
   function terminal(c, x, pes, f, esquerda, v, agora) {
-    var g = MOLDURAS[v % 5];
-    var piscar = Math.floor((agora || 0) / 420) % 2;
-    var cores = { g: g, '#': '#0d1a12', e: '#4ade80', u: piscar ? '#4ade80' : '#0d1a12', k: '#9aa3b8', b: escurecer(g) };
-    var linhas = TERM_CORPO.concat(TERM_PERNAS[f % 2]);
-    sprite(c, linhas, cores, x, pes - linhas.length, esquerda);
+    var g = MOLDURAS[v % 5], t = (agora || 0) + v * 997;
+    var piscando = (t % 3600) < 140, cursor = Math.floor(t / 420) % 2;
+    var tela = '#0b1a12', olho = '#4ade80';
+    var cores = { G: clarear(g), g: g, d: escurecer(g), '#': tela, x: '#10261a', r: '#c8ffd9', S: '#5f8f70',
+      E: piscando ? tela : olho, e: olho, u: cursor ? olho : tela, k: '#7a8196', K: '#b5bccc',
+      b: escurecer(g), B: g, y: '#fff4dc', a: escurecer(escurecer(g)), p: '#2b2b35', z: '#14131f' };
+    var linhas = TERM.concat(TERM_PASSO[f % 2]);
+    sprite(c, linhas, cores, x, pes - linhas.length - (f % 2), esquerda);
   }
-  function escurecer(hex) {
-    var n = parseInt(hex.slice(1), 16), k = 0.62;
-    return 'rgb(' + [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(function (v) { return Math.round(v * k); }).join(',') + ')';
+  function escurecer(cor) {
+    var rgb = cor[0] === '#' ? [1, 3, 5].map(function (i) { return parseInt(cor.slice(i, i + 2), 16); }) : cor.match(/\d+/g).map(Number);
+    return 'rgb(' + rgb.map(function (v) { return Math.round(v * 0.62); }).join(',') + ')';
   }
 
   /* ---------- Bichinhos de feltro (agentes.chat), pelo avatar.js do escritório ---------- */
