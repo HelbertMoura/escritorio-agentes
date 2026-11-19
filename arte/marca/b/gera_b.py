@@ -71,12 +71,16 @@ def mascote(olhar=1, piscar=False):
 
 def mascote16():
     g=grade(16,16)
-    rect(g,7,0,2,1,'t'); rect(g,7,1,2,2,'m')
-    rect(g,5,2,6,1,'r')
-    rect(g,3,3,10,12,'o'); rect(g,4,4,8,10,'b'); rect(g,4,4,1,10,'l'); rect(g,11,4,1,10,'s')
-    rect(g,5,5,2,2,'w'); rect(g,9,5,2,2,'w'); g[6][6]='p'; g[6][10]='p'
-    rect(g,5,9,1,1,'a'); rect(g,10,9,1,1,'a'); rect(g,5,11,1,1,'d'); rect(g,10,11,1,1,'a')
+    rect(g,7,0,2,1,'t'); rect(g,7,1,2,1,'m')
+    rect(g,5,2,6,1,'o')
+    rect(g,2,3,12,12,'o'); rect(g,3,4,10,10,'b'); rect(g,3,4,1,10,'l'); rect(g,12,4,1,10,'s')
+    for ex in (4,9):
+        rect(g,ex,5,3,3,'w'); rect(g,ex+1,6,2,2,'p'); g[6][ex+1]='h'
+    rect(g,4,9,1,1,'k'); rect(g,11,9,1,1,'k')
+    rect(g,5,10,6,1,'c'); rect(g,4,9,0,0,'c')
+    rect(g,4,12,1,1,'a'); rect(g,11,12,1,1,'a')
     rect(g,7,11,2,3,'a')
+    rect(g,1,14,14,1,'g')
     return g
 
 if __name__=='__main__':
@@ -84,3 +88,4 @@ if __name__=='__main__':
     svg(mascote(),14,'b-icone-app.svg',fundo='#f5b83d',pad=32)
     svg(mascote(),14,'b-icone-escuro.svg',fundo='#1c1c22',pad=32)
     svg(mascote16(),16,'b-simbolo-16.svg')
+    svg(mascote16(),14,'b-favicon.svg',fundo='#f5b83d',pad=8)
