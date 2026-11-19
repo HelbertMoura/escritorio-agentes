@@ -164,5 +164,5 @@
     });
   }
 
-  window.Abertura = { tocar: tocar, desenhar: desenhar, DURACAO: DURACAO };
+  window.Abertura = { tocar: tocar, desenhar: desenhar, DURACAO: DURACAO, MASCOTE: MASCOTE, COR: COR };
 })();
