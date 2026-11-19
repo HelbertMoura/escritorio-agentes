@@ -23,7 +23,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <link rel="preload" href="fontes/PixeloidSans.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fontes/figtree.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="estilo.css?v=6">
+  <link rel="stylesheet" href="estilo.css?v=7">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -107,19 +107,19 @@
       <p class="moradores-sub">Na nova Firmópolis, cada morador tem a cara de onde veio. Num relance você sabe quem é agente do agentes.chat, quem é terminal da sua máquina e quem é gente.</p>
       <div class="especies">
         <article class="especie">
-          <canvas class="especie-sprite" data-especie="bichinho" aria-hidden="true"></canvas>
+          <div class="especie-palco"><canvas class="especie-sprite" data-especie="bichinho" aria-hidden="true"></canvas></div>
           <h3>Bichinhos de feltro</h3>
           <p>Os agentes do agentes.chat, desenhados no estilo dos avatares de lá: cada um com a sua cor, o seu olhar e o seu acessório.</p>
           <ul class="crachas"><li><button class="cracha" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>agentes.chat</strong><span class="cracha-status">trabalhando</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Ponto batido. O escritório lê o time a cada 30 s.</span></button></li></ul>
         </article>
         <article class="especie">
-          <canvas class="especie-sprite" data-especie="terminal" aria-hidden="true"></canvas>
+          <div class="especie-palco"><canvas class="especie-sprite" data-especie="terminal" aria-hidden="true"></canvas></div>
           <h3>Terminaizinhos</h3>
           <p>Os terminais da sua máquina. Uma espécie nossa, com um monitor no lugar da cabeça e o cursor piscando como boca. A cor da moldura diz qual é o programa.</p>
           <ul class="crachas"><li><button class="cracha cracha-breve" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>Maestri</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Cada terminal do canvas vira um morador.</span></button></li><li><button class="cracha cracha-breve" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>Claude Code</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Lido pelos hooks, sem chamar o modelo.</span></button></li><li><button class="cracha cracha-breve" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>Codex</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Hooks locais, só na sua máquina.</span></button></li><li><button class="cracha cracha-breve" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>agy</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Entra pela ponte local.</span></button></li><li><button class="cracha cracha-breve" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>OpenCode</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Um plugin pequeno avisa a ponte.</span></button></li></ul>
         </article>
         <article class="especie">
-          <canvas class="especie-sprite" data-especie="gente" aria-hidden="true"></canvas>
+          <div class="especie-palco"><canvas class="especie-sprite" data-especie="gente" aria-hidden="true"></canvas></div>
           <h3>Gente</h3>
           <p>Você e as visitas, com cabelo, roupa e tudo. Quem entra por convite chega pela recepção.</p>
           <ul class="crachas"><li><button class="cracha" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>Você</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Na versão nova, você ganha um boneco de gente.</span></button></li><li><button class="cracha" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>Visitas</strong><span class="cracha-status">por convite</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Já chegam hoje pela recepção. Na versão nova, chegam como gente.</span></button></li></ul>
@@ -133,10 +133,10 @@
       </div>
 
       <div class="faixa andares">
-        <div class="poco" aria-hidden="true"><div class="elevador"><canvas class="elevador-mascote" width="32" height="32"></canvas><span class="elevador-visor">6</span></div></div>
+        <div class="poco" aria-hidden="true"><div class="elevador"><canvas class="elevador-mascote" width="32" height="32"></canvas><span class="elevador-visor">8</span></div></div>
 
-        <article class="andar" data-andar="6">
-          <p class="placa-andar"><span>6</span>Escritório</p>
+        <article class="andar" data-andar="8">
+          <p class="placa-andar"><span>8</span>Escritório</p>
           <div class="andar-texto">
             <h3>Cada agente na sua sala.</h3>
             <p>Trabalhando, esperando você ou de folga: a cor do crachá e o balão na cabeça contam. A cada 30 segundos o escritório lê o time de novo, e os moradores andam até onde devem estar.</p>
@@ -147,8 +147,8 @@
           </figure>
         </article>
 
-        <article class="andar andar-invertido" data-andar="5">
-          <p class="placa-andar"><span>5</span>Esperando você</p>
+        <article class="andar andar-invertido" data-andar="7">
+          <p class="placa-andar"><span>7</span>Esperando você</p>
           <div class="andar-texto">
             <h3>Ninguém fica esperando à toa.</h3>
             <p>Pergunta ou aprovação pendente aparece com um sinal em cima do agente e numa lista separada. Um clique leva até ele.</p>
@@ -156,6 +156,32 @@
           <figure class="janela">
             <img src="img/z-esperando.webp" alt="A agente Hana na cozinha com o balão 'Preciso do seu OK!' e um sinal de exclamação." width="720" height="440" loading="lazy" decoding="async">
             <figcaption>Hana pede aprovação na cozinha.</figcaption>
+          </figure>
+        </article>
+
+        <article class="andar" data-andar="6">
+          <p class="placa-andar"><span>6</span>Equipe</p>
+          <div class="andar-texto">
+            <h3>Gente de verdade conversando ali dentro.</h3>
+            <p>Quem tem conta no escritório conversa ao vivo com o resto da equipe: chat geral, uma conversa por sala e mensagem direta, com @menção, reação, anexo e busca. Cada sala tem um mural na parede, cada pessoa escolhe um status, e o boneco dela anda pelo mapa junto com os agentes.</p>
+            <p>A lista do andar mostra quem está e onde, com Ir até, Acenar, Bater na porta e Mensagem direta. Quem volta depois de mais de 1 hora vê no topo o que aconteceu enquanto esteve fora.</p>
+          </div>
+          <figure class="janela janela-larga">
+            <img src="img/equipe-conversas.webp" alt="O mapa do escritório com a conversa Geral da equipe aberta por cima: Rafa menciona @helena e recebe uma reação." width="960" height="458" loading="lazy" decoding="async">
+            <figcaption>O Geral aberto em cima do mapa, com menção e reação. Pessoas e empresa fictícias.</figcaption>
+          </figure>
+        </article>
+
+        <article class="andar andar-invertido" data-andar="5">
+          <p class="placa-andar"><span>5</span>Reuniões</p>
+          <div class="andar-texto">
+            <h3>Reunião marcada, sala ocupada.</h3>
+            <p>A agenda do andar guarda título, sala, horário e convidados. Cada sala pode ter um link fixo de Meet, Zoom, Jitsi, Teams ou Whereby, e o botão Entrar abre a chamada em outra aba. O aviso chega 5 minutos antes, cada um baixa o .ics para a própria agenda, e a porta da sala ganha a placa EM REUNIÃO.</p>
+            <p>Na reunião geral, cada pessoa do andar recebe o chamado e o boneco dela caminha até a sala.</p>
+          </div>
+          <figure class="janela janela-larga">
+            <img src="img/equipe-reunioes.webp" alt="A página Reuniões com a semana de 16 a 22 de novembro: o Planejamento acontecendo agora, com os botões Entrar na reunião, Baixar .ics, Editar e Cancelar." width="960" height="413" loading="lazy" decoding="async">
+            <figcaption>A agenda da semana, com a reunião que está acontecendo agora.</figcaption>
           </figure>
         </article>
 
@@ -200,30 +226,43 @@
             </div>
           </div>
           <figure class="janela janela-clima">
-            <img class="clima-img" src="img/tempo/clima-chuva.webp" alt="O escritório com chuva, gravado do modo demonstração." width="656" height="400" loading="lazy" decoding="async">
+            <img class="clima-img" src="img/tempo/clima-chuva.webp" alt="O escritório com chuva, gravado do modo demonstração." width="944" height="448" loading="lazy" decoding="async">
             <figcaption class="clima-legenda">Chuva inclinada pelo vento, com respingos na calçada e o barulho da chuva, se o som estiver ligado.</figcaption>
           </figure>
         </article>
 
-        <article class="andar andar-invertido" data-andar="1">
-          <p class="placa-andar"><span>1</span>O bairro</p>
+        <article class="andar andar-invertido andar-clima" data-andar="1">
+          <p class="placa-andar"><span>1</span>O mundo</p>
           <div class="andar-texto">
-            <h3>Um prédio por workspace.</h3>
-            <p>Cada workspace vira um andar, e os prédios formam um bairro num mapa do Brasil. Dá até para receber visita por convite na recepção.</p>
+            <h3>Do globo até a porta da recepção.</h3>
+            <p>O Mundo é uma página aberta a qualquer um que desce do globo ao Brasil, à cidade e ao bairro, com o tempo de agora em 28 cidades. Cada capital tem o seu ponto turístico desenhado, praça, ruas, carros e gente na calçada, e as cidades de praia ganham orla. Lá fora, 12 cidades viram pontos dourados no globo, de Lisboa a Tóquio. Nas datas festivas, as cidades também se enfeitam.</p>
+            <p>Na cidade do escritório, o chalé com a placa leva ao bairro, e a porta leva à recepção, onde quem tem convite entra como visita.</p>
+            <div class="previsao" role="group" aria-label="Escolha um lugar do mundo">
+              <button type="button" aria-pressed="false" data-cidade="globo" data-legenda="O globo gira com a noite de agora. Clique no Brasil para descer, ou num ponto dourado para visitar uma cidade de fora.">O globo</button>
+              <button type="button" aria-pressed="false" data-cidade="brasil" data-legenda="O mapa com biomas, rios e serras, as 27 capitais e Mateus Leme, cada uma com o seu ponto turístico em miniatura.">O Brasil</button>
+              <button type="button" aria-pressed="true" data-cidade="rio-de-janeiro" data-legenda="Rio de Janeiro: o Cristo Redentor no meio da praça, o coreto, a fonte e a orla com quiosques e farol.">Rio de Janeiro</button>
+              <button type="button" aria-pressed="false" data-cidade="sao-paulo" data-legenda="São Paulo: a Avenida Paulista com o MASP, prédios altos, quadras e o vaivém de carros e ônibus.">São Paulo</button>
+              <button type="button" aria-pressed="false" data-cidade="salvador" data-legenda="Salvador: o Pelourinho, a praça e a orla.">Salvador</button>
+              <button type="button" aria-pressed="false" data-cidade="brasilia" data-legenda="Brasília: o Congresso Nacional no meio das quadras.">Brasília</button>
+              <button type="button" aria-pressed="false" data-cidade="manaus" data-legenda="Manaus: o Teatro Amazonas e as palmeiras.">Manaus</button>
+              <button type="button" aria-pressed="false" data-cidade="belo-horizonte" data-legenda="Belo Horizonte: a Igreja da Pampulha, a praça e os ipês.">Belo Horizonte</button>
+              <button type="button" aria-pressed="false" data-cidade="paris" data-legenda="Paris: a Torre Eiffel. As cidades de fora são pontos dourados no globo, e clicar desce direto nelas.">Paris</button>
+              <button type="button" aria-pressed="false" data-cidade="nova-york" data-legenda="Nova York: a Estátua da Liberdade e a orla.">Nova York</button>
+            </div>
           </div>
-          <div class="janela-par">
-            <figure class="janela"><img src="img/19-mundo-brasil.webp" alt="O mapa do Brasil em pixel art, com os prédios nas cidades." width="760" height="647" loading="lazy" decoding="async"><figcaption>O Brasil inteiro</figcaption></figure>
-            <figure class="janela"><img src="img/21-mundo-cidade.webp" alt="O bairro visto de cima, com prédios, praça, ruas e carros." width="760" height="647" loading="lazy" decoding="async"><figcaption>O seu bairro</figcaption></figure>
-          </div>
+          <figure class="janela janela-mundo">
+            <img class="mundo-img" src="img/mundo/cidade-rio-de-janeiro.webp" alt="O Rio de Janeiro visto de cima, gravado da página Mundo." width="720" height="540" loading="lazy" decoding="async">
+            <figcaption class="mundo-legenda">Rio de Janeiro: o Cristo Redentor no meio da praça, o coreto, a fonte e a orla com quiosques e farol.</figcaption>
+          </figure>
         </article>
 
         <article class="andar" data-andar="T">
           <p class="placa-andar placa-terreo"><span>T</span>No bolso</p>
           <div class="andar-texto">
-            <h3>Cabe no celular.</h3>
-            <p>Instale como aplicativo e receba um aviso quando alguém do time precisar de você. O modo TV deixa o escritório rodando num monitor da parede.</p>
+            <h3>Cabe no bolso, até dobrado.</h3>
+            <p>Instale como aplicativo. Aberto, o escritório inteiro cabe na tela. Fechado, o aviso chega na telinha de fora quando um agente pede você, e um toque leva até ele. O modo TV deixa o escritório rodando num monitor da parede.</p>
           </div>
-          <figure class="janela janela-celular"><img src="img/09-celular.webp" alt="O escritório aberto num celular." width="300" height="649" loading="lazy" decoding="async"></figure>
+          <figure class="celular-flip"><img src="img/flip6.webp" alt="Um Galaxy Z Flip 6 desenhado em pixel art, aberto, com o escritório do modo demonstração na tela; ao lado, outro fechado, com o aviso 'Hana precisa do seu OK' na tela de fora." width="504" height="762" loading="lazy" decoding="async"><figcaption>O celular é desenhado; a tela é o app de verdade, no modo demonstração.</figcaption></figure>
         </article>
       </div>
     </section>
@@ -277,7 +316,7 @@
           <li><span class="folha folha-sua"><span class="folha-mes">?</span><span class="folha-dia">+24</span><span class="folha-nome">As datas da sua firma</span></span></li>
         </ol>
         <figure class="janela janela-festa">
-          <img class="festa-img" src="img/tempo/festa-natal.webp" alt="O escritório enfeitado de Natal, com neve, gravado do modo demonstração." width="656" height="400" loading="lazy" decoding="async">
+          <img class="festa-img" src="img/tempo/festa-natal.webp" alt="O escritório inteiro enfeitado de Natal, gravado do modo demonstração." width="944" height="448" loading="lazy" decoding="async">
           <p class="festa-fala" aria-live="polite">Ho ho ho!</p>
           <figcaption class="festa-legenda"><strong>Natal.</strong> Pisca-pisca, árvore, presentes, guirlanda e gorro de Papai Noel, de 1º a 29 de dezembro.</figcaption>
         </figure>
@@ -432,11 +471,11 @@ sudo AGENTES_ORG=<span class="var">&lt;id&gt;</span> bash instalar.sh</code></pr
   <footer class="rodape">
     <section class="familia faixa" aria-labelledby="titulo-familia">
       <h2 id="titulo-familia" class="titulo-secao">Da mesma família.</h2>
-      <p class="familia-sub">Outros projetos da Dev Maniac's, feitos com o mesmo carinho. Escolha um cartucho.</p>
+      <p class="familia-sub">Outros projetos da Dev Maniac's, feitos com o mesmo carinho, cada um com a arte oficial dele. Escolha um cartucho.</p>
       <ul class="cartuchos">
         <li>
           <a class="cartucho cartucho-eco" href="https://eco.devmaniacs.com.br" target="_blank" rel="noopener">
-            <span class="cartucho-rotulo"><img src="img/eco-hello.webp" alt="" width="320" height="320" loading="lazy" decoding="async"></span>
+            <span class="cartucho-rotulo"><img src="img/eco-universo.webp" alt="" width="480" height="480" loading="lazy" decoding="async"></span>
             <span class="cartucho-nome">Universo ECO</span>
             <span class="cartucho-desc">Histórias, criatividade e tecnologia para crianças e famílias.</span>
             <span class="sr"> (abre em nova aba)</span>
@@ -444,7 +483,7 @@ sudo AGENTES_ORG=<span class="var">&lt;id&gt;</span> bash instalar.sh</code></pr
         </li>
         <li>
           <a class="cartucho cartucho-passo" href="https://passoapasso.devmaniacs.com.br" target="_blank" rel="noopener">
-            <span class="cartucho-rotulo"><img src="img/eco-passos.webp" alt="" width="320" height="236" loading="lazy" decoding="async"></span>
+            <span class="cartucho-rotulo"><img src="img/eco-passo.webp" alt="" width="480" height="355" loading="lazy" decoding="async"></span>
             <span class="cartucho-nome">ECO Passo a Passo</span>
             <span class="cartucho-desc">Rotinas para pessoas neurodivergentes, em passos pequenos e sem culpa.</span>
             <span class="sr"> (abre em nova aba)</span>
@@ -452,7 +491,7 @@ sudo AGENTES_ORG=<span class="var">&lt;id&gt;</span> bash instalar.sh</code></pr
         </li>
         <li>
           <a class="cartucho cartucho-purple" href="https://purpleribbon.devmaniacs.com.br" target="_blank" rel="noopener">
-            <span class="cartucho-rotulo"><img src="img/purple-lobo.webp" alt="" width="320" height="320" loading="lazy" decoding="async"></span>
+            <span class="cartucho-rotulo"><img src="img/purple-ribbon.webp" alt="" width="480" height="480" loading="lazy" decoding="async"></span>
             <span class="cartucho-nome">Purple Ribbon</span>
             <span class="cartucho-desc">Um lugar quieto para as madrugadas de quem vive com dor crônica.</span>
             <span class="sr"> (abre em nova aba)</span>
@@ -460,7 +499,7 @@ sudo AGENTES_ORG=<span class="var">&lt;id&gt;</span> bash instalar.sh</code></pr
         </li>
         <li>
           <a class="cartucho cartucho-jogo" href="https://eco.devmaniacs.com.br/jogo/" target="_blank" rel="noopener">
-            <span class="cartucho-rotulo"><img src="img/eco-jogo.webp" alt="" width="720" height="405" loading="lazy" decoding="async"><img class="cartucho-logo" src="img/eco-espectro-logo.webp" alt="" width="340" height="170" loading="lazy" decoding="async"></span>
+            <span class="cartucho-rotulo"><img src="img/eco-espectro.webp" alt="" width="600" height="300" loading="lazy" decoding="async"></span>
             <span class="cartucho-nome">Eco do Espectro</span>
             <span class="cartucho-desc">O jogo do ECO, sobre empatia e os jeitos de perceber o mundo.</span>
             <span class="sr"> (abre em nova aba)</span>
@@ -506,7 +545,7 @@ sudo AGENTES_ORG=<span class="var">&lt;id&gt;</span> bash instalar.sh</code></pr
 
   <script src="abertura.js?v=3"></script>
   <script src="avatar.js?v=3"></script>
-  <script src="sprites.js?v=6"></script>
-  <script src="site.js?v=5"></script>
+  <script src="sprites.js?v=7"></script>
+  <script src="site.js?v=6"></script>
 </body>
 </html>

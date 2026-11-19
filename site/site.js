@@ -284,25 +284,44 @@
   /* ---------- Quem mora aqui: cada espécie num ciclo de anda, acena e para; passar o mouse faz acenar ---------- */
   var ROTINA = { gente: [['andar', 3200], ['acenar', 1600], ['celular', 2400]], terminal: [['andar', 3200], ['acenar', 1600], ['parar', 2600], ['esperar', 1400]],
     bichinho: [['andar', 3200], ['acenar', 1600], ['parar', 2400]] };
+  // o palco é uma faixa baixa em escala inteira (4 px por pixel, 3 no celular estreito): o morador anda de um lado ao outro
+  // e o pixel continua nítido em qualquer largura de cartão
   document.querySelectorAll('[data-especie]').forEach(function (cv, i) {
     var cx = cv.getContext('2d'), esp = cv.dataset.especie, rot = ROTINA[esp] || ROTINA.gente, oi = false;
     var total = rot.reduce(function (s, r) { return s + r[1]; }, 0);
     var cartao = cv.closest('.especie') || cv;
     cartao.addEventListener('pointerenter', function () { oi = true; });
     cartao.addEventListener('pointerleave', function () { oi = false; });
-    cv.width = 44; cv.height = 33;
+    var W = 60, H = 36, x = 10 + i * 9, esq = false, ultimo = 0;
+    var medir = function () {
+      var largura = (cv.parentNode.clientWidth || 240), esc = largura < 330 ? 3 : 4;
+      W = Math.max(40, Math.floor(largura / esc)); cv.width = W; cv.height = H;
+      cv.style.width = W * esc + 'px'; cv.style.height = H * esc + 'px';
+      x = Math.min(x, W - 18);
+    };
+    medir();
+    addEventListener('resize', depois(function () { medir(); if (parado) loop(0); }));
     var loop = function (agora) {
-      cx.clearRect(0, 0, 44, 33);
+      var dt = Math.min(100, agora - ultimo || 0); ultimo = agora;
+      cx.fillStyle = '#2b2a52'; cx.fillRect(0, 0, W, H);               // parede
+      cx.fillStyle = '#3a3968'; for (var q = 3; q < W; q += 16) cx.fillRect(q, 6, 8, 10);   // quadros na parede
+      cx.fillStyle = '#5b6275'; cx.fillRect(0, H - 9, W, 2);             // rodapé
+      cx.fillStyle = '#34343f'; cx.fillRect(0, H - 7, W, 7);             // chão
+      cx.fillStyle = '#2c2c36'; for (var r = 2; r < W; r += 8) cx.fillRect(r, H - 4, 4, 1);
       var t = parado ? 0 : (agora + i * 1700) % total, acao = 'andar';
       for (var k = 0, soma = 0; k < rot.length; k++) { soma += rot[k][1]; if (t < soma) { acao = rot[k][0]; break; } }
       if (oi) acao = 'acenar';
       if (parado) acao = 'andar';
-      var passo = parado ? 0 : Math.floor(agora / 170) % 4, ag = parado ? 0 : agora;
-      if (esp === 'gente') S.gente(cx, 15, 31, passo, false, 3, acao, ag);
-      else if (esp === 'terminal') S.terminal(cx, 14, 31, passo, false, i + 1, ag, acao);
-      else S.bichinho(cx, 10, 32, passo, false, 7, ag, acao);
+      if (!parado && acao === 'andar') {
+        x += (esq ? -1 : 1) * dt * 0.011;
+        if (x > W - 18) esq = true; else if (x < 4) esq = false;
+      }
+      var px = Math.round(x), passo = parado ? 0 : Math.floor(agora / 170) % 4, ag = parado ? 0 : agora;
+      if (esp === 'gente') S.gente(cx, px, H - 3, passo, esq, 3, acao, ag);
+      else if (esp === 'terminal') S.terminal(cx, px, H - 3, passo, esq, i + 1, ag, acao);
+      else S.bichinho(cx, px - 4, H - 2, passo, esq, 7, ag, acao);
     };
-    cena(cv, 20, loop);
+    cena(cv, 30, loop);
   });
 
   addEventListener('keydown', function (e) {
@@ -368,6 +387,23 @@
     });
   });
   if (climaImg && parado) climaImg.src = gravacao('clima-chuva');
+
+  // o mundo: a gravação de cada lugar da página Mundo (o Brasil é uma foto)
+  var mundoImg = document.querySelector('.mundo-img'), mundoLegenda = document.querySelector('.mundo-legenda');
+  var lugares = document.querySelectorAll('[data-cidade]');
+  var gravacaoMundo = function (id) {
+    if (id === 'brasil') return 'img/19-mundo-brasil.webp';
+    return 'img/mundo/' + (id === 'globo' ? 'mundo-globo' : 'cidade-' + id) + (parado ? '-parado' : '') + '.webp';
+  };
+  lugares.forEach(function (b) {
+    b.addEventListener('click', function () {
+      lugares.forEach(function (o) { o.setAttribute('aria-pressed', String(o === b)); });
+      mundoImg.src = gravacaoMundo(b.dataset.cidade);
+      mundoImg.alt = b.textContent + ', gravado da página Mundo.';
+      mundoLegenda.textContent = b.dataset.legenda;
+    });
+  });
+  if (mundoImg && parado) mundoImg.src = gravacaoMundo('rio-de-janeiro');
 
   var festaImg = document.querySelector('.festa-img'), festaFala = document.querySelector('.festa-fala'), festaLegenda = document.querySelector('.festa-legenda');
   var folhas = document.querySelectorAll('[data-festa]'), falas = [], falaN = 0;

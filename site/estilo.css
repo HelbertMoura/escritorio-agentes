@@ -107,7 +107,8 @@ h1 em { font-style: normal; color: var(--ambar); text-shadow: 4px 4px 0 #6b3f00;
 .moradores-sub { max-width: 40em; margin: 0; color: var(--texto-2); }
 .especies { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin-top: 32px; }
 .especie { display: grid; align-content: start; gap: 10px; padding: 0 0 20px; background: var(--grafite-2); box-shadow: inset 0 -6px 0 #17171d; }
-.especie-sprite { width: 100%; height: auto; aspect-ratio: 4 / 3; image-rendering: pixelated; background: linear-gradient(#2b2a52 0 72%, #5b6275 72% 76%, #34343f 76%); }
+.especie-palco { overflow: hidden; background: #34343f; line-height: 0; }
+.especie-sprite { display: block; width: 100%; height: 144px; image-rendering: pixelated; }
 .especie h3 { margin: 6px 20px 0; color: var(--creme); font: 1.3rem var(--fonte-pixel); }
 .especie p { margin: 0 20px; color: var(--texto-2); font-size: .975rem; }
 .especie .crachas { justify-content: flex-start; gap: 10px; margin: 8px 20px 0; }
@@ -163,7 +164,9 @@ h1 em { font-style: normal; color: var(--ambar); text-shadow: 4px 4px 0 #6b3f00;
 .janela img { width: 100%; image-rendering: pixelated; filter: brightness(.88) saturate(.9); transition: filter .25s var(--passo); }
 .janela:hover img, .andar.ativo .janela img { filter: none; }
 .janela figcaption { padding: 8px 2px 10px; color: var(--texto-2); font-size: .85rem; }
-.janela-celular { justify-self: start; max-width: 240px; }
+.celular-flip { justify-self: center; width: 100%; max-width: 504px; margin: 0; }
+.celular-flip img { display: block; width: 100%; height: auto; }
+.celular-flip figcaption { margin-top: 10px; color: var(--texto-2); font-size: .85rem; text-align: center; }
 .janela-par { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 /* Clima: os botões viram uma previsão do tempo de TV. */
 .previsao { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 18px; }
@@ -267,9 +270,12 @@ details p { margin: 0; padding: 0 20px 20px; color: var(--texto-2); }
 .cartucho::before { content: ""; position: absolute; top: 0; left: 50%; width: 46%; height: 10px; translate: -50% 0; background: var(--grafite); } /* entalhe */
 .cartucho:hover, .cartucho:focus-visible { translate: 0 -10px; }
 .cartucho-rotulo { position: relative; display: block; aspect-ratio: 1 / 1; margin-bottom: 10px; overflow: hidden; background: var(--creme); border: 4px solid var(--tinta); }
-.cartucho-rotulo img { width: 100%; height: 100%; object-fit: cover; transition: scale .25s var(--passo); }
+.cartucho-rotulo img { width: 100%; height: 100%; object-fit: contain; transition: scale .25s var(--passo); }
+.cartucho-eco .cartucho-rotulo { background: #dceff5; }
+.cartucho-passo .cartucho-rotulo { background: #fdf3e1; padding: 8px; }
+.cartucho-purple .cartucho-rotulo { background: #e4d8f5; }
+.cartucho-jogo .cartucho-rotulo { background: #f6ead2; padding: 10px; }
 .cartucho:hover .cartucho-rotulo img { scale: 1.06; }
-.cartucho-jogo .cartucho-logo { position: absolute; left: 50%; bottom: 8px; width: 78%; height: auto; translate: -50% 0; object-fit: contain; }
 .cartucho-nome { color: var(--creme); font: 1rem/1.3 var(--fonte-pixel); }
 .cartucho-desc { color: #d4cfc2; font-size: .9rem; }
 @media (max-width: 960px) { .cartuchos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -310,12 +316,12 @@ details p { margin: 0; padding: 0 20px 20px; color: var(--texto-2); }
 .folhinha { padding: 80px 0 40px; }
 .folhinha-cabeca { max-width: 62ch; margin-bottom: 28px; }
 .folhinha-cabeca p { margin: 0; color: var(--texto-2); }
-.folhinha-grade { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 32px; align-items: start; }
+.folhinha-grade { display: grid; gap: 28px; }   /* as folhas em cima, a gravação inteira embaixo, no tamanho real */
 .folhas { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; }
 .folha { position: relative; display: grid; justify-items: center; align-content: start; width: 100%; min-height: 128px; padding: 0 6px 10px; border: 0; cursor: pointer;
   background: var(--creme); color: var(--tinta); text-align: center; box-shadow: 4px 4px 0 rgb(0 0 0 / .35); transition: translate .15s var(--passo); }
 .folha::before { content: ""; position: absolute; top: -5px; left: 30%; right: 30%; height: 8px; background: repeating-linear-gradient(90deg, #6d6a62 0 4px, transparent 4px 10px); } /* espiral */
-.folha-mes { align-self: stretch; margin: 0 -6px 6px; padding: 7px 0 5px; background: var(--vermelho); color: var(--creme); font: .8rem var(--fonte-pixel); text-transform: uppercase; }
+.folha-mes { justify-self: stretch; margin: 8px -6px 6px; padding: 6px 0 4px; text-align: center; background: var(--vermelho); color: var(--creme); font: .8rem var(--fonte-pixel); text-transform: uppercase; }
 .folha-dia { font: 2.1rem/1 var(--fonte-pixel); }
 .folha-nome { margin-top: 6px; font-size: .8rem; font-weight: 700; line-height: 1.2; }
 .folha-movel { margin-top: 4px; font-size: .7rem; color: #6d5a2a; }
@@ -325,14 +331,14 @@ details p { margin: 0; padding: 0 20px 20px; color: var(--texto-2); }
 .folha-sua { cursor: default; background: transparent; color: var(--texto-2); box-shadow: inset 0 0 0 3px var(--linha); }
 .folha-sua .folha-mes { background: var(--grafite-2); color: var(--texto-2); }
 .folha-sua:hover { translate: none; }
-.janela-festa { position: sticky; top: 84px; }
+.janela-festa { width: 100%; max-width: 960px; justify-self: center; }
 .festa-fala { position: absolute; top: 22px; left: 22px; max-width: 70%; margin: 0; padding: 8px 12px; background: var(--creme); color: var(--tinta); font: .9rem var(--fonte-pixel);
   box-shadow: 3px 3px 0 rgb(0 0 0 / .45); }
 .festa-fala::after { content: ""; position: absolute; left: 18px; top: 100%; border: 7px solid transparent; border-top-color: var(--creme); border-left-color: var(--creme); }
 .festa-fala.troca { animation: fala-pula .3s var(--passo); }
 @keyframes fala-pula { from { translate: 0 6px; opacity: 0; } }
 .festa-legenda strong { color: var(--creme); }
-@media (max-width: 900px) { .folhinha-grade { grid-template-columns: 1fr; } .janela-festa { position: relative; top: 0; order: -1; } }
+
 
 /* ---------- O que tem: o quadro de andares da recepção (letreiro de feltro) ---------- */
 .tudo { padding: 64px 0 80px; }
@@ -353,3 +359,8 @@ details p { margin: 0; padding: 0 20px 20px; color: var(--texto-2); }
 .quadro-obra strong { color: var(--ambar-claro); }
 @media (max-width: 1000px) { .quadro-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .quadro-grade { grid-template-columns: 1fr; } .quadro { padding: 18px 16px 20px; } }
+.andar-texto p + p { margin-top: 12px; }
+@media (max-width: 700px) {   /* no celular, as folhas viram uma fileira que corre de lado, e a gravação fica logo abaixo */
+  .folhas { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 100px; overflow-x: auto; padding: 8px 4px 14px; scroll-snap-type: x mandatory; }
+  .folhas li { scroll-snap-align: start; }
+}

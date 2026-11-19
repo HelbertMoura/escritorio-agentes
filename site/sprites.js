@@ -46,29 +46,57 @@
   function sombra(c, x, pes, w) { c.fillStyle = 'rgba(0,0,0,.28)'; c.fillRect(x, pes, w, 1); c.fillRect(x + 1, pes + 1, w - 2, 1); }
   function trocar(linha, j, ch) { return linha.slice(0, j) + ch + linha.slice(j + 1); }
 
-  /* ---------- Gente (você e as visitas): de três quartos, olhando para onde anda ---------- */
-  var CABECA = [
-    '...hhhh...',
-    '..hHHhhh..',
-    '.hHhhhhhh.',
-    '.hhhsssss.',
-    '.hhssssos.',
-    '.hhsssssk.',
-    '..hsssss..',
-    '...sssm...',
-    '....ss....',
-    '...cwwlcc.',
-    '...cCClcc.'];
-  // corpo de baixo: 8 linhas. a = braço (manga escura), s = mão, P = perna de perto (clara), p = de longe, z = sapato
+  /* ---------- Gente (você e as visitas): chibi de cabeção, no traço dos bichinhos ----------
+   * 12 px de largura e 18 de altura: cabeça de 11 linhas (cabelo, franja, olhos grandes com brilho, bochecha e boca)
+   * e corpo de 7 (blusa, braços, calça e sapato). Olha para o lado em que anda; o espelho cuida da esquerda. */
+  var CABECAS = [
+    [ // curto, com topete
+      '...hhhhhh...',
+      '..hhHHHhhh..',
+      '.hhHHhhhhhh.',
+      '.hhhhhhhhhhh',
+      '.hhhsshhsshh',
+      '.hhssssssssh',
+      '.hsssowsssow',
+      '.hsssoosssoo',
+      '.hsskssssssk',
+      '..hssssmsss.',
+      '...ssssss...'],
+    [ // comprido, até o ombro
+      '...hhhhhh...',
+      '..hhHHHhhh..',
+      '.hhHHhhhhhh.',
+      'hhhhhhhhhhhh',
+      'hhhhsshhsshh',
+      'hhhssssssssh',
+      'hhsssowsssow',
+      'hhsssoosssoo',
+      'hhsskssssssk',
+      'hhhssssmsss.',
+      'hh.ssssss...'],
+    [ // cacheado, volumoso
+      '..hHhhHhh...',
+      '.hHHhhHHhhh.',
+      'hhHhhhhhHhhh',
+      'hhhhhhhhhhhh',
+      'hhhhshhhshhh',
+      'hhhssssssssh',
+      '.hsssowsssow',
+      '.hsssoosssoo',
+      '.hsskssssssk',
+      '..hssssmsss.',
+      '...ssssss...']];
+  // corpo: 7 linhas. c blusa, C dobra clara, a manga, s mão, P perna de perto, p perna de longe, z sapato, g celular
   var CORPO = {
-    contato1: ['..acccyyc.', '.a.cccyyc.', 's..cccccc.', '...pppPPP.', '..pp...PP.', '.pp.....PP', '.pp.....PP', 'zz......zzz'],
-    passa1:   ['...cccyyc.', '...cacyyc.', '...cscccc.', '...pppPPP.', '....ppPP..', '....pp.PP.', '....pp.zz.', '...zzz....'],
-    contato2: ['...cccyyca', '...cccyyca', '...ccccccs', '...PPPppp.', '..PP...pp.', '.PP.....pp', '.PP.....pp', 'zzz.....zz'],
-    passa2:   ['...cccyyc.', '...cacyyc.', '...cscccc.', '...PPPppp.', '....PPpp..', '....PPpp..', '....PP....', '....zzz...'],
-    parado:   ['...cccyyc.', '...cacyyc.', '...cscccc.', '...PPPppp.', '...PP.pp..', '...PP.pp..', '...PP.pp..', '...zzz.zzz'],
-    celular:  ['...cccyyc.', '...ccaayc.', '...cccssg.', '...PPPppp.', '...PP.pp..', '...PP.pp..', '...PP.pp..', '...zzz.zzz']};
+    parado:   ['...cCCccc...', '..acCcccca..', '..acccccca..', '..sPPPPPPs..', '...PP..pp...', '...PP..pp...', '..zzz..zzz..'],
+    contato1: ['...cCCccc...', '..acCcccca..', '..acccccca..', '..sPPPPPPs..', '...PP..pp...', '..PP....pp..', '.zzz....zzz.'],
+    passa1:   ['...cCCccc...', '..acCcccca..', '..acccccca..', '..sPPPPPPs..', '....PPpp....', '....PPpp....', '....zzzz....'],
+    contato2: ['...cCCccc...', '..acCcccca..', '..acccccca..', '..sppppPPs..', '...pp..PP...', '..pp....PP..', '.zzz....zzz.'],
+    passa2:   ['...cCCccc...', '..acCcccca..', '..acccccca..', '..sppppPPs..', '....ppPP....', '....ppPP....', '....zzzz....'],
+    celular:  ['...cCCccc...', '..acCcssga..', '..acccsscc..', '...PPPPPP...', '...PP..pp...', '...PP..pp...', '..zzz..zzz..'],
+    acenar:   ['...cCCcccas.', '..acCccca...', '..acccccc...', '..sPPPPPP...', '...PP..pp...', '...PP..pp...', '..zzz..zzz..']};
   var CICLO = ['contato1', 'passa1', 'contato2', 'passa2'];
-  var CABELOS = ['#3b2a20', '#1b1a2b', '#c98a1e', '#8a3b2a', '#d9d2c0', '#5b3a7a'];
+  var CABELOS = ['#3b2a20', '#1b1a2b', '#c98a1e', '#8a3b2a', '#e8d9b0', '#6b3fa0', '#2f6db5'];
   var PELES = ['#f6d2ae', '#e0ad84', '#b07a52', '#7a4b2e'];
   var ROUPAS = ['#e8574a', '#3fb35c', '#3a92e6', '#f5b83d', '#9566e6', '#ff7a8a', '#33b3a0'];
   var CALCAS = ['#2c3a78', '#3b3b47', '#5a4632', '#1f2650'];
@@ -76,27 +104,34 @@
   // f: tempo do passo (0..3); acao: 'andar' | 'parar' | 'acenar' | 'celular'; agora: ms (piscar e aceno)
   function gente(c, x, pes, f, esquerda, v, acao, agora) {
     acao = acao || 'andar'; agora = agora || 0;
-    var cab = CABELOS[v % 6], roupa = ROUPAS[(v >> 1) % 7], calca = CALCAS[(v >> 3) % 4];
-    var cores = paleta('g' + v, function () { return { h: cab, H: clarear(cab), s: PELES[(v >> 2) % 4], o: '#1b1a2b', k: '#ff9aa5', m: '#b5615a',
-      c: roupa, C: clarear(roupa), w: '#fff4dc', l: '#f5b83d', y: '#fff4dc', a: escurecer(roupa), P: calca, p: escurecer(calca),
-      z: '#1b1a2b', g: '#9fd3ff' }; });
-    var t = agora + v * 1311, cabeca = CABECA.slice(), corpo, sobe = 0;
-    if ((t % 4200) < 130) cabeca[4] = trocar(cabeca[4], 7, 's');             // piscou
+    var cab = CABELOS[v % 7], roupa = ROUPAS[(v >> 1) % 7], calca = CALCAS[(v >> 3) % 4];
+    var cores = paleta('g' + v, function () { return { h: cab, H: clarear(cab), s: PELES[(v >> 2) % 4], o: '#1b1a2b', w: '#ffffff', k: '#ff8a98',
+      m: '#a0463f', c: roupa, C: clarear(roupa), a: escurecer(roupa), P: calca, p: escurecer(calca), z: '#1b1a2b', g: '#9fd3ff' }; });
+    var t = agora + v * 1311, cabeca = CABECAS[(v >> 2) % 3].slice(), corpo, sobe = 0;
+    var piscou = (t % 4200) < 140;
     if (acao === 'andar') { corpo = CORPO[CICLO[f % 4]]; sobe = f % 2; }       // sobe 1 px na passagem
-    else if (acao === 'celular') { corpo = CORPO.celular; cabeca[7] = trocar(cabeca[7], 6, 's'); cabeca[4] = trocar(cabeca[4], 7, (t % 2600) < 1300 ? 'o' : 's'); }
-    else {
+    else if (acao === 'celular') {
+      corpo = CORPO.celular;
+      cabeca[6] = trocar(trocar(trocar(trocar(cabeca[6], 5, 's'), 6, 's'), 10, 's'), 11, 's');   // olhos para baixo, no celular
+      cabeca[8] = trocar(trocar(cabeca[8], 5, 'o'), 10, 'o');
+    } else if (acao === 'acenar') {
+      corpo = CORPO.acenar;
+      var lado = Math.floor(agora / 180) % 2;                                  // a mão balança ao lado da cabeça
+      cabeca = cabeca.map(function (l) { return l + '..'; });
+      cabeca[9] = trocar(cabeca[9], 12, 'a'); cabeca[10] = trocar(cabeca[10], 11, 'a');
+      cabeca[8] = trocar(cabeca[8], 12 + lado, 's'); cabeca[7] = trocar(cabeca[7], 12 + lado, 's');
+      cabeca[9] = trocar(cabeca[9], 7, 'o');                                   // boca aberta: "oi!"
+      corpo = corpo.map(function (l) { return l + '..'; });
+    } else {
       corpo = CORPO.parado;
-      if (acao === 'acenar') {                                                 // a mão sobe ao lado da cabeça e balança
-        var lado = Math.floor(agora / 180) % 2;
-        cabeca = cabeca.map(function (l) { return (l + '..').slice(0, 12); });
-        cabeca[3] = trocar(cabeca[3], 10 + lado, 's');
-        cabeca[4] = trocar(cabeca[4], 10 + lado, 'a'); cabeca[5] = trocar(cabeca[5], 10, 'a');
-        cabeca[6] = trocar(cabeca[6], 10, 'a'); cabeca[7] = trocar(cabeca[7], 9, 'a'); cabeca[8] = trocar(cabeca[8], 9, 'a');
-        cabeca[7] = trocar(cabeca[7], 6, 'o');                                 // boca aberta: "oi!"
-      } else if ((t % 5200) > 3600) cabeca[4] = trocar(trocar(cabeca[4], 6, 'o'), 7, 's');   // olha em volta
+      if ((t % 5200) > 3600) {                                                 // olha para trás
+        [[6, 4, 'w'], [6, 5, 'o'], [6, 6, 's'], [6, 9, 'w'], [6, 10, 'o'], [6, 11, 's'], [7, 4, 'o'], [7, 6, 's'], [7, 9, 'o'], [7, 11, 's']]
+          .forEach(function (m) { cabeca[m[0]] = trocar(cabeca[m[0]], m[1], m[2]); });
+      }
     }
+    if (piscou && acao !== 'celular') cabeca[6] = cabeca[6].slice(0, 2) + cabeca[6].slice(2).replace(/[ow]/g, 's');   // piscou: sobra a linha de baixo
     var linhas = cabeca.concat(corpo);
-    sombra(c, x + 1, pes, 9);
+    sombra(c, x + 2, pes, 9);
     sprite(c, linhas, cores, x, pes - linhas.length - sobe, esquerda);
   }
 
