@@ -199,7 +199,7 @@ func backups(t *testing.T, raiz string) []string {
 	t.Helper()
 	var bs []string
 	for c := range foto(t, raiz) {
-		if strings.Contains(filepath.Base(c), ".bak-escritorio-vivo-") {
+		if strings.Contains(filepath.Base(c), ".bak-firmopolis-") {
 			bs = append(bs, c)
 		}
 	}
@@ -302,14 +302,14 @@ func TestAplicarPreservaTerceiros(t *testing.T) {
 	linhasEmOrdem(t, agyTerceiros, agy)
 	v := decodificar(t, agy).(map[string]any)
 	if _, ok := v[marca]; !ok {
-		t.Fatal("faltou a entrada escritorio-vivo no agy")
+		t.Fatal("faltou a entrada firmopolis no agy")
 	}
 	delete(v, marca)
 	if !reflect.DeepEqual(any(v), decodificar(t, agyTerceiros)) {
 		t.Fatal("o hooks.json do agy mudou fora da nossa marca")
 	}
 
-	if got := a.ler(t, ".config/opencode/plugins/escritorio-vivo.js"); got != string(pluginOpenCode()) {
+	if got := a.ler(t, ".config/opencode/plugins/firmopolis.js"); got != string(pluginOpenCode()) {
 		t.Fatal("o plugin do OpenCode não foi copiado igual ao modelo")
 	}
 	if got := a.ler(t, ".codex/config.toml"); got != configTomlCodex {
@@ -440,7 +440,7 @@ func TestDesfazerVoltaByteAByte(t *testing.T) {
 		}
 	}
 	for c := range depois {
-		if _, ok := antes[c]; !ok && !strings.Contains(c, ".bak-escritorio-vivo-") {
+		if _, ok := antes[c]; !ok && !strings.Contains(c, ".bak-firmopolis-") {
 			t.Errorf("sobrou um arquivo nosso: %s", c)
 		}
 	}
@@ -638,22 +638,22 @@ func TestNaoInstaladoFicaDeFora(t *testing.T) {
 func TestPluginAlheioNaoEApagadoNemSobrescrito(t *testing.T) {
 	a := novoAmbiente(t)
 	alheio := "// plugin de outra pessoa com o mesmo nome\n"
-	a.gravar(t, ".config/opencode/plugins/escritorio-vivo.js", alheio)
+	a.gravar(t, ".config/opencode/plugins/firmopolis.js", alheio)
 
 	p := Planejar(a.op)
-	if !strings.Contains(strings.Join(p.Avisos, "\n"), "escritorio-vivo.js") {
+	if !strings.Contains(strings.Join(p.Avisos, "\n"), "firmopolis.js") {
 		t.Errorf("faltou avisar do plugin alheio: %v", p.Avisos)
 	}
 	if err := Aplicar(p); err != nil {
 		t.Fatal(err)
 	}
-	if got := a.ler(t, ".config/opencode/plugins/escritorio-vivo.js"); got != alheio {
+	if got := a.ler(t, ".config/opencode/plugins/firmopolis.js"); got != alheio {
 		t.Fatal("o plugin alheio foi sobrescrito")
 	}
 	if _, err := Desfazer(a.op); err != nil {
 		t.Fatal(err)
 	}
-	if got := a.ler(t, ".config/opencode/plugins/escritorio-vivo.js"); got != alheio {
+	if got := a.ler(t, ".config/opencode/plugins/firmopolis.js"); got != alheio {
 		t.Fatal("o desfazer apagou um plugin que não é o nosso")
 	}
 }
@@ -661,15 +661,15 @@ func TestPluginAlheioNaoEApagadoNemSobrescrito(t *testing.T) {
 func TestPluginEditadoDepoisFica(t *testing.T) {
 	a := novoAmbiente(t)
 	aplicar(t, a.op)
-	a.gravar(t, ".config/opencode/plugins/escritorio-vivo.js", "// mexi no plugin\n")
+	a.gravar(t, ".config/opencode/plugins/firmopolis.js", "// mexi no plugin\n")
 	p, err := Desfazer(a.op)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := a.ler(t, ".config/opencode/plugins/escritorio-vivo.js"); got != "// mexi no plugin\n" {
+	if got := a.ler(t, ".config/opencode/plugins/firmopolis.js"); got != "// mexi no plugin\n" {
 		t.Fatal("o desfazer apagou um plugin com hash diferente do nosso")
 	}
-	if !strings.Contains(strings.Join(p.Avisos, "\n"), "escritorio-vivo.js") {
+	if !strings.Contains(strings.Join(p.Avisos, "\n"), "firmopolis.js") {
 		t.Errorf("faltou avisar que o plugin ficou: %v", p.Avisos)
 	}
 }
@@ -687,7 +687,7 @@ func TestPlanoMostraOQueMudaSemToken(t *testing.T) {
 	}
 	for _, quero := range []string{
 		a.caminho(".claude/settings.json"), a.caminho(".codex/hooks.json"),
-		a.caminho(".gemini/config/hooks.json"), a.caminho(".config/opencode/plugins/escritorio-vivo.js"),
+		a.caminho(".gemini/config/hooks.json"), a.caminho(".config/opencode/plugins/firmopolis.js"),
 		`+ `, `"async": true`, "hook --porta 47820 claude", "/hooks", "reiniciar",
 	} {
 		if !strings.Contains(texto, quero) {

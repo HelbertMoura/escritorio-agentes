@@ -39,13 +39,13 @@ func (d *demo) passo() ([]maestri.Workspace, []mundo.MetaTerminal, []mundo.Sinal
 			}
 			metas = append(metas, meta)
 		}
-		workspaces = []maestri.Workspace{{ID: "demo", Nome: "Demonstração", Projeto: "escritorio-vivo", Bands: []maestri.Band{band}}}
+		workspaces = []maestri.Workspace{{ID: "demo", Nome: "Demonstração", Projeto: "firmopolis", Bands: []maestri.Band{band}}}
 	}
 
 	sinais := make([]mundo.Sinal, 0, len(nomesDemo))
 	for i := range nomesDemo {
 		s := mundo.Sinal{Fonte: provedoresDemo[i%len(provedoresDemo)], SessaoID: fmt.Sprintf("sessao-%02d", i+1),
-			TerminalID: idDemo(i), Estado: estadosDemo[(d.passos+3*i)%len(estadosDemo)], Cwd: "/demo/escritorio-vivo"}
+			TerminalID: idDemo(i), Estado: estadosDemo[(d.passos+3*i)%len(estadosDemo)], Cwd: "/demo/firmopolis"}
 		if s.Estado == mundo.Ocupado {
 			a := atividadesDemo[(d.passos+i)%len(atividadesDemo)]
 			s.Ferramenta, s.Alvo = a[0], a[1]

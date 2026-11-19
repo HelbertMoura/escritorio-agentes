@@ -1,5 +1,5 @@
 // Package minimax normaliza o MiniMax Code (mcode): os hooks do plugin local
-// escritorio-vivo, que repassam o stdin a POST /evento/mcode (`ponte hook mcode`,
+// firmopolis, que repassam o stdin a POST /evento/mcode (`ponte hook mcode`,
 // instalado pelo `ponte setup`).
 package minimax
 

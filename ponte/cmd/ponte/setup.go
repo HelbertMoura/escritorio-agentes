@@ -21,9 +21,9 @@ const usoSetup = `uso: ponte setup --plano | --aplicar | --desfazer [--autostart
 
   --plano      mostra o que muda em cada arquivo, sem mudar nada
   --aplicar    mostra o plano e instala (backup com data de cada arquivo de terceiros)
-  --desfazer   tira tudo o que é escritorio-vivo, inclusive o autostart
+  --desfazer   tira tudo o que é firmopolis (e o que sobrou do escritorio-vivo), inclusive o autostart
   --autostart  com --plano ou --aplicar: a ponte sobe sozinha, sem janela, no login
-               do Windows (valor EscritorioVivo na chave Run do usuário, chamando o
+               do Windows (valor Firmopolis na chave Run do usuário, chamando o
                ponte-fundo.exe do bin instalado)
   --home       outra pasta de usuário (para conferir numa cópia das configs)
 
@@ -139,6 +139,17 @@ func setup(args []string, saida io.Writer) error {
 				return err
 			}
 		}
+		if *home == "" && autostartSuportado() == nil {
+			// O autostart do Escritório Vivo subiria a ponte antiga na mesma porta.
+			if tirado, err := tirarAutostartAntigo(); err != nil {
+				return err
+			} else if tirado != "" {
+				fmt.Fprintln(saida, "\nAutostart: tirei o antigo "+nomeAutostartAntigo+" da chave "+chaveRun+" ("+tirado+").")
+				if !*autostart {
+					fmt.Fprintln(saida, "Para a ponte nova subir no login, rode de novo com --autostart.")
+				}
+			}
+		}
 		fmt.Fprintln(saida, "\nPronto. Para desfazer: ponte setup --desfazer")
 	case *desfazer:
 		p, err := integracoes.Desfazer(op)
@@ -148,20 +159,22 @@ func setup(args []string, saida io.Writer) error {
 		}
 		// Com --home é uma cópia das configs: o registro do usuário fica como está.
 		if *home == "" && autostartSuportado() == nil {
-			tirado, err := tirarAutostart()
-			if err != nil {
-				return err
-			}
-			if tirado != "" {
-				fmt.Fprintln(saida, "\nAutostart: tirei "+nomeAutostart+" da chave "+chaveRun+" ("+tirado+").")
+			for _, tirar := range []func() (string, error){tirarAutostart, tirarAutostartAntigo} {
+				tirado, err := tirar()
+				if err != nil {
+					return err
+				}
+				if tirado != "" {
+					fmt.Fprintln(saida, "\nAutostart: tirei da chave "+chaveRun+" ("+tirado+").")
+				}
 			}
 		}
 		restos := integracoes.Restos(op)
 		if len(p.Avisos) == 0 && len(restos) == 0 {
-			fmt.Fprintln(saida, "\nPronto: não sobrou nada do escritorio-vivo nas configs.")
+			fmt.Fprintln(saida, "\nPronto: não sobrou nada da ponte nas configs.")
 			return nil
 		}
-		fmt.Fprintln(saida, "\nPronto: as entradas escritorio-vivo saíram das configs.")
+		fmt.Fprintln(saida, "\nPronto: as entradas da ponte saíram das configs.")
 		if len(p.Avisos) > 0 {
 			fmt.Fprintln(saida, "Veja nos avisos acima o que ficou de propósito.")
 		}

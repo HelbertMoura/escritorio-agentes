@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { EscritorioVivo } from "./opencode-escritorio-vivo.js"
+import { Firmopolis } from "./opencode-firmopolis.js"
 
 let pasta, chamadas, fetchOriginal, envOriginal, argvOriginal
 
@@ -18,9 +18,9 @@ beforeEach(() => {
   process.env.XDG_CONFIG_HOME = pasta
   process.env.HOME = pasta
   process.env.MAESTRI_TERMINAL_ID = "T1"
-  mkdirSync(join(pasta, "EscritorioVivo"), { recursive: true })
-  mkdirSync(join(pasta, "Library", "Application Support", "EscritorioVivo"), { recursive: true })
-  for (const dir of [join(pasta, "EscritorioVivo"), join(pasta, "Library", "Application Support", "EscritorioVivo")]) {
+  mkdirSync(join(pasta, "Firmopolis"), { recursive: true })
+  mkdirSync(join(pasta, "Library", "Application Support", "Firmopolis"), { recursive: true })
+  for (const dir of [join(pasta, "Firmopolis"), join(pasta, "Library", "Application Support", "Firmopolis")]) {
     writeFileSync(join(dir, "token"), "tok-123\n")
   }
   chamadas = []
@@ -41,7 +41,7 @@ afterEach(() => {
 const espera = () => new Promise((r) => setImmediate(r))
 
 test("manda o evento para a ponte com os headers certos", async () => {
-  const ganchos = await EscritorioVivo({ directory: "C:\\proj\\loja" })
+  const ganchos = await Firmopolis({ directory: "C:\\proj\\loja" })
   await ganchos.event({ event: { type: "session.status", properties: { sessionID: "s1", status: { type: "busy" } } } })
   await espera()
 
@@ -56,7 +56,7 @@ test("manda o evento para a ponte com os headers certos", async () => {
 })
 
 test("properties ou args nulos não fazem o plugin lançar", async () => {
-  const ganchos = await EscritorioVivo({ directory: "C:\\proj" })
+  const ganchos = await Firmopolis({ directory: "C:\\proj" })
   await ganchos.event({ event: { type: "session.idle", properties: null } })
   await ganchos.event({ event: null })
   await ganchos.event(null)
@@ -66,35 +66,35 @@ test("properties ou args nulos não fazem o plugin lançar", async () => {
 })
 
 test("o comando vai só na 1ª linha", async () => {
-  const ganchos = await EscritorioVivo({ directory: "C:\\proj" })
+  const ganchos = await Firmopolis({ directory: "C:\\proj" })
   await ganchos["tool.execute.before"]({ tool: "bash", sessionID: "s1", callID: "c1" }, { args: { command: "go test ./...\ncat <<EOF\nsegredo\nEOF" } })
   await espera()
   assert.equal(chamadas[0].corpo.properties.args.command, "go test ./...")
 })
 
 test("ignora eventos que a ponte não usa", async () => {
-  const ganchos = await EscritorioVivo({ directory: "C:\\proj" })
+  const ganchos = await Firmopolis({ directory: "C:\\proj" })
   await ganchos.event({ event: { type: "message.part.updated", properties: { sessionID: "s1" } } })
   await espera()
   assert.equal(chamadas.length, 0)
 })
 
 test("tool.execute.before manda só o arquivo, o comando ou a URL", async () => {
-  const ganchos = await EscritorioVivo({ directory: "C:\\proj" })
+  const ganchos = await Firmopolis({ directory: "C:\\proj" })
   await ganchos["tool.execute.before"]({ tool: "write", sessionID: "s1", callID: "c1" }, { args: { filePath: "C:\\proj\\a.go", content: "segredo".repeat(1000) } })
   await espera()
   assert.deepEqual(chamadas[0].corpo.properties, { sessionID: "s1", tool: "write", args: { filePath: "C:\\proj\\a.go" } })
 })
 
 test("permissão e pergunta não levam o conteúdo do pedido", async () => {
-  const ganchos = await EscritorioVivo({ directory: "C:\\proj" })
+  const ganchos = await Firmopolis({ directory: "C:\\proj" })
   await ganchos.event({ event: { type: "permission.asked", properties: { id: "p1", sessionID: "s1", permission: "bash", patterns: ["rm -rf /"], metadata: { command: "rm -rf /" } } } })
   await espera()
   assert.deepEqual(chamadas[0].corpo.properties, { sessionID: "s1" })
 })
 
 test("sessão filha leva o pai nos eventos seguintes", async () => {
-  const ganchos = await EscritorioVivo({ directory: "C:\\proj" })
+  const ganchos = await Firmopolis({ directory: "C:\\proj" })
   await ganchos.event({ event: { type: "session.created", properties: { sessionID: "f1", info: { id: "f1", parentID: "s1", directory: "C:\\proj", title: "x" } } } })
   await ganchos.event({ event: { type: "session.idle", properties: { sessionID: "f1" } } })
   await espera()
@@ -106,7 +106,7 @@ test("sessão filha leva o pai nos eventos seguintes", async () => {
 
 test("nunca lança erro com a ponte desligada", async () => {
   globalThis.fetch = async () => { throw new TypeError("fetch failed") }
-  const ganchos = await EscritorioVivo({ directory: "C:\\proj" })
+  const ganchos = await Firmopolis({ directory: "C:\\proj" })
   await ganchos.event({ event: { type: "session.idle", properties: { sessionID: "s1" } } })
   await ganchos["tool.execute.before"]({ tool: "bash", sessionID: "s1", callID: "c1" }, { args: { command: "ls" } })
   globalThis.fetch = () => { throw new Error("síncrono") }
@@ -115,9 +115,9 @@ test("nunca lança erro com a ponte desligada", async () => {
 })
 
 test("sem token não manda nada", async () => {
-  rmSync(join(pasta, "EscritorioVivo", "token"))
-  rmSync(join(pasta, "Library", "Application Support", "EscritorioVivo", "token"))
-  const ganchos = await EscritorioVivo({ directory: "C:\\proj" })
+  rmSync(join(pasta, "Firmopolis", "token"))
+  rmSync(join(pasta, "Library", "Application Support", "Firmopolis", "token"))
+  const ganchos = await Firmopolis({ directory: "C:\\proj" })
   await ganchos.event({ event: { type: "session.idle", properties: { sessionID: "s1" } } })
   await espera()
   assert.equal(chamadas.length, 0)
@@ -125,6 +125,20 @@ test("sem token não manda nada", async () => {
 
 test("opencode run não manda nada", async () => {
   process.argv = ["opencode", "run", "faça x"]
-  const ganchos = await EscritorioVivo({ directory: "C:\\proj" })
+  const ganchos = await Firmopolis({ directory: "C:\\proj" })
   assert.deepEqual(ganchos, {})
+})
+
+test("quem ainda tem a pasta antiga (EscritorioVivo) segue mandando", async () => {
+  rmSync(join(pasta, "Firmopolis", "token"))
+  rmSync(join(pasta, "Library", "Application Support", "Firmopolis", "token"))
+  for (const dir of [join(pasta, "EscritorioVivo"), join(pasta, "Library", "Application Support", "EscritorioVivo")]) {
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, "token"), "tok-antigo\n")
+  }
+  const ganchos = await Firmopolis({ directory: "C:\\proj" })
+  await ganchos.event({ event: { type: "session.idle", properties: { sessionID: "s1" } } })
+  await espera()
+  assert.equal(chamadas.length, 1)
+  assert.equal(chamadas[0].opcoes.headers["X-Ponte-Token"], "tok-antigo")
 })

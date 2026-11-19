@@ -29,10 +29,12 @@ func dentroDe(raiz, caminho string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
-// tocar autoriza mexer em caminho: só dentro da home, da pasta da ponte e da pasta do
-// nosso plugin do mcode (o MINIMAX_DATA_DIR pode ficar fora da home).
+// tocar autoriza mexer em caminho: só dentro da home, da pasta da ponte e das pastas do
+// nosso plugin do mcode, a nova e a do Escritório Vivo (o MINIMAX_DATA_DIR pode ficar
+// fora da home).
 func (op Opcoes) tocar(caminho string) error {
-	if !dentroDe(op.Home, caminho) && !dentroDe(op.DirConfig, caminho) && !dentroDe(pastaPluginMiniMax(op), caminho) {
+	if !dentroDe(op.Home, caminho) && !dentroDe(op.DirConfig, caminho) && !dentroDe(pastaPluginMiniMax(op), caminho) &&
+		!dentroDe(pastaPluginMiniMaxAntiga(op), caminho) {
 		return fmt.Errorf("recusei mexer em %s: fora de %s e de %s", caminho, op.Home, op.DirConfig)
 	}
 	if antesDeTocar != nil {
@@ -82,7 +84,7 @@ func (op Opcoes) escrever(caminho string, dados []byte, shaEsperado string) erro
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(caminho)+".escritorio-vivo-*.tmp")
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(caminho)+".firmopolis-*.tmp")
 	if err != nil {
 		return err
 	}
@@ -179,7 +181,7 @@ func mascararToken(dados []byte) []byte {
 }
 
 // backup copia o conteúdo atual, com o token mascarado, para
-// <arquivo>.bak-escritorio-vivo-<AAAAMMDD-HHMMSS> (com -2, -3... se já houver um com
+// <arquivo>.bak-firmopolis-<AAAAMMDD-HHMMSS> (com -2, -3... se já houver um com
 // o mesmo nome) e devolve o caminho. O backup que o desfazer restaura é o de antes da
 // instalação, que não tem token, então a máscara não muda nada nele.
 func (op Opcoes) backup(caminho string, dados []byte) (string, error) {
@@ -253,8 +255,10 @@ func (op Opcoes) salvarManifesto(m *manifesto) error {
 func Restos(op Opcoes) []string {
 	var restos []string
 	for _, it := range integracoes {
-		achados, _ := filepath.Glob(it.arquivo(op) + ".bak-" + marca + "-*")
-		restos = append(restos, achados...)
+		for _, m := range []string{marca, marcaAntiga} {
+			achados, _ := filepath.Glob(it.arquivo(op) + ".bak-" + m + "-*")
+			restos = append(restos, achados...)
+		}
 	}
 	sort.Strings(restos)
 	return restos

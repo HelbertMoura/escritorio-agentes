@@ -28,7 +28,7 @@ Objetivo: o mapa mostrar também os terminais da máquina (Claude Code, Codex, a
 - Com a ponte desligada, o app tenta de novo com espera crescente até 1 minuto. O próprio navegador escreve no console a falha de conexão do WebSocket; o app não mostra erro.
 - No Chrome, a primeira conexão de um site público para 127.0.0.1 pode pedir a permissão "acesso à rede local". O Safari pode recusar `ws://` vindo de página https.
 
-**2b (pendente):** trocar a marca dos hooks de `escritorio-vivo` para `firmopolis` (entrada do agy, plugin do OpenCode, plugin do MiniMax, backups e o autostart do Windows), com o `setup --aplicar` migrando as entradas antigas e testes próprios.
+**2b (feita, 19/11/2026):** a marca das integrações virou `firmopolis` (entrada do agy, plugins do OpenCode e do MiniMax, backups, o bin `%LOCALAPPDATA%\Firmopolis\bin` e o autostart `Firmopolis`). O `setup --aplicar` migra quem vem do Escritório Vivo: tira a entrada `escritorio-vivo` do agy, apaga os plugins antigos só quando o sha é o nosso (manifesto ou modelo antigo) e tira o autostart `EscritorioVivo`. O plugin do OpenCode lê o token da pasta nova e, se faltar, da antiga. O `--desfazer` tira as duas marcas.
 
 ## Onda 3: as três espécies no app
 - Os **bichinhos de feltro** já existem (`avatar.js`) e representam os agentes do agentes.chat.

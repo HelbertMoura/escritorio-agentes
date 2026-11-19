@@ -84,9 +84,9 @@ func envConfig(t *testing.T, comToken bool) []string {
 func configurar(t *testing.T, comToken bool) ([]string, string) {
 	t.Helper()
 	dir := pastaTemp(t)
-	cfg := filepath.Join(dir, "EscritorioVivo")
+	cfg := filepath.Join(dir, "Firmopolis")
 	if runtime.GOOS == "darwin" {
-		cfg = filepath.Join(dir, "Library", "Application Support", "EscritorioVivo")
+		cfg = filepath.Join(dir, "Library", "Application Support", "Firmopolis")
 	}
 	if comToken {
 		os.MkdirAll(cfg, 0o700)
@@ -371,7 +371,7 @@ func TestSetupDesfazerDizOQueFicou(t *testing.T) {
 		}
 		if modo == "--desfazer" {
 			texto := string(saida)
-			if strings.Contains(texto, "não sobrou nada") || !strings.Contains(texto, ".bak-escritorio-vivo-") {
+			if strings.Contains(texto, "não sobrou nada") || !strings.Contains(texto, ".bak-firmopolis-") {
 				t.Fatalf("com backups no disco, o desfazer não pode dizer que não sobrou nada:\n%s", texto)
 			}
 		}
@@ -399,7 +399,7 @@ func TestAutostartGravaLeTira(t *testing.T) {
 	if runtime.GOOS != "windows" || os.Getenv("PONTE_TESTE_REGISTRO") != "1" {
 		t.Skip("grava no HKCU (chave de teste): PONTE_TESTE_REGISTRO=1, no Windows")
 	}
-	const raiz = `HKCU\Software\EscritorioVivoTeste`
+	const raiz = `HKCU\Software\FirmopolisTeste`
 	anterior := chaveRun
 	chaveRun = raiz + `\Run`
 	t.Cleanup(func() {
@@ -407,7 +407,7 @@ func TestAutostartGravaLeTira(t *testing.T) {
 		exec.Command("reg", "delete", raiz, "/f").Run()
 	})
 
-	exe := `C:\Users\Fulano de Tal\AppData\Local\EscritorioVivo\bin\ponte-fundo.exe`
+	exe := `C:\Users\Fulano de Tal\AppData\Local\Firmopolis\bin\ponte-fundo.exe`
 	comando := comandoAutostart(exe)
 	if comando != `"`+exe+`"` {
 		t.Fatalf("comando do autostart: %s", comando)
@@ -456,7 +456,7 @@ func TestExeFundoSoNoBinInstalado(t *testing.T) {
 	}
 	local := pastaTemp(t)
 	t.Setenv("LOCALAPPDATA", local)
-	bin := filepath.Join(local, "EscritorioVivo", "bin")
+	bin := filepath.Join(local, "Firmopolis", "bin")
 	os.MkdirAll(bin, 0o700)
 	instalado := filepath.Join(bin, "ponte.exe")
 

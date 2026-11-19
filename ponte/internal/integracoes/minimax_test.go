@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-const pluginMiniMaxRel = ".minimax/plugins/escritorio-vivo/.claude-plugin/plugin.json"
+const pluginMiniMaxRel = ".minimax/plugins/firmopolis/.claude-plugin/plugin.json"
 
 // O plugin é um arquivo só, com os hooks inline, o `ponte hook mcode` em cada evento e
 // o timeout de 10 s (o máximo do mcode).
@@ -76,8 +76,8 @@ func TestMiniMaxDesfazerApagaAPasta(t *testing.T) {
 		if _, err := Desfazer(a.op); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := os.Stat(a.caminho(".minimax/plugins/escritorio-vivo")); !os.IsNotExist(err) {
-			t.Error("a pasta escritorio-vivo deveria ter saído inteira")
+		if _, err := os.Stat(a.caminho(".minimax/plugins/firmopolis")); !os.IsNotExist(err) {
+			t.Error("a pasta firmopolis deveria ter saído inteira")
 		}
 		if got := a.ler(t, ".minimax/plugins/outro/.claude-plugin/plugin.json"); got != `{"name":"outro"}` {
 			t.Error("o plugin dos outros fica")
@@ -92,8 +92,8 @@ func TestMiniMaxDesfazerApagaAPasta(t *testing.T) {
 		if _, err := Desfazer(a.op); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := os.Stat(a.caminho(".minimax/plugins/escritorio-vivo")); !os.IsNotExist(err) {
-			t.Error("a pasta escritorio-vivo deveria ter saído inteira")
+		if _, err := os.Stat(a.caminho(".minimax/plugins/firmopolis")); !os.IsNotExist(err) {
+			t.Error("a pasta firmopolis deveria ter saído inteira")
 		}
 		if _, err := os.Stat(a.caminho(".minimax/plugins")); err != nil {
 			t.Error("a pasta plugins já existia: a limpeza para na pasta que a instalação criou")
@@ -108,7 +108,7 @@ func TestRemoverPastasVaziasForaDaPasta(t *testing.T) {
 	if err := os.MkdirAll(fora, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	a.op.removerPastasVazias(fora, a.caminho(".minimax/plugins/escritorio-vivo"))
+	a.op.removerPastasVazias(fora, a.caminho(".minimax/plugins/firmopolis"))
 	if _, err := os.Stat(fora); err != nil {
 		t.Error("uma pasta fora da que criamos não pode sair, mesmo vazia")
 	}
@@ -236,7 +236,7 @@ func TestMiniMaxExeNovo(t *testing.T) {
 
 func TestMiniMaxPluginAlheioFica(t *testing.T) {
 	a := novoAmbiente(t)
-	alheio := `{"name":"escritorio-vivo","hooks":{}}`
+	alheio := `{"name":"firmopolis","hooks":{}}`
 	a.gravar(t, pluginMiniMaxRel, alheio)
 	p := Planejar(a.op)
 	if !strings.Contains(strings.Join(p.Avisos, "\n"), "MiniMax Code: já existe um plugin") {

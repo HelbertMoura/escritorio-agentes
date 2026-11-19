@@ -10,7 +10,7 @@ import (
 var eventosAgy = []string{"SessionStart", "PreInvocation", "PreToolUse", "Stop"}
 
 // O hooks.json do agy é {"<nome>": {"<Evento>": [<hook>]}}: a nossa entrada é a de
-// nome "escritorio-vivo", ao lado das outras.
+// nome "firmopolis", ao lado das outras. A "escritorio-vivo" (marcaAntiga) sai junto.
 var agy = integracao{
 	nome: "agy",
 	arquivo: func(op Opcoes) string {
@@ -25,6 +25,13 @@ var agy = integracao{
 		}
 		quero := entradaAgy(op)
 		resumo := fmt.Sprintf("entrada %q com o comando `%s` em %d eventos (%s)", marca, comandoPosix(op.Exe, "agy"), len(eventosAgy), strings.Join(eventosAgy, ", "))
+		if i := raiz.indice(marcaAntiga); i >= 0 { // a do Escritório Vivo: sem ela, os eventos não vão em dobro
+			resumo += fmt.Sprintf("; tira a entrada antiga %q", marcaAntiga)
+			doc = removerFilho(doc, raiz, i)
+			if raiz, err = raizObjeto(doc); err != nil {
+				return nil, "", nil, err
+			}
+		}
 		switch atual := raiz.campo(marca); {
 		case atual == nil:
 			return inserirCampo(doc, raiz, marca, quero), resumo, nil, nil
@@ -38,14 +45,19 @@ var agy = integracao{
 		if err != nil {
 			return nil, nil, err
 		}
-		if i := raiz.indice(marca); i >= 0 {
-			return removerFilho(doc, raiz, i), nil, nil
+		for _, m := range []string{marca, marcaAntiga} {
+			if i := raiz.indice(m); i >= 0 {
+				doc = removerFilho(doc, raiz, i)
+				if raiz, err = raizObjeto(doc); err != nil {
+					return nil, nil, err
+				}
+			}
 		}
 		return doc, nil, nil
 	},
 	temNosso: func(_ Opcoes, doc []byte) bool {
 		raiz, err := raizObjeto(docOuVazio(doc))
-		return err == nil && raiz.campo(marca) != nil
+		return err == nil && (raiz.campo(marca) != nil || raiz.campo(marcaAntiga) != nil)
 	},
 }
 

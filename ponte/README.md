@@ -2,35 +2,39 @@
 
 Serviço local em Go (127.0.0.1:47820), vindo do Escritório Vivo. Lê os agentes (Claude Code, Codex, agy, OpenCode e MiniMax Code, com o Maestri como modo turbinado) e conversa por WebSocket com o jogo e com o Firmópolis aberto no navegador. Não gasta token: nada aqui chama modelo.
 
-A pasta de config agora se chama `Firmopolis` (`%APPDATA%\Firmopolis`, `~/.config/Firmopolis`). Quem vem do Escritório Vivo tem a `EscritorioVivo`, que a ponte renomeia sozinha na primeira execução, com o token, o histórico e o clima. Os caminhos `EscritorioVivo` que ainda aparecem abaixo (o bin no `LOCALAPPDATA`, o autostart e a marca `escritorio-vivo` dos hooks) mudam na onda 2b do plano da fusão (`docs/firmopolis/plano-fusao.md`).
+A pasta de config agora se chama `Firmopolis` (`%APPDATA%\Firmopolis`, `~/.config/Firmopolis`), e a marca das integrações é `firmopolis`. Quem vem do Escritório Vivo não precisa desfazer nada antes:
+- a pasta `EscritorioVivo` é renomeada sozinha na primeira execução, com o token, o histórico, o clima e o manifesto;
+- o `setup --aplicar` instala as entradas `firmopolis` e tira as `escritorio-vivo`: a entrada do agy e os plugins do OpenCode e do MiniMax, só quando o arquivo é o que a ponte pôs (pelo manifesto ou pelo hash do plugin antigo). Um arquivo antigo editado fica, com aviso, porque com os dois cada evento iria em dobro. No Claude Code e no Codex, a marca é o próprio comando (`ponte hook ...`), que é trocado no lugar;
+- no Windows, o `--aplicar` tira o autostart antigo (`EscritorioVivo` na chave Run), que subiria a ponte antiga na mesma porta. Compile a ponte nova no bin novo (passo 1) e rode o `--aplicar` com ele;
+- o `--desfazer` tira as duas marcas, e os backups antigos (`.bak-escritorio-vivo-*`) também entram na lista do que sobrou.
 
 ## 1. Compilar no lugar definitivo
 Os hooks do Claude Code, do agy, do Codex e do MiniMax Code guardam o caminho absoluto do `ponte.exe` que rodou o `setup`. Por isso, compile direto no lugar onde o executável vai ficar. É o mesmo lugar que o instalador da Fase 4 usa.
 
 ```powershell
 cd ponte
-$bin = "$env:LOCALAPPDATA\EscritorioVivo\bin"
+$bin = "$env:LOCALAPPDATA\Firmopolis\bin"
 go build -o "$bin\ponte.exe" ./cmd/ponte
 go build -ldflags=-H=windowsgui -o "$bin\ponte-fundo.exe" ./cmd/ponte   # só para o autostart
 ```
 
-O `ponte-fundo.exe` é o mesmo programa sem console: não abre janela e escreve o log em `%APPDATA%\EscritorioVivo\ponte-fundo.log` (recomeça ao passar de 1 MiB). Ele só serve para o autostart.
+O `ponte-fundo.exe` é o mesmo programa sem console: não abre janela e escreve o log em `%APPDATA%\Firmopolis\ponte-fundo.log` (recomeça ao passar de 1 MiB). Ele só serve para o autostart.
 
 Os passos seguintes usam sempre o `ponte.exe` do bin, nunca o `go run`. O `--aplicar` recusa um binário temporário do `go run`.
 
 ## 2. Ligar as integrações
 ```powershell
-$ponte = "$env:LOCALAPPDATA\EscritorioVivo\bin\ponte.exe"
+$ponte = "$env:LOCALAPPDATA\Firmopolis\bin\ponte.exe"
 & $ponte setup --plano      # mostra o que muda em cada arquivo; não escreve nada
-& $ponte setup --aplicar    # instala, com backup <arquivo>.bak-escritorio-vivo-<data>
-& $ponte setup --desfazer   # tira tudo o que é escritorio-vivo, inclusive o autostart
+& $ponte setup --aplicar    # instala, com backup <arquivo>.bak-firmopolis-<data>
+& $ponte setup --desfazer   # tira tudo o que é firmopolis (e o que sobrou do escritorio-vivo), inclusive o autostart
 ```
 
 - **Claude Code:** hooks em `~/.claude/settings.json`, chamando `ponte.exe hook claude` em segundo plano (`"async": true`) e sem shell no meio (`args`). O Claude não espera o hook, e o hook sai sempre com 0 e calado. O hook `http` das versões anteriores mostrava erro em toda ação com a ponte desligada; o `--aplicar` troca esse hook no lugar, e o `--desfazer` tira os dois.
-- **OpenCode:** plugin em `~/.config/opencode/plugins/escritorio-vivo.js`.
-- **agy:** entrada `escritorio-vivo` em `~/.gemini/config/hooks.json`, chamando `ponte.exe hook agy`.
+- **OpenCode:** plugin em `~/.config/opencode/plugins/firmopolis.js`.
+- **agy:** entrada `firmopolis` em `~/.gemini/config/hooks.json`, chamando `ponte.exe hook agy`.
 - **Codex:** hooks em `~/.codex/hooks.json`, chamando `ponte.exe hook codex` em segundo plano (`"async": true`), menos no `SessionEnd`, que o Codex só roda síncrono. O Codex só roda hook aprovado: depois do `--aplicar`, abra o `codex`, rode `/hooks` e aprove. A ponte não grava o `trusted_hash`. O `command` (o do sh, fora do Windows) leva o caminho entre aspas simples; o `commandWindows` roda no PowerShell. Quem instalou antes, com o caminho entre aspas duplas, aprova de novo depois do próximo `--aplicar`.
-- **MiniMax Code (`mcode`):** plugin local em `~/.minimax/plugins/escritorio-vivo/.claude-plugin/plugin.json` (ou no `MINIMAX_DATA_DIR`, se houver; com `--home`, sempre `<home>/.minimax`). É um arquivo só, todo nosso: os hooks vão inline no campo `hooks` do manifesto, chamando `'<ponte.exe>' hook mcode` em 8 eventos (`SessionStart`, `UserPromptSubmit`, `PermissionRequest`, `PostToolUse`, `SubagentStart`, `SubagentStop`, `Stop` e `SessionEnd`). O caminho vai entre aspas simples, porque o Git Bash expandiria `$` e crase entre aspas duplas. Sem o `PreToolUse`: cada hook do mcode é síncrono e custa uns 330 ms, e o `PostToolUse` já dá a atividade e tira a espera. O mcode vigia a pasta `plugins` e carrega o plugin sozinho; não há comando de instalar nem aprovação. Sem backup: o `--desfazer` apaga o arquivo e as pastas que a instalação criou. O `--plano` mostra o manifesto inteiro, porque o comando muda com o lugar do `ponte.exe`. O `~/.minimax/config.yaml` não é tocado.
+- **MiniMax Code (`mcode`):** plugin local em `~/.minimax/plugins/firmopolis/.claude-plugin/plugin.json` (ou no `MINIMAX_DATA_DIR`, se houver; com `--home`, sempre `<home>/.minimax`). É um arquivo só, todo nosso: os hooks vão inline no campo `hooks` do manifesto, chamando `'<ponte.exe>' hook mcode` em 8 eventos (`SessionStart`, `UserPromptSubmit`, `PermissionRequest`, `PostToolUse`, `SubagentStart`, `SubagentStop`, `Stop` e `SessionEnd`). O caminho vai entre aspas simples, porque o Git Bash expandiria `$` e crase entre aspas duplas. Sem o `PreToolUse`: cada hook do mcode é síncrono e custa uns 330 ms, e o `PostToolUse` já dá a atividade e tira a espera. O mcode vigia a pasta `plugins` e carrega o plugin sozinho; não há comando de instalar nem aprovação. Sem backup: o `--desfazer` apaga o arquivo e as pastas que a instalação criou. O `--plano` mostra o manifesto inteiro, porque o comando muda com o lugar do `ponte.exe`. O `~/.minimax/config.yaml` não é tocado.
 
 Só os agentes instalados entram. As sessões que já estavam abertas pegam os hooks depois de reiniciar. Para conferir numa cópia das configs, use `--home <pasta>`.
 
@@ -103,7 +107,7 @@ A ponte manda ao jogo o tempo de agora na cidade configurada e as datas festivas
 & $ponte setup --aplicar --sem-cidade                            # desliga: clima null, nada sai da máquina
 ```
 
-- **Onde fica:** `clima.json` na pasta da ponte (`%APPDATA%\EscritorioVivo`), com `cidade`, `lat`, `lon`, `fuso`, `pais` e `consentimento`. O setup do clima não toca as configs dos agentes. A ponte lê a cidade ao subir, então reinicie a ponte depois de mudar.
+- **Onde fica:** `clima.json` na pasta da ponte (`%APPDATA%\Firmopolis`), com `cidade`, `lat`, `lon`, `fuso`, `pais` e `consentimento`. O setup do clima não toca as configs dos agentes. A ponte lê a cidade ao subir, então reinicie a ponte depois de mudar.
 - **Privacidade:** gravar a cidade com `--aplicar` é o consentimento. A busca da cidade manda só o nome, uma vez. Depois, a cada consulta, saem só a latitude e a longitude (com 2 casas, cerca de 1 km) e o fuso. Sem cidade, nada sai.
 - **Busca:** o Open-Meteo (`weather_code`, `temperature_2m`, `wind_speed_10m`, `wind_gusts_10m`, `precipitation`, `is_day`, `sunrise` e `sunset`) a cada 15 min. Se falhar (sem rede, 5xx, resposta acima de 64 KiB), a ponte tenta de novo em 1, 2, 4 e 8 min, e depois a cada 15, por mais longa que seja a queda. O último clima bom vale por 2 h e fica em `clima-cache.json`; uma ponte reiniciada não busca de novo antes da hora. Um cache com a hora de chegada no futuro (relógio adiantado quando gravou) é ignorado. Passadas as 2 h sem resposta, o clima vira `null`.
 - **Largada:** a ponte manda as datas do dia (e o clima do cache, se ainda vale) assim que sobe, sem esperar a 1ª busca na rede. Depois, só manda a mensagem `clima` quando algo muda: um clima novo, o clima vencido ou o dia novo.
@@ -123,13 +127,13 @@ A ponte precisa estar ligada quando a sessão abre; senão, o vínculo com o ter
 & $ponte setup --aplicar --autostart   # grava
 ```
 
-O setup grava o valor `EscritorioVivo` em `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` com `"<bin>\ponte-fundo.exe"`, entre aspas. Não precisa de admin.
+O setup grava o valor `Firmopolis` em `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` com `"<bin>\ponte-fundo.exe"`, entre aspas. Não precisa de admin.
 
-- O `--autostart` só funciona com o `ponte.exe` do bin instalado (`%LOCALAPPDATA%\EscritorioVivo\bin`), com o `ponte-fundo.exe` ao lado e compilado com `-H=windowsgui`. Se faltar alguma dessas coisas, o setup recusa e não grava nada. Assim, um `go run`, o `%TEMP%` ou um fundo com console nunca vão para o login.
-- O `--desfazer` tira o valor, mas só quando ele termina em `\ponte-fundo.exe"`. Um valor `EscritorioVivo` de outro programa fica onde está.
+- O `--autostart` só funciona com o `ponte.exe` do bin instalado (`%LOCALAPPDATA%\Firmopolis\bin`), com o `ponte-fundo.exe` ao lado e compilado com `-H=windowsgui`. Se faltar alguma dessas coisas, o setup recusa e não grava nada. Assim, um `go run`, o `%TEMP%` ou um fundo com console nunca vão para o login.
+- O `--desfazer` tira o valor, mas só quando ele termina em `\ponte-fundo.exe"`. Um valor `Firmopolis` (ou `EscritorioVivo`) de outro programa fica onde está.
 - O `--autostart` não combina com `--home`: o registro é sempre o do usuário de verdade.
 - Uma segunda ponte de fundo na mesma porta sai sem janela, com código 1, e anota no log que a porta estava ocupada.
-- Para achar (ou parar) a ponte real, filtre pelo caminho, nunca só pelo nome: `Get-Process ponte-fundo | ? Path -eq "$env:LOCALAPPDATA\EscritorioVivo\bin\ponte-fundo.exe"`. O `go test ./cmd/ponte` sobe, por uns segundos, um `ponte-fundo.exe` de teste (`%TEMP%\ponte-teste-*`, `--demo`, porta livre, log na pasta do teste). Parar esse processo pelo nome derruba o teste de quem estiver rodando.
+- Para achar (ou parar) a ponte real, filtre pelo caminho, nunca só pelo nome: `Get-Process ponte-fundo | ? Path -eq "$env:LOCALAPPDATA\Firmopolis\bin\ponte-fundo.exe"`. O `go test ./cmd/ponte` sobe, por uns segundos, um `ponte-fundo.exe` de teste (`%TEMP%\ponte-teste-*`, `--demo`, porta livre, log na pasta do teste). Parar esse processo pelo nome derruba o teste de quem estiver rodando.
 
 ## 3. Rodar
 ```powershell
@@ -158,7 +162,7 @@ O comando grava o endereço em `origens.txt` (na pasta da ponte) e mostra o toke
 ```powershell
 go test ./...
 go vet ./...
-node --test integracoes/modelos/opencode-escritorio-vivo.test.js
+node --test integracoes/modelos/opencode-firmopolis.test.js
 ```
 
 Um `fork/exec ...\<pacote>.test.exe: The process cannot access the file because it is being used by another process` solto, que some na rodada seguinte, é o antivírus (nesta máquina, o Kaspersky) examinando o `.test.exe` que o `go test` acabou de gerar. Nenhum teste abre os `.test.exe`. Se atrapalhar, exclua a pasta temporária do Go da varredura ou rode com `-p 1`.
@@ -170,7 +174,7 @@ Os testes de prazo do hook (`TestHookNuncaPassaDeUmSegundo` e `TestHookSemPonteS
 Os testes com os agentes de verdade ficam desligados por padrão. Nenhum deles chama modelo nem toca as configs reais:
 
 ```powershell
-$env:PONTE_TESTE_REGISTRO = "1" # autostart numa chave de teste do HKCU (Software\EscritorioVivoTeste, apagada no fim), nunca na Run
+$env:PONTE_TESTE_REGISTRO = "1" # autostart numa chave de teste do HKCU (Software\FirmopolisTeste, apagada no fim), nunca na Run
 go test ./cmd/ponte -run Autostart
 $env:PONTE_TESTE_CLAUDE = "1"   # claude -p isolado (--setting-sources project); um hook do teste barra o prompt
 $env:PONTE_TESTE_CODEX = "1"    # hooks/list e codex exec com um CODEX_HOME temporário, sem login (a chamada ao modelo volta 401)
@@ -178,7 +182,7 @@ go test ./internal/integracoes -run Real
 ```
 
 O mcode não tem teste automático com o agente de verdade. Numa `MINIMAX_DATA_DIR` vazia, ele não tem login: o `exec` falha antes de qualquer hook. A validação foi feita à mão, no data dir real:
-- um plugin de teste em `~/.minimax/plugins/escritorio-vivo-teste`, apontando para uma ponte de teste na porta 47921, com um `APPDATA` temporário;
+- um plugin de teste em `~/.minimax/plugins/firmopolis-teste`, apontando para uma ponte de teste na porta 47921, com um `APPDATA` temporário;
 - o prompt barrado com exit 2, que não gasta crédito;
 - a pasta do plugin apagada logo depois.
 

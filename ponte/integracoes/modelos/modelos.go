@@ -3,7 +3,7 @@ package modelos
 
 import _ "embed"
 
-// PluginOpenCode é o plugin global do OpenCode (escritorio-vivo.js).
+// PluginOpenCode é o plugin global do OpenCode (firmopolis.js).
 //
-//go:embed opencode-escritorio-vivo.js
+//go:embed opencode-firmopolis.js
 var PluginOpenCode []byte

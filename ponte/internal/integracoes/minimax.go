@@ -63,6 +63,13 @@ func nossoPluginMiniMax(op Opcoes, doc []byte, reg *registro) bool {
 // hook (de 1 a 10 s de timeout) e só mostra algo com saída ou exit diferente de 0; o
 // `ponte hook` sai sempre com 0 e calado.
 func pluginMiniMax(op Opcoes) []byte {
+	return manifestoMiniMax(op, marca, "Firmópolis: avisa a ponte local (127.0.0.1) do estado das sessões")
+}
+
+// descricaoMiniMaxAntiga é a do plugin do Escritório Vivo (para reconhecê-lo pelo hash).
+const descricaoMiniMaxAntiga = "Escritório Vivo: avisa a ponte local (127.0.0.1) do estado das sessões"
+
+func manifestoMiniMax(op Opcoes, nome, descricao string) []byte {
 	var hooks objeto
 	for _, ev := range eventosMiniMax {
 		hooks = append(hooks, par{ev, []any{objeto{
@@ -75,9 +82,9 @@ func pluginMiniMax(op Opcoes) []byte {
 		}}})
 	}
 	manifesto := objeto{
-		{"name", marca},
+		{"name", nome},
 		{"version", "1.0.0"},
-		{"description", "Escritório Vivo: avisa a ponte local (127.0.0.1) do estado das sessões"},
+		{"description", descricao},
 		{"author", objeto{{"name", "Dev Maniac's"}}},
 		{"hooks", objeto{{"hooks", hooks}}},
 	}

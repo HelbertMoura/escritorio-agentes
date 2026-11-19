@@ -19,7 +19,12 @@ import (
 // marca identifica tudo o que é nosso: o nome da entrada no agy, os plugins e os backups.
 // No Claude e no Codex, onde não cabe chave nova no schema, a marca é o próprio valor
 // (o comando "ponte hook claude" ou "ponte hook codex").
-const marca = "escritorio-vivo"
+const marca = "firmopolis"
+
+// marcaAntiga é a do Escritório Vivo. O setup tira o que ainda estiver com ela (a
+// entrada do agy, os plugins do OpenCode e do MiniMax e os backups ficam nos Restos):
+// quem atualiza não fica com os hooks em dobro.
+const marcaAntiga = "escritorio-vivo"
 
 // Opcoes dizem onde mexer. Home e DirConfig limitam as escritas: nada fora delas.
 type Opcoes struct {
@@ -48,10 +53,11 @@ type Mudanca struct {
 	Depois     []byte
 	Resumo     string
 
-	limpo     bool // Antes não tem nada nosso: o backup dele é o estado original
-	todoNosso bool // o arquivo é todo nosso (os plugins): sem backup nem diff
-	mostrar   bool // todo nosso, mas o plano mostra o conteúdo (muda com o ponte.exe)
-	semBackup bool // o desfazer volta o original: o atual só tem o nosso a mais
+	limpo     bool   // Antes não tem nada nosso: o backup dele é o estado original
+	todoNosso bool   // o arquivo é todo nosso (os plugins): sem backup nem diff
+	mostrar   bool   // todo nosso, mas o plano mostra o conteúdo (muda com o ponte.exe)
+	semBackup bool   // o desfazer volta o original: o atual só tem o nosso a mais
+	pasta     string // a pasta para apagar se ficar vazia, sem registro no manifesto
 }
 
 // Plano é o que o setup vai fazer, para mostrar antes de fazer.
@@ -78,9 +84,13 @@ type integracao struct {
 	temNosso  func(op Opcoes, doc []byte) bool
 	todoNosso bool
 	mostrar   bool
+	antiga    bool // só tira o que a marca antiga deixou: sem nota quando não há nada
+	// pastaAntiga: a pasta que a instalação antiga criou, apagada se ficar vazia
+	// (quando o manifesto não a tem). nil: nenhuma.
+	pastaAntiga func(op Opcoes) string
 }
 
-var integracoes = []integracao{claude, opencode, agy, codex, miniMax}
+var integracoes = []integracao{claude, opencode, opencodeAntigo, agy, codex, miniMax, miniMaxAntigo}
 
 // Planejar diz o que o setup muda em cada provedor instalado, sem escrever nada.
 func Planejar(op Opcoes) Plano {
@@ -92,7 +102,9 @@ func Planejar(op Opcoes) Plano {
 	}
 	for _, it := range integracoes {
 		if !it.instalado(op) {
-			p.Notas = append(p.Notas, it.nome+": não encontrado nesta máquina, fica de fora")
+			if !it.antiga {
+				p.Notas = append(p.Notas, it.nome+": não encontrado nesta máquina, fica de fora")
+			}
 			continue
 		}
 		caminho := it.arquivo(op)
@@ -108,12 +120,14 @@ func Planejar(op Opcoes) Plano {
 		}
 		p.Avisos = append(p.Avisos, avisos...)
 		if iguais(antes, depois) {
-			p.Notas = append(p.Notas, it.nome+": já instalado, nada a mudar")
+			if !it.antiga {
+				p.Notas = append(p.Notas, it.nome+": já instalado, nada a mudar")
+			}
 			continue
 		}
 		p.Mudancas = append(p.Mudancas, Mudanca{
 			Integracao: it.nome, Arquivo: caminho, Antes: antes, Depois: depois, Resumo: resumo,
-			limpo: antes == nil || !it.temNosso(op, antes), todoNosso: it.todoNosso, mostrar: it.mostrar,
+			limpo: antes == nil || !it.temNosso(op, antes), todoNosso: it.todoNosso, mostrar: it.mostrar, pasta: pastaAntigaDe(op, it),
 		})
 	}
 	if len(p.Mudancas) > 0 {
@@ -162,7 +176,7 @@ func PlanejarDesfazer(op Opcoes) Plano {
 		}
 		p.Mudancas = append(p.Mudancas, Mudanca{
 			Integracao: it.nome, Arquivo: caminho, Antes: antes, Depois: depois, Resumo: resumo,
-			todoNosso: it.todoNosso, mostrar: it.mostrar, semBackup: restaura,
+			todoNosso: it.todoNosso, mostrar: it.mostrar, semBackup: restaura, pasta: pastaAntigaDe(op, it),
 		})
 	}
 	return p
@@ -190,6 +204,13 @@ func planejarVolta(op Opcoes, it integracao, antes []byte, reg *registro) (depoi
 		avisos = append(avisos, fmt.Sprintf("%s: o arquivo foi editado depois da instalação; tirei só as entradas %s e mantive o resto como está.", it.arquivo(op), marca))
 	}
 	return depois, resumo, avisos, false, nil
+}
+
+func pastaAntigaDe(op Opcoes, it integracao) string {
+	if it.pastaAntiga == nil {
+		return ""
+	}
+	return it.pastaAntiga(op)
 }
 
 func iguais(a, b []byte) bool {
@@ -267,6 +288,8 @@ func executar(p Plano) error {
 		case p.desfazer || m.Depois == nil:
 			if reg != nil {
 				op.removerPastasVazias(filepath.Dir(m.Arquivo), reg.Pasta)
+			} else if m.Depois == nil && m.pasta != "" {
+				op.removerPastasVazias(filepath.Dir(m.Arquivo), m.pasta)
 			}
 			delete(man.Arquivos, m.Arquivo)
 		case reg != nil && reg.Sha == shaAntes:
@@ -290,9 +313,9 @@ func executar(p Plano) error {
 func (p Plano) Texto() string {
 	var b strings.Builder
 	if p.desfazer {
-		b.WriteString("Escritório Vivo: o que o desfazer muda\n")
+		b.WriteString("Firmópolis: o que o desfazer muda\n")
 	} else {
-		b.WriteString("Escritório Vivo: o que o setup muda\n")
+		b.WriteString("Firmópolis: o que o setup muda\n")
 	}
 	if len(p.Mudancas) == 0 {
 		b.WriteString("\nNenhum arquivo muda.\n")

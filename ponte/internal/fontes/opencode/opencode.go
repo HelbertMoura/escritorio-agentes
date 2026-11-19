@@ -1,5 +1,5 @@
 // Package opencode normaliza o OpenCode, a partir do que o plugin global
-// (integracoes/modelos/opencode-escritorio-vivo.js) manda para POST /evento/opencode.
+// (integracoes/modelos/opencode-firmopolis.js) manda para POST /evento/opencode.
 package opencode
 
 import (
