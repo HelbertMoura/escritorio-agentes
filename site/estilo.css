@@ -271,7 +271,7 @@ details p { margin: 0; padding: 0 20px 20px; color: var(--texto-2); }
 .cartucho:hover, .cartucho:focus-visible { translate: 0 -10px; }
 .cartucho-rotulo { position: relative; display: block; aspect-ratio: 1 / 1; margin-bottom: 10px; overflow: hidden; background: var(--creme); border: 4px solid var(--tinta); }
 .cartucho-rotulo img { width: 100%; height: 100%; object-fit: contain; transition: scale .25s var(--passo); }
-.cartucho-eco .cartucho-rotulo { background: #dceff5; }
+.cartucho-eco .cartucho-rotulo { background: #d7eefb; }
 .cartucho-passo .cartucho-rotulo { background: #fdf3e1; padding: 8px; }
 .cartucho-purple .cartucho-rotulo { background: #e4d8f5; }
 .cartucho-jogo .cartucho-rotulo { background: #f6ead2; padding: 10px; }

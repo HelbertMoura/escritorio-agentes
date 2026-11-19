@@ -375,7 +375,7 @@
   });
 
   /* ---------- Clima e folhinha: gravações do modo demonstração (paradas com movimento reduzido) ---------- */
-  var gravacao = function (nome) { return 'img/tempo/' + nome + (parado ? '-parado' : '') + '.webp'; };
+  var gravacao = function (nome) { return 'img/tempo/' + nome + (parado ? '-parado' : '') + '.webp?v=2'; };   // ?v=2: as gravações do prédio inteiro, sem o recorte antigo do cache
   var climaImg = document.querySelector('.clima-img'), climaLegenda = document.querySelector('.clima-legenda');
   var climaBotoes = document.querySelectorAll('[data-clima]');
   climaBotoes.forEach(function (b) {
@@ -393,7 +393,7 @@
   var lugares = document.querySelectorAll('[data-cidade]');
   var gravacaoMundo = function (id) {
     if (id === 'brasil') return 'img/19-mundo-brasil.webp';
-    return 'img/mundo/' + (id === 'globo' ? 'mundo-globo' : 'cidade-' + id) + (parado ? '-parado' : '') + '.webp';
+    return 'img/mundo/' + (id === 'globo' ? 'mundo-globo' : 'cidade-' + id) + (parado ? '-parado' : '') + '.webp?v=2';
   };
   lugares.forEach(function (b) {
     b.addEventListener('click', function () {
