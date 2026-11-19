@@ -22,7 +22,7 @@
   <meta property="og:image:alt" content="O prédio-mascote da Firmópolis, com olhos, antena e janelas acesas, ao lado do nome.">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="preload" href="fontes/PixeloidSans.ttf" as="font" type="font/ttf" crossorigin>
-  <link rel="stylesheet" href="estilo.css?v=3">
+  <link rel="stylesheet" href="estilo.css?v=4">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -69,6 +69,7 @@
       </a>
       <nav class="menu" aria-label="Seções">
         <a href="#andares">O prédio</a>
+        <a href="#tudo">O que tem</a>
         <a href="#moradores">Moradores</a>
         <a href="#tv">Vídeo</a>
         <a href="#mural">Regras</a>
@@ -182,19 +183,24 @@
           </figure>
         </article>
 
-        <article class="andar" data-andar="2">
-          <p class="placa-andar"><span>2</span>Clima e festas</p>
+        <article class="andar andar-clima" data-andar="2">
+          <p class="placa-andar"><span>2</span>Clima</p>
           <div class="andar-texto">
             <h3>Chove lá fora, chove aqui.</h3>
-            <p>A hora e o clima são os da sua cidade. Anoitece, as luzes acendem, e no Natal cai neve no jardim.</p>
-            <div class="alternar" role="group" aria-label="Ver o escritório">
-              <button type="button" aria-pressed="true" data-clima="0">Noite com chuva</button>
-              <button type="button" aria-pressed="false" data-clima="1">Natal</button>
+            <p>A hora e o tempo são os da sua cidade, lidos do Open-Meteo sem chave. Anoitece no escritório quando anoitece aí, e as salas vazias apagam a luz.</p>
+            <div class="previsao" role="group" aria-label="Escolha o clima">
+              <button type="button" aria-pressed="false" data-clima="limpo" data-legenda="Sol, as sombras andando com a hora e o céu que muda do amanhecer ao fim da tarde.">Céu limpo</button>
+              <button type="button" aria-pressed="false" data-clima="nublado" data-legenda="Nuvens passam devagar por cima do prédio e a luz fica mais baixa.">Nublado</button>
+              <button type="button" aria-pressed="false" data-clima="neblina" data-legenda="Uma neblina baixa cobre o jardim e a rua.">Neblina</button>
+              <button type="button" aria-pressed="false" data-clima="garoa" data-legenda="Garoa fina, quase de lado quando venta.">Garoa</button>
+              <button type="button" aria-pressed="true" data-clima="chuva" data-legenda="Chuva inclinada pelo vento, com respingos na calçada e o barulho da chuva, se o som estiver ligado.">Chuva</button>
+              <button type="button" aria-pressed="false" data-clima="tempestade" data-legenda="Raios que clareiam o mapa, trovão no som e rajadas que balançam as árvores e levam folhas.">Tempestade</button>
+              <button type="button" aria-pressed="false" data-clima="neve" data-legenda="Flocos caindo e o chão ficando branquinho aos poucos. Para de nevar e a neve derrete.">Neve</button>
             </div>
           </div>
           <figure class="janela janela-clima">
-            <img src="img/03-noite-chuva.webp" alt="O escritório à noite, com chuva e luzes acesas." width="960" height="462" loading="lazy">
-            <img src="img/04-natal-neve.webp" alt="O escritório enfeitado de Natal, com neve no jardim." width="960" height="462" loading="lazy" hidden>
+            <img class="clima-img" src="img/tempo/clima-chuva.webp" alt="O escritório com chuva, gravado do modo demonstração." width="656" height="400" loading="lazy">
+            <figcaption class="clima-legenda">Chuva inclinada pelo vento, com respingos na calçada e o barulho da chuva, se o som estiver ligado.</figcaption>
           </figure>
         </article>
 
@@ -218,6 +224,118 @@
           </div>
           <figure class="janela janela-celular"><img src="img/09-celular.webp" alt="O escritório aberto num celular." width="300" height="649" loading="lazy"></figure>
         </article>
+      </div>
+    </section>
+
+    <section id="folhinha" class="faixa folhinha" aria-labelledby="titulo-folhinha">
+      <div class="folhinha-cabeca">
+        <h2 id="titulo-folhinha" class="titulo-secao">A firma tem folhinha.</h2>
+        <p>São 13 datas que vêm de fábrica, com enfeites, chapéus e falas próprias. A Páscoa e o Carnaval são calculados todo ano. No Personalizar, dá para desligar qualquer uma e criar até 24 datas da sua empresa, como o aniversário da firma ou a semana do lançamento.</p>
+      </div>
+      <div class="folhinha-grade">
+        <ol class="folhas" aria-label="Datas comemorativas">
+          <li><button type="button" class="folha" aria-pressed="false" data-festa="carnaval" data-nome="Carnaval" data-enfeites="Bandeirinhas, confete, máscaras, serpentina e chapéu de festa." data-falas="Ô abre alas!|Bloco do commit!|Alalaô!">
+            <span class="folha-mes">fev</span><span class="folha-dia">17</span><span class="folha-nome">Carnaval</span><span class="folha-movel">muda todo ano</span>
+          </button></li>
+          <li><button type="button" class="folha" aria-pressed="false" data-festa="chines" data-nome="Ano Novo Chinês" data-enfeites="Lanternas vermelhas, fogos e pisca-pisca." data-falas="Ano novo lunar, código novo|Envelope vermelho?">
+            <span class="folha-mes">fev</span><span class="folha-dia">17</span><span class="folha-nome">Ano Novo Chinês</span><span class="folha-movel">muda todo ano</span>
+          </button></li>
+          <li><button type="button" class="folha" aria-pressed="false" data-festa="pascoa" data-nome="Páscoa" data-enfeites="Ovos escondidos, coelho, bandeirinhas e orelhas de coelho na turma." data-falas="Feliz Páscoa!|Achei um ovo escondido!|Chocolate liberado">
+            <span class="folha-mes">abr</span><span class="folha-dia">5</span><span class="folha-nome">Páscoa</span><span class="folha-movel">muda todo ano</span>
+          </button></li>
+          <li><button type="button" class="folha" aria-pressed="false" data-festa="trabalho" data-nome="Dia do Trabalho" data-enfeites="Bandeirinhas vermelhas e brancas." data-falas="Feriado! Até os agentes descansam|Dia do trabalho… e a gente trabalhando">
+            <span class="folha-mes">mai</span><span class="folha-dia">1</span><span class="folha-nome">Dia do Trabalho</span>
+          </button></li>
+          <li><button type="button" class="folha" aria-pressed="false" data-festa="namorados" data-nome="Dia dos Namorados" data-enfeites="Corações e pisca-pisca." data-falas="Amor é código sem bug|Quem vai jantar fora?">
+            <span class="folha-mes">jun</span><span class="folha-dia">12</span><span class="folha-nome">Dia dos Namorados</span>
+          </button></li>
+          <li><button type="button" class="folha" aria-pressed="false" data-festa="junina" data-nome="Festa Junina" data-enfeites="Bandeirinhas, fogueira e chapéu de palha em todo mundo, de junho até 10 de julho." data-falas="Arraiá da firma!|Olha a cobra! É mentira!|Pamonha ou curau?">
+            <span class="folha-mes">jun</span><span class="folha-dia">24</span><span class="folha-nome">Festa Junina</span>
+          </button></li>
+          <li><button type="button" class="folha" aria-pressed="false" data-festa="independencia" data-nome="Independência" data-enfeites="Bandeirinhas verde e amarelas." data-falas="Viva o Brasil!|Feriadão!">
+            <span class="folha-mes">set</span><span class="folha-dia">7</span><span class="folha-nome">Independência</span>
+          </button></li>
+          <li><button type="button" class="folha" aria-pressed="false" data-festa="programador" data-nome="Dia do Programador" data-enfeites="Pisca-pisca, confete e chapéu de festa no 256º dia do ano." data-falas="Feliz dia 256!|0x100 dias no ano|Hoje o deploy é por conta da casa">
+            <span class="folha-mes">set</span><span class="folha-dia">13</span><span class="folha-nome">Dia do Programador</span><span class="folha-movel">muda todo ano</span>
+          </button></li>
+          <li><button type="button" class="folha" aria-pressed="false" data-festa="criancas" data-nome="Dia das Crianças" data-enfeites="Balões, confete e chapéu de festa." data-falas="Bora jogar videogame!|Hoje pode doce">
+            <span class="folha-mes">out</span><span class="folha-dia">12</span><span class="folha-nome">Dia das Crianças</span>
+          </button></li>
+          <li><button type="button" class="folha" aria-pressed="false" data-festa="halloween" data-nome="Halloween" data-enfeites="Abóboras, morcegos, pisca-pisca e chapéu de bruxa." data-falas="Gostosuras ou travessuras?|Esse bug é assombrado|Buuu!">
+            <span class="folha-mes">out</span><span class="folha-dia">31</span><span class="folha-nome">Halloween</span>
+          </button></li>
+          <li><button type="button" class="folha" aria-pressed="false" data-festa="diwali" data-nome="Diwali" data-enfeites="Lamparinas, pisca-pisca e fogos." data-falas="Feliz Diwali!|Festival das luzes!">
+            <span class="folha-mes">nov</span><span class="folha-dia">8</span><span class="folha-nome">Diwali</span><span class="folha-movel">muda todo ano</span>
+          </button></li>
+          <li><button type="button" class="folha" aria-pressed="true" data-festa="natal" data-nome="Natal" data-enfeites="Pisca-pisca, árvore, presentes, guirlanda e gorro de Papai Noel, de 1º a 29 de dezembro." data-falas="Ho ho ho!|Quem tirou quem no amigo secreto?|Panetone com ou sem fruta?">
+            <span class="folha-mes">dez</span><span class="folha-dia">25</span><span class="folha-nome">Natal</span>
+          </button></li>
+          <li><button type="button" class="folha" aria-pressed="false" data-festa="anonovo" data-nome="Ano Novo" data-enfeites="Champanhe, confete, fogos e chapéu de festa, de 30 de dezembro a 2 de janeiro." data-falas="Metas pro ano: deploy sem bug|5… 4… 3… 2… 1…">
+            <span class="folha-mes">dez</span><span class="folha-dia">31</span><span class="folha-nome">Ano Novo</span>
+          </button></li>
+          <li><span class="folha folha-sua"><span class="folha-mes">?</span><span class="folha-dia">+24</span><span class="folha-nome">As datas da sua firma</span></span></li>
+        </ol>
+        <figure class="janela janela-festa">
+          <img class="festa-img" src="img/tempo/festa-natal.webp" alt="O escritório enfeitado de Natal, com neve, gravado do modo demonstração." width="656" height="400" loading="lazy">
+          <p class="festa-fala" aria-live="polite">Ho ho ho!</p>
+          <figcaption class="festa-legenda"><strong>Natal.</strong> Pisca-pisca, árvore, presentes, guirlanda e gorro de Papai Noel, de 1º a 29 de dezembro.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="tudo" class="faixa tudo" aria-labelledby="titulo-tudo">
+      <div class="tudo-cabeca">
+        <h2 id="titulo-tudo" class="titulo-secao">O que tem no prédio.</h2>
+        <p>A Firmópolis é um prédio em pixel art que mostra, ao vivo, o que o seu time de agentes de IA está fazendo. Hoje ela lê o agentes.chat. Com a fusão com o Escritório Vivo, vai ler também os terminais da sua máquina. Ela roda no seu servidor, não chama modelo nenhum e tem o código aberto. O quadro abaixo é o mesmo da recepção.</p>
+      </div>
+      <div class="quadro">
+        <p class="quadro-topo">Firmópolis · quadro de andares</p>
+        <div class="quadro-grade">
+        <div class="quadro-coluna">
+          <h3>No mapa</h3>
+          <ul>
+            <li><strong>Prédio montado pelo time</strong><span>Recepção com o seu logo, uma sala por time que cresce com o número de agentes, corredor, sala de reunião, sala comunal e cozinha.</span></li>
+            <li><strong>Mapa vivo</strong><span>Com tarefa, o agente vai para a mesa e digita. Livre, joga fliperama, sinuca, pebolim, xadrez ou dardos, toca violão e toma café. Chega de manhã e vai embora à noite.</span></li>
+            <li><strong>21 poses e 45 sons</strong><span>Jogos em dupla com torcida, &quot;toca aqui&quot;, robô aspirador à noite e sons sintetizados no navegador, cada categoria com o seu volume.</span></li>
+            <li><strong>Objetos clicáveis</strong><span>A TV de 5 canais, os fliperamas, a jukebox, a cafeteira, o aquário, o gato, a lousa de código e o sino das vendas, entre outros.</span></li>
+            <li><strong>Câmera</strong><span>Zoom pela roda ou pela pinça, duplo clique para focar uma sala e &quot;Ir para…&quot; um agente com Ctrl+K.</span></li>
+          </ul>
+        </div>
+        <div class="quadro-coluna">
+          <h3>Com o time</h3>
+          <ul>
+            <li><strong>Esperando você</strong><span>Um &quot;!&quot; ou &quot;?&quot; em cima de quem pede aprovação ou resposta, e uma lista com há quanto tempo cada um espera.</span></li>
+            <li><strong>Conversas</strong><span>A lista do dia das conversas dos agentes, desligada por padrão. Responder pelo mapa também é opcional.</span></li>
+            <li><strong>Equipe</strong><span>Contas por convite, chat geral, salas e DM com menções e anexos, mural, status e reuniões com agenda.</span></li>
+            <li><strong>Visitas</strong><span>Quem da equipe está com o escritório aberto aparece no mapa, e um link de 1 hora traz alguém de fora para a sala de reunião.</span></li>
+            <li><strong>Jornal da semana</strong><span>Manchete, notas e os números de cada agente nesta semana e na passada.</span></li>
+          </ul>
+        </div>
+        <div class="quadro-coluna">
+          <h3>Para mostrar</h3>
+          <ul>
+            <li><strong>Modo TV</strong><span>Tela cheia e um diretor de câmera que corre para os pedidos, as brigas e as greves, com uma faixa de notícias.</span></li>
+            <li><strong>Modo apresentação</strong><span>Troca os nomes por &quot;Agente 1&quot; e &quot;Pessoa 2&quot; e esconde o que é sensível na hora de mostrar a tela.</span></li>
+            <li><strong>Time-lapse e foto</strong><span>O dia inteiro do escritório num vídeo de uns 30 segundos, ou um PNG sem a interface.</span></li>
+            <li><strong>Mundo</strong><span>Uma página pública que desce do globo ao Brasil, à cidade e à porta da recepção, com o tempo real de 28 cidades.</span></li>
+            <li><strong>Demonstração e simulação</strong><span>Com ?demo=1 entram agentes fictícios e um dia acelerado. A simulação mostra outra data, hora ou clima sem salvar nada.</span></li>
+          </ul>
+        </div>
+        <div class="quadro-coluna">
+          <h3>Do seu jeito</h3>
+          <ul>
+            <li><strong>Personalizar</strong><span>Nome, cor, logo, cidade do clima, datas comemorativas, times e a aparência de cada agente.</span></li>
+            <li><strong>Modo construção</strong><span>Pinte as salas, arraste e espelhe os móveis e ponha enfeites, com desfazer. A planta salva vale para todos.</span></li>
+            <li><strong>Andares</strong><span>Cada workspace vira um andar, e o térreo é um saguão comum a todas as empresas.</span></li>
+            <li><strong>Vida social e modo sério</strong><span>Amizades, briga no ringue com placar, fofoca e greve. Um interruptor pausa tudo isso para apresentar.</span></li>
+            <li><strong>App e aviso no celular</strong><span>Instale na tela de início e receba um aviso quando um agente pedir você.</span></li>
+          </ul>
+        </div>
+        </div>
+        <div class="quadro-obra">
+          <h3>Em obra</h3>
+          <p><strong>A ponte local</strong>, que traz os terminais de Claude Code, Codex, agy, OpenCode e Maestri como terminaizinhos. <strong>As rotinas do Escritório Vivo</strong>, reescritas aqui. <strong>A abertura com o mascote</strong>, que já está pronta na próxima versão.</p>
+        </div>
       </div>
     </section>
 
@@ -387,7 +505,7 @@ sudo AGENTES_ORG=<span class="var">&lt;id&gt;</span> bash instalar.sh</code></pr
 
   <script src="abertura.js?v=3"></script>
   <script src="avatar.js?v=3"></script>
-  <script src="sprites.js?v=4"></script>
-  <script src="site.js?v=3"></script>
+  <script src="sprites.js?v=5"></script>
+  <script src="site.js?v=4"></script>
 </body>
 </html>

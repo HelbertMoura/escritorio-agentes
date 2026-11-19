@@ -139,7 +139,29 @@
       var t = Math.random() < 0.25 ? 'van' : 'carro';
       this.coisas.push({ tipo: t, x: esq ? W + 30 : -34, esq: esq, y: esq ? H - 13 : H - 2, v: 0.7 + Math.random() * 0.7, n: n, z: esq ? 1 : 2 });
     } else {
-      this.coisas.push({ tipo: ESPECIES[n % 3], x: esq ? W + 20 : -24, esq: esq, y: H - 25 + (esq ? 0 : 3), v: 0.22 + Math.random() * 0.12, n: n, z: esq ? 0 : 0.5, f: 0 });
+      this.coisas.push({ tipo: ESPECIES[n % 3], x: esq ? W + 20 : -24, esq: esq, y: H - 25 + (esq ? 0 : 3), v: 0.22 + Math.random() * 0.12, n: n, z: esq ? 0 : 0.5, f: 0, acao: 'andar' });
+    }
+  };
+  // cada pedestre anda, às vezes para (olha em volta, mexe no celular, digita, toma café) e, quando cruza com alguém
+  // vindo do outro lado, os dois param, acenam e soltam um balãozinho
+  var PARADAS = { gente: ['parar', 'celular', 'celular'], terminal: ['parar', 'parar', 'esperar'], bichinho: ['parar'] };
+  var BALOES = ['oi', 'oi', 'coracao', 'nota', 'cafe'];
+  var ALTURA = { gente: 30, terminal: 28, bichinho: 34 };
+  Rua.prototype.viver = function (agora) {
+    var gente = this.coisas.filter(function (o) { return o.f != null; });
+    gente.forEach(function (o) {
+      if (o.ate && agora > o.ate) { o.acao = 'andar'; o.ate = 0; o.balao = null; }
+      if (o.acao === 'andar' && Math.random() < 0.0018) {
+        var ops = PARADAS[o.tipo]; o.acao = ops[(Math.random() * ops.length) | 0]; o.ate = agora + 1500 + Math.random() * 1800;
+        if (o.tipo === 'bichinho' && Math.random() < 0.5) o.balao = 'cafe';
+      }
+    });
+    for (var i = 0; i < gente.length; i++) for (var j = i + 1; j < gente.length; j++) {
+      var a = gente[i], b = gente[j];
+      if (a.esq === b.esq || a.acao !== 'andar' || b.acao !== 'andar' || a.viu === b.n || b.viu === a.n) continue;
+      if (Math.abs(a.x - b.x) > 14) continue;
+      a.viu = b.n; b.viu = a.n; a.acao = b.acao = 'acenar'; a.ate = b.ate = agora + 1700;
+      a.balao = BALOES[(Math.random() * BALOES.length) | 0]; b.balao = Math.random() < 0.6 ? 'oi' : null;
     }
   };
   Rua.prototype.desenhar = function (agora) {
@@ -154,15 +176,18 @@
     c.fillStyle = 'rgba(255,244,220,.7)';
     for (var x = 4; x < W; x += 20) c.fillRect(x, H - 11, 10, 1);
     if (!parado && agora > this.proxima) { this.nova(); this.proxima = agora + 700 + Math.random() * 1800; }
-    var self = this;
+    if (!parado) this.viver(agora);
+    var self = this, t = parado ? 0 : agora;
     this.coisas.sort(function (a, b) { return a.z - b.z; });
     this.coisas = this.coisas.filter(function (o) {
-      if (!parado) { o.x += o.v * (o.esq ? -1 : 1); if (o.f != null) o.f += o.v; }
-      var px = Math.round(o.x), passo = o.f != null ? Math.floor(o.f / 3) % 2 : 0;
-      if (o.tipo === 'gente') S.gente(c, px, o.y, passo, o.esq, o.n);
-      else if (o.tipo === 'terminal') S.terminal(c, px, o.y, passo, o.esq, o.n, agora);
-      else if (o.tipo === 'bichinho') S.bichinho(c, px, o.y, passo, o.esq, o.n, parado ? 0 : agora);
-      else S.veiculo(c, o.tipo, px, o.y, o.esq, o.n, self.noite);
+      var anda = o.f == null || o.acao === 'andar';
+      if (!parado && anda) { o.x += o.v * (o.esq ? -1 : 1); if (o.f != null) o.f += o.v; }
+      var px = Math.round(o.x), passo = o.f != null ? Math.floor(o.f / 2.6) % 4 : 0, acao = parado ? 'andar' : o.acao || 'andar';
+      if (o.tipo === 'gente') S.gente(c, px, o.y, passo, o.esq, o.n, acao, t);
+      else if (o.tipo === 'terminal') S.terminal(c, px, o.y, passo, o.esq, o.n, t, acao);
+      else if (o.tipo === 'bichinho') S.bichinho(c, px, o.y, passo, o.esq, o.n, t, acao);
+      else S.veiculo(c, o.tipo, px, o.y, o.esq, o.n, self.noite, t);
+      if (o.balao && !parado) S.balao(c, o.balao, px + (o.esq ? -2 : 5), o.y - ALTURA[o.tipo] - 2 - (Math.floor(agora / 300) % 2));
       return o.x > -40 && o.x < W + 40;
     });
   };
@@ -203,23 +228,31 @@
     requestAnimationFrame(loopRuas);
   }
 
-  /* ---------- Quem mora aqui: cada espécie andando no lugar ---------- */
+  /* ---------- Quem mora aqui: cada espécie num ciclo de anda, acena e para; passar o mouse faz acenar ---------- */
+  var ROTINA = { gente: [['andar', 3200], ['acenar', 1600], ['celular', 2400]], terminal: [['andar', 3200], ['acenar', 1600], ['parar', 2600], ['esperar', 1400]],
+    bichinho: [['andar', 3200], ['acenar', 1600], ['parar', 2400]] };
   document.querySelectorAll('[data-especie]').forEach(function (cv, i) {
-    var cx = cv.getContext('2d'), esp = cv.dataset.especie;
-    cv.width = 40; cv.height = 30;
+    var cx = cv.getContext('2d'), esp = cv.dataset.especie, rot = ROTINA[esp] || ROTINA.gente, oi = false;
+    var total = rot.reduce(function (s, r) { return s + r[1]; }, 0);
+    var cartao = cv.closest('.especie') || cv;
+    cartao.addEventListener('pointerenter', function () { oi = true; });
+    cartao.addEventListener('pointerleave', function () { oi = false; });
+    cv.width = 44; cv.height = 33;
     var loop = function (agora) {
-      cx.clearRect(0, 0, 40, 30);
-      var passo = parado ? 0 : Math.floor(agora / 220) % 2;
-      if (esp === 'gente') S.gente(cx, 16, 27, passo, false, 3);
-      else if (esp === 'terminal') S.terminal(cx, 15, 27, passo, false, i + 1, agora);
-      else S.bichinho(cx, 9, 28, passo, false, 7, parado ? 0 : agora);
+      cx.clearRect(0, 0, 44, 33);
+      var t = parado ? 0 : (agora + i * 1700) % total, acao = 'andar';
+      for (var k = 0, soma = 0; k < rot.length; k++) { soma += rot[k][1]; if (t < soma) { acao = rot[k][0]; break; } }
+      if (oi) acao = 'acenar';
+      if (parado) acao = 'andar';
+      var passo = parado ? 0 : Math.floor(agora / 170) % 4, ag = parado ? 0 : agora;
+      if (esp === 'gente') S.gente(cx, 15, 31, passo, false, 3, acao, ag);
+      else if (esp === 'terminal') S.terminal(cx, 14, 31, passo, false, i + 1, ag, acao);
+      else S.bichinho(cx, 10, 32, passo, false, 7, ag, acao);
       if (!parado) requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
   });
 
-  // Segredo: digitar "pizza" manda o motoboy pelas ruas.
-  var digitado = '';
   addEventListener('keydown', function (e) {
     if (!e.key || e.key.length !== 1 || /input|textarea/i.test(e.target.tagName)) return;
     digitado = (digitado + e.key.toLowerCase()).slice(-5);
@@ -259,15 +292,41 @@
     b.addEventListener('click', function () { b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'); });
   });
 
-  /* ---------- Clima: noite com chuva ou Natal ---------- */
-  var climaImgs = document.querySelectorAll('.janela-clima img');
+  /* ---------- Clima e folhinha: gravações do modo demonstração (paradas com movimento reduzido) ---------- */
+  var gravacao = function (nome) { return 'img/tempo/' + nome + (parado ? '-parado' : '') + '.webp'; };
+  var climaImg = document.querySelector('.clima-img'), climaLegenda = document.querySelector('.clima-legenda');
   var climaBotoes = document.querySelectorAll('[data-clima]');
   climaBotoes.forEach(function (b) {
     b.addEventListener('click', function () {
       climaBotoes.forEach(function (o) { o.setAttribute('aria-pressed', String(o === b)); });
-      climaImgs.forEach(function (img, i) { img.hidden = String(i) !== b.dataset.clima; });
+      climaImg.src = gravacao('clima-' + b.dataset.clima);
+      climaImg.alt = 'O escritório com ' + b.textContent.toLowerCase() + ', gravado do modo demonstração.';
+      climaLegenda.textContent = b.dataset.legenda;
     });
   });
+  if (climaImg && parado) climaImg.src = gravacao('clima-chuva');
+
+  var festaImg = document.querySelector('.festa-img'), festaFala = document.querySelector('.festa-fala'), festaLegenda = document.querySelector('.festa-legenda');
+  var folhas = document.querySelectorAll('[data-festa]'), falas = [], falaN = 0;
+  var mostrarFala = function () {
+    if (!falas.length) return;
+    festaFala.textContent = falas[falaN++ % falas.length];
+    festaFala.classList.remove('troca'); void festaFala.offsetWidth; festaFala.classList.add('troca');
+  };
+  folhas.forEach(function (b) {
+    b.addEventListener('click', function () {
+      folhas.forEach(function (o) { o.setAttribute('aria-pressed', String(o === b)); });
+      festaImg.src = gravacao('festa-' + b.dataset.festa);
+      festaImg.alt = 'O escritório enfeitado para ' + b.dataset.nome + ', gravado do modo demonstração.';
+      festaLegenda.innerHTML = '';
+      var forte = document.createElement('strong'); forte.textContent = b.dataset.nome + '. ';
+      festaLegenda.append(forte, b.dataset.enfeites);
+      falas = b.dataset.falas.split('|'); falaN = 0; mostrarFala();
+    });
+  });
+  var natal = document.querySelector('[data-festa="natal"]');
+  if (natal) { falas = natal.dataset.falas.split('|'); falaN = 1; if (parado) festaImg.src = gravacao('festa-natal'); }
+  if (festaFala && !parado) setInterval(function () { if (!document.hidden) mostrarFala(); }, 3200);
 
   /* ---------- TV com chiado (só enquanto está na tela) ---------- */
   var chiado = document.querySelector('.tv-chiado');
