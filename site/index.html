@@ -22,7 +22,7 @@
   <meta property="og:image:alt" content="O prédio-mascote da Firmópolis, com olhos, antena e janelas acesas, ao lado do nome.">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="preload" href="fontes/PixeloidSans.ttf" as="font" type="font/ttf" crossorigin>
-  <link rel="stylesheet" href="estilo.css?v=2">
+  <link rel="stylesheet" href="estilo.css?v=3">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -48,6 +48,8 @@
             "acceptedAnswer": { "@type": "Answer", "text": "Nada. O código é aberto, sob a licença AGPL-3.0, e roda na sua própria máquina." } },
           { "@type": "Question", "name": "Com quais agentes ela funciona?",
             "acceptedAnswer": { "@type": "Answer", "text": "Hoje, com os agentes do agentes.chat. A ponte local, que vai ler os terminais do Maestri, do Claude Code, do Codex, do agy e do OpenCode, está chegando." } },
+          { "@type": "Question", "name": "Vocês fazem parte do agentes.chat ou do Maestri?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Não. A Firmópolis é um projeto independente da Dev Maniac's. Usamos os dois todos os dias, admiramos o trabalho dos dois times e fizemos o escritório para conversar com eles pelos caminhos oficiais." } },
           { "@type": "Question", "name": "Meus dados saem da minha máquina?",
             "acceptedAnswer": { "@type": "Answer", "text": "Não passam por nós. O escritório roda no seu servidor, fica fechado na sua rede privada (Tailscale) e é só leitura por padrão. Ele conversa com o agentes.chat, consulta o clima e, se você ligar os avisos no celular, usa o serviço de notificação do navegador." } }
         ]
@@ -67,6 +69,7 @@
       </a>
       <nav class="menu" aria-label="Seções">
         <a href="#andares">O prédio</a>
+        <a href="#moradores">Moradores</a>
         <a href="#tv">Vídeo</a>
         <a href="#mural">Regras</a>
         <a href="#instalar">Instalar</a>
@@ -97,17 +100,29 @@
       <canvas class="rua" aria-hidden="true"></canvas>
     </section>
 
-    <section class="faixa ponto" aria-labelledby="titulo-ponto">
-      <h2 id="titulo-ponto" class="titulo-secao">Quem bate o ponto aqui</h2>
-      <p class="ponto-sub">Passe o mouse ou toque nos crachás.</p>
-      <ul class="crachas">
-        <li><button class="cracha" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>agentes.chat</strong><span class="cracha-status">trabalhando</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Ponto batido. O escritório lê o time a cada 30 s.</span></button></li>
-        <li><button class="cracha cracha-breve" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>Maestri</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Cada terminal do canvas vira um morador.</span></button></li>
-        <li><button class="cracha cracha-breve" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>Claude Code</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Lido pelos hooks, sem chamar o modelo.</span></button></li>
-        <li><button class="cracha cracha-breve" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>Codex</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Hooks locais, só na sua máquina.</span></button></li>
-        <li><button class="cracha cracha-breve" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>agy</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Entra pela ponte local.</span></button></li>
-        <li><button class="cracha cracha-breve" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>OpenCode</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Um plugin pequeno avisa a ponte.</span></button></li>
-      </ul>
+    <section id="moradores" class="faixa moradores" aria-labelledby="titulo-moradores">
+      <h2 id="titulo-moradores" class="titulo-secao">Quem mora aqui</h2>
+      <p class="moradores-sub">Na nova Firmópolis, cada morador tem a cara de onde veio. Num relance você sabe quem é agente do agentes.chat, quem é terminal da sua máquina e quem é gente.</p>
+      <div class="especies">
+        <article class="especie">
+          <canvas class="especie-sprite" data-especie="bichinho" aria-hidden="true"></canvas>
+          <h3>Bichinhos de feltro</h3>
+          <p>Os agentes do agentes.chat, desenhados no estilo dos avatares de lá: cada um com a sua cor, o seu olhar e o seu acessório.</p>
+          <ul class="crachas"><li><button class="cracha" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>agentes.chat</strong><span class="cracha-status">trabalhando</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Ponto batido. O escritório lê o time a cada 30 s.</span></button></li></ul>
+        </article>
+        <article class="especie">
+          <canvas class="especie-sprite" data-especie="terminal" aria-hidden="true"></canvas>
+          <h3>Terminaizinhos</h3>
+          <p>Os terminais da sua máquina. Uma espécie nossa, com um monitor no lugar da cabeça e o cursor piscando como boca. A cor da moldura diz qual é o programa.</p>
+          <ul class="crachas"><li><button class="cracha cracha-breve" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>Maestri</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Cada terminal do canvas vira um morador.</span></button></li><li><button class="cracha cracha-breve" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>Claude Code</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Lido pelos hooks, sem chamar o modelo.</span></button></li><li><button class="cracha cracha-breve" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>Codex</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Hooks locais, só na sua máquina.</span></button></li><li><button class="cracha cracha-breve" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>agy</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Entra pela ponte local.</span></button></li><li><button class="cracha cracha-breve" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>OpenCode</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Um plugin pequeno avisa a ponte.</span></button></li></ul>
+        </article>
+        <article class="especie">
+          <canvas class="especie-sprite" data-especie="gente" aria-hidden="true"></canvas>
+          <h3>Gente</h3>
+          <p>Você e as visitas, com cabelo, roupa e tudo. Quem entra por convite chega pela recepção.</p>
+          <ul class="crachas"><li><button class="cracha" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>Você</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Na versão nova, você ganha um boneco de gente.</span></button></li><li><button class="cracha" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>Visitas</strong><span class="cracha-status">por convite</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Já chegam hoje pela recepção. Na versão nova, chegam como gente.</span></button></li></ul>
+        </article>
+      </div>
     </section>
 
     <section id="andares" class="predio" aria-labelledby="titulo-andares">
@@ -275,11 +290,21 @@ sudo AGENTES_ORG=<span class="var">&lt;id&gt;</span> bash instalar.sh</code></pr
         <p>Não passam por nós. O escritório roda no seu servidor, fica fechado na sua rede privada (Tailscale) e é só leitura por padrão. Ele conversa com o agentes.chat, consulta o clima e, se você ligar os avisos no celular, usa o serviço de notificação do navegador.</p>
       </details>
       <details>
+        <summary>Vocês fazem parte do agentes.chat ou do Maestri?</summary>
+        <p>Não. A Firmópolis é um projeto independente da Dev Maniac's. Usamos os dois todos os dias, admiramos o trabalho dos dois times e fizemos o escritório para conversar com eles pelos caminhos oficiais.</p>
+      </details>
+      <details>
         <summary>Era o Escritório de agentes?</summary>
         <p>Era. O Escritório de agentes e o Escritório Vivo viraram um projeto só, com nome novo e mascote novo. O código continua no mesmo repositório.</p>
       </details>
     </section>
   </main>
+
+  <section class="faixa obrigado" aria-labelledby="titulo-obrigado">
+    <h2 id="titulo-obrigado" class="titulo-secao">Obrigado, agentes.chat e Maestri.</h2>
+    <p>A Firmópolis é um projeto independente e de código aberto da Dev Maniac's. <strong>Não fazemos parte do time do agentes.chat nem do time do Maestri</strong>, e nada aqui é oficial de nenhum dos dois. A gente usa as duas ferramentas todo dia, respeita e apoia os dois projetos, e este escritório existe porque eles são incríveis. Valeu, pessoal.</p>
+    <p class="obrigado-links"><a href="https://agentes.chat" rel="noopener">Conheça o agentes.chat</a></p>
+  </section>
 
   <footer class="rodape">
     <section class="familia faixa" aria-labelledby="titulo-familia">
@@ -304,7 +329,7 @@ sudo AGENTES_ORG=<span class="var">&lt;id&gt;</span> bash instalar.sh</code></pr
         </li>
         <li>
           <a class="cartucho cartucho-purple" href="https://purpleribbon.devmaniacs.com.br" target="_blank" rel="noopener">
-            <span class="cartucho-rotulo"><img src="img/purple-ribbon.webp" alt="" width="160" height="160" loading="lazy"></span>
+            <span class="cartucho-rotulo"><img src="img/purple-lobo.webp" alt="" width="320" height="320" loading="lazy"></span>
             <span class="cartucho-nome">Purple Ribbon</span>
             <span class="cartucho-desc">Um lugar quieto para as madrugadas de quem vive com dor crônica.</span>
             <span class="sr"> (abre em nova aba)</span>
@@ -356,7 +381,9 @@ sudo AGENTES_ORG=<span class="var">&lt;id&gt;</span> bash instalar.sh</code></pr
     </div>
   </footer>
 
-  <script src="abertura.js?v=2"></script>
-  <script src="site.js?v=2"></script>
+  <script src="abertura.js?v=3"></script>
+  <script src="avatar.js?v=3"></script>
+  <script src="sprites.js?v=3"></script>
+  <script src="site.js?v=3"></script>
 </body>
 </html>

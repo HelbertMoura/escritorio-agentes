@@ -119,71 +119,67 @@
     requestAnimationFrame(desenharCeu);
   }
 
-  /* ---------- Ruas (hero e rodapé à noite): carros, pedestres e o motoboy da pizza ---------- */
-  var CORES_CARRO = ['#e8574a', '#f5b83d', '#4ade80', '#5468bf', '#fff4dc', '#ff7a8a'];
-  var CORES_PESSOA = ['#3d4f9e', '#e8574a', '#4ade80', '#f5b83d', '#b07ad8', '#ff7a8a'];
-  var ruas = [];
+  /* ---------- Ruas (hero e rodapé à noite): os três tipos de morador na calçada, carros, van e o motoboy da pizza ---------- */
+  var S = window.Sprites, ruas = [];
+  var ESPECIES = ['bichinho', 'terminal', 'gente'];
   function Rua(canvas, noite) {
-    this.c = canvas; this.ctx = canvas.getContext('2d'); this.noite = noite; this.coisas = []; this.proxima = 0; this.medir();
-    if (parado) for (var i = 0; i < 4; i++) { this.nova(); this.coisas[i].x = (i + 0.5) * this.c.width / 4; }
+    this.c = canvas; this.ctx = canvas.getContext('2d'); this.noite = noite; this.coisas = []; this.proxima = 0; this.n = 0; this.medir();
+    for (var i = 0; i < 5; i++) { this.nova(); var o = this.coisas[this.coisas.length - 1]; o.x = (i + 0.3) * this.c.width / 5; }
   }
   Rua.prototype.medir = function () {
     this.c.width = Math.ceil(this.c.clientWidth / 3); this.c.height = Math.ceil(this.c.clientHeight / 3);
     if (this.noite) this.predios = montarPredios(this.c.width, this.c.height);
   };
+  // pista de baixo (vai para a direita) e de cima (vai para a esquerda); calçada acima das pistas
   Rua.prototype.nova = function (tipo) {
-    var W = this.c.width, H = this.c.height, dir = Math.random() < 0.5 ? 1 : -1;
-    if (tipo === 'pizza') { this.coisas.push({ tipo: 'pizza', x: -20, dir: 1, y: H - 4, v: 0.9 }); return; }
-    if (Math.random() < 0.65) this.coisas.push({ tipo: 'carro', x: dir > 0 ? -20 : W + 20, dir: dir, y: dir > 0 ? H - 3 : H - 13, v: 0.5 + Math.random() * 0.6, cor: CORES_CARRO[Math.random() * 6 | 0] });
-    else this.coisas.push({ tipo: 'pessoa', x: dir > 0 ? -6 : W + 6, dir: dir, y: H - 32, v: 0.15 + Math.random() * 0.1, cor: CORES_PESSOA[Math.random() * 6 | 0], f: 0 });
+    var W = this.c.width, H = this.c.height, n = this.n++;
+    if (tipo === 'pizza') { this.coisas.push({ tipo: 'moto', x: -20, esq: false, y: H - 2, v: 1.6, n: n, z: 2 }); return; }
+    var esq = Math.random() < 0.5;
+    if (Math.random() < 0.5) {
+      var t = Math.random() < 0.25 ? 'van' : 'carro';
+      this.coisas.push({ tipo: t, x: esq ? W + 30 : -34, esq: esq, y: esq ? H - 13 : H - 2, v: 0.7 + Math.random() * 0.7, n: n, z: esq ? 1 : 2 });
+    } else {
+      this.coisas.push({ tipo: ESPECIES[n % 3], x: esq ? W + 20 : -24, esq: esq, y: H - 25 + (esq ? 0 : 3), v: 0.22 + Math.random() * 0.12, n: n, z: esq ? 0 : 0.5, f: 0 });
+    }
   };
   Rua.prototype.desenhar = function (agora) {
     var c = this.ctx, W = this.c.width, H = this.c.height, noite = this.noite;
     c.clearRect(0, 0, W, H);
     if (noite) desenharBairro(c, this.predios, W, H, agora);
-    c.fillStyle = '#5b6275'; c.fillRect(0, H - 23, W, 3);   // meio-fio
-    c.fillStyle = '#7a8196'; c.fillRect(0, H - 25, W, 2);
-    c.fillStyle = '#2b2b35'; c.fillRect(0, H - 20, W, 20);  // asfalto
-    c.fillStyle = 'rgba(255,244,220,.75)';
-    for (var x = 2; x < W; x += 16) c.fillRect(x, H - 10, 8, 1);
-    if (!parado && agora > this.proxima) { this.nova(); this.proxima = agora + 900 + Math.random() * 2200; }
+    c.fillStyle = '#7a8196'; c.fillRect(0, H - 33, W, 2);            // calçada
+    c.fillStyle = '#5b6275'; c.fillRect(0, H - 31, W, 8);
+    c.fillStyle = '#4e5468'; for (var x0 = 0; x0 < W; x0 += 12) c.fillRect(x0, H - 31, 1, 8);
+    c.fillStyle = '#9aa3b8'; c.fillRect(0, H - 23, W, 2);            // meio-fio
+    c.fillStyle = '#2b2b35'; c.fillRect(0, H - 21, W, 21);           // asfalto
+    c.fillStyle = 'rgba(255,244,220,.7)';
+    for (var x = 4; x < W; x += 20) c.fillRect(x, H - 11, 10, 1);
+    if (!parado && agora > this.proxima) { this.nova(); this.proxima = agora + 700 + Math.random() * 1800; }
+    var self = this;
+    this.coisas.sort(function (a, b) { return a.z - b.z; });
     this.coisas = this.coisas.filter(function (o) {
-      if (!parado) o.x += o.v * o.dir;
-      var px = Math.round(o.x);
-      if (o.tipo === 'carro') {
-        c.fillStyle = o.cor; c.fillRect(px, o.y - 4, 14, 4); c.fillRect(px + 3, o.y - 7, 8, 3);
-        c.fillStyle = '#9fd3ff'; c.fillRect(px + (o.dir > 0 ? 7 : 4), o.y - 6, 3, 2);
-        c.fillStyle = '#1b1a2b'; c.fillRect(px + 2, o.y, 3, 2); c.fillRect(px + 9, o.y, 3, 2);
-        if (noite) { c.fillStyle = 'rgba(255,230,140,.85)'; c.fillRect(o.dir > 0 ? px + 14 : px - 3, o.y - 3, 3, 1); }
-      } else if (o.tipo === 'pessoa') {
-        o.f += o.v;
-        var passo = Math.floor(o.f / 2) % 2;
-        c.fillStyle = '#f2c9a0'; c.fillRect(px, o.y, 3, 3);
-        c.fillStyle = o.cor; c.fillRect(px, o.y + 3, 3, 4);
-        c.fillStyle = '#1b1a2b'; c.fillRect(px + passo, o.y + 7, 1, 2); c.fillRect(px + 2 - passo, o.y + 7, 1, 2);
-      } else {  // motoboy da pizza
-        c.fillStyle = '#e8574a'; c.fillRect(px, o.y - 5, 10, 3); c.fillRect(px + 1, o.y - 10, 6, 5);
-        c.fillStyle = '#f5b83d'; c.fillRect(px + 1, o.y - 13, 6, 3);
-        c.fillStyle = '#1b1a2b'; c.fillRect(px - 1, o.y - 2, 3, 3); c.fillRect(px + 9, o.y - 2, 3, 3);
-        c.fillStyle = '#fff4dc'; c.fillRect(px + 8, o.y - 9, 3, 2);
-      }
-      return o.x > -30 && o.x < W + 30;
+      if (!parado) { o.x += o.v * (o.esq ? -1 : 1); if (o.f != null) o.f += o.v; }
+      var px = Math.round(o.x), passo = o.f != null ? Math.floor(o.f / 3) % 2 : 0;
+      if (o.tipo === 'gente') S.gente(c, px, o.y, passo, o.esq, o.n);
+      else if (o.tipo === 'terminal') S.terminal(c, px, o.y, passo, o.esq, o.n, agora);
+      else if (o.tipo === 'bichinho') S.bichinho(c, px, o.y, passo, o.esq, o.n, parado ? 0 : agora);
+      else S.veiculo(c, o.tipo, px, o.y, o.esq, o.n, self.noite);
+      return o.x > -40 && o.x < W + 40;
     });
   };
   function montarPredios(W, H) {
-    var ps = [];
+    var ps = [], base = H - 33;
     for (var x = 0; x < W;) {
-      var w = 14 + (Math.random() * 20 | 0), h = 18 + (Math.random() * (H - 50) | 0), jan = [];
-      for (var y = H - 25 - h + 4; y < H - 30; y += 5) for (var xx = x + 3; xx < x + w - 3; xx += 4) jan.push([xx, y, Math.random()]);
+      var w = 16 + (Math.random() * 22 | 0), h = 20 + (Math.random() * (base - 26) | 0), jan = [];
+      for (var y = base - h + 4; y < base - 4; y += 5) for (var xx = x + 3; xx < x + w - 3; xx += 4) jan.push([xx, y, Math.random()]);
       ps.push({ x: x, w: w, h: h, jan: jan }); x += w + 2;
     }
     return ps;
   }
   function desenharBairro(c, ps, W, H, agora) {
-    var ox = Math.round(W * 0.5 - 16), oy = H - 25 - 31;
+    var base = H - 33, ox = Math.round(W * 0.5 - 32), oy = base - 60;
     ps.forEach(function (p) {
-      if (p.x + p.w > ox && p.x < ox + 32) return;  // espaço do mascote
-      c.fillStyle = '#1f2040'; c.fillRect(p.x, H - 25 - p.h, p.w, p.h);
+      if (p.x + p.w > ox - 2 && p.x < ox + 66) return;  // espaço do mascote
+      c.fillStyle = '#1f2040'; c.fillRect(p.x, base - p.h, p.w, p.h);
       p.jan.forEach(function (j) {
         var acesa = parado ? j[2] > 0.55 : ((agora / 5000 + j[2] * 9) % 9) > 4.5;
         c.fillStyle = acesa ? '#f5b83d' : '#2c2e5a'; c.fillRect(j[0], j[1], 2, 2);
@@ -191,13 +187,13 @@
     });
     if (!A) return;
     // o prédio-mascote dormindo no meio do bairro, com zzz
-    pintar(c, grade({ janelas: 2, olho: 'fechado', dx: 1, dy: 1, antena: !parado && Math.floor(agora / 900) % 2 === 0 }), 1, 1, ox, oy);
+    pintar(c, grade({ janelas: 2, olho: 'fechado', dx: 1, dy: 1, antena: !parado && Math.floor(agora / 900) % 2 === 0 }), 2, 1, ox, oy);
     var z = parado ? 1 : (agora / 600) % 3;
     c.fillStyle = 'rgba(255,244,220,.85)';
-    var zx = ox + 27 + Math.floor(z * 2), zy = oy + 6 - Math.floor(z * 3);
-    c.fillRect(zx, zy, 3, 1); c.fillRect(zx + 1, zy + 1, 1, 1); c.fillRect(zx, zy + 2, 3, 1);
+    var zx = ox + 54 + Math.floor(z * 3), zy = oy + 10 - Math.floor(z * 5);
+    c.fillRect(zx, zy, 4, 1); c.fillRect(zx + 2, zy + 1, 1, 1); c.fillRect(zx + 1, zy + 2, 1, 1); c.fillRect(zx, zy + 3, 4, 1);
   }
-  document.querySelectorAll('.rua, .rua-noite').forEach(function (cv) { ruas.push(new Rua(cv, cv.classList.contains('rua-noite'))); });
+  if (S) document.querySelectorAll('.rua, .rua-noite').forEach(function (cv) { ruas.push(new Rua(cv, cv.classList.contains('rua-noite'))); });
   if (ruas.length) {
     addEventListener('resize', function () { ruas.forEach(function (r) { r.medir(); if (parado) r.desenhar(0); }); });
     var loopRuas = function (agora) {
@@ -206,6 +202,21 @@
     };
     requestAnimationFrame(loopRuas);
   }
+
+  /* ---------- Quem mora aqui: cada espécie andando no lugar ---------- */
+  document.querySelectorAll('[data-especie]').forEach(function (cv, i) {
+    var cx = cv.getContext('2d'), esp = cv.dataset.especie;
+    cv.width = 40; cv.height = 30;
+    var loop = function (agora) {
+      cx.clearRect(0, 0, 40, 30);
+      var passo = parado ? 0 : Math.floor(agora / 220) % 2;
+      if (esp === 'gente') S.gente(cx, 16, 27, passo, false, 3);
+      else if (esp === 'terminal') S.terminal(cx, 15, 27, passo, false, i + 1, agora);
+      else S.bichinho(cx, 9, 28, passo, false, 7, parado ? 0 : agora);
+      if (!parado) requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  });
 
   // Segredo: digitar "pizza" manda o motoboy pelas ruas.
   var digitado = '';
