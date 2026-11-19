@@ -1503,7 +1503,7 @@ const Vida = (() => {
   // ref: a chave da pessoa fora daqui (lista do andar, ir até, aceno), um contador; o "usuario" (no saguão, o id opaco) não sai
   let refs = 0;
   const novaPessoa = (id, x, y) => ({ id: "pessoa:" + id, usuario: id, ref: "r" + ++refs, nome: "", ap: null, x, y, rota: [], alvo: null, sala: "", pose: "parado",
-    olha: "baixo", parado: "baixo", passos: 0, pausa: 0, aceno: 0, status: null, semente: semente(id) });
+    olha: "baixo", parado: "baixo", lado: 1, passos: 0, pausa: 0, aceno: 0, status: null, semente: semente(id) });
   // 1.6 Onda 2: o status de cada pessoa (o ícone no boneco e na lista); fora da lista, sem status
   const STATUS = Object.freeze(["disponivel", "ocupado", "reuniao", "ausente"]);
   const statusDe = s => (STATUS.includes(s) ? s : null);
@@ -1694,7 +1694,7 @@ const Vida = (() => {
   function nascer(m) {
     const { nome, ap } = vivo.perfil, e = m.predio.entrada, cy = m.predio.corredorY;
     const recepcao = m.predio.salas.find(s => s.tipo === "recepcao"), alvo = recepcao && pontoDeVisita(m, recepcao);
-    vivo.eu = { ...novaPessoa("eu", e.x - 22, e.calcadaY), id: "eu", nome: `${nome} (você)`, ap, eu: true, salaNome: "Corredor",
+    vivo.eu = { ...novaPessoa("eu", e.x - 22, e.calcadaY), id: "eu", nome: `${nome} (você)`, ap, eu: true, salaNome: "Corredor", semente: semente(vivo.perfil.usuario),
       rota: alvo ? [[e.x - 22, cy], [e.x, cy], ...alvo.r] : [[e.x - 22, cy], [e.x, cy]] };
     mostrar(vivo.eu, vivo.eu.nome);
     meuStatus();
@@ -1758,6 +1758,7 @@ const Vida = (() => {
     if (!p.rota.length && !p.eu && !(p.aceno > agora)) p.olha = p.parado;   // parado: olha para onde a pessoa olha na tela dela
     if (p.fala && agora > p.ate) p.fala = null;
     p.pose = p.rota.length ? "andando" : p.aceno > agora ? "acenando" : "parado"; p.chave = p.y + 0.5;
+    if (p.olha === "esq" || p.olha === "dir") p.lado = p.olha === "esq" ? -1 : 1;   // a gente (app.js) vira para o lado; de frente ou de costas, fica como estava
   }
   // --- terminaizinhos (Firmópolis, onda 2): os terminais deste computador, lidos pela ponte local (ponte.js) -------
   // Figurantes como as pessoas: fora do m.bonecos, das vagas e da vida social, e só nesta tela (nada vai ao servidor).

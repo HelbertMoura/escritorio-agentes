@@ -30,10 +30,10 @@ Objetivo: o mapa mostrar também os terminais da máquina (Claude Code, Codex, a
 
 **2b (feita, 19/11/2026):** a marca das integrações virou `firmopolis` (entrada do agy, plugins do OpenCode e do MiniMax, backups, o bin `%LOCALAPPDATA%\Firmopolis\bin` e o autostart `Firmopolis`). O `setup --aplicar` migra quem vem do Escritório Vivo: tira a entrada `escritorio-vivo` do agy, apaga os plugins antigos só quando o sha é o nosso (manifesto ou modelo antigo) e tira o autostart `EscritorioVivo`. O plugin do OpenCode lê o token da pasta nova e, se faltar, da antiga. O `--desfazer` tira as duas marcas.
 
-## Onda 3: as três espécies no app
+## Onda 3: as três espécies no app (feita)
 - Os **bichinhos de feltro** já existem (`avatar.js`) e representam os agentes do agentes.chat.
 - Os **terminaizinhos** têm um monitor CRT como cabeça, um cursor como boca e a cor da moldura conforme o programa. O desenho já existe em `site/sprites.js` e vai para o mapa em escala de jogo.
-- A **gente** é você e as visitas. As visitas já têm presença; a espécie só troca o boneco.
+- A **gente** é você e as visitas. As visitas já têm presença; a espécie só troca o boneco. Feito: `desenharGente` (app.js) usa `Sprites.gente`, com a blusa na cor do perfil e cabelo, pele e calça pela semente da pessoa. Olhos e acessório do perfil continuam valendo só para o bichinho (convite, perfil).
 
 ## Onda 4: mecânicas "Sims"
 Necessidades e rotinas da Vivo (café, pausa, conversa no corredor), reescritas sobre o `vida.js`. O GDScript não é portado linha a linha. O gatilho continua sendo o estado real do agente, e nada é inventado.

@@ -316,7 +316,7 @@ function desenharCena(t) {
   const cs = mundo.cenaSocial, naNuvem = b => !!cs && cs.fase === "luta" && (b.id === cs.a || b.id === cs.b);   // na luta, a nuvem cobre os dois (Efeitos.cena)
   for (const b of mundo.bonecos.values()) if (visivel(b) && !naNuvem(b)) cena.push({ chave: b.chave ?? b.y + 0.5, desenha: () => desenharBoneco(b, t) });
   const visitas = Vida.pessoas();   // as pessoas da equipe neste andar e o meu boneco (vida.js: /api/ao-vivo)
-  for (const v of visitas) cena.push({ chave: v.chave ?? v.y + 0.5, desenha: () => Avatar.boneco(ctx, v, t, escala) });
+  for (const v of visitas) cena.push({ chave: v.chave ?? v.y + 0.5, desenha: () => (window.Sprites ? desenharGente(v, t) : Avatar.boneco(ctx, v, t, escala)) });
   const terminais = window.Sprites ? Vida.terminais() : [];   // os terminais deste computador, pela ponte local (ponte.js)
   for (const k of terminais) cena.push({ chave: k.chave ?? k.y + 0.5, desenha: () => desenharTerminal(k, ta) });
   cena.sort((a, b) => a.chave - b.chave).forEach(c => c.desenha());
@@ -489,6 +489,16 @@ function desenharTerminal(k, t) {
   Sprites.terminal(ctx, Math.round(k.x - 6), Math.round(k.y), Math.floor(k.anda / 4) % 4, k.lado < 0, k.cor, t, acao);
   if (escala !== 1) ctx.restore();
   ctx.globalAlpha = 1;
+}
+
+// gente (sprites.js, Firmópolis onda 3): você e as visitas. A blusa é a cor do perfil; cabelo, pele e calça vêm da
+// semente da pessoa, sempre os mesmos. O passo segue o caminho andado (vida.js: passos, de 0 a 11)
+function desenharGente(p, t) {
+  const acao = p.pose === "andando" ? "andar" : p.pose === "acenando" ? "acenar" : "parar";
+  const blusa = p.ap ? (Avatar.CORES[p.ap.color] || {}).base || (/^#[0-9a-f]{6}$/i.test(p.ap.color) ? p.ap.color : "") : "";
+  if (escala !== 1) { ctx.save(); ctx.scale(escala, escala); }
+  Sprites.gente(ctx, Math.round(p.x - 6), Math.round(p.y), Math.floor(p.passos / 3) % 4, p.lado < 0, p.semente, acao, menosMovimento.matches ? 0 : t, blusa);
+  if (escala !== 1) ctx.restore();
 }
 
 // o entregador da greve atendida é um figurante (não está no mundo.bonecos): o mesmo avatar, com o item nas mãos enquanto traz

@@ -101,11 +101,12 @@
   var ROUPAS = ['#e8574a', '#3fb35c', '#3a92e6', '#f5b83d', '#9566e6', '#ff7a8a', '#33b3a0'];
   var CALCAS = ['#2c3a78', '#3b3b47', '#5a4632', '#1f2650'];
 
-  // f: tempo do passo (0..3); acao: 'andar' | 'parar' | 'acenar' | 'celular'; agora: ms (piscar e aceno)
-  function gente(c, x, pes, f, esquerda, v, acao, agora) {
+  // f: tempo do passo (0..3); acao: 'andar' | 'parar' | 'acenar' | 'celular'; agora: ms (piscar e aceno);
+  // blusa: a cor que a pessoa escolheu no perfil (#rrggbb), no lugar da sorteada pela variação v
+  function gente(c, x, pes, f, esquerda, v, acao, agora, blusa) {
     acao = acao || 'andar'; agora = agora || 0;
-    var cab = CABELOS[v % 7], roupa = ROUPAS[(v >> 1) % 7], calca = CALCAS[(v >> 3) % 4];
-    var cores = paleta('g' + v, function () { return { h: cab, H: clarear(cab), s: PELES[(v >> 2) % 4], o: '#1b1a2b', w: '#ffffff', k: '#ff8a98',
+    var cab = CABELOS[v % 7], roupa = blusa || ROUPAS[(v >> 1) % 7], calca = CALCAS[(v >> 3) % 4];
+    var cores = paleta('g' + v + roupa, function () { return { h: cab, H: clarear(cab), s: PELES[(v >> 2) % 4], o: '#1b1a2b', w: '#ffffff', k: '#ff8a98',
       m: '#a0463f', c: roupa, C: clarear(roupa), a: escurecer(roupa), P: calca, p: escurecer(calca), z: '#1b1a2b', g: '#9fd3ff' }; });
     var t = agora + v * 1311, cabeca = CABECAS[(v >> 2) % 3].slice(), corpo, sobe = 0;
     var piscou = (t % 4200) < 140;
