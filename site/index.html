@@ -22,7 +22,7 @@
   <meta property="og:image:alt" content="O prédio-mascote da Firmópolis, com olhos, antena e janelas acesas, ao lado do nome.">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="preload" href="fontes/PixeloidSans.ttf" as="font" type="font/ttf" crossorigin>
-  <link rel="stylesheet" href="estilo.css?v=1">
+  <link rel="stylesheet" href="estilo.css?v=2">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -67,123 +67,135 @@
       </a>
       <nav class="menu" aria-label="Seções">
         <a href="#andares">O prédio</a>
-        <a href="#principios">Princípios</a>
+        <a href="#tv">Vídeo</a>
+        <a href="#mural">Regras</a>
         <a href="#instalar">Instalar</a>
-        <a href="#perguntas">Perguntas</a>
       </nav>
       <a class="botao botao-pequeno" href="https://github.com/HelbertMoura/escritorio-agentes" rel="noopener">GitHub</a>
     </div>
   </header>
 
   <main id="conteudo">
-    <!-- HERO: a cidade à noite e o prédio-mascote, que segue o cursor com os olhos -->
     <section class="hero" aria-labelledby="titulo-hero">
       <canvas class="ceu" aria-hidden="true"></canvas>
       <div class="faixa hero-grade">
         <div class="hero-texto">
-          <p class="etiqueta"><span class="ponto-vivo" aria-hidden="true"></span>ao vivo · código aberto · zero token</p>
           <h1 id="titulo-hero">A firma dos seus agentes, <em>ao vivo.</em></h1>
-          <p class="hero-sub">A Firmópolis é um escritório em pixel art onde cada agente de IA vira um morador. Num relance você vê quem está na mesa, quem foi jogar sinuca e quem espera a sua aprovação.</p>
+          <p class="hero-sub">Um escritório em pixel art onde cada agente de IA vira morador. Num relance você vê quem está na mesa, quem foi jogar sinuca e quem espera a sua aprovação. Sem gastar um token.</p>
           <div class="acoes">
             <a class="botao" href="https://github.com/HelbertMoura/escritorio-agentes" rel="noopener">Ver o código no GitHub</a>
             <a class="botao botao-vazado" href="#instalar">Como instalar</a>
           </div>
         </div>
         <div class="hero-predio">
-          <canvas class="mascote" width="320" height="320" role="img" aria-label="O prédio-mascote da Firmópolis piscando e olhando para o cursor."></canvas>
-          <p class="balao" aria-hidden="true">Bom dia, firma!</p>
+          <button class="mascote-botao" type="button" aria-label="Cutucar o prédio da Firmópolis">
+            <canvas class="mascote" width="320" height="320" aria-hidden="true"></canvas>
+          </button>
+          <p class="balao" role="status" aria-live="polite"></p>
         </div>
       </div>
-      <div class="rua" aria-hidden="true"></div>
+      <canvas class="rua" aria-hidden="true"></canvas>
     </section>
 
-    <!-- FUNCIONA COM -->
-    <section class="faixa com" aria-labelledby="titulo-com">
-      <h2 id="titulo-com" class="olho">Quem bate o ponto aqui</h2>
-      <ul class="cracha-lista">
-        <li class="cracha"><span class="cracha-furo" aria-hidden="true"></span><strong>agentes.chat</strong><span>hoje</span></li>
-        <li class="cracha cracha-breve"><span class="cracha-furo" aria-hidden="true"></span><strong>Maestri</strong><span>em breve</span></li>
-        <li class="cracha cracha-breve"><span class="cracha-furo" aria-hidden="true"></span><strong>Claude Code</strong><span>em breve</span></li>
-        <li class="cracha cracha-breve"><span class="cracha-furo" aria-hidden="true"></span><strong>Codex</strong><span>em breve</span></li>
-        <li class="cracha cracha-breve"><span class="cracha-furo" aria-hidden="true"></span><strong>agy</strong><span>em breve</span></li>
-        <li class="cracha cracha-breve"><span class="cracha-furo" aria-hidden="true"></span><strong>OpenCode</strong><span>em breve</span></li>
+    <section class="faixa ponto" aria-labelledby="titulo-ponto">
+      <h2 id="titulo-ponto" class="titulo-secao">Quem bate o ponto aqui</h2>
+      <p class="ponto-sub">Passe o mouse ou toque nos crachás.</p>
+      <ul class="crachas">
+        <li><button class="cracha" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>agentes.chat</strong><span class="cracha-status">trabalhando</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Ponto batido. O escritório lê o time a cada 30 s.</span></button></li>
+        <li><button class="cracha cracha-breve" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>Maestri</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Cada terminal do canvas vira um morador.</span></button></li>
+        <li><button class="cracha cracha-breve" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>Claude Code</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Lido pelos hooks, sem chamar o modelo.</span></button></li>
+        <li><button class="cracha cracha-breve" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>Codex</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Hooks locais, só na sua máquina.</span></button></li>
+        <li><button class="cracha cracha-breve" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>agy</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Entra pela ponte local.</span></button></li>
+        <li><button class="cracha cracha-breve" type="button" aria-pressed="false"><span class="cracha-frente"><span class="cracha-furo"></span><strong>OpenCode</strong><span class="cracha-status">em breve</span></span><span class="cracha-verso"><span class="cracha-furo"></span>Um plugin pequeno avisa a ponte.</span></button></li>
       </ul>
-      <p class="com-nota">Os terminais locais chegam com a ponte da Firmópolis, que lê cada agente na sua máquina sem chamar nenhum modelo.</p>
     </section>
 
-    <!-- O PRÉDIO: cada recurso é um andar -->
     <section id="andares" class="predio" aria-labelledby="titulo-andares">
       <div class="faixa">
-        <p class="olho">Tour pelo prédio</p>
-        <h2 id="titulo-andares" class="titulo-secao">Sobe que a gente mostra.</h2>
+        <h2 id="titulo-andares" class="titulo-secao">Sobe que a gente mostra o prédio.</h2>
       </div>
 
       <div class="faixa andares">
-        <article class="andar">
+        <div class="poco" aria-hidden="true"><div class="elevador"><canvas class="elevador-mascote" width="32" height="32"></canvas><span class="elevador-visor">6</span></div></div>
+
+        <article class="andar" data-andar="6">
           <p class="placa-andar"><span>6</span>Escritório</p>
           <div class="andar-texto">
             <h3>Cada agente na sua sala.</h3>
-            <p>Trabalhando, esperando você ou de folga: a cor do crachá e o balão na cabeça contam. A cada 30 segundos o escritório lê o time de novo e os moradores andam até onde devem estar.</p>
+            <p>Trabalhando, esperando você ou de folga: a cor do crachá e o balão na cabeça contam. A cada 30 segundos o escritório lê o time de novo, e os moradores andam até onde devem estar.</p>
           </div>
-          <figure class="janela"><img src="img/01-escritorio-dia.webp" alt="O mapa do escritório de dia, com as salas Dev, Produto, Marketing, Vendas e Ops, agentes nas mesas e balões de fala." width="960" height="462" loading="lazy"></figure>
+          <figure class="janela janela-larga">
+            <img src="img/01-escritorio-dia.webp" alt="O mapa do escritório de dia, com as salas Dev, Produto, Marketing, Vendas e Ops, agentes nas mesas e balões de fala." width="960" height="462" loading="lazy">
+            <figcaption>O prédio inteiro de dia, com 10 agentes fictícios do modo demonstração.</figcaption>
+          </figure>
         </article>
 
-        <article class="andar andar-invertido">
+        <article class="andar andar-invertido" data-andar="5">
           <p class="placa-andar"><span>5</span>Esperando você</p>
           <div class="andar-texto">
             <h3>Ninguém fica esperando à toa.</h3>
-            <p>Pergunta ou aprovação pendente aparece com um ponto de interrogação em cima do agente e numa lista separada. Um clique leva até ele.</p>
+            <p>Pergunta ou aprovação pendente aparece com um sinal em cima do agente e numa lista separada. Um clique leva até ele.</p>
           </div>
-          <figure class="janela"><img src="img/02-esperando-voce.webp" alt="Um agente com o balão de pergunta e a lista Esperando você aberta." width="960" height="462" loading="lazy"></figure>
+          <figure class="janela">
+            <img src="img/z-esperando.webp" alt="A agente Hana na cozinha com o balão 'Preciso do seu OK!' e um sinal de exclamação." width="720" height="440" loading="lazy">
+            <figcaption>Hana pede aprovação na cozinha.</figcaption>
+          </figure>
         </article>
 
-        <article class="andar">
+        <article class="andar andar-social" data-andar="4">
           <p class="placa-andar"><span>4</span>Vida social</p>
           <div class="andar-texto">
             <h3>Quando ninguém olha, a firma vive.</h3>
-            <p>Greve na sala comunal com plaquinha de papelão, briga no ringue com plateia, pizza chegando de motoboy. Tudo nasce do que o time faz de verdade.</p>
+            <p>Greve com plaquinha de papelão, briga no ringue com plateia, pizza chegando de motoboy. Tudo nasce do que o time faz de verdade.</p>
           </div>
-          <div class="janela janela-tripla">
-            <img src="img/13-greve-plaquinhas.webp" alt="Greve na sala comunal: os agentes sentados no chão segurando plaquinhas." width="960" height="462" loading="lazy">
-            <img src="img/11-ringue-plateia.webp" alt="Briga no ringue com a plateia em volta." width="960" height="462" loading="lazy">
-            <img src="img/14-entrega-pizza.webp" alt="O motoboy entrega a pizza e a turma come junto." width="960" height="462" loading="lazy">
+          <div class="mural-fotos">
+            <figure class="foto foto-a"><img src="img/z-greve.webp" alt="Greve na sala comunal com plaquinhas: 'Queremos pizza', 'Soneca livre', 'Mais café'." width="720" height="440" loading="lazy"><figcaption>"Queremos pizza"</figcaption></figure>
+            <figure class="foto foto-b"><img src="img/z-ringue.webp" alt="Briga no ringue com nuvem de poeira, 'BUM!' e a plateia em volta." width="880" height="520" loading="lazy"><figcaption>Briga no ringue</figcaption></figure>
+            <figure class="foto foto-c"><img src="img/z-pizza.webp" alt="A turma reunida em volta do ringue gritando 'Pizza!!'." width="1040" height="480" loading="lazy"><figcaption>A pizza chegou</figcaption></figure>
           </div>
         </article>
 
-        <article class="andar andar-invertido">
-          <p class="placa-andar"><span>3</span>Modo construção</p>
+        <article class="andar andar-invertido" data-andar="3">
+          <p class="placa-andar"><span>3</span>Construção</p>
           <div class="andar-texto">
             <h3>A planta é sua.</h3>
             <p>Pinte as salas com 7 paredes e 10 pisos, arraste e espelhe os móveis e escolha entre 53 enfeites. Você arruma no computador e o time vê pronto no mapa.</p>
           </div>
-          <figure class="janela"><img src="img/16-modo-construcao.webp" alt="O editor do modo construção com o catálogo de móveis e as salas pintadas." width="960" height="462" loading="lazy"></figure>
+          <figure class="janela">
+            <img src="img/16-modo-construcao.webp" alt="O editor do modo construção: o mapa à esquerda e, à direita, o painel com paredes, pisos e o catálogo de plantas." width="960" height="600" loading="lazy">
+            <figcaption>O sofá da sala comunal selecionado para espelhar.</figcaption>
+          </figure>
         </article>
 
-        <article class="andar">
+        <article class="andar" data-andar="2">
           <p class="placa-andar"><span>2</span>Clima e festas</p>
           <div class="andar-texto">
             <h3>Chove lá fora, chove aqui.</h3>
             <p>A hora e o clima são os da sua cidade. Anoitece, as luzes acendem, e no Natal cai neve no jardim.</p>
+            <div class="alternar" role="group" aria-label="Ver o escritório">
+              <button type="button" aria-pressed="true" data-clima="0">Noite com chuva</button>
+              <button type="button" aria-pressed="false" data-clima="1">Natal</button>
+            </div>
           </div>
-          <div class="janela janela-dupla">
+          <figure class="janela janela-clima">
             <img src="img/03-noite-chuva.webp" alt="O escritório à noite, com chuva e luzes acesas." width="960" height="462" loading="lazy">
-            <img src="img/04-natal-neve.webp" alt="O escritório enfeitado de Natal, com neve." width="960" height="462" loading="lazy">
-          </div>
+            <img src="img/04-natal-neve.webp" alt="O escritório enfeitado de Natal, com neve no jardim." width="960" height="462" loading="lazy" hidden>
+          </figure>
         </article>
 
-        <article class="andar andar-invertido">
+        <article class="andar andar-invertido" data-andar="1">
           <p class="placa-andar"><span>1</span>O bairro</p>
           <div class="andar-texto">
             <h3>Um prédio por workspace.</h3>
             <p>Cada workspace vira um andar, e os prédios formam um bairro num mapa do Brasil. Dá até para receber visita por convite na recepção.</p>
           </div>
-          <div class="janela janela-dupla">
-            <img src="img/19-mundo-brasil.webp" alt="O mapa do Brasil em pixel art, com os prédios de cada workspace nas cidades." width="760" height="647" loading="lazy">
-            <img src="img/21-mundo-cidade.webp" alt="O bairro visto de cima, com prédios, praça, ruas e carros." width="760" height="647" loading="lazy">
+          <div class="janela-par">
+            <figure class="janela"><img src="img/19-mundo-brasil.webp" alt="O mapa do Brasil em pixel art, com os prédios nas cidades." width="760" height="647" loading="lazy"><figcaption>O Brasil inteiro</figcaption></figure>
+            <figure class="janela"><img src="img/21-mundo-cidade.webp" alt="O bairro visto de cima, com prédios, praça, ruas e carros." width="760" height="647" loading="lazy"><figcaption>O seu bairro</figcaption></figure>
           </div>
         </article>
 
-        <article class="andar">
+        <article class="andar" data-andar="T">
           <p class="placa-andar placa-terreo"><span>T</span>No bolso</p>
           <div class="andar-texto">
             <h3>Cabe no celular.</h3>
@@ -194,23 +206,38 @@
       </div>
     </section>
 
-    <!-- PRINCÍPIOS -->
-    <section id="principios" class="faixa principios" aria-labelledby="titulo-principios">
-      <p class="olho">Regimento interno</p>
-      <h2 id="titulo-principios" class="titulo-secao">Quatro regras da firma.</h2>
-      <ol class="regras">
-        <li><span class="regra-num">01</span><h3>Zero token</h3><p>Nenhum modelo de IA é chamado para o escritório existir. Ele só lê o estado do time e desenha.</p></li>
-        <li><span class="regra-num">02</span><h3>Só leitura</h3><p>Por padrão, o escritório olha e não mexe. Responder pelo mapa é opcional e fica desligado até você ligar.</p></li>
-        <li><span class="regra-num">03</span><h3>Na sua máquina</h3><p>Roda no seu servidor, fechado na sua rede privada. Os dados do time não passam por nós.</p></li>
-        <li><span class="regra-num">04</span><h3>Código aberto</h3><p>AGPL-3.0, Python só com a biblioteca padrão e JavaScript puro. Sem build e sem caixa-preta.</p></li>
-      </ol>
+    <!-- TODO(content): trocar a estática pelo vídeo de lançamento da nova Firmópolis quando ele existir. -->
+    <section id="tv" class="tv-sala" aria-labelledby="titulo-tv">
+      <div class="faixa tv-grade">
+        <div class="tv" data-tv>
+          <span class="tv-antena" aria-hidden="true"></span>
+          <div class="tv-tela">
+            <canvas class="tv-chiado" aria-hidden="true"></canvas>
+            <p class="tv-texto"><span>Canal 6</span>Em breve</p>
+          </div>
+          <span class="tv-botoes" aria-hidden="true"><i></i><i></i></span>
+        </div>
+        <div class="tv-legenda">
+          <h2 id="titulo-tv" class="titulo-secao">O tour completo vai passar aqui.</h2>
+          <p>Quando a nova Firmópolis estiver montada, com a ponte local e o mascote, esta TV mostra o prédio inteiro funcionando, narrado em português.</p>
+          <a class="botao botao-vazado" href="https://github.com/HelbertMoura/escritorio-agentes/releases" rel="noopener">Acompanhar as versões</a>
+        </div>
+      </div>
     </section>
 
-    <!-- INSTALAR -->
+    <section id="mural" class="faixa mural" aria-labelledby="titulo-mural">
+      <h2 id="titulo-mural" class="titulo-secao">Regras da firma, pregadas no mural.</h2>
+      <ul class="avisos">
+        <li class="aviso aviso-amarelo"><h3>Zero token</h3><p>Nenhum modelo de IA é chamado para o escritório existir. Ele só lê o estado do time e desenha.</p></li>
+        <li class="aviso aviso-rosa"><h3>Só leitura</h3><p>Por padrão, o escritório olha e não mexe. Responder pelo mapa é opcional e começa desligado.</p></li>
+        <li class="aviso aviso-azul"><h3>Na sua máquina</h3><p>Roda no seu servidor, fechado na sua rede privada. Os dados do time não passam por nós.</p></li>
+        <li class="aviso aviso-verde"><h3>Código aberto</h3><p>AGPL-3.0, Python só com a biblioteca padrão e JavaScript puro. Sem build e sem caixa-preta.</p></li>
+      </ul>
+    </section>
+
     <section id="instalar" class="instalar" aria-labelledby="titulo-instalar">
       <div class="faixa instalar-grade">
         <div>
-          <p class="olho">Recepção</p>
           <h2 id="titulo-instalar" class="titulo-secao">Dois comandos e a firma abre.</h2>
           <p>Você precisa de um Linux com systemd, Python 3.10 ou mais novo e o Tailscale com HTTPS ligado. No fim, o instalador mostra o código do primeiro acesso.</p>
           <p>Prefere contêiner? Também tem Docker e Coolify.</p>
@@ -229,9 +256,7 @@ sudo AGENTES_ORG=<span class="var">&lt;id&gt;</span> bash instalar.sh</code></pr
       </div>
     </section>
 
-    <!-- PERGUNTAS -->
     <section id="perguntas" class="faixa perguntas" aria-labelledby="titulo-perguntas">
-      <p class="olho">Cafezinho</p>
       <h2 id="titulo-perguntas" class="titulo-secao">Perguntas de corredor.</h2>
       <details>
         <summary>A Firmópolis gasta tokens de IA?</summary>
@@ -258,84 +283,80 @@ sudo AGENTES_ORG=<span class="var">&lt;id&gt;</span> bash instalar.sh</code></pr
 
   <footer class="rodape">
     <section class="familia faixa" aria-labelledby="titulo-familia">
-      <p class="olho">da mesma família</p>
-      <h2 id="titulo-familia" class="titulo-secao">Outros projetos feitos com o mesmo carinho.</h2>
+      <h2 id="titulo-familia" class="titulo-secao">Da mesma família.</h2>
+      <p class="familia-sub">Outros projetos da Dev Maniac's, feitos com o mesmo carinho. Escolha um cartucho.</p>
       <ul class="cartuchos">
         <li>
-          <a class="cartucho" href="https://eco.devmaniacs.com.br" target="_blank" rel="noopener">
-            <span class="cartucho-arte"><img src="img/eco-hello.webp" alt="" width="320" height="320" loading="lazy"></span>
-            <span class="cartucho-olho">Universo ECO</span>
-            <strong>Ideias pequenas. Descobertas enormes.</strong>
+          <a class="cartucho cartucho-eco" href="https://eco.devmaniacs.com.br" target="_blank" rel="noopener">
+            <span class="cartucho-rotulo"><img src="img/eco-hello.webp" alt="" width="320" height="320" loading="lazy"></span>
+            <span class="cartucho-nome">Universo ECO</span>
             <span class="cartucho-desc">Histórias, criatividade e tecnologia para crianças e famílias.</span>
-            <span class="cartucho-cta">conhecer o ECO<span class="sr"> (abre em nova aba)</span></span>
+            <span class="sr"> (abre em nova aba)</span>
           </a>
         </li>
         <li>
-          <a class="cartucho" href="https://passoapasso.devmaniacs.com.br" target="_blank" rel="noopener">
-            <span class="cartucho-arte"><img src="img/eco-passos.webp" alt="" width="320" height="236" loading="lazy"></span>
-            <span class="cartucho-olho">ECO Passo a Passo</span>
-            <strong>Um passo de cada vez.</strong>
+          <a class="cartucho cartucho-passo" href="https://passoapasso.devmaniacs.com.br" target="_blank" rel="noopener">
+            <span class="cartucho-rotulo"><img src="img/eco-passos.webp" alt="" width="320" height="236" loading="lazy"></span>
+            <span class="cartucho-nome">ECO Passo a Passo</span>
             <span class="cartucho-desc">Rotinas para pessoas neurodivergentes, em passos pequenos e sem culpa.</span>
-            <span class="cartucho-cta">conhecer o Passo a Passo<span class="sr"> (abre em nova aba)</span></span>
+            <span class="sr"> (abre em nova aba)</span>
           </a>
         </li>
         <li>
-          <a class="cartucho" href="https://purpleribbon.devmaniacs.com.br" target="_blank" rel="noopener">
-            <span class="cartucho-arte"><img src="img/purple-ribbon.webp" alt="" width="160" height="160" loading="lazy"></span>
-            <span class="cartucho-olho">Purple Ribbon</span>
-            <strong>Um lugar quieto para as madrugadas.</strong>
-            <span class="cartucho-desc">Companhia para quem vive com dor crônica, no ritmo de cada um.</span>
-            <span class="cartucho-cta">conhecer o Purple Ribbon<span class="sr"> (abre em nova aba)</span></span>
+          <a class="cartucho cartucho-purple" href="https://purpleribbon.devmaniacs.com.br" target="_blank" rel="noopener">
+            <span class="cartucho-rotulo"><img src="img/purple-ribbon.webp" alt="" width="160" height="160" loading="lazy"></span>
+            <span class="cartucho-nome">Purple Ribbon</span>
+            <span class="cartucho-desc">Um lugar quieto para as madrugadas de quem vive com dor crônica.</span>
+            <span class="sr"> (abre em nova aba)</span>
           </a>
         </li>
         <li>
-          <a class="cartucho" href="https://eco.devmaniacs.com.br/jogo/" target="_blank" rel="noopener">
-            <span class="cartucho-arte cartucho-jogo">
-              <img src="img/eco-jogo.webp" alt="" width="720" height="405" loading="lazy">
-              <img class="cartucho-logo" src="img/eco-espectro-logo.webp" alt="" width="340" height="170" loading="lazy">
-            </span>
-            <span class="cartucho-olho">O jogo do ECO</span>
-            <strong>Eco do Espectro</strong>
-            <span class="cartucho-desc">Uma aventura sobre empatia e os jeitos diferentes de perceber o mundo.</span>
-            <span class="cartucho-cta">acompanhar o jogo<span class="sr"> (abre em nova aba)</span></span>
+          <a class="cartucho cartucho-jogo" href="https://eco.devmaniacs.com.br/jogo/" target="_blank" rel="noopener">
+            <span class="cartucho-rotulo"><img src="img/eco-jogo.webp" alt="" width="720" height="405" loading="lazy"><img class="cartucho-logo" src="img/eco-espectro-logo.webp" alt="" width="340" height="170" loading="lazy"></span>
+            <span class="cartucho-nome">Eco do Espectro</span>
+            <span class="cartucho-desc">O jogo do ECO, sobre empatia e os jeitos de perceber o mundo.</span>
+            <span class="sr"> (abre em nova aba)</span>
           </a>
         </li>
       </ul>
     </section>
 
-    <div class="calcada" aria-hidden="true"></div>
+    <div class="rodape-cena">
+      <canvas class="rua-noite" aria-hidden="true"></canvas>
+      <button class="chamar-elevador" type="button" aria-label="Voltar ao topo"><span aria-hidden="true">▲</span></button>
+    </div>
     <div class="rodape-chao">
       <div class="faixa rodape-base">
         <div class="rodape-marca">
           <a class="marca" href="./"><img src="img/favicon.svg" alt="" width="32" height="32"><span>Firmópolis</span></a>
           <p>O escritório vivo dos seus agentes. Um projeto aberto da <a href="https://devmaniacs.com.br" rel="noopener">Dev Maniac's</a>.</p>
         </div>
-        <div class="rodape-col">
-          <h2 class="rodape-titulo">O projeto</h2>
+        <nav class="rodape-col" aria-labelledby="rodape-projeto">
+          <h2 id="rodape-projeto" class="rodape-titulo">O projeto</h2>
           <ul>
             <li><a href="https://github.com/HelbertMoura/escritorio-agentes" rel="noopener">Código no GitHub</a></li>
             <li><a href="https://github.com/HelbertMoura/escritorio-agentes/releases" rel="noopener">Novidades</a></li>
             <li><a href="https://github.com/HelbertMoura/escritorio-agentes/blob/main/LICENSE" rel="noopener">Licença AGPL-3.0</a></li>
             <li><a href="https://github.com/HelbertMoura/escritorio-agentes/blob/main/SECURITY.md" rel="noopener">Segurança</a></li>
           </ul>
-        </div>
-        <div class="rodape-col">
-          <h2 class="rodape-titulo">Fale com a gente</h2>
+        </nav>
+        <nav class="rodape-col" aria-labelledby="rodape-contato">
+          <h2 id="rodape-contato" class="rodape-titulo">Fale com a gente</h2>
           <ul>
             <li><a href="mailto:contato@devmaniacs.com.br">contato@devmaniacs.com.br</a></li>
             <li><a href="https://github.com/HelbertMoura/escritorio-agentes/issues" rel="noopener">Abrir uma issue</a></li>
             <li><a href="https://agentes.chat" rel="noopener">agentes.chat</a></li>
           </ul>
-        </div>
+        </nav>
       </div>
       <div class="faixa rodape-fim">
-        <p>© <span data-ano>2026</span> Dev Maniac's. Arte do escritório gerada no PixelLab; fontes Pixeloid Sans e Figtree, sob a OFL.</p>
-        <p class="rodape-tchau"><canvas class="mascote-mini" width="64" height="64" aria-hidden="true"></canvas>até amanhã, firma.</p>
+        <p>© <span data-ano>2026</span> Dev Maniac's. Arte do escritório gerada no PixelLab. Fontes Pixeloid Sans e Figtree, sob a OFL.</p>
+        <p class="rodape-tchau">até amanhã, firma.</p>
       </div>
     </div>
   </footer>
 
-  <script src="abertura.js?v=1"></script>
-  <script src="site.js?v=1"></script>
+  <script src="abertura.js?v=2"></script>
+  <script src="site.js?v=2"></script>
 </body>
 </html>
