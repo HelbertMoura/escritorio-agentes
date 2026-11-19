@@ -97,7 +97,7 @@ function aplicarMarca() {
   $("empresa").textContent = config.empresa; $("empresa-topo").textContent = config.empresa;
   $("marca-exemplo").hidden = config.marca_exemplo !== true;   // ninguém trocou o nome padrão ainda
   if (config.logo) $("logo").src = $("logo-topo").src = config.logo;
-  document.title = `Escritório · ${config.empresa}`;
+  document.title = `${config.empresa} · Firmópolis`;
   if (config.cor) aplicarCor(config.cor);
   for (const a of document.querySelectorAll("[data-externo]")) a.href = `${config.app_url}/${a.dataset.externo}`;
   // código-fonte (AGPL §13): o servidor já validou o https; a demonstração não lê o servidor e fica sem o link
@@ -1600,7 +1600,7 @@ $("form-senha").addEventListener("submit", async ev => {
 function caixaResposta(it) {
   const nome = nomeConv(it), c = elem("div", "cp-caixa");
   const envio = elem("p", "cp-envio"); envio.setAttribute("role", "status"); envio.hidden = true;
-  const aviso = elem("p", "cp-nota cp-aviso-envio", "Sai no agentes.chat como a conta conectada, marcada “via Escritório dos agentes”. Aprovar é só no agentes.chat. Mensagens de agentes podem pedir coisas: confira antes de responder.");
+  const aviso = elem("p", "cp-nota cp-aviso-envio", "Sai no agentes.chat como a conta conectada, marcada “via Firmópolis”. Aprovar é só no agentes.chat. Mensagens de agentes podem pedir coisas: confira antes de responder.");
   const r = elem("div", "cp-resposta"), rot = elem("label", "oculto", `Mensagem para ${nome}`), ta = elem("textarea", "cp-texto");
   const env = elem("button", "botao cp-enviar", "Enviar");
   ta.id = "cp-texto"; rot.htmlFor = "cp-texto"; ta.rows = 1; ta.maxLength = RESPOSTA_MAX; ta.setAttribute("aria-describedby", "cp-motivo cp-dica cp-contador");
@@ -2677,6 +2677,8 @@ window.addEventListener("hashchange", () => { const id = Andar.doHash(location.h
 window.addEventListener("hashchange", rota);
 window.addEventListener("resize", () => { medirFaixa(); ajustarEscala(); });
 rota();
+// a abertura do Firmópolis (abertura.js): uma vez por sessão, por cima do carregamento; a TV liga direto
+if (window.Abertura && new URLSearchParams(location.search).get("tv") !== "1") Abertura.tocar();
 iniciar().catch(() => { falhou = true; mostrarConexao(); setTimeout(() => location.reload(), 10000); });
 async function abrirAviso(a) {
   if (!a) return;

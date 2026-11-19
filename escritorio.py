@@ -1,6 +1,6 @@
 # Copyright (C) 2026 Dev Maniac's
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Escritório dos agentes: página que mostra quem do time do agentes.chat está trabalhando.
+"""Firmópolis: página que mostra quem do time do agentes.chat está trabalhando.
 
 Lê o agentes.chat pelo conector MCP de apps externos (OAuth, escopo "read"; "read write" só com
 "conversas": "responder"), a cada ESCRITORIO_INTERVALO segundos, e guarda um resumo em memória.
@@ -182,6 +182,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "reunioes.js": "text/javascript; charset=utf-8", "reunioes.css": "text/css; charset=utf-8",
     "linha_tempo.js": "text/javascript; charset=utf-8", "linha_tempo.css": "text/css; charset=utf-8",
     "apresentacao.js": "text/javascript; charset=utf-8",
+    "abertura.js": "text/javascript; charset=utf-8",
     "manifest.webmanifest": "application/manifest+json", "icone-180.png": "image/png", "icone-192.png": "image/png",
     "icone-512.png": "image/png", "icone-mascara-512.png": "image/png",
 }
@@ -280,7 +281,7 @@ class Credenciais:
         for p in self.pendentes.values():
             if agora - p["em"] < self.VALIDADE and p["escopo"] == escopo and p["redirect_uri"] == self.redirect_uri():
                 return p["client_id"]
-        nome = "Escritório dos agentes" if "write" in escopo.split() else "Escritório dos agentes (leitura)"
+        nome = "Firmópolis" if "write" in escopo.split() else "Firmópolis (leitura)"
         corpo = {"client_name": nome, "redirect_uris": [self.redirect_uri()],
                  "grant_types": ["authorization_code", "refresh_token"], "response_types": ["code"],
                  "token_endpoint_auth_method": "none", "scope": escopo}
