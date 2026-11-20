@@ -163,7 +163,44 @@ const TimesAuto = (() => {
     return { times: lista, semVaga };
   }
 
-  return { MAX_TIMES, MAX_POR_TIME, OUTROS, chave, limpar, nomeValido, timeDoNome, timeDoPapel, lerLista, tipoSugerido, iconeSugerido,
+  // ---------- salas automáticas das bands do Maestri (só exibição: não vão ao servidor nem à planta) ----------
+  // vigia(): decide QUANDO o conjunto de bands com sala muda. Band nova entra depois de `atraso` (60 s) de conjunto
+  // diferente; band sem terminal fica com a sala até `carencia` (5 min) sem uso. A primeira leitura com bands vale na hora.
+  function vigia({ atraso = 60000, carencia = 300000 } = {}) {
+    const visto = new Map();   // chave → { nome, em }: a última vez em uso
+    let valendo = [], diferenteDesde = null, comecou = false;
+    const assinatura = l => l.map(chave).sort().join("\n");
+    return function passo(emUso, agora) {
+      for (const n of emUso || []) {   // a grafia que chegou primeiro fica
+        const nome = limpar(n), k = chave(nome);
+        if (nome) visto.set(k, { nome: visto.has(k) ? visto.get(k).nome : nome, em: agora });
+      }
+      for (const [k, v] of visto) if (agora - v.em >= carencia) visto.delete(k);   // histerese: só some depois da carência
+      const quer = [...visto.values()].map(v => v.nome);
+      if (assinatura(quer) === assinatura(valendo)) { diferenteDesde = null; return valendo; }
+      if (!comecou && quer.length) { comecou = true; valendo = quer; return valendo; }
+      if (diferenteDesde === null) diferenteDesde = agora;
+      if (agora - diferenteDesde >= atraso) { valendo = quer; diferenteDesde = null; comecou = true; }
+      return valendo;
+    };
+  }
+  // as salas: time sem agentes, com o nome da band; nenhuma se já há time de mesmo nome (o terminal vai para ele), e só
+  // até o teto de times do prédio (as que passam ficam sem sala: o terminal segue a semente)
+  const CORES_SALA = ["#3b82f6", "#22c55e", "#a855f7", "#f97316", "#e8587a", "#14b8a6", "#f5b83d", "#64748b"];
+  function salasDasBands(nomes, times, max = MAX_TIMES) {
+    const ja = new Set((times || []).map(t => chave(t.nome))), salas = [];
+    for (const n of nomes || []) {
+      const nome = limpar(n), k = chave(nome);
+      if (!nome || ja.has(k) || (times || []).length + salas.length >= max) continue;
+      ja.add(k);
+      let h = 7; for (const ch of k) h = (h * 31 + ch.charCodeAt(0)) % 9973;
+      salas.push({ nome, tipo: tipoSugerido(nome), cor: CORES_SALA[h % CORES_SALA.length], icone: iconeSugerido(nome),
+        parede: h % 6, piso: h % 10, agentes: [], virtual: true });
+    }
+    return salas;
+  }
+
+  return { MAX_TIMES, MAX_POR_TIME, OUTROS, vigia, salasDasBands, chave, limpar, nomeValido, timeDoNome, timeDoPapel, lerLista, tipoSugerido, iconeSugerido,
     agrupar, teto, comBands, juntar, tirar, erroPrevia, montar };
 })();
 if (typeof window !== "undefined") window.TimesAuto = TimesAuto;

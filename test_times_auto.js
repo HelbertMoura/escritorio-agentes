@@ -109,3 +109,36 @@ assert.deepEqual([m.times[2].tipo, m.times[2].cor, m.times[2].parede, m.times[2]
 // nada dá time: nenhum time, todos em Novos
 r = T.agrupar([{ handle: "lodi", nome: "Lodi", funcao: "" }], "");
 assert.deepEqual([r.times.length, [...r.novos]], [0, ["lodi"]]);
+
+// salas automáticas das bands: o conjunto, o atraso de 60 s, a carência de 5 min e o teto
+const S = 1000, MIN = 60 * S;
+let v = T.vigia();
+assert.deepEqual([...v([], 0)], [], "sem band, sem sala");
+assert.deepEqual([...v(["Esquadrão DM", "esquadrao dm"], 1 * S)], ["Esquadrão DM"], "a primeira leitura com bands vale na hora, sem repetir");
+assert.deepEqual([...v(["Esquadrão DM", "Braçal"], 2 * S)], ["Esquadrão DM"], "band nova espera");
+assert.deepEqual([...v(["Esquadrão DM", "Braçal"], 61 * S)], ["Esquadrão DM"], "ainda não deu 60 s");
+assert.deepEqual([...v(["Esquadrão DM", "Braçal"], 62 * S)].sort(), ["Braçal", "Esquadrão DM"], "60 s depois, entra");
+// a Braçal fica sem terminal: a sala segue por 5 min (histerese) e só então sai, ainda com o atraso de 60 s
+assert.equal(v(["Esquadrão DM"], 3 * MIN).length, 2);
+assert.equal(v(["Esquadrão DM"], 62 * S + 5 * MIN - S).length, 2, "antes dos 5 min, fica");
+assert.equal(v(["Esquadrão DM"], 62 * S + 5 * MIN).length, 2, "passou a carência: começa o atraso");
+assert.deepEqual([...v(["Esquadrão DM"], 62 * S + 6 * MIN)], ["Esquadrão DM"], "e sai");
+// pisca (some e volta antes da carência): nada muda
+v = T.vigia();
+v(["A"], 0);
+for (let t = 10 * S; t < 4 * MIN; t += 10 * S) assert.deepEqual([...v(t % (20 * S) ? [] : ["A"], t)], ["A"]);
+// band que aparece um instante: conta como em uso pela carência, e entra 60 s depois da primeira vez
+v = T.vigia();
+v(["A"], 0); v(["A", "B"], 10 * S);
+assert.deepEqual([...v(["A"], 69 * S)], ["A"]);
+assert.deepEqual([...v(["A"], 70 * S)], ["A", "B"]);
+
+// as salas: nenhuma para band com time de mesmo nome, e o teto de 12 times
+const salas = T.salasDasBands(["Arte", "Esquadrão DM", "infra", "Braçal"], [{ nome: "Infra" }, { nome: "arte" }]);
+assert.deepEqual(salas.map(s => [s.nome, s.virtual, s.agentes.length]), [["Esquadrão DM", true, 0], ["Braçal", true, 0]]);
+assert.ok(/^#[0-9a-f]{6}$/.test(salas[0].cor) && salas[0].icone === "pessoas" && salas[0].tipo === "mesas");
+assert.equal(T.salasDasBands(["NOC Maestri"], [])[0].tipo, "ops", "tipo e ícone pelo nome");
+assert.equal(T.salasDasBands(["Esquadrão DM"], [])[0].cor, T.salasDasBands(["esquadrao dm"], [])[0].cor, "a cor sai do nome");
+const onze = Array.from({ length: 11 }, (_, i) => ({ nome: `T${i}` }));
+assert.deepEqual(T.salasDasBands(["X", "Y", "Z"], onze).map(s => s.nome), ["X"], "só cabe uma");
+assert.deepEqual(T.salasDasBands(["X"], [...onze, { nome: "T11" }]), [], "prédio cheio: nenhuma");

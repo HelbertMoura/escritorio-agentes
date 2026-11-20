@@ -133,11 +133,20 @@ function aparencia(handle) {
   return Object.hasOwn(config.aparencia, handle) ? config.aparencia[handle] : Avatar.padrao(handle);
 }
 
-// Reconstrói o prédio quando muda a lista de agentes ou de times.
+// salas automáticas das bands do Maestri em uso (ponte.js): só nesta tela, nunca no servidor; o vigia segura a remontagem
+// (60 s para band nova, 5 min para tirar a sala de quem ficou sem terminal)
+const vigiaBands = window.TimesAuto ? TimesAuto.vigia() : () => [];
+function salasDasBands() {
+  if (!window.TimesAuto || Brincar.demo) return [];
+  const emUso = window.Ponte && typeof window.Ponte.bands === "function" ? window.Ponte.bands() : [];
+  return TimesAuto.salasDasBands(vigiaBands(emUso, Date.now()), config.times);
+}
+
+// Reconstrói o prédio quando muda a lista de agentes ou de times (ou o conjunto de salas das bands).
 function montar(agentes) {
   const conhecidos = new Set(agentes.map(a => a.handle));
   const usados = new Set();
-  const grupos = config.times.map(t => {
+  const grupos = [...config.times, ...salasDasBands()].map(t => {
     const hs = t.agentes.filter(h => conhecidos.has(h));
     hs.forEach(h => usados.add(h));
     return { ...t, handles: hs };
