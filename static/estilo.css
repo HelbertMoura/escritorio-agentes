@@ -606,6 +606,24 @@ button.linha-resolvido:hover { background: rgba(255, 255, 255, .04); }
 .st-linha input { flex: 1 1 220px; }
 .st-linha .botao { min-height: 44px; flex: none; }
 .selo-nao-visto { height: 20px; padding: 0 8px; border-radius: 0; font-size: 11.5px; font-weight: 700; display: inline-flex; align-items: center; background: var(--cartao3); color: var(--texto2); }
+/* Montar os times automaticamente: a prévia (ajustes.js) */
+.auto-previa { display: flex; flex-direction: column; gap: 10px; margin: 0 0 14px; padding: 14px; background: var(--cartao2); border: 1px solid var(--borda); }
+.auto-previa h4 { margin: 0; font-size: 15px; }
+.auto-resumo { margin: 0; font-weight: 700; color: var(--texto); }
+.auto-resumo:focus { outline: none; }
+.auto-times { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.auto-time { padding: 10px 0; border-top: 1px solid var(--borda); }
+.auto-time:first-child { border-top: 0; }
+.auto-topo { display: flex; flex-wrap: wrap; align-items: end; gap: 6px 12px; }
+.auto-topo > .campo { flex: 1 1 180px; max-width: 280px; }
+.auto-topo > .suave { flex: 1 1 200px; font-size: 13px; padding-bottom: 12px; }
+.auto-agentes { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.auto-agente { display: inline-flex; align-items: center; gap: 2px; padding-left: 10px; background: var(--cartao3); font-size: 13.5px; }
+.auto-tirar { min-width: 32px; min-height: 32px; border: 0; background: none; color: var(--texto2); font-size: 18px; cursor: pointer; }
+.auto-tirar:hover, .auto-tirar:focus-visible { color: var(--texto); background: var(--cartao); }
+.auto-lista summary { min-height: 32px; display: inline-flex; align-items: center; font-weight: 600; cursor: pointer; }
+.auto-lista textarea { display: block; width: 100%; margin: 6px 0 8px; font-family: ui-monospace, monospace; font-size: 13px; }
+@media (pointer: coarse) { .auto-tirar, .auto-lista summary { min-width: 44px; min-height: 44px; } }
 @media (max-width: 900px) {
   .time-linha { grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: none; align-items: end; }
   .time-linha > .campo:nth-of-type(1) { grid-column: 2 / 4; }

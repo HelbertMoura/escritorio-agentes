@@ -216,6 +216,9 @@ const Ponte = (() => {
   const ws = id => st.workspaces.get(id);
   return { terminais: () => [...st.moradores.values()], versao: () => st.v, situacao,
     dia: id => (st.dia.get(id) || []).map(e => ({ ...e })),
-    workspace: id => (ws(id) ? ws(id).nome : ""), band: (wsId, bandId) => (ws(wsId) && ws(wsId).bands.get(bandId)) || "" };
+    workspace: id => (ws(id) ? ws(id).nome : ""), band: (wsId, bandId) => (ws(wsId) && ws(wsId).bands.get(bandId)) || "",
+    // as bands em uso: o nome da band (ou do workspace, para o terminal sem band) de cada terminal vivo, sem repetir
+    bands: () => [...new Set([...st.moradores.values()].map(m => (m.band && ws(m.workspace) && ws(m.workspace).bands.get(m.band)) ||
+      (!m.band && ws(m.workspace) ? ws(m.workspace).nome : "")).filter(Boolean))] };
 })();
 window.Ponte = Ponte;

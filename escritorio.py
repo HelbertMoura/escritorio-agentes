@@ -191,7 +191,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "reunioes.js": "text/javascript; charset=utf-8", "reunioes.css": "text/css; charset=utf-8",
     "linha_tempo.js": "text/javascript; charset=utf-8", "linha_tempo.css": "text/css; charset=utf-8",
     "apresentacao.js": "text/javascript; charset=utf-8",
-    "abertura.js": "text/javascript; charset=utf-8",
+    "abertura.js": "text/javascript; charset=utf-8", "times_auto.js": "text/javascript; charset=utf-8",
     "manifest.webmanifest": "application/manifest+json", "icone-180.png": "image/png", "icone-192.png": "image/png",
     "icone-512.png": "image/png", "icone-mascara-512.png": "image/png",
 }
@@ -633,28 +633,58 @@ def limpa_rotulo(txt, nomes=None):
 
 
 # o setor (department) e a aparência que o list_agents do agentes.chat manda desde a versão que os expõe:
-# só valores das listas fechadas dele, para a tela Configurações copiar os setores como times
+# só valores das listas do escritório, para a tela Configurações montar os times (Montar os times automaticamente)
 CORES_SETOR = {"indigo", "violet", "rose", "amber", "green", "teal", "graphite"}
 ICONES_SETOR = {"shield", "code", "wallet", "mail", "bolt", "flag", "book", "chart", "bulb", "globe", "pullRequest",
                 "calendar", "message", "eye", "plug", "person"}
+# a cor base de cada cor do boneco (a mesma do static/avatar.js), para a cor #hex do agentes.chat virar a mais próxima
+BASE_CORES = {"amber": "#f2a93b", "teal": "#33b3a0", "rose": "#e8587a", "green": "#3fb35c", "indigo": "#5b62e8",
+              "sky": "#3a92e6", "violet": "#9566e6", "graphite": "#64646e"}
+HEX_COR = re.compile(r"#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})")
+
+
+def _so_str(v, reserva=""):
+    return v if isinstance(v, str) else reserva
+
+
+def _rgb(h):
+    h = h[1:] if len(h) == 7 else "".join(c * 2 for c in h[1:])
+    return [int(h[i:i + 2], 16) for i in (0, 2, 4)]
+
+
+def cor_da_lista(c):
+    """A cor do boneco: o nome, se for da lista; #rgb ou #rrggbb vira a cor da lista mais próxima; o resto, None."""
+    if isinstance(c, str) and c in ajustes.CORES:
+        return c
+    if not isinstance(c, str) or not HEX_COR.fullmatch(c):
+        return None
+    rgb = _rgb(c)
+    return min(sorted(BASE_CORES), key=lambda k: sum((a - b) ** 2 for a, b in zip(rgb, _rgb(BASE_CORES[k]))))
 
 
 def setor_do_agente(d):
-    """{"nome", "cor", "icone", "ordem"} do department do list_agents, ou None (sem setor ou fora do formato)."""
+    """{"nome", "cor", "icone", "ordem"} do department do list_agents, ou None (sem setor ou fora do formato).
+    O department pode ser só o nome do grupo (texto) ou {name, color, icon, position}; a cor #rrggbb vale como cor do time."""
+    if isinstance(d, str):
+        d = {"name": d}
     if not isinstance(d, dict) or not isinstance(d.get("name"), str) or not d["name"].strip():
         return None
-    ordem = d.get("position")
-    return {"nome": d["name"].strip()[:80], "cor": d.get("color") if d.get("color") in CORES_SETOR else None,
-            "icone": d.get("icon") if d.get("icon") in ICONES_SETOR else None,
+    ordem, cor, icone = d.get("position"), _so_str(d.get("color")), _so_str(d.get("icon"))
+    cor = cor if cor in CORES_SETOR else cor.lower() if re.fullmatch(r"#[0-9a-fA-F]{6}", cor) else None
+    return {"nome": d["name"].strip()[:80], "cor": cor, "icone": icone if icone in ICONES_SETOR else None,
             "ordem": ordem if type(ordem) is int and 0 <= ordem < 1000 else 999}
 
 
 def aparencia_do_agente(a):
-    """A aparência do agentes.chat que o escritório sabe desenhar, ou None. Acessório que ele não tem vira nenhum."""
-    if not isinstance(a, dict) or a.get("color") not in ajustes.CORES or a.get("eyes") not in ajustes.OLHOS:
+    """Só o que o escritório sabe desenhar, campo a campo: cor (#hex vira a mais próxima), olhos e acessório da lista.
+    Campo fora da lista some (a tela completa com o boneco automático); nada aproveitável: None."""
+    if not isinstance(a, dict):
         return None
-    acessorio = a.get("accessory")
-    return {"color": a["color"], "eyes": a["eyes"], "accessory": acessorio if acessorio in ajustes.ACESSORIOS else ""}
+    olhos, acessorio = _so_str(a.get("eyes")), _so_str(a.get("accessory"), None)
+    ap = {"color": cor_da_lista(a.get("color")), "eyes": olhos if olhos in ajustes.OLHOS else None,
+          "accessory": acessorio if acessorio in ajustes.ACESSORIOS else None}
+    ap = {k: v for k, v in ap.items() if v is not None}
+    return ap or None
 
 
 def normalizar(agentes, tarefas, url_app=None):
