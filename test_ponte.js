@@ -92,9 +92,9 @@ assert.equal(Ponte.workspace("w32"), "W30", "controle sai");
 assert.equal(Ponte.workspace("w33"), "", "32 workspaces");
 assert.equal(Ponte.workspace("nada"), ""); assert.equal(Ponte.band("nada", "b1"), "");
 // só as bands em uso (com terminal vivo) viram sugestão de sala; a band "B" das 30 vazias não entra
-assert.deepEqual([...Ponte.bands()], ["Front"]);
+assert.deepEqual([...Ponte.bands()], ["Loja"], "a sala é o workspace, não a band");
 mensagem(ws, { v: 1, tipo: "morador", morador: morador("r", "ocupado", { workspace_id: "w2", band_id: null }) });
-assert.deepEqual([...Ponte.bands()], ["Front", "W0"], "sem band, o nome do workspace");
+assert.deepEqual([...Ponte.bands()], ["Loja", "W0"], "um por workspace em uso");
 
 // o dia: por morador, com a hora em ms, o estado traduzido (desconhecido sai), a ferramenta cortada e os 200 mais novos
 const evs = [{ ts: "2026-11-20T10:05:00Z", morador_id: "m", estado: "ocioso", ferramenta: "" },

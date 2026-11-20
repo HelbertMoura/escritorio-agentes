@@ -1124,6 +1124,8 @@ function montar(atlas, config, grupos, planta) {
       const cabe = x => portasCima.every(p => x + w < p - 20 || x > p + 20) && cheios.every(([a, b, ya, yb]) => x + w + 3 < a || x - 3 > b || yb < topo || ya > cT + 4);
       let x = x1 - 10 - w;
       while (x > x0 + 40 && !cabe(x)) x -= 2;
+      // parede de cima toda tomada (muitos times): a porta vai no fundo do corredor, na ponta direita, só desviando das portas
+      if (x <= x0 + 40) { x = x1 - 10 - w; while (x > x0 + 40 && !portasCima.every(p => x + w < p - 20 || x > p + 20)) x -= 2; }
       if (x > x0 + 40) { banheiro = { x: x + w / 2, y: corredorY, px: x, sp: wc }; placasCima.push([x - 4, x + w + 4]); }
     }
     const tetoLivre = x => portasCima.every(p => Math.abs(p - x) > 16) && placasCima.every(([a, b]) => x < a - 4 || x > b + 4);
