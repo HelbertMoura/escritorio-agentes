@@ -4,7 +4,15 @@
 
 As mudanças que importam neste projeto ficam aqui, da mais nova para a mais antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Desde a 1.1.0, as versões seguem o [SemVer](https://semver.org/lang/pt-BR/); as entradas mais antigas são marcos com data.
 
-## Não lançado · Firmópolis
+## Não lançado
+
+### Mudado
+- **A identidade do site no app inteiro:** a tela de entrar, o primeiro acesso, o convite, a visita, o Mundo e o app por dentro usam a mesma marca de [firmopolis.devmaniacs.com.br](https://firmopolis.devmaniacs.com.br): Figtree no texto, Pixeloid nos títulos, a paleta noite, grafite, creme, âmbar e índigo, cantos retos ou em degrau, botões em bisel e sombra dura. As telas de fora ganharam o céu noturno com a janela acesa do escritório. O mapa e a arte pixel não mudaram.
+- As fontes Source Sans 3 e Doto saíram; a Pixeloid Sans (OFL) entrou em `static/fontes/`.
+
+## 2.0.0 · 2026-11-20 · Firmópolis
+
+Release [`v2.0.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2.0.0). Commits: [`v1.6.0...v2.0.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.6.0...v2.0.0).
 
 ### Adicionado
 - **Novo nome: Firmópolis.** O Escritório de agentes se juntou ao Escritório Vivo. A aba, o app instalável, o convite e o modo construção trazem o nome e os ícones novos, e uma abertura curta roda uma vez por sessão (pode ser pulada, e não roda no modo TV).
@@ -12,6 +20,12 @@ As mudanças que importam neste projeto ficam aqui, da mais nova para a mais ant
 - **Três espécies no mapa:** os bichinhos de feltro são os agentes do agentes.chat, os terminaizinhos são os terminais locais e a gente são você e as visitas.
 - **Café e conversa dos terminais:** livres, os terminaizinhos vão à cafeteira ou conversam no corredor, conforme as necessidades que caem enquanto trabalham.
 - **Seletor da gente:** no perfil e no convite, você escolhe a blusa, o cabelo e a pele de como aparece no mapa.
+- **A vida dos terminais:** além de café e conversa, os terminaizinhos jogam sozinhos ou em dupla, comem, cochilam e vão ao banheiro, cada um pela necessidade que apertou. Eles ficam na sala do time deles (pela band do Maestri), o Maestro vai à sala de reunião com uma coroa, e quem se encontra ganha afinidade.
+- **Banheiro com fila:** uma porta WC no fim do corredor, com fila que anda. Quem está muito apertado fura a fila e perde afinidade com quem passou.
+- **Cartão do terminal:** clicar num terminaizinho mostra o programa, o estado, o time, há quanto tempo está aberto, as necessidades, as maiores afinidades e o dia dele.
+- **Terminais nos contadores:** os widgets e o painel contam os terminais da ponte junto com os agentes: quem trabalha, quem espera você e quem está livre.
+- **O prédio visto de frente:** embaixo do mapa, a fachada com porta, janelas, arandelas que acendem à noite e floreiras, em arte nova do PixelLab.
+- **O Bairro novo:** a vista da rua na página Mundo foi refeita com arte nova do PixelLab (chalés, árvores, postes, banco, carros e pessoas), de dia e de noite.
 
 ### Mudado
 - **Integrações da ponte:** a marca dos hooks passou de `escritorio-vivo` para `firmopolis`. O `ponte setup --aplicar` migra quem vem do Escritório Vivo, com a config, o token e o histórico, e só apaga um plugin antigo quando confirma que foi a ponte que o instalou.

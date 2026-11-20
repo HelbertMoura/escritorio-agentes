@@ -63,7 +63,7 @@ from social import PLACAR_BYTES, PLACAR_MAX, PLACAR_TETO, Social  # noqa: E402
 from visitas_sala import Salas, LimiteRequisicoes  # noqa: E402
 from presenca import Limite as LimitePresenca, Presenca  # noqa: E402
 
-VERSAO = "1.6.0"
+VERSAO = "2.0.0"
 AGENTES_PADRAO = "https://app.agentes.chat"
 # a nuvem ou a sua instalação self-host (o PUBLIC_URL dela): o main() confere (erro_agentes)
 AGENTES = os.environ.get("AGENTES_URL", "").strip().rstrip("/") or AGENTES_PADRAO
@@ -167,7 +167,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "mundo/atlas.png": "image/png", "mundo/atlas.json": "application/json",
     "mundo/bairro.png": "image/png", "mundo/bairro.json": "application/json",
     "logo.png": "image/png", "fontes/figtree.ttf": "font/ttf", "fontes/silkscreen.ttf": "font/ttf",
-    "fontes/source-sans-3.woff2": "font/woff2", "fontes/doto.woff2": "font/woff2",
+    "fontes/PixeloidSans.woff2": "font/woff2",
     "entrar.css": "text/css; charset=utf-8", "entrar.js": "text/javascript; charset=utf-8",
     "convite.html": "text/html; charset=utf-8", "convite.js": "text/javascript; charset=utf-8",
     "convite.css": "text/css; charset=utf-8", "chat_sala.js": "text/javascript; charset=utf-8",
@@ -427,7 +427,13 @@ class Credenciais:
             return self.dados["access_token"]
 
 
+# um User-Agent próprio: o padrão do Python (Python-urllib) é barrado pela Cloudflare (erro 1010) na frente de self-hosts
+AGENTE_HTTP = f"Firmopolis/{VERSAO} (+https://github.com/HelbertMoura/escritorio-agentes)"
+
+
 def _abrir(req):
+    if not req.has_header("User-agent"):
+        req.add_header("User-Agent", AGENTE_HTTP)
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
             return r.status, dict(r.headers), r.read(2_000_000)
@@ -2722,7 +2728,7 @@ def geometria_visita(config, foto, planta):
     return {"grupos": grupos, "planta": {"rev": 0, "salas": pinturas, "moveis": moveis, "novos": novos}}
 
 
-PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "sprites.js", "convite.html", "convite.js", "convite.css", "fontes/figtree.ttf", "fontes/silkscreen.ttf", "fontes/source-sans-3.woff2",
+PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "sprites.js", "convite.html", "convite.js", "convite.css", "fontes/figtree.ttf", "fontes/silkscreen.ttf",
             "visita.html", "visita.js", "visita.css", "mapa.js", "tema/atlas.png", "tema/atlas.json",
             "mundo.html", "mundo.js", "ceu.js", "clima.js", "som.js",  # bairro público: só código de desenho e som, sem dados
             # mapa do mundo: imagens, cidades e código de desenho, sem dados do escritório
@@ -2730,7 +2736,7 @@ PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "sprites.js", "convite.html"
             "mundo_globo.js", "mundo_mapa.js", "mundo_mapa_arte.js", "mundo_cidade.js", "mundo_cidade_planta.js", "mundo_bairro.js",
             "mundo_festa.js", "mundo_cidade_chao.js", "mundo_cidade_letreiro.js", "mundo_mapa_perto.js", *AZULEJOS_PERTO, "mundo/perto/ufs.json",
             "festas.js",  # o calendário embutido; as datas próprias só chegam pelo /api/config
-            "fontes/doto.woff2", "logo.png",  # liberados na tela de login
+            "fontes/PixeloidSans.woff2", "logo.png",  # liberados na tela de login
             # PWA: o navegador busca o manifesto sem cookie; nenhum deles tem segredo. O sw.js fica na raiz (escopo /)
             "manifest.webmanifest", "sw.js", "icone-180.png", "icone-192.png", "icone-512.png", "icone-mascara-512.png"}
 
