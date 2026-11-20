@@ -134,7 +134,60 @@
       </div>
 
       <div class="faixa andares">
-        <div class="poco" aria-hidden="true"><div class="elevador"><canvas class="elevador-mascote" width="32" height="32"></canvas><span class="elevador-visor">8</span></div></div>
+        <div class="poco" aria-hidden="true"><div class="elevador"><canvas class="elevador-mascote" width="32" height="32"></canvas><span class="elevador-visor">12</span></div></div>
+
+        <article class="andar" data-andar="12">
+          <p class="placa-andar"><span>12</span>Rádio</p>
+          <div class="andar-texto">
+            <h3>A firma tem rádio.</h3>
+            <p>Um rádio na parede da sala comunal toca a Rádio Firmópolis, composta na hora pelo próprio navegador: Lo-fi da firma, Chiptune do fliperama e Jazz da cafeteria. Nenhum arquivo de áudio e nenhum direito autoral. A música não repete em laço, e quem está livre por perto dança de vez em quando.</p>
+            <p>Cada pessoa liga o seu, com um clique. Se a empresa preferir, o admin põe uma rádio da internet como quarta estação.</p>
+          </div>
+          <figure class="janela janela-larga">
+            <img src="img/radio.webp" alt="O controle da Rádio Firmópolis aberto em cima da sala comunal, tocando Lo-fi da firma, com as estações Chiptune do fliperama e Jazz da cafeteria e o volume." width="960" height="600" loading="lazy" decoding="async">
+            <figcaption>O rádio ligado no Lo-fi da firma, no modo demonstração.</figcaption>
+          </figure>
+        </article>
+
+        <article class="andar andar-social andar-invertido" data-andar="11">
+          <p class="placa-andar"><span>11</span>Zeladoria</p>
+          <div class="andar-texto">
+            <h3>Alguém tem que limpar isso.</h3>
+            <p>O banheiro suja a cada uso. Sujo demais, ganha moscas e fica interditado, e a fila espera ou desiste. A faxineira chega de balde e rodo, o zelador conserta a cafeteira quebrada e o porteiro cumprimenta quem entra (de noite, é o vigia com a lanterna).</p>
+            <p>Clique em alguém da equipe para ver o que está fazendo.</p>
+          </div>
+          <div class="mural-fotos">
+            <figure class="foto foto-a"><img src="img/z-banheiro.webp" alt="Dois terminaizinhos na fila do banheiro, com a placa de interditado e o balão 'Interditado' na porta WC." width="880" height="520" loading="lazy" decoding="async"><figcaption>Interditado</figcaption></figure>
+            <figure class="foto foto-b"><img src="img/z-faxina.webp" alt="A faxineira Dona Rosa limpando a porta do banheiro com balde e rodo." width="720" height="440" loading="lazy" decoding="async"><figcaption>A faxina chegou</figcaption></figure>
+            <figure class="foto foto-c"><img src="img/z-zelador.webp" alt="A zeladora Dona Neide com a caixa de ferramentas na cozinha, ao lado da cafeteira com o balão 'Quebrada!'." width="720" height="440" loading="lazy" decoding="async"><figcaption>Cafeteira quebrada</figcaption></figure>
+          </div>
+        </article>
+
+        <article class="andar" data-andar="10">
+          <p class="placa-andar"><span>10</span>Terminais</p>
+          <div class="andar-texto">
+            <h3>Os terminais da sua máquina, no mapa.</h3>
+            <p>Pela ponte local, cada Claude Code, Codex, agy, OpenCode e MiniMax aberto vira um terminalzinho. Com o Maestri, cada workspace em uso ganha a sua sala sozinho, e o Maestro vai à sala de reunião de coroa. Um clique no terminalzinho mostra o programa, o estado e o dia dele.</p>
+            <p>Os terminais estão numa VM? O espelho manda para o seu escritório, sem túnel, com um comando só: <code>ponte conectar</code>.</p>
+          </div>
+          <figure class="janela janela-larga">
+            <img src="img/terminais-maestri.webp" alt="O prédio com terminaizinhos de vários programas nas salas Loja e Front, criadas sozinhas para o Maestri, e a Ada, o Maestro, na sala de reunião." width="960" height="600" loading="lazy" decoding="async">
+            <figcaption>Terminais fictícios de cinco programas, com as salas automáticas do Maestri.</figcaption>
+          </figure>
+        </article>
+
+        <article class="andar andar-invertido" data-andar="9">
+          <p class="placa-andar"><span>9</span>Por cidade</p>
+          <div class="andar-texto">
+            <h3>Um andar em São Paulo, outro em Tóquio.</h3>
+            <p>Cada andar do prédio pode ficar numa cidade, com o tempo e a hora de lá. Enquanto o térreo trabalha de manhã, o andar do outro lado do mundo já fechou o expediente, e o vigia faz a ronda.</p>
+            <p>E os times se montam sozinhos: pelo setor do agentes.chat, pelo nome ou pelo papel de cada agente, com uma prévia para ajustar antes de salvar.</p>
+          </div>
+          <figure class="janela janela-larga">
+            <img src="img/andares-cidades.webp" alt="Dois andares do mesmo prédio: em cima, o Térreo em São Paulo às 10h30, de dia; embaixo, o 2º andar em Tóquio às 22h30, de noite e fora do expediente." width="960" height="600" loading="lazy" decoding="async">
+            <figcaption>O mesmo instante em dois andares: São Paulo de manhã, Tóquio de noite.</figcaption>
+          </figure>
+        </article>
 
         <article class="andar" data-andar="8">
           <p class="placa-andar"><span>8</span>Escritório</p>
@@ -339,6 +392,8 @@
             <li><strong>Mapa vivo</strong><span>Com tarefa, o agente vai para a mesa e digita. Livre, joga fliperama, sinuca, pebolim, xadrez ou dardos, toca violão e toma café. Chega de manhã e vai embora à noite.</span></li>
             <li><strong>21 poses e 45 sons</strong><span>Jogos em dupla com torcida, &quot;toca aqui&quot;, robô aspirador à noite e sons sintetizados no navegador, cada categoria com o seu volume.</span></li>
             <li><strong>Objetos clicáveis</strong><span>A TV de 5 canais, os fliperamas, a jukebox, a cafeteira, o aquário, o gato, a lousa de código e o sino das vendas, entre outros.</span></li>
+            <li><strong>Rádio da firma</strong><span>Três estações compostas na hora pelo navegador, sem arquivo de áudio, e uma rádio da internet se a empresa quiser.</span></li>
+            <li><strong>Zeladoria</strong><span>Banheiro que suja e interdita, faxineira, zelador para o que quebra e porteiro na entrada.</span></li>
             <li><strong>Câmera</strong><span>Zoom pela roda ou pela pinça, duplo clique para focar uma sala e &quot;Ir para…&quot; um agente com Ctrl+K.</span></li>
           </ul>
         </div>
@@ -349,6 +404,7 @@
             <li><strong>Conversas</strong><span>A lista do dia das conversas dos agentes, desligada por padrão. Responder pelo mapa também é opcional.</span></li>
             <li><strong>Equipe</strong><span>Contas por convite, chat geral, salas e DM com menções e anexos, mural, status e reuniões com agenda.</span></li>
             <li><strong>Visitas</strong><span>Quem da equipe está com o escritório aberto aparece no mapa, e um link de 1 hora traz alguém de fora para a sala de reunião.</span></li>
+            <li><strong>Terminais da sua máquina</strong><span>Pela ponte local, ou de outra máquina pelo espelho, sem túnel. O Maestri ganha uma sala por workspace.</span></li>
             <li><strong>Jornal da semana</strong><span>Manchete, notas e os números de cada agente nesta semana e na passada.</span></li>
           </ul>
         </div>
@@ -367,7 +423,8 @@
           <ul>
             <li><strong>Personalizar</strong><span>Nome, cor, logo, cidade do clima, datas comemorativas, times e a aparência de cada agente.</span></li>
             <li><strong>Modo construção</strong><span>Pinte as salas, arraste e espelhe os móveis e ponha enfeites, com desfazer. A planta salva vale para todos.</span></li>
-            <li><strong>Andares</strong><span>Cada workspace vira um andar, e o térreo é um saguão comum a todas as empresas.</span></li>
+            <li><strong>Times automáticos</strong><span>Pelo setor, pelo nome ou pelo papel de cada agente, com prévia antes de salvar.</span></li>
+            <li><strong>Andares por cidade</strong><span>Cada workspace vira um andar, cada andar com a cidade, o tempo e a hora dele, e o térreo é um saguão comum.</span></li>
             <li><strong>Vida social e modo sério</strong><span>Amizades, briga no ringue com placar, fofoca e greve. Um interruptor pausa tudo isso para apresentar.</span></li>
             <li><strong>App e aviso no celular</strong><span>Instale na tela de início e receba um aviso quando um agente pedir você.</span></li>
           </ul>
@@ -375,7 +432,7 @@
         </div>
         <div class="quadro-obra">
           <h3>Em obra</h3>
-          <p><strong>A ponte local</strong>, que traz os terminais de Claude Code, Codex, agy, OpenCode e Maestri como terminaizinhos. <strong>As rotinas do Escritório Vivo</strong>, reescritas aqui. <strong>A abertura com o mascote</strong>, que já está pronta na próxima versão.</p>
+          <p><strong>As rotinas do Escritório Vivo</strong>, reescritas aqui, e <strong>o tour em vídeo</strong> da nova Firmópolis.</p>
         </div>
       </div>
     </section>

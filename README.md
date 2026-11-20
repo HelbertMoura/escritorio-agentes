@@ -20,7 +20,7 @@
   <img src="./docs/demo.gif" alt="Animated demo of the office in demo mode, with fictional agents: the pixel-art map by day with agents walking and working, the camera zooming in on an agent with a '?' question bubble, then the pointer moves to a request in the Waiting for you list (one click takes you to that agent). Short captions in Portuguese explain each step." width="900">
 </picture>
 
-[Features](#features) · [Screenshots](#screenshots) · [Install](#install) · [Floors](#floors-several-workspaces-in-one-building) · [Team](#team) · [Customize](#customize-white-label) · [Social life](#social-life) · [Construction mode](#construction-mode) · [TV mode](#tv-mode) · [Presentation mode](#presentation-mode) · [Installable app](#installable-app-pwa) · [Visitors](#visitors) · [Visits by invitation](#visits-by-invitation) · [Local bridge](#local-bridge-the-terminals-on-this-computer) · [Newspaper](#newspaper) · [Time-lapse](#time-lapse) · [Phone alerts](#phone-alerts) · [Security](#security) · [Architecture](#architecture) · [Development](#development) · [Changelog](./CHANGELOG.md) · [Contributing](./CONTRIBUTING.md) · [Code of Conduct](./CODE_OF_CONDUCT.md)
+[Features](#features) · [Screenshots](#screenshots) · [Install](#install) · [Floors](#floors-several-workspaces-in-one-building) · [Team](#team) · [Customize](#customize-white-label) · [Social life](#social-life) · [Building staff](#building-staff) · [Office radio](#office-radio) · [Construction mode](#construction-mode) · [TV mode](#tv-mode) · [Presentation mode](#presentation-mode) · [Installable app](#installable-app-pwa) · [Visitors](#visitors) · [Visits by invitation](#visits-by-invitation) · [Local bridge](#local-bridge-the-terminals-on-this-computer) · [Newspaper](#newspaper) · [Time-lapse](#time-lapse) · [Phone alerts](#phone-alerts) · [Security](#security) · [Architecture](#architecture) · [Development](#development) · [Changelog](./CHANGELOG.md) · [Contributing](./CONTRIBUTING.md) · [Code of Conduct](./CODE_OF_CONDUCT.md)
 
 🎬 **[Launch video](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2026.11.06)** (narrated in Brazilian Portuguese, with subtitles), attached to the release. 🌎 **[Video of the world and the visits](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.3.0)** (1.3.0), also narrated in Portuguese, with subtitles.
 
@@ -51,20 +51,22 @@ It **does not call any AI model** and does not spend tokens. Approving always ha
 ## Features
 
 - 🏢 **A building made from your teams:** reception with your logo, one room per team (it grows with the number of agents), corridor, meeting room, lounge and kitchen. A new agent gets a desk in the "New" room.
-- 🖥️ **Terminals on this computer:** with the local bridge, each terminal becomes a little terminal on the map. Busy, it works in the team room. Waiting for you, it goes to the reception with a "!" or "?". Free, it gets coffee and chats in the hallway with another free terminal (see [Local bridge](#local-bridge-the-terminals-on-this-computer)).
+- 🖥️ **Terminals on this computer:** with the local bridge, each terminal becomes a little terminal on the map. Busy, it works in the team room (with Maestri, each workspace in use gets its own room automatically). Waiting for you, it goes to the reception with a "!" or "?". Free, it gets coffee and chats in the hallway with another free terminal. Terminals on another machine come in through the mirror, with no tunnel (see [Local bridge](#local-bridge-the-terminals-on-this-computer)).
+- 📻 **Office radio:** three stations composed on the fly by the browser, with no audio files, plus an optional internet radio (see [Office radio](#office-radio)).
+- 🧹 **Building staff:** the bathroom gets dirty and closed, the cleaner cleans, the handyman fixes what breaks and the doorman looks after the entrance (see [Building staff](#building-staff)).
 - 🧑‍💻 **Live map:** agents go to their desk and type when they get a task. When they are free they play arcade, video games, pool, foosball, ping-pong, chess, darts and basketball by themselves, play the piano or the guitar, grab a coffee or chat in pairs. They arrive in the morning and leave at night through the front door.
 - ✋ **Approvals at a glance:** a "!" or "?" over anyone waiting for your approval or answer, and a **"Waiting for you"** list with how long each request has been waiting. Each one opens the right request in agentes.chat (approving is always done there).
 - 🎵 **Life and sounds:** 21 poses, games in pairs up to 3 points with a cheering crowd, a coffee circle, high-fives, a robot vacuum at night and more. 45 optional sound effects synthesized in the browser (keyboard, "simlish" chatter with a voice per agent, games, alerts, the ring and the strike, rain and thunder), with a volume control and on/off per category. Audio only starts after you interact with the page.
 - 🖱️ **Clickable objects** (mouse, touch, or Tab and Enter): the TV (5 channels), arcade machines, jukebox, coffee maker, aquarium, lamps, notice board, plants, the opening-hours sign, the cat, the wall clock, the code board, kanban and moodboard, the sales bell, the ring scoreboard and the strike signs. Most of them also bring a free agent over. The games (pool, foosball, ping-pong, chess, darts, basketball) are not clickable: the agents play them on their own.
 - 🌦️ **Real time and weather:** day and night follow the real clock, empty rooms turn their lights off and windows show the sky of the hour. Real weather for your city ([Open-Meteo](https://open-meteo.com), no key): rain, drizzle, thunderstorm, snow, fog, overcast, with gusty wind, lightning in the thunderstorm and swaying trees.
 - 🎉 **Holidays:** Christmas, New Year (fireworks), Carnival and Easter (calculated), Lunar New Year, Halloween, Festa Junina, Brazilian Independence Day, Programmers' Day, Diwali and more, with decorations, hats and lines.
-- 🎨 **Customization:** company name, accent color and logo from the **Customize** screen; teams, rooms, floors, walls, icons and avatars in `times.json`.
+- 🎨 **Customization:** company name, accent color and logo from the **Customize** screen, and teams built automatically (by department, name or role) with a preview; rooms, floors, walls, icons and avatars also in `times.json`.
 - 🕹️ **Simulation:** a panel to preview the office on another date, time or weather (Christmas at night in the snow, for example). Nothing is saved: it only changes the URL of that tab, and a "Simulation" banner stays visible with "Back to real".
 - 🥊 **Social life:** friendships and rivals, cartoon fights in the Ring with a weekly scoreboard, complaints, gossip and a strike that ends with a delivery (pizza by motorbike, coffee, a "Sexta livre aprovada!" banner...). The same on every screen and only among agents who are free (see [Social life](#social-life)).
 - 🧱 **Construction mode:** paint the rooms and move, mirror, remove and add furniture with the mouse or the keyboard, with undo; the plan is saved on the server for everyone (see [Construction mode](#construction-mode)).
 - 📺 **TV mode:** full screen, the screen kept on and a camera director that rushes to requests, fights and strikes, with a news ticker (see [TV mode](#tv-mode)).
 - 📲 **App and phone alerts:** install the office on your home screen and get an alert when an agent asks for your approval or asks a question (see [Installable app](#installable-app-pwa) and [Phone alerts](#phone-alerts)).
-- 🏬 **Floors:** each agentes.chat workspace becomes a floor of the building, and the elevator in the top bar switches floors (see [Floors](#floors-several-workspaces-in-one-building)).
+- 🏬 **Floors:** each agentes.chat workspace becomes a floor of the building, each in its own city with that city's weather and time, and the elevator in the top bar switches floors (see [Floors](#floors-several-workspaces-in-one-building)).
 - 👥 **Team:** member accounts by invitation, with a name and a character on the map (shirt, hair and skin chosen in the profile); team conversations (general, rooms and DMs, with mentions, reactions, attachments and search), a board, status, meetings with a calendar and a summary of what happened while you were away (see [Team](#team)).
 - 🙈 **Presentation mode:** replaces names with "Agente 1" and "Pessoa 2" and hides what is sensitive, for showing the screen to a client (see [Presentation mode](#presentation-mode)).
 - 👀 **Visitors:** whoever else on the team has the office open shows up on the map with their own name and character (see [Visitors](#visitors)).
@@ -140,26 +142,40 @@ All screenshots come from **demo mode** or from a preview with **fictional data*
 </p>
 <p align="center"><em>Before and after: the same lounge, repainted and rearranged.</em></p>
 
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/32-fachada-noite.png"><img src="./docs/screenshots/32-fachada-noite.png" alt="The front of the building at night, below the map: windows, the glass door with its two wall lamps lit, planters, lit street lamps on the sidewalk and cars with headlights on the street" width="100%"></a>
+      <p><em>The building from the front at night: the wall lamps and street lamps light up.</em></p>
+    </td>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/34-entrar.png"><img src="./docs/screenshots/34-entrar.png" alt="The first-access screen: on the left, the night sky with the title 'Seu time de agentes trabalhando à vista' and a scene with a little terminal at a desk, an agent with a crown, a person and two terminals on the couch; on the right, the form with the first-access code, username and password, and the footer 'Firmópolis · Código aberto · AGPL'" width="100%"></a>
+      <p><em>The sign-in screen, with the new identity.</em></p>
+    </td>
+  </tr>
+</table>
+
 <p align="center">
   <img src="./docs/screenshots/09-celular.png" alt="The office on a phone: the map at the top with agents and speech bubbles, and the 'Waiting for you' list with Review and Answer buttons below" width="300">
 </p>
 
 ## Install
 
-Requirements: Linux with systemd, Python 3.10+ and [Tailscale](https://tailscale.com) with MagicDNS and HTTPS enabled.
+**Just want to see it?** Open `static/index.html?demo=1` with any static server (for example, `cd static && python3 -m http.server 8000` and `http://127.0.0.1:8000/index.html?demo=1`). That is demo mode, with fictional agents, and nothing to install.
 
-**DNS:** the service only reaches the public internet. Its systemd unit blocks private addresses (`IPAddressDeny`), and that includes a DNS resolver on a private IP, such as the VPC resolver on AWS or `169.254.169.254` on GCP and Oracle. The systemd-resolved stub (`127.0.0.53`) and Tailscale MagicDNS (`100.100.100.100`) are allowed. Without a resolver it can reach, the office never reads agentes.chat, and `journalctl -u escritorio` shows name-resolution errors. To fix it, use systemd-resolved (with `/etc/resolv.conf` pointing to `127.0.0.53`) or allow only your resolver's address in a drop-in, which survives reinstalls (`sudo systemctl edit escritorio`):
+**For your team, in 4 steps** (Linux with systemd, Python 3.10+ and [Tailscale](https://tailscale.com) with MagicDNS and HTTPS enabled; without Tailscale, see [Docker and Coolify](#docker-and-coolify)):
 
-```ini
-[Service]
-IPAddressAllow=<your resolver IP>/32
-```
+1. **Get your organization id:** it is what comes after `/org/` in your agentes.chat address.
+2. **Run the installer** from the repository folder:
+   ```bash
+   sudo AGENTES_ORG=<your organization id> bash instalar.sh
+   ```
+3. **Create your account:** open `https://<your-machine>.<your-tailnet>.ts.net/` and use the **first-access code** the installer printed at the end (to see it again: `sudo escritorio-codigo`). On a phone, the Tailscale app turned on is all you need.
+4. **Connect:** click **Conectar ao agentes.chat** (connect) in the strip above the map and authorize read access. The agents show up right away. The installer already sets the return address (`ESCRITORIO_BASE`).
 
-On GCP and Oracle, `169.254.169.254` is also the metadata server, so prefer systemd-resolved there.
+That's it. Everything else (brand, city, teams, radio, floors) is set from the **Personalizar** (customize) screen, with no files to edit. To also see the terminals on your computer, follow [Local bridge](#local-bridge-the-terminals-on-this-computer). The installer details are below; you only need them if something is out of the ordinary.
 
-```bash
-sudo AGENTES_ORG=<your organization id> bash instalar.sh
-```
+#### Installer details
 
 At the end, in a terminal, the installer shows the **first-access code**. To see it again, run `sudo escritorio-codigo`. The code works once, only while no user exists, and does not expire. When the output is not a terminal (automation, `| tee`), the code is not printed: run `sudo escritorio-codigo` afterwards.
 
@@ -175,7 +191,14 @@ The installer publishes the `/` path of port 443 of this machine on your tailnet
 
 **Reinstalling or updating:** run the installer again with the same variables. It rewrites `/etc/escritorio.env` every time, so `ESCRITORIO_PORTA` and `ESCRITORIO_FONTE` go back to their defaults when left out (in a fork, the source-code link would point back to this repository). Users, sessions, tokens and `/opt/escritorio/times.json` are kept.
 
-Open `https://<your-machine>.<your-tailnet>.ts.net/` and use the code to create your username and password. Then authorize read access in agentes.chat (see [Connect to agentes.chat](#connect-to-agenteschat)). On a phone, the Tailscale app turned on is all you need.
+**If the office does not read agentes.chat** and `journalctl -u escritorio` shows name-resolution errors, the problem is DNS: the service only reaches the public internet. Its systemd unit blocks private addresses (`IPAddressDeny`), and that includes a DNS resolver on a private IP, such as the VPC resolver on AWS or `169.254.169.254` on GCP and Oracle. The systemd-resolved stub (`127.0.0.53`) and Tailscale MagicDNS (`100.100.100.100`) are allowed. To fix it, use systemd-resolved (with `/etc/resolv.conf` pointing to `127.0.0.53`) or allow only your resolver's address in a drop-in, which survives reinstalls (`sudo systemctl edit escritorio`):
+
+```ini
+[Service]
+IPAddressAllow=<your resolver IP>/32
+```
+
+On GCP and Oracle, `169.254.169.254` is also the metadata server, so prefer systemd-resolved there.
 
 ### Connect to agentes.chat
 
@@ -198,6 +221,11 @@ In **Settings › Floors**, whoever runs the office creates a floor from a name 
 The list lives in `dados/andares.json` and each floor's data in `dados/andares/<id>/` (`oauth.json`, `times.json`, `equipe.json`, `planta.json`, `placar.json`, `jornal.json` and, with its own city, `clima.json`). Holidays, visits and phone alerts belong to the whole building.
 
 **Each floor in its own city:** an extra floor can sit in another city, with that city's weather and local time. Whoever runs the floor picks the city in **Personalizar › Clima deste andar** (this floor's weather), with the same search as the building; without its own city, the floor inherits the building's, as before. On that floor's map, the sky, day and night, rain and office hours follow that city and its time zone, and the elevator shows each floor with its city (for example, "Dev Maniac's · Mateus Leme"). A floor's city is only shown to people with access to that floor: the lobby, visitors and the public World page only show the building's city. Each city's weather is fetched once every 15 minutes, per coordinate (floors in the same city share the request), and at most one request per minute overall. The floor's social life (the ring) and newspaper (overtime) use the same time zone; phone alerts stay on Brasília time. Removing a floor disconnects its token, but the folder stays on the server: delete `dados/andares/<id>/` by hand if you no longer need it. An unreadable `andares.json` stops the service from starting, so no floor disappears silently.
+
+<p align="center">
+  <a href="./docs/screenshots/31-andares-cidades.png"><img src="./docs/screenshots/31-andares-cidades.png" alt="The same moment on two floors of the building: on top, the ground floor in São Paulo at 10:30, in the morning and sunny; below, the 2nd floor in Tokyo at 22:30, at night, outside office hours and with the watchman at the entrance. The side elevator shows each floor's name and city" width="900"></a>
+</p>
+<p align="center"><em>The same moment on two floors: São Paulo in the morning, Tokyo at night.</em></p>
 
 #### Lobby: a ground floor for every company
 
@@ -278,7 +306,12 @@ From the **Customize** screen: company name, accent color and logo (PNG, JPEG or
 
 - **Weather city:** search by name. The search goes through the server, which asks Open-Meteo's geocoding (Open-Meteo data, under the same terms as the weather, in [Third-party](#third-party)), with at most 10 searches per minute and 200 per day for the whole office. Pick **Usar esta** (use this one), **Sem clima** (no weather) or **Voltar ao times.json** (back to times.json). The new city applies without a restart or reload; its weather shows up within 1 minute. It lives in `dados/clima.json`, with the coordinates rounded to 2 decimals (about 1 km). On an extra floor, the same section becomes **Clima deste andar** (this floor's weather): whoever runs the floor picks its city (saved in `dados/andares/<id>/clima.json`, with the time zone for the map's clock) or **Usar a cidade do prédio** (use the building's city). The building's city is only chosen on the main floor, by whoever runs the building.
 - **Holidays:** turn each of the 13 built-in dates on or off and create up to 24 of your own, with a name, a day (every year, or just once), 1 to 14 days, a theme (the colors, decorations and hat of one of the holidays, or the generic one) and up to 3 lines. They live in `dados/festas.json`.
-- **Teams and appearance:** name, type, color and icon of each team (up to 12), the agents in each one (each agent in one team only) and each agent's appearance. They live in `dados/equipe.json` and fully replace `times` and `aparencia` from `times.json`; **Voltar ao times.json** (back to times.json) deletes the file. Renaming a team removes the construction mode paint and furniture from its room: the screen warns before saving. **Montar os times automaticamente** (build the teams automatically) gives each agent the team from the first source that has one: a pasted list (`handle, team`, one per line, for scripting), the agentes.chat department (when `list_agents` sends `department`), what comes after “ · ”, “ - ” or “ | ” in the name (“Gandalf · Maestro” goes to Maestro) or a short role (up to 3 words). Names that match without accents or case become one team. A preview shows the teams, where each came from and who was left without a team (they go to “Novos”), and lets you rename, remove an agent and merge two teams; above 12 teams, the smallest are merged into “Outros” (others). Type and icon come from the name (Infra, NOC and Ops: Ops; Direção, Diretoria and Gestão: Gabinete; the rest, Mesas), and a team with the same name keeps its type, wall and floor. The agentes.chat `appearance` only brings what is in the app's lists (a `#hex` color becomes the closest one). With the local bridge on, each Maestri band in use (with a live terminal; without a band, the workspace) gets a display-only room on its own, which never goes to the server or to construction mode (it appears within 1 minute, leaves 5 minutes after the last terminal, and never goes past the 12-team cap); a team with the same name takes the band's terminals instead, and the preview can also create these rooms as real teams. If no source gives a team, the preview says what to do. Nothing applies before **Usar estes times** (use these teams) and **Salvar times** (save teams).
+- **Teams and appearance:** name, type, color and icon of each team (up to 12), the agents in each one (each agent in one team only) and each agent's appearance. They live in `dados/equipe.json` and fully replace `times` and `aparencia` from `times.json`; **Voltar ao times.json** (back to times.json) deletes the file. Renaming a team removes the construction mode paint and furniture from its room: the screen warns before saving. **Montar os times automaticamente** (build the teams automatically) gives each agent the team from the first source that has one: a pasted list (`handle, team`, one per line, for scripting), the agentes.chat department (when `list_agents` sends `department`), what comes after “ · ”, “ - ” or “ | ” in the name (“Gandalf · Maestro” goes to Maestro) or a short role (up to 3 words). Names that match without accents or case become one team. A preview shows the teams, where each came from and who was left without a team (they go to “Novos”), and lets you rename, remove an agent and merge two teams; above 12 teams, the smallest are merged into “Outros” (others). Type and icon come from the name (Infra, NOC and Ops: Ops; Direção, Diretoria and Gestão: Gabinete; the rest, Mesas), and a team with the same name keeps its type, wall and floor. The agentes.chat `appearance` only brings what is in the app's lists (a `#hex` color becomes the closest one). With the local bridge on, each Maestri workspace in use (with a live terminal) gets a display-only room on its own, named after the workspace, which never goes to the server or to construction mode (it appears within 1 minute, leaves 5 minutes after the last terminal, and never goes past the 12-team cap); a team with the same name takes the workspace's terminals instead, and the preview can also create these rooms as real teams. If no source gives a team, the preview says what to do. Nothing applies before **Usar estes times** (use these teams) and **Salvar times** (save teams).
+
+<p align="center">
+  <a href="./docs/screenshots/30-times-automaticos.png"><img src="./docs/screenshots/30-times-automaticos.png" alt="The Montar os times automaticamente preview: 'Vou criar estes 5 times com 7 agentes (6 pelo setor do agentes.chat, 1 pelo papel)', with Diretoria, Produto, Operações, Comercial and Atendimento, each with an editable name, type, icon, source, its agents with an x to remove them and a Juntar com (merge with) list; below, Usar estes times and Cancelar" width="900"></a>
+</p>
+<p align="center"><em>The automatic teams preview: rename, remove an agent or merge two teams before saving.</em></p>
 
 What the screen saves overrides `times.json`, and the screen says where the current value comes from.
 
@@ -315,7 +348,25 @@ A layer of fun, drawn by the server. Free agents make friends and rivals, grab c
 
 ### Building staff
 
-The building also has people who look after it, and the bathroom can get gross. It all runs in the browser only, like the terminals' life: nothing goes to the server.
+The building also has people who look after it, and the bathroom can get gross. It all runs in the browser only, like the terminals' life: nothing goes to the server. There is nothing to configure.
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/26-banheiro-interditado.png"><img src="./docs/screenshots/26-banheiro-interditado.png" alt="The closed bathroom at the end of the hallway: the sign on the WC door, the 'Interditado' (closed) bubble and two little terminals, Gil and Ivo, waiting in line with the alert" width="100%"></a>
+      <p><em>Closed: the queue waits and, after a while, gives up.</em></p>
+    </td>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/28-porteiro.png"><img src="./docs/screenshots/28-porteiro.png" alt="The doorman Seu Lima, in a cap, at the building entrance, next to the reception with the cat asleep" width="100%"></a>
+      <p><em>The doorman at the entrance; at night, the watchman with a flashlight.</em></p>
+    </td>
+  </tr>
+</table>
+
+<p align="center">
+  <a href="./docs/screenshots/27-faxineira-zelador.png"><img src="./docs/screenshots/27-faxineira-zelador.png" alt="On top, the cleaner Dona Rosa cleaning the bathroom door with a bucket and mop; below, the handywoman Dona Neide with her toolbox in the kitchen, next to the coffee machine with the 'Quebrada!' (broken) bubble" width="900"></a>
+</p>
+<p align="center"><em>The cleaner at the bathroom and the handywoman fixing the coffee machine.</em></p>
 
 - **Dirt:** every bathroom trip makes it a little dirtier, and a desperate terminal or one that cut the line makes it dirtier still. Above 60, flies and stink lines show up at the WC door, and whoever comes out shows an "eww" bubble. Above 90, the bathroom is **closed**, with a sign: nobody goes in, the queue waits with an alert and, after a while, gives up. Coffee and snacks leave cups and crumbs on the floor.
 - **Cleaning:** when the dirt passes 60, or on a round (more often at night), the cleaner comes in from the street with a bucket and mop, cleans the bathroom with sparkles, picks up cups and crumbs and leaves.
@@ -360,7 +411,12 @@ For showing the screen on a call with a client or posting a screenshot without l
 
 ## Office radio
 
-A radio on the wall of the Sala comunal (common room). Click it (or reach it with `Tab` and press `Enter`) to open its controls: on and off, station and volume.
+A radio on the wall of the Sala comunal (common room). Click it (or reach it with `Tab` and press `Enter`), or the radio button on the camera bar, to open its controls: on and off, station and volume. There is nothing to install or configure.
+
+<p align="center">
+  <a href="./docs/screenshots/29-radio.png"><img src="./docs/screenshots/29-radio.png" alt="The Rádio Firmópolis controls open over the common room: the Desligar o rádio (turn off) button, the stations Lo-fi da firma (selected), Chiptune do fliperama and Jazz da cafeteria, the volume and 'Tocando: Lo-fi da firma'" width="900"></a>
+</p>
+<p align="center"><em>The radio playing Lo-fi da firma.</em></p>
 
 - **Rádio Firmópolis, made in the browser:** three stations composed on the fly with Web Audio, with no audio files and no copyright: **Lo-fi da firma** (calm, for working), **Chiptune do fliperama** (arcade chiptune) and **Jazz da cafeteria** (café jazz). Each song draws a key, tempo, chord progression and form (intro, A and B parts, ending); the melody comes back with variations and the drums change groove, so there is no short loop. Station and volume changes fade smoothly.
 - **Everyone turns on their own:** the radio only plays after a click (browsers block sound on their own) and only for whoever turned it on. Station and volume are remembered in this browser; the volume starts low. The radio is independent of the sound panel.
@@ -454,6 +510,11 @@ You can bring someone from outside into the office without creating a user or sh
 - **Light:** the far map weighs 47 KB. The two detail levels are only downloaded when you zoom: 160 KB from 2x and 395 KB at maximum zoom, in tiles, and only the ones in view. With "reduce motion" on nothing moves, and the animation pauses when the tab is hidden.
 - **Try it:** `python ferramentas/previa.py ferramentas/previa.exemplo.json` and open `http://127.0.0.1:7372/mundo.html`. `?hora=22`, `?clima=chuva` and `?data=2026-12-25` simulate the hour, the weather and the date.
 
+<p align="center">
+  <a href="./docs/screenshots/33-bairro.png"><img src="./docs/screenshots/33-bairro.png" alt="The office's neighborhood on the World page, by day: a shop with a striped awning, a townhouse, a cottage, trees, lamp posts, people on the sidewalk and a car on the street; on the left, the World text and the Entrar na recepção (enter the reception) button" width="600"></a>
+</p>
+<p align="center"><em>The neighborhood, redrawn with new art: the door leads to the reception.</em></p>
+
 What the server sends to this page is in [Security](#security).
 
 ### Changing the cities or the world art
@@ -470,11 +531,38 @@ If you only install the office you need none of this: the files in `static/mundo
 
 The bridge (`ponte/`, written in Go) reads the AI terminals on this machine (Claude Code, Codex, agy, OpenCode, MiniMax and Maestri) and hands them to the map. Your browser reads it directly at `ws://127.0.0.1:47820`, and nothing goes through the Firmópolis server.
 
-1. Build and install the bridge following [`ponte/README.md`](./ponte/README.md) (in Portuguese).
-2. Run `ponte setup --aplicar --origem https://<your Firmópolis address>`. It adds the address to the list of accepted origins and prints the token.
-3. In Firmópolis, open **Personalizar > Ponte local** and paste the token. It stays in that browser only.
+Three steps, on the machine where the terminals run (you need [Go](https://go.dev/dl/)):
 
-- **On the map:** each terminal walks in from the street with its name and program on the label ("Ada · Codex"). Busy, it works in the first team's room. Waiting for your approval or answer, or after an error, it goes to the reception with a "!" or "?". Free, it stays in the common room or the kitchen.
+1. **Build the bridge where it will live** (the hooks store that path):
+   ```bash
+   cd ponte && go build -o ~/.local/bin/ponte ./cmd/ponte      # Linux and macOS
+   ```
+   On Windows, the command with the right path is in [`ponte/README.md`](./ponte/README.md#1-compilar-no-lugar-definitivo) (in Portuguese).
+2. **Turn on the hooks and allow your Firmópolis:**
+   ```bash
+   ponte setup --aplicar --origem https://<your Firmópolis address>
+   ponte          # keeps the bridge running; to start it on its own, see ponte/README.md
+   ```
+   `setup` installs the hooks of the programs it finds, adds the address to the list of accepted origins and prints the token.
+3. **Paste the token** in Firmópolis, under **Personalizar > Ponte local**. It stays in that browser only.
+
+Do the terminals run on a VM or another machine? Skip these steps and use the [mirror](#mirror-the-terminals-of-another-machine-with-no-tunnel): a single command, on the terminals' machine.
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/24-terminais-salas-maestri.png"><img src="./docs/screenshots/24-terminais-salas-maestri.png" alt="The building with little terminals of several programs, all fictional: Nina · Codex at the reception waiting for approval, Ada · Claude Code +2 in the meeting room, Gil · Claude Code in the common room and Lin · Codex, Rui · OpenCode, Bea · agy and Zé · MiniMax in the Loja and Front rooms, created automatically for Maestri" width="100%"></a>
+      <p><em>Terminals of five programs and the automatic Maestri rooms.</em></p>
+    </td>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/25-cartao-terminal.png"><img src="./docs/screenshots/25-cartao-terminal.png" alt="The card of the terminal Ada, the Maestro with a crown, in the meeting room: Claude Code, Trabalhando (working), project, what it is doing, workspace, 2 helpers, since when, its needs as bars and today's log" width="100%"></a>
+      <p><em>The terminal card: the Maestro, wearing a crown, with its needs and its day.</em></p>
+    </td>
+  </tr>
+</table>
+
+
+- **On the map:** each terminal walks in from the street with its name and program on the label ("Ada · Codex"). Busy, it works in its team's room (with Maestri, the workspace's room). Waiting for your approval or answer, or after an error, it goes to the reception with a "!" or "?". Free, it stays in the common room or the kitchen.
 - **Coffee and chats:** each terminal has these two needs, and they drop faster while it works. When it is free, after a short break, it goes to the coffee machine or asks another free terminal for a chat in the hallway. It is cosmetic only, and the real state wins: when the terminal gets back to work, it drops the coffee right away.
 - **Security:** the bridge only listens on 127.0.0.1 and only accepts the WebSocket from a listed origin with the right token. The browser gets a reduced version, without the activity target (file or command) and without the day's history.
 - **Without the bridge:** the app retries with a growing wait of up to 1 minute and shows no error on screen. In Chrome, the first connection may ask for the local network access permission. Safari may refuse `ws://` from an https page.
