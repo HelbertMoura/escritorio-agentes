@@ -1074,7 +1074,7 @@ function atualizarSalas() {
   for (const s of [...predio.salas, ...predio.baixo]) {
     const b = $("salas").querySelector(`[data-sala="${CSS.escape(s.nome)}"]`); if (!b) continue;
     let txt, ativa, espera = false;
-    if (s.mesas && s.mesas.length) { // time: quem está na mesa trabalhando, de quantos; âmbar se alguém espera você
+    if (s.mesas && s.mesas.length && !s.projeto) { // time: quem está na mesa trabalhando, de quantos; âmbar se alguém espera você
       const donos = bs.filter(x => (s.handles || []).includes(x.handle));
       const na = donos.filter(x => x.lugar && x.lugar.tipo === "mesa" && x.trabalho).length;
       txt = `${na}/${donos.length}`; ativa = na > 0; espera = donos.some(x => situacao(x) === "esp");
