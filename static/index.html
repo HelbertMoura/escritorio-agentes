@@ -11,10 +11,10 @@
   <meta name="theme-color" content="#0f0f0e">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <link rel="stylesheet" href="estilo.css?v=123">
-  <link rel="stylesheet" href="chat_sala.css?v=123">
-  <link rel="stylesheet" href="reunioes.css?v=123">
-  <link rel="stylesheet" href="linha_tempo.css?v=123">
+  <link rel="stylesheet" href="estilo.css?v=125">
+  <link rel="stylesheet" href="chat_sala.css?v=125">
+  <link rel="stylesheet" href="reunioes.css?v=125">
+  <link rel="stylesheet" href="linha_tempo.css?v=125">
 </head>
 <body>
   <a class="pular" href="#principal">Ir para o conteúdo</a>
@@ -507,7 +507,7 @@
           </section>
           <section id="a-ponte" class="cartao ajuste" aria-labelledby="t-ponte">
             <h2 id="t-ponte">Ponte local</h2>
-            <p class="ajuda">Mostra no mapa os terminais deste computador (Claude Code, Codex, agy, OpenCode, MiniMax e o Maestri) como terminaizinhos: ocupado trabalha na sala do time, esperando você vai para a recepção, livre fica na sala comunal. Quem lê a ponte é este navegador, direto do seu computador: nada vai para o servidor do escritório, e só você vê os seus terminais.</p>
+            <p class="ajuda">Mostra no mapa os terminais deste computador (Claude Code, Codex, agy, OpenCode, MiniMax e o Maestri) como terminaizinhos: ocupado trabalha na sala do time, esperando você vai para a recepção, livre fica na sala comunal. Quem lê a ponte é este navegador, direto do seu computador: nada vai para o servidor do escritório, e só você vê os seus terminais. Com o espelho (abaixo), a ponte de outra máquina aparece aqui pelo servidor.</p>
             <ol class="ajuda ponte-passos">
               <li>Com a ponte instalada (pasta <code>ponte/</code> do repositório), rode no terminal:<code id="pt-comando" class="ponte-comando">ponte setup --aplicar --origem</code></li>
               <li>Cole aqui o token que ele mostrar. Ele fica só neste navegador.</li>
@@ -518,6 +518,15 @@
               <p id="pt-estado" class="aviso-form" role="status"></p>
               <div class="acoes"><button id="pt-desligar" class="botao fantasma" type="button" hidden>Desligar a ponte</button></div>
             </form>
+            <div id="pt-espelho" hidden>
+              <h3 class="ajuste-sub">Espelho: ver de qualquer navegador</h3>
+              <p class="ajuda">Para ver os terminais de outra máquina (uma VM, por exemplo) sem túnel: a ponte de lá manda ao servidor os nomes dos terminais e dos projetos, os estados e as ferramentas, nunca arquivo, comando ou alvo. Quem é deste andar vê os terminais no mapa.</p>
+              <p id="pt-esp-estado" class="aviso-form" role="status"></p>
+              <code id="pt-esp-comando" class="ponte-comando" hidden></code>
+              <p id="pt-esp-chave-rot" class="ajuda" hidden>Quando ele pedir, cole esta chave:</p>
+              <code id="pt-esp-chave" class="ponte-comando" hidden></code>
+              <div class="acoes"><button id="pt-esp-gerar" class="botao secundario" type="button">Gerar chave</button><button id="pt-esp-desligar" class="botao fantasma" type="button" hidden>Desligar o espelho</button></div>
+            </div>
           </section>
           <section id="a-acesso" class="cartao ajuste" aria-labelledby="t-acesso">
             <h2 id="t-acesso">Acesso</h2>
@@ -785,33 +794,33 @@
       </div>
     </div>
   </dialog>
-  <script src="abertura.js?v=123"></script>
-  <script src="avatar.js?v=123"></script>
-  <script src="mapa.js?v=123"></script>
-  <script src="expediente.js?v=123"></script>
-  <script src="vida.js?v=123"></script>
-  <script src="apresentacao.js?v=123"></script>
-  <script src="sprites.js?v=123"></script>
-  <script src="ponte.js?v=123"></script>
-  <script src="som.js?v=123"></script>
-  <script src="ceu.js?v=123"></script>
-  <script src="clima.js?v=123"></script>
-  <script src="festas.js?v=123"></script>
-  <script src="simular.js?v=123"></script>
-  <script src="efeitos.js?v=123"></script>
-  <script src="brincar.js?v=123"></script>
-  <script src="tv.js?v=123"></script>
-  <script src="jornal.js?v=123"></script>
-  <script src="novidades.js?v=123"></script>
-  <script src="timelapse.js?v=123"></script>
-  <script src="avisar.js?v=123"></script>
-  <script src="resposta_rapida.js?v=123"></script>
-  <script src="linha_tempo.js?v=123"></script>
-  <script src="reunioes.js?v=123"></script>
-  <script src="app.js?v=123"></script>
-  <script src="personalizar.js?v=123"></script>
-  <script src="ajustes.js?v=123"></script>
-  <script src="assistente.js?v=123"></script>
-  <script src="chat_sala.js?v=123"></script>
+  <script src="abertura.js?v=125"></script>
+  <script src="avatar.js?v=125"></script>
+  <script src="mapa.js?v=125"></script>
+  <script src="expediente.js?v=125"></script>
+  <script src="vida.js?v=125"></script>
+  <script src="apresentacao.js?v=125"></script>
+  <script src="sprites.js?v=125"></script>
+  <script src="ponte.js?v=125"></script>
+  <script src="som.js?v=125"></script>
+  <script src="ceu.js?v=125"></script>
+  <script src="clima.js?v=125"></script>
+  <script src="festas.js?v=125"></script>
+  <script src="simular.js?v=125"></script>
+  <script src="efeitos.js?v=125"></script>
+  <script src="brincar.js?v=125"></script>
+  <script src="tv.js?v=125"></script>
+  <script src="jornal.js?v=125"></script>
+  <script src="novidades.js?v=125"></script>
+  <script src="timelapse.js?v=125"></script>
+  <script src="avisar.js?v=125"></script>
+  <script src="resposta_rapida.js?v=125"></script>
+  <script src="linha_tempo.js?v=125"></script>
+  <script src="reunioes.js?v=125"></script>
+  <script src="app.js?v=125"></script>
+  <script src="personalizar.js?v=125"></script>
+  <script src="ajustes.js?v=125"></script>
+  <script src="assistente.js?v=125"></script>
+  <script src="chat_sala.js?v=125"></script>
 </body>
 </html>

@@ -455,6 +455,20 @@ A ponte (`ponte/`, em Go) lê os terminais de IA desta máquina (Claude Code, Co
 - **Segurança:** a ponte só escuta em 127.0.0.1 e só aceita o WebSocket de uma origem da lista com o token certo. O navegador recebe uma versão reduzida: sem o alvo da atividade (arquivo ou comando) e sem o histórico do dia.
 - **Sem a ponte:** o app tenta de novo, com espera crescente até 1 minuto, e não mostra erro na tela. No Chrome, a primeira conexão pode pedir a permissão de acesso à rede local. O Safari pode recusar `ws://` vindo de uma página https.
 
+### Espelho: os terminais de outra máquina, sem túnel
+
+Se os terminais rodam numa máquina (uma VM, por exemplo) e você abre o Firmópolis em outra, ligue o espelho. A ponte daquela máquina manda ao servidor a mesma versão reduzida que o navegador recebe, e quem é do andar vê os terminais no mapa, de qualquer navegador. O espelho vem desligado.
+
+1. Em **Personalizar > Ponte local**, o admin do prédio clica em **Gerar chave**. A tela mostra o comando pronto, uma vez só: `ponte conectar https://<seu Firmópolis>`, e a chave para colar quando ele pedir.
+2. Rode o comando na máquina dos terminais. Ele testa a chave antes de mudar qualquer coisa, instala os hooks, grava o espelho e diz o próximo passo. No Linux, `ponte conectar ... --servico` cria e liga o serviço `firmopolis-ponte` do systemd do usuário.
+3. No mapa, os terminais aparecem, e **Personalizar > Ponte local** mostra "Pelo servidor".
+
+- **Pela variável, em vez da tela:** defina `ESCRITORIO_PONTE_CHAVE` no servidor (gere com `openssl rand -hex 32`) e rode na máquina dos terminais `ponte conectar https://<seu Firmópolis> <a mesma chave>`. Com a variável definida, a tela não gera nem desliga a chave. Na instalação pelo `instalar.sh`, prefira a chave da tela: ela fica em `dados/` e sobrevive à reinstalação, que reescreve o `/etc/escritorio.env`.
+- **Só os comandos:** `ponte setup --aplicar --espelho https://<seu Firmópolis> --chave-espelho <chave>` grava o espelho sem mexer nos hooks, e `ponte setup --aplicar --sem-espelho` desliga. Os dois valem na hora, sem reiniciar a ponte.
+- **Em que andar aparece:** no modo clássico, no andar principal. No modo saguão, o saguão nunca recebe o espelho; defina `ESCRITORIO_PONTE_ANDAR` com o id do andar da empresa que deve ver os terminais.
+- **Como funciona:** a ponte manda um `POST /api/ponte/espelho` com a chave no `Authorization: Bearer`, só por https, uns 2 s depois de cada mudança e, no mínimo, a cada 30 s. Se o servidor não responde, ela espera mais a cada falha, até 5 minutos, sem travar. O servidor guarda só na memória, e o app lê `GET /api/ponte` a cada 3 s. Passados 90 s sem nada, o espelho conta como desligado. A ponte local deste computador, se estiver ligada, tem prioridade.
+- **Segurança:** com o espelho ligado, **os nomes dos terminais, dos projetos, dos workspaces e das bands passam a ir ao servidor**, com os estados e o nome das ferramentas. Nunca vai o alvo (arquivo ou comando) nem os membros das bands. O servidor confere tudo com os mesmos limites do app (48 terminais, nomes de até 40 letras, 32 workspaces, 200 eventos do dia por terminal) e aceita até 256 KB por envio, no máximo um por segundo. Só quem é do andar lê; o saguão, as visitas e quem não entrou não recebem nada. A chave fica no `espelho.json` da pasta da ponte (só o seu usuário lê) e em `dados/ponte-espelho.chave` no servidor (0600). Ela nunca vai ao log. Gerar outra chave faz a anterior parar de valer na hora.
+
 ## Jornal
 
 A página **Jornal**, no menu, conta a semana do escritório como um jornal: o número da edição (a semana do ano), o período, a manchete, as notas e uma tabela com todo mundo.

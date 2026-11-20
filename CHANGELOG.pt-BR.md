@@ -6,6 +6,9 @@ As mudanças que importam neste projeto ficam aqui, da mais nova para a mais ant
 
 ## Não lançado
 
+### Adicionado
+- **Espelho da ponte:** os terminais de outra máquina (uma VM, por exemplo) aparecem no mapa de qualquer navegador, sem túnel. O admin do prédio gera a chave em **Personalizar > Ponte local**, e um comando só na máquina dos terminais (`ponte conectar <endereço>`, que pede a chave) testa a chave, instala os hooks, grava o espelho e, no Linux com `--servico`, cria o serviço. Vem desligado; com ele ligado, os nomes dos terminais e dos projetos passam a ir ao servidor, mas nunca arquivo, comando ou alvo. Veja [Espelho](./README.pt-BR.md#espelho-os-terminais-de-outra-máquina-sem-túnel).
+
 ### Mudado
 - **A identidade do site no app inteiro:** a tela de entrar, o primeiro acesso, o convite, a visita, o Mundo e o app por dentro usam a mesma marca de [firmopolis.devmaniacs.com.br](https://firmopolis.devmaniacs.com.br): Figtree no texto, Pixeloid nos títulos, a paleta noite, grafite, creme, âmbar e índigo, cantos retos ou em degrau, botões em bisel e sombra dura. As telas de fora ganharam o céu noturno com a janela acesa do escritório. O mapa e a arte pixel não mudaram.
 - As fontes Source Sans 3 e Doto saíram; a Pixeloid Sans (OFL) entrou em `static/fontes/`.

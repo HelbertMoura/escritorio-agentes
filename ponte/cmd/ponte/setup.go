@@ -18,6 +18,7 @@ const usoSetup = `uso: ponte setup --plano | --aplicar | --desfazer [--autostart
      ponte setup --plano | --aplicar --cidade NOME [--escolha N] [--pais XX]
      ponte setup --plano | --aplicar --sem-cidade
      ponte setup --plano | --aplicar --origem URL | --sem-origem URL
+     ponte setup --plano | --aplicar --espelho URL --chave-espelho CHAVE | --sem-espelho
 
   --plano      mostra o que muda em cada arquivo, sem mudar nada
   --aplicar    mostra o plano e instala (backup com data de cada arquivo de terceiros)
@@ -39,6 +40,16 @@ const usoSetup = `uso: ponte setup --plano | --aplicar | --desfazer [--autostart
                e mostra o token para colar no Firmópolis (Ajustes > Ponte local).
                Os dados seguem só no seu PC: é o navegador que lê a ponte.
   --sem-origem tira esse endereço da lista
+
+  --espelho    o endereço do Firmópolis que recebe o espelho da ponte, para ver os
+               terminais desta máquina de qualquer navegador, sem túnel. Com
+               --chave-espelho (a chave de Personalizar > Ponte local) e --aplicar,
+               grava em espelho.json (só você lê). Vai ao servidor só o que a tela usa:
+               nomes dos terminais e dos projetos, estados e ferramentas; nunca
+               arquivo, comando ou alvo. Vale na hora, sem reiniciar a ponte.
+  --sem-espelho para de enviar e apaga o espelho.json
+
+Para fazer tudo de uma vez (hooks, espelho e teste): ponte conectar URL CHAVE
 `
 
 // tokenAusente aparece no plano no lugar do token que ainda não existe.
@@ -59,7 +70,22 @@ func setup(args []string, saida io.Writer) error {
 	semCidade := fs.Bool("sem-cidade", false, "")
 	origem := fs.String("origem", "", "")
 	semOrigem := fs.String("sem-origem", "", "")
+	espelho := fs.String("espelho", "", "")
+	chaveEspelho := fs.String("chave-espelho", "", "")
+	semEspelho := fs.Bool("sem-espelho", false, "")
 	err := fs.Parse(args)
+	if err == nil && (*espelho != "" || *chaveEspelho != "" || *semEspelho) {
+		if fs.NArg() > 0 || contar(*plano, *aplicar) != 1 || *desfazer || *autostart || *home != "" || *cidade != "" || *semCidade ||
+			*escolha != 0 || *pais != "" || *origem != "" || *semOrigem != "" || *semEspelho == (*espelho != "") ||
+			(*espelho != "") != (*chaveEspelho != "") {
+			return errors.New(usoSetup)
+		}
+		dir, err := servidor.DirConfig()
+		if err != nil {
+			return err
+		}
+		return setupEspelho(dir, *espelho, *chaveEspelho, *aplicar, saida)
+	}
 	if err == nil && (*origem != "" || *semOrigem != "") {
 		if fs.NArg() > 0 || contar(*plano, *aplicar) != 1 || *desfazer || *autostart || *home != "" || *cidade != "" || *semCidade ||
 			*escolha != 0 || *pais != "" || (*origem != "") == (*semOrigem != "") {
@@ -298,4 +324,52 @@ func setupOrigem(dir, origem, semOrigem string, aplicar bool, saida io.Writer) e
 	fmt.Fprintln(saida, "Ajustes > Ponte local e cole este token (não mande para ninguém):")
 	fmt.Fprintln(saida, "\n  "+token)
 	return nil
+}
+
+// setupEspelho grava ou apaga o espelho.json. A chave nunca é mostrada.
+func setupEspelho(dir, endereco, chave string, aplicar bool, saida io.Writer) error {
+	if endereco == "" {
+		if _, ok := servidor.LerEspelho(dir); !ok {
+			fmt.Fprintln(saida, "Espelho: já está desligado; nada a tirar.")
+		} else {
+			fmt.Fprintln(saida, "Espelho: a ponte para de enviar ao servidor (apaga "+servidor.ArquivoEspelho+").")
+		}
+		if !aplicar {
+			fmt.Fprintln(saida, "\nNada foi alterado. Para desligar: ponte setup --aplicar --sem-espelho")
+			return nil
+		}
+		if err := servidor.GravarEspelho(dir, servidor.ConfigEspelho{}); err != nil {
+			return err
+		}
+		fmt.Fprintln(saida, "\nPronto. Vale na hora, sem reiniciar a ponte.")
+		return nil
+	}
+	c, err := configEspelho(endereco, chave)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(saida, "Espelho: a ponte passa a enviar a "+c.URL+" os nomes dos terminais e dos projetos, os estados e")
+	fmt.Fprintln(saida, "as ferramentas (nunca arquivo, comando ou alvo). Fica em "+servidor.ArquivoEspelho+", que só você lê.")
+	if !aplicar {
+		fmt.Fprintln(saida, "\nNada foi alterado. Para gravar: ponte setup --aplicar --espelho "+c.URL+" --chave-espelho <chave>")
+		return nil
+	}
+	if err := servidor.GravarEspelho(dir, c); err != nil {
+		return err
+	}
+	fmt.Fprintln(saida, "\nPronto. Vale na hora, sem reiniciar a ponte.")
+	return nil
+}
+
+// configEspelho confere o endereço e a chave (64 letras de 0 a 9 e a a f).
+func configEspelho(endereco, chave string) (servidor.ConfigEspelho, error) {
+	u, err := servidor.NormalizarEspelho(endereco)
+	if err != nil {
+		return servidor.ConfigEspelho{}, err
+	}
+	chave = strings.ToLower(strings.TrimSpace(chave))
+	if len(chave) != 64 || strings.Trim(chave, "0123456789abcdef") != "" {
+		return servidor.ConfigEspelho{}, errors.New("a chave tem 64 letras e números (0 a 9, a a f); copie de novo de Personalizar > Ponte local")
+	}
+	return servidor.ConfigEspelho{URL: u, Chave: chave}, nil
 }
