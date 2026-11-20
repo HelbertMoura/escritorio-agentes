@@ -165,7 +165,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "mundo_cidade_chao.js": "text/javascript; charset=utf-8", "mundo_cidade_letreiro.js": "text/javascript; charset=utf-8",
     "index.html": "text/html; charset=utf-8", "app.js": "text/javascript; charset=utf-8",
     "avatar.js": "text/javascript; charset=utf-8", "mapa.js": "text/javascript; charset=utf-8",
-    "vida.js": "text/javascript; charset=utf-8", "som.js": "text/javascript; charset=utf-8",
+    "vida.js": "text/javascript; charset=utf-8", "zeladoria.js": "text/javascript; charset=utf-8", "som.js": "text/javascript; charset=utf-8",
     "radio.js": "text/javascript; charset=utf-8",
     "sprites.js": "text/javascript; charset=utf-8", "ponte.js": "text/javascript; charset=utf-8",
     "ceu.js": "text/javascript; charset=utf-8", "clima.js": "text/javascript; charset=utf-8",

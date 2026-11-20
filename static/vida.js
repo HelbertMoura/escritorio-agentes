@@ -628,6 +628,7 @@ const Vida = (() => {
     if ((m.proxRobo -= dt) <= 0) { m.proxRobo = 1; verRobo(m, agora); }
     passoPessoas(m, dt, agora);
     passoTerminais(m, dt, agora);
+    if (window.Zeladoria) Zeladoria.passo(m, dt, agora, { rotaAte, andar: andarPessoa });   // a equipe do prédio (zeladoria.js)
     jogosSozinho(m, dt);
     if (!m.fora) brincadeiras(m, dt, agora);
     papo(m, dt, agora);
@@ -1833,6 +1834,7 @@ const Vida = (() => {
     for (const t of term.lista.values()) {
       if (t.mudou !== null && agora - t.mudou >= TERM_FIRME) irSalaTerminal(m, t);
       viverTerminal(m, t, dt, agora);
+      if (t.reacao) { if (t.reacao.ate > agora) t.balao = t.reacao.balao; else { if (t.balao === t.reacao.balao) t.balao = null; t.reacao = null; } }
       const x0 = t.x, y0 = t.y;
       andarPessoa(m, t, dt, agora);
       if (t.x !== x0) t.lado = t.x < x0 ? -1 : 1;
@@ -1876,9 +1878,15 @@ const Vida = (() => {
     if (!a) { if (!t.rota.length && agora >= t.proxAtiv) escolherAtiv(m, t, agora); return; }
     if (a.tipo === "wc") { // na fila: olha para a porta e, de vez em quando, o "wc"; quem furou mostra o "!" 3 s ao chegar
       if (!t.rota.length && a.fase === "fila") { t.lado = 1; if (a.alerta === true) a.alerta = agora + 3; }
-      t.balao = a.alerta === true || a.alerta > agora ? "alerta" : !t.rota.length && a.fase === "fila" && (Math.floor(agora / 2.5) + t.cor % 3) % 3 === 0 ? "wc" : null;
+      // interditado (zeladoria.js): a fila espera com o "!"; depois de WC_DESISTE s, desiste e volta para a sala
+      const fechado = a.fase === "fila" && window.Zeladoria && Zeladoria.bloqueado();
+      a.esperaDesde = fechado ? a.esperaDesde || agora : 0;
+      if (fechado && agora - a.esperaDesde > WC_DESISTE) { reagir(t, "alerta"); return terminarAtiv(m, t, agora); }
+      t.balao = a.alerta === true || a.alerta > agora || (fechado && !t.rota.length && Math.floor(agora / 1.5) % 2 === 0) ? "alerta"
+        : !t.rota.length && a.fase === "fila" && (Math.floor(agora / 2.5) + t.cor % 3) % 3 === 0 ? "wc" : null;
       return;
     }
+    if (a.tipo === "cafe" && window.Zeladoria && Zeladoria.quebrado("cafe")) { reagir(t, "alerta"); return largar(m, t, agora); }   // a cafeteira quebrou: desiste
     if (t.rota.length) return;
     const par = a.par && term.lista.get(a.par);
     if (a.par && (!par || !par.ativ || par.ativ.par !== t.dado.id)) return largar(m, t, agora);   // o outro foi embora
@@ -1897,6 +1905,7 @@ const Vida = (() => {
     t.feliz = a.tipo === "jogo" && !vez; t.dorme = a.tipo === "cochilo";
     if (agora < a.ate) return;
     t.nec[ENCHE[a.tipo]] = 100;
+    if ((a.tipo === "cafe" || a.tipo === "fome") && window.Zeladoria) Zeladoria.migalha(t.x, t.y, a.tipo === "cafe" ? "copo" : "migalha");   // o copo ou as migalhas ficam
     if (par) { par.nec[ENCHE[a.tipo]] = 100; somarAfinidade(t.dado.id, par.dado.id); terminarAtiv(m, par, agora); }
     terminarAtiv(m, t, agora);
   }
@@ -1912,6 +1921,7 @@ const Vida = (() => {
   const pontosEmUso = () => [...term.lista.values()].filter(u => u.ativ && u.ativ.p).map(u => u.ativ.p);
   // vai sozinho a um ponto de chão perto de uma vaga dos tipos da atividade (sem ocupar a vaga, que é dos agentes)
   function irAVaga(m, t, tipo, tipos = VAGAS_DE[tipo]) {
+    if (tipo === "cafe" && window.Zeladoria && Zeladoria.quebrado("cafe")) { reagir(t, "alerta"); return false; }   // as vagas de café fecharam
     const evitar = pontosEmUso();
     for (const v of m.vagas.filter(q => tipos.includes(q.tipo) && !q.fechada).sort(() => Math.random() - 0.5)) {
       const p = pontoPerto(m, v.sala, v.x, v.y, 22, evitar), rota = p && rotaAte(m, [t.x, t.y], p);
@@ -1973,9 +1983,13 @@ const Vida = (() => {
   // _arrumar_fila): quem precisa entra no fim da fila, de 14 em 14 px para a esquerda da porta, e um entra por vez (some
   // de 5 a 8 s). Apertado (bexiga abaixo de 15), fura a fila na frente de quem não está, e cada um que ele passou perde
   // 10 de afinidade com ele. Mudou de estado, saiu do livre ou fechou: sai da fila na hora (sairDaFila)
-  const APERTO = 15, WC_T = [5, 8];
+  // Zeladoria (zeladoria.js): cada uso suja o banheiro (o apertado e quem furou, mais); interditado, ninguém entra até limparem
+  // e quem precisa mostra o "!"; quem sai de um banheiro sujo mostra o "eca"
+  const APERTO = 15, WC_T = [5, 8], WC_DESISTE = 20;
+  const reagir = (t, balao, s = 3) => { t.reacao = { balao, ate: performance.now() / 1000 + s }; };
   function entrarNaFila(m, t, agora) {
     if (!m.predio.banheiro) return false;
+    if (window.Zeladoria && Zeladoria.interditado()) { reagir(t, "alerta"); return false; }
     let i = term.fila.length;
     if (t.nec.bexiga < APERTO) { i = 0; term.fila.forEach((u, k) => { if (u.nec.bexiga < APERTO) i = k + 1; }); }
     const passou = term.fila.slice(i);
@@ -2008,11 +2022,12 @@ const Vida = (() => {
       const a = d.ativ;
       if (!a || a.tipo !== "wc") { term.dentro = null; d.dentro = false; return; }
       if (a.fase === "entrando" && !d.rota.length) { a.fase = "dentro"; d.dentro = true; a.ate = agora + entre(...WC_T); }
-      else if (a.fase === "dentro" && agora >= a.ate) { d.nec.bexiga = 100; terminarAtiv(m, d, agora); }
+      else if (a.fase === "dentro" && agora >= a.ate) { d.nec.bexiga = 100; terminarAtiv(m, d, agora); if (window.Zeladoria && Zeladoria.suja()) reagir(d, "eca", 3.5); }
       return;
     }
     const u = term.fila[0];
-    if (!u || u.rota.length) return;
+    if (!u || u.rota.length || (window.Zeladoria && Zeladoria.bloqueado())) return;
+    if (window.Zeladoria) Zeladoria.sujar(u.ativ.alerta !== false ? "furou" : u.nec.bexiga < APERTO ? "apertado" : "uso");
     term.fila.shift(); term.dentro = u;
     u.ativ.fase = "entrando"; u.rota = [[b.x, m.predio.corredorTopo + 8]];
     arrumarFila(m);
@@ -2066,7 +2081,7 @@ const Vida = (() => {
     const agora = performance.now() / 1000;
     if (m.cenaSocial || m.entrega) return true;
     for (const b of m.lista) if (b.rota.length || b.festa > agora || b.aceno > agora || b.arremesso > agora) return true;
-    return pessoas().some(p => p.rota.length || p.aceno > agora) || terminais().some(t => t.rota.length);
+    return pessoas().some(p => p.rota.length || p.aceno > agora) || terminais().some(t => t.rota.length) || !!(window.Zeladoria && Zeladoria.mexendo());
   }
   // intervalo mínimo entre quadros, em ms (0: a cada requestAnimationFrame). Só chuva, neve ou festa (animando): até 60 quadros/s.
   // Parado, 30 com foco e 20 sem foco (segundo monitor, TV): acima das animações paradas (monitores, digitando e café, até

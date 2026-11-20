@@ -313,6 +313,17 @@ Uma camada de diversão sorteada pelo servidor. Os agentes livres fazem amizades
 - **Não chama o agentes.chat** nem mexe no trabalho dos agentes: usa só a leitura que o escritório já faz.
 - Os números (chances, tetos e intervalos) ficam no topo do `social.py`, e as falas, no `FRASES.social` do `static/vida.js`, para trocar no white-label.
 
+### Zeladoria
+
+O prédio também tem quem cuide dele, e o banheiro pode ficar podre. Tudo roda só no navegador, como a vida dos terminais: nada vai ao servidor.
+
+- **Sujeira:** cada ida ao banheiro suja um pouco, e o terminal apertado e quem furou a fila sujam mais. Acima de 60, aparecem moscas e linhas de fedor na porta WC, e quem sai mostra o balão "eca". Acima de 90, o banheiro fica **interditado**, com placa: ninguém entra, a fila espera com o alerta e, depois de um tempo, desiste. Depois do café e do lanche, sobram copos e migalhas no chão.
+- **Faxina:** quando a sujeira passa de 60, ou numa ronda (mais frequente à noite), a faxineira entra pela rua com balde e rodo, limpa o banheiro com brilho, recolhe copos e migalhas e vai embora.
+- **Manutenção:** de vez em quando algo quebra. Com a cafeteira quebrada, ninguém toma café (agentes, roda e terminais desistem, com o alerta). Com uma luminária do corredor quebrada, ela pisca. O zelador vem com a caixa de ferramentas, conserta com faíscas e vai embora.
+- **Portaria:** no expediente, o porteiro fica na entrada, lê o jornal, toma café e cumprimenta quem chega. Fora do expediente, o vigia assume com a lanterna e faz a ronda.
+- **Cartão:** clicar em alguém da equipe mostra o nome, a função e o que está fazendo. No modo apresentação, a etiqueta mostra só a função. Com menos movimento (`prefers-reduced-motion`), moscas, brilho e faíscas ficam parados.
+- **Para testar:** a demonstração (`?demo=1`) suja e quebra coisas sozinha. No console: `Zeladoria.sujar(95)` (interdita), `Zeladoria.quebrar("cafe")` ou `Zeladoria.quebrar("luz")`, `Zeladoria.chamar("limpeza")`, `Zeladoria.estado()` e `Zeladoria.zerar()`. Os números ficam no topo do `static/zeladoria.js`.
+
 ## Modo construção
 
 Arrume o escritório com o mouse, no computador. Abra pela tela **Personalizar** (`construir.html`); no celular, o editor mostra só um aviso, e a página principal mostra o resultado.

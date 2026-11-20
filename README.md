@@ -313,6 +313,17 @@ A layer of fun, drawn by the server. Free agents make friends and rivals, grab c
 - **Does not call agentes.chat** or touch the agents' work: it only uses the reading the office already does.
 - The numbers (chances, caps and intervals) are at the top of `social.py`, and the lines are in `FRASES.social` in `static/vida.js`, to change for white-label.
 
+### Building staff
+
+The building also has people who look after it, and the bathroom can get gross. It all runs in the browser only, like the terminals' life: nothing goes to the server.
+
+- **Dirt:** every bathroom trip makes it a little dirtier, and a desperate terminal or one that cut the line makes it dirtier still. Above 60, flies and stink lines show up at the WC door, and whoever comes out shows an "eww" bubble. Above 90, the bathroom is **closed**, with a sign: nobody goes in, the queue waits with an alert and, after a while, gives up. Coffee and snacks leave cups and crumbs on the floor.
+- **Cleaning:** when the dirt passes 60, or on a round (more often at night), the cleaner comes in from the street with a bucket and mop, cleans the bathroom with sparkles, picks up cups and crumbs and leaves.
+- **Maintenance:** now and then something breaks. With the coffee machine broken, nobody gets coffee (agents, coffee circles and terminals give up, with an alert). A broken hallway light flickers. The handyman comes with a toolbox, fixes it with sparks and leaves.
+- **Front desk:** during office hours, the doorman stays by the entrance, reads the paper, has a coffee and greets whoever arrives. After hours, the night watchman takes over with a flashlight and does rounds.
+- **Card:** clicking a staff member shows their name, role and what they are doing. In presentation mode, the label shows only the role. With reduced motion (`prefers-reduced-motion`), flies, sparkles and sparks stay still.
+- **To test:** the demo (`?demo=1`) gets dirty and breaks things on its own. In the console: `Zeladoria.sujar(95)` (closes it), `Zeladoria.quebrar("cafe")` or `Zeladoria.quebrar("luz")`, `Zeladoria.chamar("limpeza")`, `Zeladoria.estado()` and `Zeladoria.zerar()`. The numbers are at the top of `static/zeladoria.js`.
+
 ## Construction mode
 
 Rearrange the office with the mouse, on a computer. Open it from the **Customize** screen (`construir.html`); on a phone, the editor only shows a notice, and the main page shows the result.

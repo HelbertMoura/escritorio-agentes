@@ -236,7 +236,9 @@
     comida: ['wwwwwwwww', 'wwwwgmwww', 'wwrrgrrww', 'wwrrrrrww', 'wwwrrrwww', 'wwwwwwwww', '.ww......', '.w.......'],   // a maçã
     zz:     ['wwwwwwwww', 'wnnnnwwww', 'wwwnwwwww', 'wwnwwnnnw', 'wnnnnwnww', 'wwwwwnnnw', '.ww......', '.w.......'],   // um Z grande e um z
     alerta: ['wwwwwwwww', 'wwwwrwwww', 'wwwwrwwww', 'wwwwrwwww', 'wwwwwwwww', 'wwwwrwwww', '.ww......', '.w.......'],
-    wc:     ['wwwwwwwww', 'wnwwwnwnn', 'wnwnwnwnw', 'wnwnwnwnw', 'wwnwnwwnn', 'wwwwwwwww', '.ww......', '.w.......']};   // "WC" em azul
+    wc:     ['wwwwwwwww', 'wnwwwnwnn', 'wnwnwnwnw', 'wnwnwnwnw', 'wwnwnwwnn', 'wwwwwwwww', '.ww......', '.w.......'],   // "WC" em azul
+    eca:    ['wwwwwwwww', 'wwgwwgwgw', 'wgwwgwgww', 'wwgwwgwgw', 'wgwwgwgww', 'wwwwwwwww', '.ww......', '.w.......'],   // o fedor (zeladoria.js)
+    quebrada: ['wwwwwwwww', 'wwrwwwrww', 'wwwrwrwww', 'wwwwrwwww', 'wwwrwrwww', 'wwrwwwrww', 'wwwwwwwww', '.ww......', '.w.......']};   // o X vermelho
   var CORES_BALAO = { w: '#fff4dc', r: '#e8574a', n: '#3d4f9e', m: '#8a5a3a', s: '#b5bccc', g: '#4f9a4a' };
   function balao(c, tipo, x, y) {
     var g = ICONES[tipo]; if (!g) return;
