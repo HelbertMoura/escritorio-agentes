@@ -869,9 +869,14 @@ function montar(atlas, config, grupos, planta) {
     const mesa = obj("reuniao", cx, chao + 5.4 * T);
     obj("planta_g1", s.px + 12, chao + 1.6 * T); obj("planta_g3", s.px + s.pw - 12, chao + 1.6 * T);
     obj("quadro_branco", s.px + s.pw - 20, chao + 5.4 * T);   // na altura da mesa, para a apresentação
-    if (mesa) { // pé de quem senta em cada cadeira do sprite (mesa na diagonal) e para onde olha
-      const cadeiras = [[7, 36, "dir"], [21, 20, "baixo"], [35, 13, "baixo"], [72, 12, "esq"], [48, 44, "cima"], [63, 36, "cima"]];
-      for (const [cx0, cy0, olha] of cadeiras) { const v = vaga(s, mesa.x + cx0 * mesa.w / 77, mesa.y + cy0 * mesa.h / 49, "reuniao"); v.olha = olha; liga(mesa, "vagas", v); }
+    if (mesa) { // mesa de frente (efeitos.js): o tampo e os encostos de trás são anexos, para quem senta ficar entre as camadas
+      for (const [nome, dy] of [["reuniao_fundo", 10], ["reuniao_mesa", 36]]) {
+        const a = { nome, x: mesa.x, y: mesa.y, w: mesa.w, h: mesa.h, dx: 0, chave: mesa.y + dy }; objetos.push(a); liga(mesa, "anexos", a);
+      }
+      // pé de quem senta em cada cadeira (três atrás, olhando para baixo, e três de costas na frente) e para onde olha
+      for (const cx0 of [19, 38, 57]) for (const [cy0, olha] of [[19, "baixo"], [44, "cima"]]) {
+        const v = vaga(s, mesa.x + cx0, mesa.y + cy0, "reuniao"); v.olha = olha; liga(mesa, "vagas", v);
+      }
     }
   }
   // Cozinha de verdade: bancada contínua na parede (geladeira na ponta, pia sob a janela, cooktop com coifa e
@@ -1124,6 +1129,29 @@ function montar(atlas, config, grupos, planta) {
       obj("bebedouro", L + 12, fimB - 4);
       obj("vendas", R - 18, fimB - 4); obj(temCopa || !tem("geladeira_bebidas") ? "vendas2" : "geladeira_bebidas", R - 50, fimB - 4);
       obj("lixeiras", R - 82, fimB - 4);
+    }
+    { // vãos de parede que sobraram entre os cantinhos: estante baixa, aparador e vasos no fundo, jardineira e vaso na frente.
+      // Longe da arena do ringue (e da plateia), das portas, dos assentos e do que já está lá; nada sobe na frente de quadro
+      const rg = s.ringue, zona = rg ? { x: rg.x - 30, y: rg.y - 48, w: rg.w + 60, h: rg.h + 96 } : null;
+      const livre = r => !colide(r) && !(zona && sobre(r, zona)) && !reservas.some(q => sobre(r, q))
+        && !vagas.some(v => v.x > r.x - 10 && v.x < r.x + r.w + 10 && v.y > r.y - 14 && v.y < r.y + r.h + 14)
+        && objetos.every(o => o.chave < 0 || !o.w || !sobre(r, o));
+      if (rg) { // a arena fora da briga: um tapete no meio (some na luta, app.js)
+        const t = obj("tapete", rg.x + rg.w / 2, rg.y + rg.h - 8, false); if (t) t.semLuta = true;
+      }
+      const FUNDO = ["estante_baixa", "planta_alta", "aparador_baixo", "planta_g3"], FRENTE = ["jardineira", "planta_g1"];
+      for (const [lista, base] of [[FUNDO, chao + 12], [FRENTE, fim - 4]]) {
+        let k = 0;
+        for (let x = s.px + T; x < s.px + s.pw - T - 30; x += 4) {
+          const nome = lista[k % lista.length], sp = nome === "jardineira" ? [0, 0, 30, 9] : sprite(atlas, nome);
+          if (!sp) { k++; continue; }
+          const w = sp[2], h = sp[3];
+          if (x + w > s.px + s.pw - T || !livre({ x: x - 6, y: base - h, w: w + 12, h }) || (base - h < chao && !paredeLivreEm(x - 2, x + w + 2, chao))) continue;
+          if (nome === "jardineira") { objetos.push({ nome, x, y: base - h, w, h, dx: 0, chave: base }); pegadas.push({ x, y: base - h, w, h }); }
+          else if (!obj(nome, x + w / 2, base, false)) continue;
+          k++; x += w + 3 * T;
+        }
+      }
     }
     // corredor de passagem: a linha com menos móveis no caminho
     let melhor = s.faixa, menor = Infinity;

@@ -404,14 +404,14 @@ Para deixar o escritório numa TV na parede ou num segundo monitor. Abra pelo bo
 
 ## Modo apresentação
 
-Para mostrar a tela numa chamada com cliente ou postar um print sem vazar nada. Ligue pelo botão na barra da câmera ou com `Alt+Shift+P`; ele fica lembrado na aba até fechá-la.
+Para mostrar a tela numa chamada com cliente ou postar um print sem vazar nada. Ligue pelo menu "⋯" da barra da câmera ou com `Alt+Shift+P`; ele fica lembrado na aba até fechá-la.
 
 - **O que muda:** os bonecos ficam, mas os nomes viram "Agente 1", "Pessoa 2" e "Você", numerados na ordem em que aparecem; os balões somem; e a tela esconde o que mostra nome de gente ou de agente, título de tarefa, conversa, chat da sala, mural, recado de status, placar, as páginas Conversas, Aprovações e Jornal, o título e os convidados das reuniões e os links das salas no **Personalizar** (o link do Zoom pode levar a senha em `?pwd=`). O aviso de 5 minutos da reunião diz só "Uma reunião começa em breve".
 - **Só tela, não é controle de acesso:** o modo só esconde o que aparece nesta tela. Quem tem a sessão continua lendo tudo pela API e pelo DevTools do navegador, e o servidor responde igual. Não entregue um navegador logado a quem não deve ver os dados.
 
 ## Rádio da firma
 
-Um rádio na parede da Sala comunal. Clique nele (ou chegue nele com `Tab` e aperte `Enter`), ou no botão de rádio da barra da câmera, para abrir o controle: ligar e desligar, a estação e o volume. Não há nada para instalar nem configurar.
+Um rádio na parede da Sala comunal. Clique nele (ou chegue nele com `Tab` e aperte `Enter`), ou em "Rádio da firma", no menu "⋯" da barra da câmera, para abrir o controle: ligar e desligar, a estação e o volume. Não há nada para instalar nem configurar.
 
 <p align="center">
   <a href="./docs/screenshots/29-radio.png"><img src="./docs/screenshots/29-radio.png" alt="O controle da Rádio Firmópolis aberto em cima da sala comunal: o botão Desligar o rádio, as estações Lo-fi da firma (escolhida), Chiptune do fliperama e Jazz da cafeteria, o volume e 'Tocando: Lo-fi da firma'" width="900"></a>

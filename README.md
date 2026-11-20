@@ -404,14 +404,14 @@ For keeping the office on a wall TV or a second monitor. Open it with the **Modo
 
 ## Presentation mode
 
-For showing the screen on a call with a client or posting a screenshot without leaking anything. Turn it on with the button on the camera bar or with `Alt+Shift+P`; it is remembered per tab until the tab closes.
+For showing the screen on a call with a client or posting a screenshot without leaking anything. Turn it on from the "⋯" menu on the camera bar or with `Alt+Shift+P`; it is remembered per tab until the tab closes.
 
 - **What changes:** the avatars stay, but the names become "Agente 1", "Pessoa 2" and "Você" (you), numbered in the order they show up; the speech bubbles disappear; and the screen hides whatever shows a person's or agent's name, task title, conversation, room chat, mural, status note, the scoreboard, the Conversas, Aprovações and Jornal pages, the meeting titles and guests, and the meeting room links in **Personalizar** (a Zoom link can carry the password in `?pwd=`). The 5-minute meeting alert only says "Uma reunião começa em breve".
 - **Screen only, not access control:** the mode only hides things on this screen. Whoever holds the session still reads everything through the API and the browser DevTools, and the server answers the same. Do not hand a signed-in browser to someone who should not see the data.
 
 ## Office radio
 
-A radio on the wall of the Sala comunal (common room). Click it (or reach it with `Tab` and press `Enter`), or the radio button on the camera bar, to open its controls: on and off, station and volume. There is nothing to install or configure.
+A radio on the wall of the Sala comunal (common room). Click it (or reach it with `Tab` and press `Enter`), or "Rádio da firma" in the "⋯" menu on the camera bar, to open its controls: on and off, station and volume. There is nothing to install or configure.
 
 <p align="center">
   <a href="./docs/screenshots/29-radio.png"><img src="./docs/screenshots/29-radio.png" alt="The Rádio Firmópolis controls open over the common room: the Desligar o rádio (turn off) button, the stations Lo-fi da firma (selected), Chiptune do fliperama and Jazz da cafeteria, the volume and 'Tocando: Lo-fi da firma'" width="900"></a>

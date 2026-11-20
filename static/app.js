@@ -216,7 +216,7 @@ function ajustarEscala() {
   const palco = $("palco"), cheio = $("palco-cartao").classList.contains("cheio");
   vw = palco.clientWidth;
   if (cheio) vh = Math.max(240, window.innerHeight - (parseFloat(getComputedStyle($("palco-cartao")).top) || 0));   // sem a faixa de prévia ou demonstração do topo
-  else if (window.innerWidth <= 760) vh = 268;   // celular: cartão de 268 px; a câmera completa fica na tela cheia
+  else if (window.innerWidth <= 760) vh = Math.round(Math.max(460, Math.min(window.innerHeight * 0.62, 620)));   // celular: o mapa aparece inteiro logo abaixo do título
   else vh = Math.round(Math.max(380, Math.min(window.innerHeight * 0.72, vw * predio.H / predio.W)));
   tela.width = Math.round(vw * dpr); tela.height = Math.round(vh * dpr);
   tela.style.width = `${vw}px`; tela.style.height = `${vh}px`;
@@ -298,6 +298,7 @@ function quadro(t) {
   }
 }
 
+let noiteQuadro = 0;   // o escuro do céu neste quadro (a luminária da mesa acende para quem trabalha à noite)
 // handle → boneco, refeito a cada quadro: as telas das mesas consultam sem varrer a lista
 const bonecoDaMesa = new Map();
 function desenharCena(t) {
@@ -315,6 +316,7 @@ function desenharCena(t) {
   ctx.setTransform(cam.k, 0, 0, cam.k, tela.width / 2 - cam.x * cam.k, tela.height / 2 - cam.y * cam.k);
   ctx.imageSmoothingEnabled = cam.k < 1;   // de 1x para cima, pixel inteiro (nítido); abaixo, a vista geral reduzida sem serrilhar
   const ceu = Ceu.agora(), ta = menosMovimento.matches ? 0 : t;   // ta: relógio dos objetos (parado com menos movimento)
+  noiteQuadro = ceu.escuro;
   ctx.drawImage(predio.fundo, 0, 0);
   const rg = predio.ringue, luta = !!rg && !!mundo.cenaSocial && mundo.cenaSocial.tipo === "briga";   // o ringue só aparece na briga
   if (luta && rg.arte) ctx.drawImage(rg.arte.cv, rg.arte.x, rg.arte.y);
@@ -331,7 +333,7 @@ function desenharCena(t) {
   if (luta && rg.quadro) { const q = rg.quadro; Mapa.pintarQuadroPlacar(ctx, q.x, q.y, q.w, q.h); Efeitos.placar(ctx, q, placarDaTela(), mundo); }   // top 3 da semana
   for (const r of predio.rotulos || []) desenharRotulo(r);
   const cena = [];
-  for (const o of predio.objetos) if (!o.luta || luta) cena.push({ chave: o.chave, desenha: () => desenharObjeto(o, ta) });
+  for (const o of predio.objetos) if ((!o.luta || luta) && !(o.semLuta && luta)) cena.push({ chave: o.chave, desenha: () => desenharObjeto(o, ta) });
   for (const a of predio.animados) if (!a.parede) cena.push({ chave: a.chave, desenha: () => desenharAnimado(a, ta) });
   for (const s of [...predio.salas, ...predio.baixo]) if (s.placa) cena.push({ chave: s.placa.y + Mapa.PLACA_H, desenha: () => { desenharPlaca(s); } });
   const ent = mundo.entrega;   // entrega da greve atendida (vida.js): o item no ponto e o entregador, na ordem da cena
@@ -373,7 +375,10 @@ function desenharCena(t) {
   if (baloes) for (const v of visitas) if (v.fala) desenharBalao(v, ocupadas);   // o aceno e o "Toc, toc!" das pessoas (vida.js)
   if (baloes) for (const v of Z ? [...npcs.filter(n => n.fala), ...Z.falas()] : []) desenharBalao(v, ocupadas);   // a equipe, "Quebrada!" e "Interditado"
   Brincar.desenhar(ctx);   // realce, reações dos objetos e a festa do Konami
+  const rotulo = `${String(Math.round((cam.k / dpr) * 10) / 10).replace(".", ",")}x`;
+  if (rotulo !== zoomMostrado) { zoomMostrado = rotulo; $("zoom-nivel").textContent = rotulo; }   // o zoom de agora na barra da câmera
 }
+let zoomMostrado = "";
 
 function naEscala(f) { if (escala !== 1) { ctx.save(); ctx.scale(escala, escala); } f(); if (escala !== 1) ctx.restore(); }
 function visivel(b) { return !(b.lugar && b.lugar.tipo === "fora" && !b.rota.length) && b.x > -20; }
@@ -457,6 +462,9 @@ function desenharPortas(t) {
 let ultimoLuz = 0;
 function dt0(t) { const d = Math.min(0.1, (t - ultimoLuz) / 1000); ultimoLuz = t; return d; }
 
+// móveis soltos ganham sombra de contato; tapete, peças da fachada e da rua e as peças em código que já têm a sua, não
+const SEM_SOMBRA = /^(tapete|ringue|bancada|placa_|fachada|parede|piso|carro|poste|arvore|palmeira|arbusto|lixeiras$|poltrona_tecido$|luminaria_arco$|aparador_baixo$|jardineira$|divisoria$|ring_light$|ventilador$|hidrante$|reuniao|sinuca2$|mesa_cozinha|biombo$|floreira$)/;
+const temSombra = o => o.sombra ?? (o.sombra = !!o.nome && !o.fora && !SEM_SOMBRA.test(o.nome) && o.w > 5);
 function desenharObjeto(o, t) {
   if (o.tipo === "mesa") {
     o.mesa.horaExtra = naHoraExtra(o.mesa);
@@ -464,6 +472,10 @@ function desenharObjeto(o, t) {
   } else if (o.tipo === "cadeira") {
     Mapa.desenharCadeira(ctx, o.x, o.y, o.cor, o.estilo);
   } else {
+    if (temSombra(o)) { // sombra de contato: elipse achatada na base do móvel solto (atrás dos pés dele)
+      const w = Math.max(6, Math.round(o.w * 0.8)), x = Math.round(o.x + (o.w - w) / 2), y = o.y + o.h;
+      ctx.fillStyle = "rgba(0,0,0,.2)"; ctx.fillRect(x + 2, y - 1, w - 4, 1); ctx.fillRect(x, y, w, 1); ctx.fillRect(x + 2, y + 1, w - 4, 1);
+    }
     if (o.espelho) { ctx.save(); ctx.translate(2 * o.x + o.w, 0); ctx.scale(-1, 1); }   // árvore ou planta espelhada (mapa.js)
     if (!Efeitos.objeto(ctx, o, t)) spr(o.nome, o.x, o.y);
     if (o.espelho) ctx.restore();
@@ -487,7 +499,8 @@ function telaDaMesa(mesa) {
 // a luminária da mesa acende com o dono fazendo hora extra (vida.js: Vida.horaExtra) sentado nela
 function naHoraExtra(mesa) {
   const b = mesa.handle && bonecoDaMesa.get(mesa.handle);
-  return !!b && Vida.horaExtra(b, mundo.fora) && !b.rota.length && !!b.lugar && b.lugar.tipo === "mesa";
+  if (!b || b.rota.length || !b.lugar || b.lugar.tipo !== "mesa") return false;
+  return Vida.horaExtra(b, mundo.fora) || (noiteQuadro > 0.5 && !!b.trabalho && estadoDe(b.trabalho.status).classe === "trabalhando");   // à noite, quem trabalha acende a dela
 }
 
 function desenharAnimado(a, t) {
@@ -515,18 +528,13 @@ function desenharBoneco(b, t) {
 
 // terminalzinho da ponte local (sprites.js): andando, dá o passo; parado, a telinha mostra o estado (código subindo
 // quando ocupado, "!" âmbar quando espera você, olhos quando livre; no papo e no jogo, a carinha feliz e a mão; no cochilo,
-// a tela apagada). O Maestro (gerente) leva uma coroinha âmbar em cima do monitor. t: o relógio dos objetos
+// a tela apagada). A cor é a do programa e o papel ganha um acessório (sprites.js: coroa, óculos ou capacete). t: o relógio dos objetos
 function desenharTerminal(k, t) {
   const d = k.dado, f = Math.floor(k.anda / 4) % 4;
   const acao = k.rota.length ? "andar" : k.dorme ? "dormir" : k.balao === "oi" || k.feliz || k.danca > performance.now() / 1000 ? "acenar" : d.estado === "ocupado" ? "parar" : d.estado === "livre" ? "ficar" : "esperar";
   ctx.globalAlpha = combina(k) ? 1 : 0.3;
   if (escala !== 1) { ctx.save(); ctx.scale(escala, escala); }
-  Sprites.terminal(ctx, Math.round(k.x - 6), Math.round(k.y), f, k.lado < 0, k.cor, t, acao);
-  if (d.gerente) { // 17 linhas de sprite (monitor e corpo); andando, sobe 1 px no passo, como o sprite
-    const x = Math.round(k.x) - 3, y = Math.round(k.y) - 17 - (acao === "andar" ? f % 2 : 0) - 3;   // 6×3, as três pontas em cima
-    ctx.fillStyle = "#f5b83d"; ctx.fillRect(x, y, 1, 2); ctx.fillRect(x + 2, y, 2, 2); ctx.fillRect(x + 5, y, 1, 2); ctx.fillRect(x + 1, y + 1, 1, 1); ctx.fillRect(x + 4, y + 1, 1, 1);
-    ctx.fillStyle = "#b9791c"; ctx.fillRect(x, y + 2, 6, 1);
-  }
+  Sprites.terminal(ctx, Math.round(k.x - 6), Math.round(k.y), f, k.lado < 0, k.cor, t, acao, d);   // cor do programa e acessório do papel
   // vida.js, onda 4: o café e o papo, no balãozinho do lado de trás (em cima, a etiqueta do nome o cobriria)
   if (k.balao && (!k.rota.length || k.reacao)) Sprites.balao(ctx, k.balao, Math.round(k.x) + (k.lado < 0 ? 7 : -16), Math.round(k.y) - 19);
   if (escala !== 1) ctx.restore();
@@ -551,7 +559,12 @@ function desenharEntregador(e, t) {
 
 // o banheiro fica aceso com alguém numa cabine ou a faxina lá dentro
 const banheiroEmUso = () => !!(predio.banheiro && (predio.banheiro.cabines.some(k => k.ocupada) || (window.Zeladoria && Zeladoria.estado().limpando)));
+// a luz da noite é multiplicada (tinge sem apagar o desenho): azul lá fora e nos corredores, quase preto-azulado nas
+// salas vazias (dá para ler) e branco quente nas salas acesas, que ficam bem mais claras que o resto
+const NOITE = [78, 88, 150], SALA_APAGADA = [58, 64, 112], SALA_ACESA = [255, 234, 200];
+const tingir = (cor, n) => `rgb(${cor.map(v => Math.round(255 + (v - 255) * n)).join(",")})`;
 function desenharLuzes(dt, ceu) {
+  // sala acesa = trabalho de verdade: agente na mesa com tarefa, terminal ocupado parado nela, ou gente nas vagas da sala
   const ocupadas = new Set();
   for (const b of mundo.bonecos.values()) {
     if (b.lugar && b.lugar.tipo === "mesa" && b.trabalho) ocupadas.add(b.lugar.mesa.sala);
@@ -559,22 +572,30 @@ function desenharLuzes(dt, ceu) {
     if (b.destino && b.destino.vaga) ocupadas.add(b.destino.vaga.sala);
     if (b.destino && b.destino.mesa) ocupadas.add(b.destino.mesa.sala);
   }
+  for (const k of window.Sprites ? Vida.terminais() : []) if (!k.dentro && !k.rota.length && k.dado && k.dado.estado === "ocupado") { const s = salaEm(k); if (s) ocupadas.add(s); }
   const noite = ceu.escuro; // 0 = dia claro, 1 = noite
-  if (noite > 0.02) { const v = vistaMundo(); ctx.fillStyle = `rgba(8,10,34,${noite * 0.5})`; ctx.fillRect(Math.min(0, v.l), Math.min(0, v.t), Math.max(predio.W, v.r) - Math.min(0, v.l), Math.max(predio.H, v.b) - Math.min(0, v.t)); }
-  const agora = performance.now();
-  for (const s of [...predio.salas, ...predio.baixo]) {
-    const acesa = s.tipo === "recepcao" || ocupadas.has(s) || (s.tipo === "banheiro" && banheiroEmUso());
-    if (acesa && s.acesa === false && !menosMovimento.matches) s.pisca = agora + 450;   // lâmpada piscando ao acender
-    s.acesa = acesa;
-    const piscando = s.pisca > agora;
-    s.luz += ((acesa ? (piscando && Math.floor(agora / 70) % 3 === 0 ? 0.2 : 1) : 0) - s.luz) * Math.min(1, dt * (piscando ? 20 : 2.5));
-    const escuroSala = (1 - s.luz) * (0.35 + noite * 0.4);
-    if (escuroSala > 0.01) { ctx.fillStyle = `rgba(6,8,26,${escuroSala})`; ctx.fillRect(s.px, s.py, s.pw, s.ph); }
-    if (noite > 0.05 && s.luz > 0.05) { // luz quente das salas acesas à noite
-      ctx.globalCompositeOperation = "lighter";
-      ctx.fillStyle = `rgba(52,40,22,${noite * 0.55 * s.luz})`; ctx.fillRect(s.px, s.py, s.pw, s.ph);
-      ctx.globalCompositeOperation = "source-over";
+  const todas = [...predio.salas, ...predio.baixo];
+  for (const s of todas) {
+    s.acesa = s.tipo === "recepcao" || ocupadas.has(s) || (s.tipo === "banheiro" && banheiroEmUso());
+    s.luz += ((s.acesa ? 1 : 0) - s.luz) * Math.min(1, dt * 2.5);   // acende e apaga num fade curto, sem piscar
+  }
+  if (noite > 0.02) {
+    const v = vistaMundo(), l = Math.min(0, v.l), t = Math.min(0, v.t), r = Math.max(predio.W, v.r), b = Math.max(predio.H, v.b);
+    ctx.globalCompositeOperation = "multiply";
+    ctx.beginPath(); ctx.rect(l, t, r - l, b - t);
+    for (const s of todas) ctx.rect(s.px + s.pw, s.py, -s.pw, s.ph);   // as salas ficam de fora: cada uma leva a sua luz
+    ctx.fillStyle = tingir(NOITE, noite); ctx.fill("evenodd");
+    for (const s of todas) {
+      ctx.fillStyle = tingir(SALA_APAGADA.map((v, i) => v + (SALA_ACESA[i] - v) * s.luz), noite);
+      ctx.fillRect(s.px, s.py, s.pw, s.ph);
     }
+    ctx.globalCompositeOperation = "lighter";   // o calor da lâmpada no meio das salas acesas
+    for (const s of todas) if (s.luz > 0.05) brilho(s.px + s.pw / 2, s.py + s.ph * 0.55, Math.max(s.pw, s.ph) * 0.6, `rgba(60,40,14,${0.38 * noite * s.luz})`);
+    ctx.globalCompositeOperation = "source-over";
+  }
+  for (const s of todas) { // de dia, a sala sem ninguém fica só um pouco na penumbra
+    const escuroSala = (1 - s.luz) * 0.3 * (1 - noite);
+    if (escuroSala > 0.01) { ctx.fillStyle = `rgba(6,8,26,${escuroSala})`; ctx.fillRect(s.px, s.py, s.pw, s.ph); }
   }
   if (noite > 0.05) { // luminárias, monitores e telas brilham
     ctx.globalCompositeOperation = "lighter";
@@ -597,10 +618,9 @@ function desenharLuzes(dt, ceu) {
     }
     ctx.globalCompositeOperation = "source-over";
   }
-  const pulso = menosMovimento.matches ? 1 : 0.88 + 0.12 * Math.sin(agora / 700);   // a luz da hora extra respira devagar
-  ctx.globalCompositeOperation = "lighter";
+  ctx.globalCompositeOperation = "lighter";   // a luminária de quem trabalha à noite (ou na hora extra): luz firme, sem pulsar
   for (const o of predio.objetos) if (o.tipo === "mesa" && o.mesa.horaExtra)
-    brilho(Mapa.lampadaX(o.mesa) + 2.5, o.mesa.topo + 3, 20, `rgba(255,210,130,${Math.max(0.5, noite) * 0.45 * pulso})`);
+    brilho(Mapa.lampadaX(o.mesa) + 2.5, o.mesa.topo + 3, 22, `rgba(255,200,120,${Math.max(0.5, noite) * 0.5})`);
   ctx.globalCompositeOperation = "source-over";
 }
 
@@ -1021,7 +1041,7 @@ const situacaoTerminal = d => (d.estado === "ocupado" ? "trab" : Object.hasOwn(E
 function miniTerminal(d, espera) {
   const cv = document.createElement("canvas"); cv.width = cv.height = 44; cv.className = "mini"; cv.setAttribute("aria-hidden", "true");
   const c = cv.getContext("2d"); c.imageSmoothingEnabled = false; c.scale(2, 2);
-  Sprites.terminal(c, 5, 20, 0, false, Avatar.semente(d.id), 0, espera ? "esperar" : "parar");   // a mesma cor do mapa (vida.js)
+  Sprites.terminal(c, 5, 22, 0, false, Avatar.semente(d.id), 0, espera ? "esperar" : "parar", d);   // a mesma cara do mapa
   return cv;
 }
 // uma linha do widget: quem (nome · programa), o que pede ou faz, e o clique leva a câmera até ele no mapa
@@ -2411,11 +2431,36 @@ function telaCheia(ligar) {
   c.classList.toggle("cheio", ligar); document.body.classList.toggle("travado", ligar);
   $("tela-cheia").setAttribute("aria-pressed", String(ligar)); $("tela-cheia").setAttribute("aria-label", ligar ? "Sair da tela cheia" : "Mapa em tela cheia");
   $("tela-cheia").querySelector(".ic").replaceChildren(iconeSvg(ligar ? "recolher" : "expandir"));
+  $("tela-cheia").querySelector(".rotulo-menu").textContent = ligar ? "Sair da tela cheia" : "Tela cheia";
   ajustarEscala();
-  if (!ligar && window.innerWidth <= 760) $("abrir-cheia").focus();   // o botão de sair some com a tela cheia: o foco não cai no body
+  if (!ligar && window.innerWidth <= 760 && $("controles-menu").hidden) $("controles-mais").focus();   // o botão de sair estava no menu, que fechou: o foco não cai no body
 }
 $("tela-cheia").addEventListener("click", () => telaCheia(!$("palco-cartao").classList.contains("cheio")));
-$("abrir-cheia").addEventListener("click", () => { telaCheia(true); $("tela-cheia").focus(); });   // celular: o foco vai para o botão que sai da tela cheia
+// o menu "⋯" da câmera: tela cheia, foto, TV, rádio, time-lapse (e o modo apresentação, apresentacao.js). Fecha ao escolher,
+// no Esc e no clique fora; o foco volta para o "⋯"
+function menuCamera(abrir, devolverFoco) {
+  const m = $("controles-menu"), b = $("controles-mais");
+  if (abrir === !m.hidden) return;
+  m.hidden = !abrir; b.setAttribute("aria-expanded", String(abrir));
+  if (abrir) m.querySelector("button")?.focus(); else if (devolverFoco) b.focus();
+}
+$("controles-mais").addEventListener("click", () => menuCamera($("controles-menu").hidden));
+$("controles-menu").addEventListener("click", ev => { if (ev.target.closest("button")) menuCamera(false); });
+$("controles-menu").addEventListener("keydown", ev => { if (ev.key === "Escape") { ev.stopPropagation(); menuCamera(false, true); } });
+document.addEventListener("pointerdown", ev => { if (!$("controles-menu").hidden && !ev.target.closest(".controles")) menuCamera(false); });
+// o selo do mapa: curto (hora, ícone do tempo e temperatura); o clique abre a cidade e o tempo por extenso
+$("selo-vivo").addEventListener("click", () => {
+  const aberto = $("selo-vivo").getAttribute("aria-expanded") !== "true";
+  $("selo-vivo").setAttribute("aria-expanded", String(aberto)); $("selo-mais").hidden = !aberto;
+});
+// "Toque num agente" some depois do primeiro toque no mapa (lembrado neste navegador)
+const CHAVE_DICA = "firmopolis.dica-mapa";
+try { if (localStorage.getItem(CHAVE_DICA) === "1") document.querySelector(".dica-mapa").hidden = true; } catch (e) { /* armazenamento bloqueado: a dica fica */ }
+tela.addEventListener("pointerdown", () => {
+  const d = document.querySelector(".dica-mapa"); if (d.hidden) return;
+  d.hidden = true;
+  try { localStorage.setItem(CHAVE_DICA, "1"); } catch (e) { /* só nesta visita */ }
+}, { passive: true });
 document.addEventListener("keydown", ev => {
   if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && ev.key.toLowerCase() === "k") { ev.preventDefault(); irParaBusca(); return; }
   if (ev.key === "Escape") {
@@ -2673,8 +2718,10 @@ setInterval(() => {
   const f = (festa ? ` · ${festa.nome}` : "") + (mo ? ` · ${{ daily: "hora da daily", almoco: "almoço", cafe: "pausa do café" }[mo.nome]}` : "");
   const completo = `${c.hora} · ${c.periodo} · ${Clima.texto()}${f}`, curto = Clima.texto(true);
   const vivo = falhou ? "Sem conexão" : estado && estado.erro ? "Última leitura" : "Ao vivo";
-  $("relogio").textContent = `${vivo} · ${innerWidth <= 760 ? `${c.hora}${curto ? " · " + curto : ""}` : completo}`;
-  $("relogio").title = completo;
+  const icone = { limpo: c.escuro > 0.5 ? "☾" : "☀", nublado: "☁", neblina: "≋", garoa: "☂", chuva: "☂", tempestade: "⚡", neve: "❄" }[Clima.tipo()] || "";
+  textoSe($("relogio"), `${vivo === "Ao vivo" ? "" : vivo + " · "}${c.hora}`); textoSe($("selo-icone"), icone); textoSe($("selo-temp"), curto);
+  textoSe($("selo-mais"), `${vivo} · ${completo}`);
+  $("selo-vivo").title = `${vivo} · ${completo}`; $("selo-vivo").setAttribute("aria-label", `${vivo} · ${completo}`);
   mostrarExpediente(c.h);
   if (!predio || !mundo || document.hidden) return;
   atualizarEstados(); atualizarSalas(); mostrarConexao();
