@@ -15,7 +15,7 @@ function predio() {
   const lounge = { tipo: "lounge", chave: "lounge", nome: "Sala comunal", px: 100, py: 200, pw: 120, ph: 100, chao: 236, portas: [160] };
   const wc = { tipo: "banheiro", chave: "banheiro", nome: "Banheiro", px: 240, py: 200, pw: 192, ph: 100, chao: 236, portas: [400] };
   const cabines = [0, 1, 2].map(i => ({ x: 258 + i * 26, y: 283, px: 244 + i * 26, chao: 236, ocupada: false }));
-  return { salas: [recepcao], baixo: [lounge, wc], vagas: [], objetos: [], livre: () => true, corredorY: 170, corredorTopo: 150,
+  return { salas: [recepcao], baixo: [lounge, wc], vagas: [], objetos: [], animados: [], livre: () => true, corredorY: 170, corredorTopo: 150,
     corredorAlt: 40, predioRet: { x: 60, y: 30, w: 460, h: 300 }, entrada: { x: 62, calcadaY: 350 },
     banheiro: { x: 400, y: 170, sala: wc, cabines } };
 }
