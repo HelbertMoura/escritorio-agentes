@@ -4,6 +4,11 @@
 
 All notable changes to this project are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Since 1.1.0, versions follow [SemVer](https://semver.org/); older entries are dated milestones.
 
+## Unreleased
+
+### Changed
+- **A real bathroom:** the WC door on the hallway wall became a whole room in the bottom row, next to the kitchen: small white and blue tiles, three stalls with a door and a vacant/occupied latch (green or red, with feet in the gap when someone is inside), a counter with two sinks and a mirror, a hand dryer, a bin and plants. The terminals' queue still forms in the hallway, in front of the door; whoever is first walks to a free stall and disappears inside, up to one per stall. The dirt shows on the floor (paper, puddles, toilet paper out of the stall, flies and stink), the closed bathroom gets a wet-floor cone and the "Interditado" sign at the door, and the cleaner goes in to mop. In the sidebar, the bathroom shows "livre", how many stalls are taken or "interditado". It only exists on this screen: it is not a chat channel and stays out of construction mode.
+
 ## 2.1.0 · 2026-11-20 · The firm comes alive
 
 Release [`v2.1.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2.1.0). Commits: [`v2.0.0...v2.1.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v2.0.0...v2.1.0).

@@ -368,7 +368,7 @@ O prédio também tem quem cuide dele, e o banheiro pode ficar podre. Tudo roda 
 </p>
 <p align="center"><em>A faxineira no banheiro e a zeladora consertando a cafeteira.</em></p>
 
-- **Sujeira:** cada ida ao banheiro suja um pouco, e o terminal apertado e quem furou a fila sujam mais. Acima de 60, aparecem moscas e linhas de fedor na porta WC, e quem sai mostra o balão "eca". Acima de 90, o banheiro fica **interditado**, com placa: ninguém entra, a fila espera com o alerta e, depois de um tempo, desiste. Depois do café e do lanche, sobram copos e migalhas no chão.
+- **Sujeira:** cada ida ao banheiro suja um pouco, e o terminal apertado e quem furou a fila sujam mais. A sujeira aparece no chão do banheiro (papel, poças, o papel higiênico saindo da cabine). Acima de 60, aparecem moscas e linhas de fedor nas cabines, e quem sai mostra o balão "eca". Acima de 90, o banheiro fica **interditado**, com o cone de piso molhado e a placa na porta: ninguém entra, a fila espera com o alerta e, depois de um tempo, desiste. Depois do café e do lanche, sobram copos e migalhas no chão.
 - **Faxina:** quando a sujeira passa de 60, ou numa ronda (mais frequente à noite), a faxineira entra pela rua com balde e rodo, limpa o banheiro com brilho, recolhe copos e migalhas e vai embora.
 - **Manutenção:** de vez em quando algo quebra. Com a cafeteira quebrada, ninguém toma café (agentes, roda e terminais desistem, com o alerta). Com uma luminária do corredor quebrada, ela pisca. O zelador vem com a caixa de ferramentas, conserta com faíscas e vai embora.
 - **Portaria:** no expediente, o porteiro fica na entrada, lê o jornal, toma café e cumprimenta quem chega. Fora do expediente, o vigia assume com a lanterna e faz a ronda.

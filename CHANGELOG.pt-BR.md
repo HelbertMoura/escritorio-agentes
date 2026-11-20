@@ -4,6 +4,11 @@
 
 As mudanças que importam neste projeto ficam aqui, da mais nova para a mais antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Desde a 1.1.0, as versões seguem o [SemVer](https://semver.org/lang/pt-BR/); as entradas mais antigas são marcos com data.
 
+## Não lançado
+
+### Mudado
+- **Banheiro de verdade:** a porta WC na parede do corredor virou uma sala inteira na fileira de baixo, ao lado da cozinha: piso de pastilhas brancas e azuis, três cabines com porta e o trinco de vago/ocupado (verde ou vermelho, com os pés na fresta quando tem alguém), bancada com duas cubas e espelho, secador de mãos, lixeira e plantas. A fila dos terminais continua no corredor, na frente da porta; o da frente vai a uma cabine vaga e some lá dentro, um por cabine. A sujeira aparece no chão (papel, poças, o papel higiênico saindo da cabine, moscas e fedor), o banheiro interditado ganha o cone de piso molhado e a placa "Interditado" na porta, e a faxineira entra para passar o rodo. Na lateral, o banheiro mostra "livre", quantas cabines estão ocupadas ou "interditado". Ele só existe nesta tela: não é canal de conversa e fica fora do modo construção.
+
 ## 2.1.0 · 2026-11-20 · A firma ganha vida
 
 Release [`v2.1.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2.1.0). Commits: [`v2.0.0...v2.1.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v2.0.0...v2.1.0).

@@ -310,7 +310,8 @@ function desenharCena(t) {
   Efeitos.painelLogo(ctx, t, ceu);
   Efeitos.festaChao(ctx, festa);
   const Z = window.Zeladoria && window.Sprites ? Zeladoria : null, npcs = Z ? Z.npcs() : [];   // a equipe do prédio (zeladoria.js)
-  if (Z) Z.chao(ctx);   // migalhas e copos no chão
+  if (Z) Z.chao(ctx);   // migalhas e copos no chão, e a sujeira do banheiro
+  if (predio.banheiro) Mapa.desenharCabines(ctx, predio.banheiro);   // vago ou ocupado em cada cabine (vida.js)
   Efeitos.robo(ctx, dtQuadro, t, ceu);
   for (const a of predio.animados) if (a.parede) desenharAnimado(a, ta);
   for (const s of [...predio.salas, ...predio.baixo]) if (s.mural) desenharMural(s.mural);
@@ -534,6 +535,8 @@ function desenharEntregador(e, t) {
   if (g.carrega) Efeitos.itemNaMao(ctx, e.item, x, y, t);
 }
 
+// o banheiro fica aceso com alguém numa cabine ou a faxina lá dentro
+const banheiroEmUso = () => !!(predio.banheiro && (predio.banheiro.cabines.some(k => k.ocupada) || (window.Zeladoria && Zeladoria.estado().limpando)));
 function desenharLuzes(dt, ceu) {
   const ocupadas = new Set();
   for (const b of mundo.bonecos.values()) {
@@ -546,7 +549,7 @@ function desenharLuzes(dt, ceu) {
   if (noite > 0.02) { ctx.fillStyle = `rgba(8,10,34,${noite * 0.5})`; ctx.fillRect(0, 0, predio.W, predio.H); }
   const agora = performance.now();
   for (const s of [...predio.salas, ...predio.baixo]) {
-    const acesa = s.tipo === "recepcao" || ocupadas.has(s);
+    const acesa = s.tipo === "recepcao" || ocupadas.has(s) || (s.tipo === "banheiro" && banheiroEmUso());
     if (acesa && s.acesa === false && !menosMovimento.matches) s.pisca = agora + 450;   // lâmpada piscando ao acender
     s.acesa = acesa;
     const piscando = s.pisca > agora;
@@ -705,13 +708,14 @@ const ICONES = {
   camera:   ["........", "..##....", "########", "#..++..#", "#.+..+.#", "#.+..+.#", "#..++..#", "########"],
   radio:    ["......#.", ".....#..", "########", "#++..#.#", "#++.#+##", "#++..#.#", "########", ".#....#."],
   estrela:  ["...#....", "...#....", "..###...", "#######.", ".#####..", "..#.#...", ".#...#..", "........"],
+  wc:       [".#.+.##.", "###+.##.", "###+.##.", "###+####", "###+####", "#.#+####", "#.#+.##.", "#.#+.##."],
 };
-const ICONE_DO_TIPO = { recepcao: "sino", gabinete: "coroa", ops: "servidor", reuniao: "pessoas", lounge: "controle", cozinha: "xicara" };
+const ICONE_DO_TIPO = { recepcao: "sino", gabinete: "coroa", ops: "servidor", reuniao: "pessoas", lounge: "controle", cozinha: "xicara", banheiro: "wc" };
 const CORES_TIME = ["#3b82f6", "#e8587a", "#22c55e", "#f59e0b", "#8b5cf6", "#14b8a6", "#f97316"];
 
 function corDaSala(s) {
   if (s.cor) return s.cor;
-  const fixas = { recepcao: Mapa.cor("destaque"), reuniao: "#0ea5e9", lounge: "#a855f7", cozinha: "#f97316", gabinete: "#eab308", ops: "#10b981" };
+  const fixas = { recepcao: Mapa.cor("destaque"), reuniao: "#0ea5e9", lounge: "#a855f7", cozinha: "#f97316", banheiro: "#2f5fb3", gabinete: "#eab308", ops: "#10b981" };
   if (fixas[s.tipo]) return fixas[s.tipo];
   let h = 0; for (const ch of s.nome) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return CORES_TIME[h % CORES_TIME.length];
@@ -1018,6 +1022,9 @@ function atualizarSalas() {
       const donos = bs.filter(x => (s.handles || []).includes(x.handle));
       const na = donos.filter(x => x.lugar && x.lugar.tipo === "mesa" && x.trabalho).length;
       txt = `${na}/${donos.length}`; ativa = na > 0; espera = donos.some(x => situacao(x) === "esp");
+    } else if (s.tipo === "banheiro" && predio.banheiro) { // banheiro: interditado, ou quantas cabines estão ocupadas
+      const n = predio.banheiro.cabines.filter(k => k.ocupada).length;
+      txt = window.Zeladoria && Zeladoria.interditado() ? "interditado" : n ? `${n} ${n === 1 ? "ocupada" : "ocupadas"}` : "livre"; ativa = false;
     } else {
       const aqui = bs.filter(x => visivel(x) && salaEm(x) === s).length + gente.filter(p => salaEm(p) === s).length;   // pela posição de agora (quem está chegando já conta)
       txt = aqui ? `${aqui} aqui` : "vazia"; ativa = false;

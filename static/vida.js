@@ -1765,7 +1765,8 @@ const Vida = (() => {
     if (vivo.convocacao) { convocar(m, vivo.convocacao); vivo.convocacao = null; }
     const andava = eu.rota.length > 0;
     andarPessoa(m, eu, dt, agora);
-    const s = salaEm(m, eu.x, eu.y), sala = s && typeof s.chave === "string" ? s.chave : "";
+    // o banheiro só existe nesta tela (o servidor não tem essa sala): lá dentro, para os outros, conta como o corredor
+    const s = salaEm(m, eu.x, eu.y), sala = s && typeof s.chave === "string" && s.tipo !== "banheiro" ? s.chave : "";
     if (sala !== eu.sala) { eu.sala = sala; eu.salaNome = s ? s.nome : "Corredor"; enviarPresenca(); }
     else if ((andava && !eu.rota.length) || performance.now() - vivo.enviado > RENOVAR) enviarPresenca();   // chegou, ou renova
     if (andava && !eu.rota.length && eu.bater) { gesto(eu, "Toc, toc!", eu.bater.olha); eu.bater = null; eu.pose = "acenando"; }   // chegou na porta: bate
@@ -1782,7 +1783,7 @@ const Vida = (() => {
   // Entram pela rua e vão para a sala do estado: ocupado trabalha numa sala de time (a mesma para a band ou o workspace,
   // e o Maestro na sala de reunião), esperando você (aprovação, pergunta ou erro) vai para a recepção, livre fica na sala
   // comunal ou na cozinha. Mudou o estado, muda de sala.
-  const term = { v: -1, m: null, lista: new Map(), fila: [], dentro: null };   // fila e dentro: o banheiro (vida, abaixo)
+  const term = { v: -1, m: null, lista: new Map(), fila: [], dentro: [] };   // fila e dentro: o banheiro (vida, abaixo)
   const TERM_ESPERA = new Set(["aprovacao", "pergunta", "erro"]);
   // o estado do terminal no vocabulário dos agentes (app.js: ESTADOS): o erro pede você, como uma aprovação ("!")
   const TERM_TRABALHO = { ocupado: "running", aprovacao: "waiting_approval", erro: "waiting_approval", pergunta: "waiting_input" };
@@ -1807,7 +1808,7 @@ const Vida = (() => {
     if (!window.Ponte) return;
     if (term.m !== m) { // o app.js remontou o prédio: quem andava chega direto e escolhe a sala de novo
       for (const t of term.lista.values()) { const fim = t.rota[t.rota.length - 1]; if (fim) { t.x = fim[0]; t.y = fim[1]; t.rota = []; } t.salaT = null; t.direto = true; t.mudou = -Infinity; t.ativ = null; t.balao = null; t.parado = "baixo"; t.dentro = false; }
-      term.m = m; term.v = -1; term.fila = []; term.dentro = null;
+      term.m = m; term.v = -1; term.fila = []; term.dentro = [];
     }
     if (Ponte.versao() !== term.v) {
       const direto = term.v === -1;   // a primeira leitura (página aberta, prédio remontado): cada um já está na sua sala
@@ -1979,16 +1980,17 @@ const Vida = (() => {
     terminarAtiv(m, t, agora);
     if (mudou !== null) t.mudou = mudou;
   }
-  // o banheiro (a porta WC no fim do corredor, mapa.js: predio.banheiro), como no Escritório Vivo (sim.gd: _entrar_na_fila,
-  // _arrumar_fila): quem precisa entra no fim da fila, de 14 em 14 px para a esquerda da porta, e um entra por vez (some
-  // de 5 a 8 s). Apertado (bexiga abaixo de 15), fura a fila na frente de quem não está, e cada um que ele passou perde
-  // 10 de afinidade com ele. Mudou de estado, saiu do livre ou fechou: sai da fila na hora (sairDaFila)
+  // o banheiro (a sala da fileira de baixo, mapa.js: predio.banheiro), como no Escritório Vivo (sim.gd: _entrar_na_fila,
+  // _arrumar_fila): quem precisa entra no fim da fila, no corredor, de 14 em 14 px para a esquerda da porta; o da frente vai
+  // à primeira cabine vaga e some lá dentro de 5 a 8 s (a cabine fica "ocupada"), um por cabine. Apertado (bexiga abaixo
+  // de 15), fura a fila na frente de quem não está, e cada um que ele passou perde 10 de afinidade com ele. Mudou de estado, saiu do livre ou fechou: sai da fila na hora (sairDaFila)
   // Zeladoria (zeladoria.js): cada uso suja o banheiro (o apertado e quem furou, mais); interditado, ninguém entra até limparem
   // e quem precisa mostra o "!"; quem sai de um banheiro sujo mostra o "eca"
   const APERTO = 15, WC_T = [5, 8], WC_DESISTE = 20;
   const reagir = (t, balao, s = 3) => { t.reacao = { balao, ate: performance.now() / 1000 + s }; };
   function entrarNaFila(m, t, agora) {
-    if (!m.predio.banheiro) return false;
+    const b = m.predio.banheiro;
+    if (!b || !b.cabines || !b.cabines.length) return false;
     if (window.Zeladoria && Zeladoria.interditado()) { reagir(t, "alerta"); return false; }
     let i = term.fila.length;
     if (t.nec.bexiga < APERTO) { i = 0; term.fila.forEach((u, k) => { if (u.nec.bexiga < APERTO) i = k + 1; }); }
@@ -2010,26 +2012,29 @@ const Vida = (() => {
   }
   function sairDaFila(m, t) {
     if (!t) return;
-    if (term.dentro === t) term.dentro = null;
+    const k = term.dentro.indexOf(t);
+    if (k >= 0) { term.dentro.splice(k, 1); const c = cabineDe(m, t); if (c) { c.quem = null; c.ocupada = false; } }
     t.dentro = false;
     const i = term.fila.indexOf(t);
     if (i >= 0) { term.fila.splice(i, 1); arrumarFila(m); }
   }
-  // a porta: o da frente, parado no ponto dele, entra quando o banheiro vaga; lá dentro, some e sai com a bexiga cheia
+  const cabineDe = (m, t) => (m.predio.banheiro ? m.predio.banheiro.cabines.find(c => c.quem === t.id) || null : null);
+  // a porta: o da frente, parado no ponto dele, vai à primeira cabine vaga; chegou na frente dela, some lá dentro (a cabine
+  // fica ocupada) e sai com a bexiga cheia
   function cuidarDoBanheiro(m, agora) {
-    const d = term.dentro, b = m.predio.banheiro;
-    if (d) {
+    const b = m.predio.banheiro;
+    for (const d of [...term.dentro]) {
       const a = d.ativ;
-      if (!a || a.tipo !== "wc") { term.dentro = null; d.dentro = false; return; }
-      if (a.fase === "entrando" && !d.rota.length) { a.fase = "dentro"; d.dentro = true; a.ate = agora + entre(...WC_T); }
+      if (!a || a.tipo !== "wc") { sairDaFila(m, d); continue; }
+      if (a.fase === "entrando" && !d.rota.length) { a.fase = "dentro"; d.dentro = true; cabineDe(m, d).ocupada = true; a.ate = agora + entre(...WC_T); }
       else if (a.fase === "dentro" && agora >= a.ate) { d.nec.bexiga = 100; terminarAtiv(m, d, agora); if (window.Zeladoria && Zeladoria.suja()) reagir(d, "eca", 3.5); }
-      return;
     }
-    const u = term.fila[0];
-    if (!u || u.rota.length || (window.Zeladoria && Zeladoria.bloqueado())) return;
+    const u = term.fila[0], i = b ? b.cabines.findIndex(c => !c.quem) : -1;
+    if (!u || u.rota.length || i < 0 || (window.Zeladoria && Zeladoria.bloqueado())) return;
     if (window.Zeladoria) Zeladoria.sujar(u.ativ.alerta !== false ? "furou" : u.nec.bexiga < APERTO ? "apertado" : "uso");
-    term.fila.shift(); term.dentro = u;
-    u.ativ.fase = "entrando"; u.rota = [[b.x, m.predio.corredorTopo + 8]];
+    const c = b.cabines[i];
+    term.fila.shift(); term.dentro.push(u); c.quem = u.id;
+    u.ativ.fase = "entrando"; u.rota = rotaAte(m, [u.x, u.y], [c.x, c.y]) || [[c.x, c.y]];
     arrumarFila(m);
   }
 

@@ -9,6 +9,7 @@ const T = 16;
 const PAREDE = 3;              // altura da parede, em tiles
 const MESA_W = 3, MESA_H = 3;  // célula de mesa, em tiles
 const BAIXO_PISO = 8;          // piso das salas de baixo, em tiles
+const WC_W = 12;               // largura do banheiro, em tiles
 const CORREDOR_H = 3;
 const MX = 5, MY = 4, MB = 13;  // área externa: laterais, topo e rua embaixo (em tiles)
 const FACHADA = 32;  // px: a frente do prédio vista de frente, embaixo da planta (Firmópolis); empurra a rua para baixo
@@ -182,6 +183,107 @@ function pintarRadio(c, x, y) {
   pintaPx(c, x, y + 14, 22, 2, "#6b4a2e"); pintaPx(c, x, y + 14, 22, 1, "#8a6240");                        // prateleira
   pintaPx(c, x + 2, y + 16, 2, 1, "#4a3220"); pintaPx(c, x + 18, y + 16, 2, 1, "#4a3220");                 // mãos-francesas
   pintaPx(c, x + 1, y + 17, 20, 1, "rgba(0,0,0,.25)");                                                      // sombra na parede
+}
+
+// ---------------- banheiro (Firmópolis): tudo em pixel art desenhada aqui, no fundo do mapa
+const WC_CABINES = 3, CABINE = { w: 26, alto: 28, fundo: 40 };   // cabine: largura, altura das divisórias e onde fica a frente (px do chão)
+// piso de pastilhas brancas com a faixa azul junto das paredes e a parede de azulejo com a faixa azul (por cima da parede 6)
+function pintarBanheiro(c, s) {
+  const x0 = s.px, y0 = s.chao, w = s.pw, h = s.py + s.ph - y0, r = rng(semente("banheiro"));
+  const cols = Math.ceil(w / 8), lins = Math.ceil(h / 8);
+  for (let j = 0; j < lins; j++) for (let i = 0; i < cols; i++) {
+    const borda = i === 1 || i === cols - 2 || j === lins - 2, x = x0 + i * 8, y = y0 + j * 8;
+    const k = r(), cor = borda ? "#5b8fcc" : k < 0.08 ? "#d4e4f2" : k < 0.5 ? "#f1f5f8" : "#eaf0f4";
+    pintaPx(c, x, y, 8, 8, "#b9c6d2"); pintaPx(c, x + 1, y + 1, 7, 7, cor);                    // rejunte e pastilha
+    pintaPx(c, x + 1, y + 1, 2, 1, borda ? "#8fb6e2" : "#ffffff");                             // brilho no canto
+  }
+  pintaPx(c, x0, y0, w, 3, "rgba(36,40,60,.16)"); pintaPx(c, x0, y0 + 3, w, 2, "rgba(36,40,60,.08)");   // sombra da parede
+  pintaPx(c, x0, y0, 2, h, "rgba(36,40,60,.08)"); pintaPx(c, x0 + w - 2, y0, 2, h, "rgba(36,40,60,.08)");
+  { // o ralo no meio do piso
+    const rx = x0 + Math.round(w * 0.42), ry = y0 + 84;
+    pintaPx(c, rx - 4, ry - 3, 9, 7, "#8d99a6"); pintaPx(c, rx - 3, ry - 2, 7, 5, "#5f6b78");
+    for (let k = 0; k < 3; k++) pintaPx(c, rx - 2 + k * 2, ry - 1, 1, 3, "#b9c3cd");
+  }
+  for (let x = x0; x < x0 + w; x++) { // a faixa decorativa da parede de azulejo, em azul
+    const k = (x - x0) % 6;
+    pintaPx(c, x, s.py + 22, 1, 7, k === 0 ? "#2f5fb3" : "#e4edf6");
+    if (k === 3) { pintaPx(c, x, s.py + 23, 1, 5, "#5b8fcc"); pintaPx(c, x - 1, s.py + 25, 3, 1, "#5b8fcc"); }
+  }
+}
+// uma cabine vista de frente: o vaso lá dentro (só a caixa e a tampa aparecem por cima da porta), as divisórias até o chão
+// e a porta com a fresta embaixo. O sinal de vago/ocupado e os pés na fresta são do desenharCabines (mudam a cada quadro)
+function pintarCabine(c, x, chao) {
+  const { w, alto, fundo } = CABINE, fy = chao + fundo, cx = x + 1 + w / 2, topo = fy - alto;
+  // o vaso: a caixa na parede e o assento no chão
+  pintaPx(c, cx - 6, chao - 13, 12, 11, "#7d8a97"); pintaPx(c, cx - 5, chao - 12, 10, 9, "#f4f6f8"); pintaPx(c, cx - 5, chao - 12, 10, 2, "#ffffff");
+  pintaPx(c, cx - 1, chao - 10, 3, 1, "#b9c3cd");   // a descarga
+  [3, 4, 5, 5, 5, 5, 5, 5, 4, 4, 3].forEach((m, j) => { // o assento oval, de cima: contorno, louça e a tampa aberta
+    pintaPx(c, cx - m, chao - 3 + j, 2 * m, 1, "#7d8a97");
+    if (j > 0 && j < 10) pintaPx(c, cx - m + 1, chao - 3 + j, 2 * m - 2, 1, j < 3 ? "#ffffff" : "#eef2f5");
+  });
+  pintaPx(c, cx - 2, chao + 1, 4, 5, "#c9d4de"); pintaPx(c, cx - 1, chao + 2, 2, 3, "#a9c3da");   // a água
+  // o rolo de papel na divisória
+  pintaPx(c, x + 3, chao + 2, 4, 4, "#7d8a97"); pintaPx(c, x + 4, chao + 3, 2, 2, "#ffffff");
+  // as divisórias: de cima, a quina sobe da parede até a frente; embaixo, o pé de metal
+  for (const px of [x, x + w]) {
+    pintaPx(c, px, chao - alto, 2, fy - (chao - alto), "#3f5f86"); pintaPx(c, px, chao - alto, 1, fy - (chao - alto), "#7fa4cc");
+    pintaPx(c, px - 1, fy - 3, 4, 3, "#9aa5b1"); pintaPx(c, px - 1, fy - 3, 4, 1, "#c9d1d9");
+  }
+  // a porta (com a fresta de 3 px embaixo) e o frontão em cima dela
+  pintaPx(c, x + 2, topo, w - 2, 3, "#3f5f86"); pintaPx(c, x + 2, topo, w - 2, 1, "#7fa4cc");
+  pintaPx(c, x + 2, topo + 3, w - 2, alto - 6, "#2f4766");
+  pintaPx(c, x + 3, topo + 3, w - 4, alto - 7, "#5f86b3"); pintaPx(c, x + 3, topo + 3, w - 4, 1, "#86aad3");
+  pintaPx(c, x + 5, topo + 6, w - 8, alto - 13, "#5580ad"); pintaPx(c, x + 5, topo + 6, 1, alto - 13, "#7099c4");   // o painel
+  pintaPx(c, x + w - 6, topo + 9, 4, 4, "#1d2b3d");                                                                  // o visor do trinco
+  pintaPx(c, x + w - 5, topo + 14, 2, 2, "#d9dee4"); pintaPx(c, x + w - 5, topo + 15, 2, 1, "#8d99a6");             // a maçaneta
+  pintaPx(c, x + 2, fy, w + 2, 2, "rgba(30,40,60,.18)");                                                             // sombra
+}
+// a bancada de mármore claro sobre o gabinete de madeira, com duas cubas, as torneiras, o sabonete e o espelho em cima
+function pintarBancada(c, x, chao, w) {
+  const cubas = [x + Math.round(w * 0.27), x + Math.round(w * 0.73)];
+  // espelho: moldura, vidro azulado e o reflexo na diagonal
+  const ex = x + 2, ey = chao - 27, ew = w - 4, eh = 19;
+  pintaPx(c, ex, ey, ew, eh, "#6b7682"); pintaPx(c, ex + 1, ey + 1, ew - 2, eh - 2, "#bcdcec");
+  for (let k = 0; k < 3; k++) for (let j = 0; j < eh - 2; j++) { const px = ex + 6 + k * 13 + Math.floor((eh - 2 - j) / 2); if (px < ex + ew - 1) pintaPx(c, px, ey + 1 + j, k === 1 ? 2 : 1, 1, "#e8f6fc"); }
+  pintaPx(c, ex + 1, ey + eh - 3, ew - 2, 2, "#a7c9db"); pintaPx(c, ex + 1, ey + eh, ew - 2, 1, "rgba(0,0,0,.18)");
+  // torneiras cromadas na parede
+  for (const cx of cubas) { pintaPx(c, cx, chao - 7, 1, 4, "#9aa5b1"); pintaPx(c, cx - 1, chao - 7, 3, 1, "#d9dee4"); pintaPx(c, cx, chao - 4, 1, 2, "#6b7682"); }
+  // tampo
+  pintaPx(c, x, chao - 3, w, 10, "#9aa5b1"); pintaPx(c, x + 1, chao - 2, w - 2, 8, "#eef1f4"); pintaPx(c, x + 1, chao - 2, w - 2, 1, "#ffffff");
+  for (let k = 0; k < w / 3; k++) pintaPx(c, x + 2 + ((k * 7) % (w - 4)), chao - 1 + ((k * 5) % 6), 1, 1, "#d3dae1");   // veios do mármore
+  for (const cx of cubas) { // a cuba oval e o ralinho
+    pintaPx(c, cx - 7, chao - 1, 14, 6, "#8d99a6"); pintaPx(c, cx - 6, chao - 1, 12, 6, "#c9d4de"); pintaPx(c, cx - 5, chao, 10, 4, "#dfe7ee");
+    pintaPx(c, cx - 7, chao - 1, 1, 1, "#eef1f4"); pintaPx(c, cx + 6, chao - 1, 1, 1, "#eef1f4"); pintaPx(c, cx - 7, chao + 4, 1, 1, "#eef1f4"); pintaPx(c, cx + 6, chao + 4, 1, 1, "#eef1f4");
+    pintaPx(c, cx, chao + 2, 1, 1, "#6b7682");
+  }
+  const sx = x + Math.round(w / 2);   // o sabonete líquido entre as cubas
+  pintaPx(c, sx - 1, chao - 5, 3, 5, "#2f6b4a"); pintaPx(c, sx, chao - 4, 1, 3, "#5fbf8a"); pintaPx(c, sx, chao - 7, 1, 2, "#d9dee4");
+  // gabinete de madeira com duas portinhas e os puxadores
+  pintaPx(c, x, chao + 7, w, 12, "#5e3c26"); pintaPx(c, x + 1, chao + 7, w - 2, 11, "#9b7653"); pintaPx(c, x + 1, chao + 7, w - 2, 1, "#b48d66");
+  for (const cx of cubas) { pintaPx(c, cx - 8, chao + 9, 16, 8, "#8a6a45"); pintaPx(c, cx - 7, chao + 10, 14, 6, "#a98260"); pintaPx(c, cx - 1, chao + 12, 2, 1, "#e0c08a"); }
+  pintaPx(c, x, chao + 19, w, 2, "rgba(30,40,60,.18)");
+}
+// o secador de mãos na parede (10x12) e a lixeira de pedal no chão (pé em base)
+function pintarSecador(c, x, y) {
+  pintaPx(c, x, y, 10, 12, "#6b7682"); pintaPx(c, x + 1, y + 1, 8, 9, "#e3e8ec"); pintaPx(c, x + 1, y + 1, 8, 1, "#ffffff");
+  pintaPx(c, x + 2, y + 10, 6, 2, "#3a3f48"); pintaPx(c, x + 3, y + 12, 4, 1, "#1d2129");   // o bocal
+  pintaPx(c, x + 7, y + 3, 1, 1, "#e5484d");                                                  // a luzinha
+  pintaPx(c, x + 2, y + 5, 4, 1, "#b9c3cd"); pintaPx(c, x + 2, y + 7, 4, 1, "#b9c3cd");       // a grade
+  pintaPx(c, x + 1, y + 13, 9, 1, "rgba(0,0,0,.15)");
+}
+function pintarLixeiraWc(c, x, base) {
+  pintaPx(c, x, base - 11, 9, 11, "#5f6b78"); pintaPx(c, x + 1, base - 10, 7, 9, "#aab4be"); pintaPx(c, x + 2, base - 10, 1, 9, "#d3dae1");
+  pintaPx(c, x - 1, base - 12, 11, 2, "#7d8a97"); pintaPx(c, x, base - 12, 9, 1, "#c9d1d9");   // a tampa
+  pintaPx(c, x + 3, base - 1, 3, 1, "#3a3f48");                                                // o pedal
+  pintaPx(c, x, base, 10, 1, "rgba(0,0,0,.18)");
+}
+// por cima do fundo, a cada quadro: o sinal do trinco (verde vago, vermelho ocupado) e, ocupada, os pés na fresta da porta
+function desenharCabines(c, b) {
+  for (const k of (b && b.cabines) || []) {
+    const fy = k.chao + CABINE.fundo, topo = fy - CABINE.alto, x = k.px + CABINE.w - 5;
+    pintaPx(c, x, topo + 10, 2, 2, k.ocupada ? "#e5484d" : "#3fbf5f");
+    if (k.ocupada) { pintaPx(c, k.x - 4, fy - 2, 3, 2, "#1d1b26"); pintaPx(c, k.x + 1, fy - 2, 3, 2, "#1d1b26"); }
+  }
 }
 
 function pintarSala(c, atlas, sala) {
@@ -397,7 +499,7 @@ function montar(atlas, config, grupos, planta) {
   // parede de cima, no máximo 2 fileiras de mesas) até as duas fileiras ficarem com larguras parecidas.
   const largCima = n => Math.min(Math.max(n, 2), 4) * MESA_W + 5;
   const largBaixo = n => Math.max(2, Math.ceil(n / 2)) * MESA_W + 5;
-  const minimoBaixo = 12 + 1 + 40 + 1 + 14;  // reunião + comunal + cozinha
+  const minimoBaixo = 12 + 1 + 32 + 1 + 14 + 1 + WC_W;  // reunião + comunal + cozinha + banheiro
   const qtd = g => Math.max(1, g.handles.length);
   let emCima = grupos.length, wCima = recepcao.tw + 1 + grupos.reduce((t, g) => t + largCima(qtd(g)), 0), wBaixo = minimoBaixo + 1;
   while (emCima > 1 && wCima - wBaixo > 30) {   // até ~6 times cabe tudo em cima (a sala comunal só cresce)
@@ -423,14 +525,15 @@ function montar(atlas, config, grupos, planta) {
   for (const s of salas) s.th = alturaSalas;
   const corredor = { ty: MY + alturaSalas, h: CORREDOR_H };
   const yb = corredor.ty + corredor.h, thb = PAREDE + BAIXO_PISO;
-  // fileira de baixo, da direita para a esquerda: salas de time que desceram, cozinha, sala comunal (o que sobrar) e reunião
+  // fileira de baixo, da direita para a esquerda: salas de time que desceram, banheiro, cozinha, sala comunal (o que sobrar) e reunião
   let xb = B;
   for (const s of [...debaixo].reverse()) { xb -= s.tw; Object.assign(s, { tx: xb, ty: yb, th: thb }); xb -= 1; }
   const reuniao = { tipo: "reuniao", chave: "reuniao", nome: "Reunião", tx: MX, ty: yb, tw: 12, th: thb, parede: 1, piso: 7 };
-  const cozinha = { tipo: "cozinha", chave: "cozinha", nome: "Cozinha", tx: xb - 14, ty: yb, tw: 14, th: thb, parede: 6, piso: 6 };
+  const wc = { tipo: "banheiro", chave: "banheiro", nome: "Banheiro", tx: xb - WC_W, ty: yb, tw: WC_W, th: thb, parede: 6, piso: 0 };
+  const cozinha = { tipo: "cozinha", chave: "cozinha", nome: "Cozinha", tx: wc.tx - 1 - 14, ty: yb, tw: 14, th: thb, parede: 6, piso: 6 };
   const lounge = { tipo: "lounge", chave: "lounge", nome: "Sala comunal", tx: reuniao.tx + reuniao.tw + 1, ty: yb, th: thb, parede: 2, piso: 1 };
   lounge.tw = cozinha.tx - 1 - lounge.tx;
-  const baixo = [reuniao, lounge, cozinha];
+  const baixo = [reuniao, lounge, cozinha, wc];   // a cozinha fica no índice 2 (efeitos.js: festaChao)
   // planta: a pintura vale mais que o times.json (valor cru); sala que não existe nesta montagem é ignorada e contada
   const resumoPlanta = { rev: planta && Number.isInteger(planta.rev) ? planta.rev : 0, aplicados: 0, ignorados: [] };
   const pinturas = planta && planta.salas && typeof planta.salas === "object" ? planta.salas : null;
@@ -697,8 +800,9 @@ function montar(atlas, config, grupos, planta) {
   // portas: abrem a parede de cima para o corredor
   reuniao.portas.push(reuniao.px + reuniao.pw / 2);
   cozinha.portas.push(cozinha.px + cozinha.pw - 26);   // na ponta: a bancada corre inteira pela parede
+  wc.portas.push(wc.px + wc.pw - 24);                  // na ponta direita: a fila do corredor fica na frente do próprio banheiro
   const reservarPorta = (s, px) => pegadas.push({ x: px - 22, y: s.chao - 2, w: 44, h: 36, livre: true });
-  for (const s of [reuniao, cozinha]) for (const px of s.portas) reservarPorta(s, px);
+  for (const s of [reuniao, cozinha, wc]) for (const px of s.portas) reservarPorta(s, px);
   // Placa no alto da parede, no trecho livre (sem porta, janela, quadro, TV, relógio ou logo) mais perto da porta;
   // se a parede não tiver um trecho do tamanho dela, a placa encolhe (o nome espreme) em vez de cobrir algo
   const placaBaixo = s => {
@@ -752,6 +856,32 @@ function montar(atlas, config, grupos, planta) {
     const m1 = obj("mesa_cozinha", L + 44, chao + 100), m2 = obj("mesa_cozinha2", L + 92, chao + 100);
     for (const m of [m1, m2]) if (m) { liga(m, "vagas", vaga(s, m.x + 6, m.y + m.h - 6, "lanche")); liga(m, "vagas", vaga(s, m.x + m.w - 6, m.y + m.h - 6, "lanche")); }
     // placa no alto da parede, logo à esquerda da porta (a bancada é baixa: cabe embaixo dela)
+    const tp = tamanhoPlaca(s), x = s.portas[0] - 20 - tp.total;
+    s.placa = { x, y: s.py + 4, w: tp.w, total: tp.total, max: tp.total };
+    paredeOcupada.push({ x: x - 2, w: tp.total + 4, y: s.py + 4 });
+  }
+  // Banheiro: piso de pastilhas, três cabines na parede do fundo (o vago e o ocupado são do vida.js; app.js: desenharCabines),
+  // a bancada com duas cubas e o espelho, o secador de mãos com a lixeira e um vaso no canto. A porta fica na ponta direita
+  const cabines = [];
+  {
+    const s = wc, chao = s.chao, L = s.px;
+    pintarBanheiro(c, s);
+    for (let i = 0; i < WC_CABINES; i++) {
+      const x = L + 4 + i * CABINE.w;
+      pintarCabine(c, x, chao);
+      cabines.push({ x: x + 1 + CABINE.w / 2, y: chao + CABINE.fundo + 7, px: x, chao, ocupada: false });
+    }
+    pegadas.push({ x: L + 2, y: chao - 2, w: WC_CABINES * CABINE.w + 4, h: CABINE.fundo + 2 });   // cabines
+    paredeOcupada.push({ x: L + 2, w: WC_CABINES * CABINE.w + 4, y: chao - CABINE.alto });
+    const xb = L + 6 + WC_CABINES * CABINE.w;   // secador e lixeira entre as cabines e a bancada
+    pintarSecador(c, xb + 2, chao - 28); paredeOcupada.push({ x: xb, w: 14, y: chao - 28 });
+    pintarLixeiraWc(c, xb + 3, chao + 18); pegadas.push({ x: xb + 2, y: chao + 6, w: 12, h: 12 });
+    const bx = xb + 14, bw = s.portas[0] - 22 - bx;   // a bancada vai até perto da porta
+    pintarBancada(c, bx, chao, bw); pegadas.push({ x: bx, y: chao - 2, w: bw, h: 22 });
+    paredeOcupada.push({ x: bx, w: bw, y: chao - 28 });
+    obj("planta_alta", L + 18, fimB - 4, false);
+    obj("planta_fina", L + s.pw - 16, fimB - 4, false);
+    // placa no alto da parede, logo à esquerda da porta (o espelho fica embaixo dela)
     const tp = tamanhoPlaca(s), x = s.portas[0] - 20 - tp.total;
     s.placa = { x, y: s.py + 4, w: tp.w, total: tp.total, max: tp.total };
     paredeOcupada.push({ x: x - 2, w: tp.total + 4, y: s.py + 4 });
@@ -1088,7 +1218,6 @@ function montar(atlas, config, grupos, planta) {
   // ---------------- corredor: passadeira, luminárias de teto e, encostados na parede de baixo (longe da linha
   // por onde se anda e fora da frente das portas), banco, quadro de avisos, vasos e bebedouro
   const luzesTeto = [];
-  let banheiro = null;
   {
     const cT = cT0, cB = cB0, x0 = cx0, x1 = cx1, corP = corMarca;
     const ry = Math.round(corredorY) - 8, rx0 = x0 + 10, rw = x1 - 10 - rx0;
@@ -1113,21 +1242,6 @@ function montar(atlas, config, grupos, planta) {
     for (const p of portasBaixo) pintaPx(c, p - 16, cB - 5, 32, 2, "#d6cfbf");
     // luminárias de teto a cada ~6 tiles, fora da frente das portas e das placas de cima (à noite acendem: app.js)
     const placasCima = salas.filter(s => !s.emCima && s.placa).map(s => [s.placa.x - 4, s.placa.x + Math.min(s.placa.total, s.placa.max) + 4]);
-    // a porta do banheiro (Firmópolis): na parede de cima, o trecho livre mais perto da ponta direita, sem porta, placa,
-    // mesa nem móvel, com a plaquinha WC em cima (pintada depois dos contornos). A fila dos terminais fica na frente (vida.js)
-    const wc = sprite(atlas, "banheiro_porta");
-    if (wc) {
-      const w = wc[2], topo = cT + 4 - wc[3] - 9;
-      const cheios = [...objetos, ...animados].filter(o => o.w && o.h).map(o => [o.x, o.x + o.w, o.y, o.y + o.h])
-        .concat(salas.filter(s => !s.emCima && s.placa).map(s => [s.placa.x, s.placa.x + Math.min(s.placa.total, s.placa.max), s.placa.y, s.placa.y + PLACA_H]))
-        .concat(salas.flatMap(s => s.mesas.map(q => [q.x - 18, q.x + 18, q.topo - 26, q.topo + 16])));
-      const cabe = x => portasCima.every(p => x + w < p - 20 || x > p + 20) && cheios.every(([a, b, ya, yb]) => x + w + 3 < a || x - 3 > b || yb < topo || ya > cT + 4);
-      let x = x1 - 10 - w;
-      while (x > x0 + 40 && !cabe(x)) x -= 2;
-      // parede de cima toda tomada (muitos times): a porta vai no fundo do corredor, na ponta direita, só desviando das portas
-      if (x <= x0 + 40) { x = x1 - 10 - w; while (x > x0 + 40 && !portasCima.every(p => x + w < p - 20 || x > p + 20)) x -= 2; }
-      if (x > x0 + 40) { banheiro = { x: x + w / 2, y: corredorY, px: x, sp: wc }; placasCima.push([x - 4, x + w + 4]); }
-    }
     const tetoLivre = x => portasCima.every(p => Math.abs(p - x) > 16) && placasCima.every(([a, b]) => x < a - 4 || x > b + 4);
     for (let x = x0 + 40; x < x1 - 24; x += 6 * T) {
       const lx = [0, 8, -8, 16, -16, 24, -24].map(d => x + d).find(tetoLivre); if (lx === undefined) continue;
@@ -1174,18 +1288,10 @@ function montar(atlas, config, grupos, planta) {
       portas.push({ tipo: s.tipo === "cozinha" ? "vaivem" : "vidro", x: px - T, y: s.py - 3, w: 2 * T, h: PAREDE * T + 3, abre: 0 });
     }
   }
-  if (banheiro) { // a porta do banheiro sobre a parede de cima e a plaquinha azul "WC" em cima dela
-    const { px, sp } = banheiro, y = cT0 + 5 - sp[3], pw = 11, qx = Math.round(px + sp[2] / 2 - pw / 2), qy = y - 9;
-    c.drawImage(atlas.img, sp[0], sp[1], sp[2], sp[3], px, y, sp[2], sp[3]);
-    pintaPx(c, px - 1, cT0 + 5, sp[2] + 2, 1, "rgba(36,20,8,.25)");
-    pintaPx(c, qx, qy, pw, 7, "#2f5fb3"); pintaPx(c, qx, qy + 7, pw, 1, "#1d3c75");
-    pontosPx(c, qx + 1, qy + 1, [[0, 0], [0, 1], [0, 2], [0, 3], [1, 4], [2, 2], [2, 3], [3, 4], [4, 0], [4, 1], [4, 2], [4, 3],   // W
-      [7, 0], [8, 0], [6, 1], [6, 2], [6, 3], [7, 4], [8, 4]], "#ffffff");   // C
-    delete banheiro.px; delete banheiro.sp;
-  }
   // F) mural de cada sala (1.6, só com o store: config.equipe.mural), no trecho de parede que sobrou livre, da direita
   // para a esquerda, sem mexer em mais nada. A recepção mostra o canal "geral" (no saguão, o mural do prédio)
   if (config.equipe && config.equipe.mural) for (const s of [...salas, ...baixo]) {
+    if (s.tipo === "banheiro") continue;   // o banheiro não é canal de conversa (o servidor não tem essa sala)
     const { w, h } = MURAL;
     const ocupados = [...janelas, ...quadros, ...reservas, ...paredeOcupada.map(o => ({ ...o, h: 20 })), ...objetos.filter(o => o.w && o.h),
       ...animados.filter(a => a.w && a.h), s.placaLogo, s.logo, s.placa && { x: s.placa.x, y: s.placa.y, w: s.placa.total, h: PLACA_H }];
@@ -1200,6 +1306,8 @@ function montar(atlas, config, grupos, planta) {
     s.mural = { ...lugar, w, h, canal: s.tipo === "recepcao" ? "geral" : "sala:" + s.chave };
     paredeOcupada.push({ x: lugar.x - 4, w: w + 8, y: lugar.y });
   }
+  // o banheiro para o vida.js e a zeladoria: a porta (no corredor, onde a fila se forma), a sala e a frente de cada cabine
+  const banheiro = { x: wc.portas[0], y: corredorY, sala: wc, cabines };
   // caminho da entrada lateral até a calçada fica livre (nenhuma árvore ou banco no meio)
   pegadas.push({ x: predioRet.x - 46, y: corredor.ty * T - 10, w: 62, h: predioRet.y + predioRet.h + 24 - corredor.ty * T, livre: true });
   const externos = montarExterior(atlas, (n, x, y) => obj(n, x, y, true, true), W, H, predioRet, marca, corredor.ty * T);
@@ -1410,6 +1518,6 @@ function desenharPlacaReuniao(c, s) {
   c.restore();
 }
 
-return { iconeStatus, desenharStatus, placaReuniao, desenharPlacaReuniao, nomePlaca, montarPredio, desenharMesa, lampadaX, desenharCadeira, mistura, hex6, cor, rgb, T, TELAS, PLACA_FONTE, PLACA_H, CATALOGO, FIXOS, SEM_ESPELHO, tamanho };
+return { desenharCabines, iconeStatus, desenharStatus, placaReuniao, desenharPlacaReuniao, nomePlaca, montarPredio, desenharMesa, lampadaX, desenharCadeira, mistura, hex6, cor, rgb, T, TELAS, PLACA_FONTE, PLACA_H, CATALOGO, FIXOS, SEM_ESPELHO, tamanho };
 })();
 window.Mapa = Mapa;
