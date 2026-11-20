@@ -8,6 +8,8 @@
 // que o diálogo mostra (o comando ou o arquivo) e espera a decisão do Firmópolis; com ela,
 // responde pelo próprio OpenCode. O diálogo segue na tela e quem responder primeiro leva: se o
 // terminal responder antes, o plugin desiste. A ponte só segura o pedido com alguém atendendo.
+// Na pergunta (só a de uma questão que aceita texto livre), o plugin manda o texto dela à ponte
+// e espera a resposta escrita no Firmópolis; com ela, responde pela API de perguntas.
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
@@ -15,10 +17,14 @@ import { join } from "node:path"
 
 const URL_PONTE = "http://127.0.0.1:47820/evento/opencode"
 const URL_PENDENTE = "http://127.0.0.1:47820/pendente/opencode"
+const URL_PERGUNTA = "http://127.0.0.1:47820/pendente/opencode-pergunta"
 const ESPERA_MS = 130000 // a espera da ponte (120 s) e a folga
+const ESPERA_PERGUNTA_MS = 310000 // a da pergunta (5 min) e a folga
 
 const PERGUNTAS = new Set(["permission.asked", "permission.v2.asked"])
-const RESPOSTAS = new Set(["permission.replied", "permission.v2.replied"])
+const QUESTOES = new Set(["question.asked", "question.v2.asked"])
+const RESPOSTAS = new Set(["permission.replied", "permission.v2.replied",
+  "question.replied", "question.v2.replied", "question.rejected", "question.v2.rejected"])
 
 const TIPOS = new Set([
   "session.created", "session.deleted", "session.status", "session.idle", "session.error",
@@ -82,6 +88,14 @@ function pedidoDe(p) {
   }
 }
 
+// a pergunta como a ponte lê: só uma questão que aceita texto livre (custom não é false), com
+// o texto dela cortado; senão, null (o Firmópolis não responde por ela)
+function perguntaDe(p) {
+  const qs = Array.isArray(p?.questions) ? p.questions : []
+  if (qs.length !== 1 || qs[0]?.custom === false || typeof qs[0]?.question !== "string") return null
+  return { sessionID: p.sessionID, id: p.id, pergunta: qs[0].question.slice(0, 1000) }
+}
+
 // o HMAC do token sobre as partes, como o decisao.Assinar da ponte (cada parte seguida de um 0)
 function assinar(token, ...partes) {
   const h = createHmac("sha256", token)
@@ -118,7 +132,7 @@ export const Firmopolis = async ({ directory, client }) => {
 
   const pais = new Map() // sessão filha (subagente) → sessão pai
 
-  const esperando = new Map() // pedido de permissão → AbortController (respondido no terminal: aborta)
+  const esperando = new Map() // pedido de permissão ou pergunta → AbortController (respondido no terminal: aborta)
 
   // responde pelo OpenCode: o SDK que o plugin recebe (v1) e, se vier o v2, o reply dele
   const responder = (p, resposta) => {
@@ -128,17 +142,28 @@ export const Firmopolis = async ({ directory, client }) => {
     if (typeof client?.permission?.reply === "function") return client.permission.reply({ requestID: p.id, reply: resposta })
   }
 
-  const pedirDecisao = async (p) => {
+  // a resposta da pergunta: POST /question/{requestID}/reply com answers [[texto]] (o v1 do SDK não
+  // tem o método, então vai pelo cliente HTTP dele, com a autenticação do OpenCode)
+  const responderPergunta = (p, texto) => {
+    if (typeof client?.question?.reply === "function") return client.question.reply({ requestID: p.id, answers: [[texto]] })
+    if (typeof client?._client?.post === "function") {
+      return client._client.post({ url: "/question/{requestID}/reply", path: { requestID: p.id }, body: { answers: [[texto]] },
+        headers: { "Content-Type": "application/json" } })
+    }
+  }
+
+  // manda o pedido à ponte e espera; devolve a resposta dela (ainda sem conferir) ou null. O token
+  // não vai no pedido: vai um nonce e o HMAC dele; a resposta só vale assinada pela ponte.
+  const esperarPonte = async (url, p, pedido, esperaMs, aceitar) => {
     const token = lerToken()
     if (!token || typeof p?.id !== "string" || typeof p.sessionID !== "string" || esperando.has(p.id)) return
     const ctl = new AbortController()
     esperando.set(p.id, ctl)
     try {
       const pai = pais.get(p.sessionID)
-      // o token não vai no pedido: vai um nonce e o HMAC dele; a resposta só vale assinada pela ponte
-      const corpo = JSON.stringify({ ...pedidoDe(p), cwd: directory, ...(pai && { pai }) })
+      const corpo = JSON.stringify({ ...pedido, cwd: directory, ...(pai && { pai }) })
       const nonce = randomBytes(16).toString("hex")
-      const r = await fetch(URL_PENDENTE, {
+      const r = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -147,18 +172,32 @@ export const Firmopolis = async ({ directory, client }) => {
           "X-Maestri-Terminal-Id": process.env.MAESTRI_TERMINAL_ID || "",
         },
         body: corpo,
-        signal: AbortSignal.any([ctl.signal, AbortSignal.timeout(ESPERA_MS)]),
+        signal: AbortSignal.any([ctl.signal, AbortSignal.timeout(esperaMs)]),
       })
       if (r.status !== 200) return
       const d = await r.json()
-      if (!esperando.has(p.id) || (d?.acao !== "permitir" && d?.acao !== "negar")) return
-      if (!confere(token, d.assinatura, nonce, d.acao)) return // outro processo na porta
-      await responder(p, d.acao === "permitir" ? "once" : "reject")
+      if (esperando.has(p.id)) await aceitar(d, token, nonce)
     } catch {
       // ponte desligada, terminal respondeu antes ou o pedido já não existe: o diálogo resolve
     } finally {
       esperando.delete(p.id)
     }
+  }
+
+  const pedirDecisao = (p) => esperarPonte(URL_PENDENTE, p, pedidoDe(p), ESPERA_MS, async (d, token, nonce) => {
+    if (d?.acao !== "permitir" && d?.acao !== "negar") return
+    if (!confere(token, d.assinatura, nonce, d.acao)) return // outro processo na porta
+    await responder(p, d.acao === "permitir" ? "once" : "reject")
+  })
+
+  const pedirResposta = (p) => {
+    const pergunta = perguntaDe(p)
+    if (!pergunta) return
+    return esperarPonte(URL_PERGUNTA, p, pergunta, ESPERA_PERGUNTA_MS, async (d, token, nonce) => {
+      if (d?.acao !== "responder" || typeof d.texto !== "string" || !d.texto || d.texto.length > 4000) return
+      if (!confere(token, d.assinatura, nonce, "responder", d.texto)) return
+      await responderPergunta(p, d.texto)
+    })
   }
 
   // O pid do OpenCode deixa a ponte saber quando o processo saiu (não há evento de fim).
@@ -177,6 +216,7 @@ export const Firmopolis = async ({ directory, client }) => {
         mandar(event.type, p)
         if (event.type === "session.deleted") pais.delete(p.sessionID)
         if (PERGUNTAS.has(event.type)) pedirDecisao(event.properties) // sem await: não segura o OpenCode
+        if (QUESTOES.has(event.type)) pedirResposta(event.properties)
         if (RESPOSTAS.has(event.type)) {
           const id = event.properties?.requestID ?? event.properties?.permissionID
           esperando.get(id)?.abort()

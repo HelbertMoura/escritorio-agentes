@@ -387,6 +387,12 @@ body.travado { overflow: hidden; }
 .decisao-acoes .botao:disabled { opacity: .6; cursor: progress; }
 .decisao-erro { grid-column: 1 / -1; margin: 0; color: var(--erro-texto); font-size: 13px; }
 .decisao-nota { margin: 0; color: var(--suave); font-size: 12.5px; }
+.decisao-item > .decisao-nota { grid-column: 1 / -1; }
+.decisao-resposta { flex-wrap: wrap; }
+.decisao-resposta input { flex: 3 1 200px; min-width: 0; min-height: 44px; padding: 0 10px; border-radius: 0; font-size: 16px;
+  border: 1px solid color-mix(in srgb, var(--ambar) 60%, transparent); background: var(--campo, rgba(15, 15, 14, .6)); color: var(--texto); }
+.decisao-resposta input:focus-visible { outline: 2px solid var(--ambar-texto); outline-offset: 2px; }
+.decisao-resposta .botao { flex: 1 1 110px; }
 .linha-decisao { display: grid; }
 /* seletor do "Mandar pro ringue": o mesmo diálogo das boas-vindas */
 .dlg-ringue { width: min(440px, calc(100vw - 24px)); }

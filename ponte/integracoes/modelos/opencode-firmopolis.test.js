@@ -227,3 +227,71 @@ test("permissão respondida no terminal: o plugin desiste", async () => {
   await varias()
   assert.deepEqual(client.respostas, [])
 })
+
+// ---------- responder uma pergunta ----------
+const questao = { id: "que1", sessionID: "s1", questions: [{ question: "Qual banco?", header: "Banco", options: [{ label: "Postgres", description: "" }] }] }
+
+// a ponte de mentira da pergunta: devolve o texto assinado sobre o nonce, a ação e o texto
+function ponteResponde(texto, { tokenResposta = "tok-123", segurar = false } = {}) {
+  globalThis.fetch = async (url, opcoes) => {
+    chamadas.push({ url, opcoes, corpo: JSON.parse(opcoes.body) })
+    if (url.endsWith("/pendente/opencode-pergunta")) {
+      const nonce = opcoes.headers["X-Ponte-Nonce"]
+      chamadas.at(-1).assinado = opcoes.headers["X-Ponte-Assinatura"] === assinarTeste("tok-123", nonce, createHash("sha256").update(opcoes.body).digest())
+      if (segurar) await new Promise((_, rejeitar) => opcoes.signal.addEventListener("abort", () => rejeitar(new Error("abortado"))))
+      return new Response(JSON.stringify({ acao: "responder", texto, assinatura: assinarTeste(tokenResposta, nonce, "responder", texto) }), { status: 200 })
+    }
+    return new Response(null, { status: 204 })
+  }
+}
+
+function clientePergunta() {
+  const posts = []
+  return { posts, _client: { post: async (a) => { posts.push(a); return {} } } }
+}
+
+test("pergunta: manda só o texto da questão e responde pela API de perguntas", async () => {
+  ponteResponde("Postgres, versão 16")
+  const client = clientePergunta()
+  const ganchos = await Firmopolis({ directory: "C:\\proj", client })
+  await ganchos.event({ event: { type: "question.asked", properties: questao } })
+  await varias()
+  assert.deepEqual(chamadas[0].corpo.properties, { sessionID: "s1" }, "o evento de estado segue sem a pergunta")
+  const p = chamadas.find((c) => c.url.endsWith("/pendente/opencode-pergunta"))
+  assert.deepEqual(p.corpo, { sessionID: "s1", id: "que1", pergunta: "Qual banco?", cwd: "C:\\proj" })
+  assert.ok(p.assinado)
+  assert.deepEqual(client.posts, [{ url: "/question/{requestID}/reply", path: { requestID: "que1" },
+    body: { answers: [["Postgres, versão 16"]] }, headers: { "Content-Type": "application/json" } }])
+})
+
+test("pergunta: sem assinatura certa, com várias questões ou sem texto livre, nada", async () => {
+  ponteResponde("Postgres", { tokenResposta: "outro-token" })
+  let client = clientePergunta()
+  let ganchos = await Firmopolis({ directory: "C:\\proj", client })
+  await ganchos.event({ event: { type: "question.asked", properties: questao } })
+  await varias()
+  assert.deepEqual(client.posts, [], "resposta sem a assinatura da ponte não vale")
+
+  ponteResponde("Postgres")
+  chamadas.length = 0
+  client = clientePergunta()
+  ganchos = await Firmopolis({ directory: "C:\\proj", client })
+  const duas = { ...questao, id: "que2", questions: [questao.questions[0], questao.questions[0]] }
+  const fechada = { ...questao, id: "que3", questions: [{ ...questao.questions[0], custom: false }] }
+  await ganchos.event({ event: { type: "question.asked", properties: duas } })
+  await ganchos.event({ event: { type: "question.asked", properties: fechada } })
+  await varias()
+  assert.equal(chamadas.filter((c) => c.url.endsWith("/pendente/opencode-pergunta")).length, 0)
+  assert.deepEqual(client.posts, [])
+})
+
+test("pergunta respondida no terminal: o plugin desiste", async () => {
+  ponteResponde("Postgres", { segurar: true })
+  const client = clientePergunta()
+  const ganchos = await Firmopolis({ directory: "C:\\proj", client })
+  await ganchos.event({ event: { type: "question.asked", properties: questao } })
+  await espera()
+  await ganchos.event({ event: { type: "question.replied", properties: { sessionID: "s1", requestID: "que1", answers: [["MySQL"]] } } })
+  await varias()
+  assert.deepEqual(client.posts, [])
+})

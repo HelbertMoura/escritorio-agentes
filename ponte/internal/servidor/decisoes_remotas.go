@@ -24,13 +24,14 @@ import (
 // EsperaRemota é o long-poll; o servidor aceita até 25 s.
 const EsperaRemota = 25 * time.Second
 
-// MaxDecisoes é o teto do corpo da resposta.
-const MaxDecisoes = 16 << 10
+// MaxDecisoes é o teto do corpo da resposta (16 respostas de até 1000 runas cabem).
+const MaxDecisoes = 128 << 10
 
-// DecisaoRemota é uma decisão vinda do servidor.
+// DecisaoRemota é uma decisão vinda do servidor: permitir/negar, ou responder com o texto.
 type DecisaoRemota struct {
-	ID   string `json:"id"`
-	Acao string `json:"acao"`
+	ID    string `json:"id"`
+	Acao  string `json:"acao"`
+	Texto string `json:"texto,omitempty"`
 }
 
 func (s *Servidor) esperaRemota() time.Duration {
@@ -117,7 +118,11 @@ func (s *Servidor) decisoesRemotas(ctx context.Context) {
 					s.atendRemoto.Store(0)
 				}
 				for _, d := range decisoes {
-					s.decidir(d.ID, d.Acao, decisao.PorRemoto)
+					if d.Acao == decisao.Responder {
+						s.responder(d.ID, d.Texto, decisao.PorRemoto)
+					} else {
+						s.decidir(d.ID, d.Acao, decisao.PorRemoto)
+					}
 				}
 				if time.Since(inicio) < time.Second && len(decisoes) == 0 {
 					espera = time.Second // um servidor que responde na hora não vira laço apertado

@@ -1,8 +1,9 @@
-// Package decisao guarda os pedidos de permissão que esperam um "Permitir" ou "Negar" vindo
-// do Firmópolis (o navegador neste PC, pelo /ws, ou o servidor, pelo celular). Cada pedido
-// tem um id de 128 bits de crypto/rand, vale uma vez só e some no prazo. A decisão só vale
-// para um id que este registro criou; o primeiro a responder leva (o terminal, o navegador
-// ou o prazo), e quem chega depois recebe "não existe".
+// Package decisao guarda os pedidos que esperam uma resposta do Firmópolis (o navegador neste
+// PC, pelo /ws, ou o servidor, pelo celular): os de permissão ("Permitir" ou "Negar") e as
+// perguntas (um texto curto). Cada pedido tem um id de 128 bits de crypto/rand, vale uma vez
+// só e some no prazo. A resposta só vale para um id que este registro criou e do tipo dele; o
+// primeiro a responder leva (o terminal, o navegador ou o prazo), e quem chega depois recebe
+// "não existe".
 package decisao
 
 import (
@@ -19,15 +20,29 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"firmopolis/ponte/internal/fontes/alvo"
 	"firmopolis/ponte/internal/mascara"
 )
 
-// Acoes aceitas numa decisão.
+// Acoes aceitas: Permitir e Negar no pedido de permissão, Responder (com o texto) na pergunta.
 const (
-	Permitir = "permitir"
-	Negar    = "negar"
+	Permitir  = "permitir"
+	Negar     = "negar"
+	Responder = "responder"
+)
+
+// Tipos de pedido.
+const (
+	TipoPermissao = "permissao"
+	TipoPergunta  = "pergunta"
+)
+
+// Por onde a resposta de uma pergunta chega ao agente (Pendente.Via).
+const (
+	ViaMaestri  = "maestri"  // digitada no terminal pelo `maestri ask --raw`
+	ViaOpenCode = "opencode" // pelo plugin, na API de perguntas do OpenCode
 )
 
 // Quem resolveu o pedido (a mensagem "resolvido" do /ws).
@@ -55,6 +70,11 @@ const (
 	EsperaOpenCode = 120 * time.Second
 	// Folga é o que o agente dá a mais ao `ponte decidir` (timeout do hook = espera + folga).
 	Folga = 10 * time.Second
+	// EsperaPergunta é quanto uma pergunta fica aberta; vencida com o morador ainda na pergunta,
+	// a ponte abre outra (o servidor não aceita pedido de mais de 10 min).
+	EsperaPergunta = 5 * time.Minute
+	// MaxTexto é o teto da resposta, em runas.
+	MaxTexto = 1000
 )
 
 // Espera diz quanto o pedido de cada rota espera (zero: rota sem decisão).
@@ -66,6 +86,8 @@ func Espera(rota string) time.Duration {
 		return EsperaCodex
 	case "opencode":
 		return EsperaOpenCode
+	case "opencode-pergunta":
+		return EsperaPergunta
 	}
 	return 0
 }
@@ -75,14 +97,17 @@ var ErrCheio = errors.New("decisao: pedidos demais esperando")
 
 // Pendente é o pedido como a tela o vê: a ferramenta e um resumo já mascarado e cortado.
 // Completo falso (resumo cortado, vazio, arquivo fora do projeto ou ferramenta cortada): a
-// ponte não aceita "permitir" vindo do servidor, e a tela só oferece Negar.
+// ponte não aceita "permitir" vindo do servidor, e a tela só oferece Negar. Na pergunta, o
+// resumo é o texto da pergunta quando o agente o dá (o OpenCode), Completo é sempre falso e
+// Via diz por onde a resposta chega.
 type Pendente struct {
 	ID         string    `json:"id"`
 	MoradorID  string    `json:"morador_id"`
-	Tipo       string    `json:"tipo"` // sempre "permissao" nesta versão
+	Tipo       string    `json:"tipo"` // "permissao" ou "pergunta"
 	Ferramenta string    `json:"ferramenta"`
 	Resumo     string    `json:"resumo"`
 	Completo   bool      `json:"completo"`
+	Via        string    `json:"via,omitempty"`
 	ExpiraEm   time.Time `json:"expira_em"`
 }
 
@@ -93,9 +118,11 @@ type Resumo struct {
 }
 
 // Resultado é como o pedido acabou: Acao vazia é "sem decisão" (o agente mostra o prompt dele).
+// Texto é a resposta da pergunta (só com Acao Responder).
 type Resultado struct {
-	Acao string
-	Por  string
+	Acao  string
+	Texto string
+	Por   string
 }
 
 type item struct {
@@ -126,20 +153,42 @@ func (r *Registro) Abrir(moradorID, ferramenta string, resumo Resumo, prazo time
 		return Pendente{}, nil, err
 	}
 	nome, inteiro := cortar(ferramenta, MaxFerramenta)
+	return r.abrir(Pendente{ID: id, MoradorID: moradorID, Tipo: TipoPermissao, Ferramenta: nome,
+		Resumo: resumo.Texto, Completo: resumo.Completo && inteiro && nome != ""}, prazo)
+}
+
+// AbrirPergunta registra uma pergunta do morador. pergunta é o texto que o agente mostra, já
+// mascarado ("" quando a ponte não o tem); via, por onde a resposta chega.
+func (r *Registro) AbrirPergunta(moradorID, pergunta, via string, prazo time.Duration) (Pendente, <-chan Resultado, error) {
+	id, err := novoID()
+	if err != nil {
+		return Pendente{}, nil, err
+	}
+	return r.abrir(Pendente{ID: id, MoradorID: moradorID, Tipo: TipoPergunta, Resumo: Cortar(pergunta), Via: via}, prazo)
+}
+
+func (r *Registro) abrir(p Pendente, prazo time.Duration) (Pendente, <-chan Resultado, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if len(r.itens) >= Max {
 		return Pendente{}, nil, ErrCheio
 	}
 	agora := r.relogio()
-	it := &item{
-		Pendente: Pendente{ID: id, MoradorID: moradorID, Tipo: "permissao", Ferramenta: nome,
-			Resumo: resumo.Texto, Completo: resumo.Completo && inteiro && nome != "", ExpiraEm: agora.Add(prazo)},
-		criado: agora,
-		fim:    make(chan Resultado, 1),
-	}
-	r.itens[id] = it
+	p.ExpiraEm = agora.Add(prazo)
+	it := &item{Pendente: p, criado: agora, fim: make(chan Resultado, 1)}
+	r.itens[p.ID] = it
 	return it.Pendente, it.fim, nil
+}
+
+// Pegar devolve o pedido id, se ainda espera.
+func (r *Registro) Pegar(id string) (Pendente, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	it, ok := r.itens[id]
+	if !ok {
+		return Pendente{}, false
+	}
+	return it.Pendente, true
 }
 
 // Decidir entrega a decisão ao pedido id (só um id que este registro criou e que ainda
@@ -149,31 +198,36 @@ func (r *Registro) Decidir(id, acao, por string) (Pendente, time.Duration, bool)
 	if acao != Permitir && acao != Negar {
 		return Pendente{}, 0, false
 	}
-	if acao == Permitir && por == PorRemoto {
+	p, espera, res, ok := r.fechar(id, Resultado{Acao: acao, Por: por}, func(it *item) bool {
 		// sem o pedido inteiro na tela de quem está longe, só Negar vale de lá
-		r.mu.Lock()
-		it, ok := r.itens[id]
-		incompleto := ok && !it.Completo
-		r.mu.Unlock()
-		if incompleto {
-			return Pendente{}, 0, false
-		}
-	}
-	p, espera, res, ok := r.fechar(id, Resultado{Acao: acao, Por: por})
+		return it.Tipo == TipoPermissao && (acao == Negar || por != PorRemoto || it.Completo)
+	})
 	return p, espera, ok && res.Acao != ""
+}
+
+// Responder entrega o texto (já passado pelo ValidarTexto) à pergunta id: só uma pergunta que
+// este registro criou e que ainda espera, uma vez só, como no Decidir.
+func (r *Registro) Responder(id, texto, por string) (Pendente, bool) {
+	if texto == "" {
+		return Pendente{}, false
+	}
+	p, _, res, ok := r.fechar(id, Resultado{Acao: Responder, Texto: texto, Por: por}, func(it *item) bool { return it.Tipo == TipoPergunta })
+	return p, ok && res.Acao != ""
 }
 
 // Encerrar fecha o pedido sem decisão (respondido no terminal ou vencido).
 func (r *Registro) Encerrar(id, por string) (Pendente, bool) {
-	p, _, _, ok := r.fechar(id, Resultado{Por: por})
+	p, _, _, ok := r.fechar(id, Resultado{Por: por}, nil)
 	return p, ok
 }
 
-func (r *Registro) fechar(id string, res Resultado) (Pendente, time.Duration, Resultado, bool) {
+// fechar tira o pedido e entrega o resultado; vale (nil: sempre) diz, sob o lock, se o pedido
+// aceita esse resultado.
+func (r *Registro) fechar(id string, res Resultado, vale func(*item) bool) (Pendente, time.Duration, Resultado, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	it, ok := r.itens[id]
-	if !ok {
+	if !ok || vale != nil && !vale(it) {
 		return Pendente{}, 0, Resultado{}, false
 	}
 	delete(r.itens, id)
@@ -185,13 +239,13 @@ func (r *Registro) fechar(id string, res Resultado) (Pendente, time.Duration, Re
 	return it.Pendente, agora.Sub(it.criado), res, true
 }
 
-// DoMorador são os ids que esperam por um morador.
-func (r *Registro) DoMorador(moradorID string) []string {
+// DoMorador são os ids do tipo (vazio: todos) que esperam por um morador.
+func (r *Registro) DoMorador(moradorID, tipo string) []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var ids []string
 	for id, it := range r.itens {
-		if it.MoradorID == moradorID {
+		if it.MoradorID == moradorID && (tipo == "" || it.Tipo == tipo) {
 			ids = append(ids, id)
 		}
 	}
@@ -316,6 +370,39 @@ func Relativo(caminho, cwd string) (string, bool) {
 		return "fora do projeto: …/" + strings.Join(partes, "/"), false
 	}
 	return "fora do projeto: " + c, false
+}
+
+// Erros do ValidarTexto: nenhum traz o texto.
+var (
+	ErrTextoVazio    = errors.New("decisao: resposta vazia")
+	ErrTextoGrande   = errors.New("decisao: resposta acima de 1000 caracteres")
+	ErrTextoProibido = errors.New("decisao: resposta com caractere proibido")
+)
+
+// ValidarTexto confere a resposta de uma pergunta antes de ela ir ao terminal e a devolve sem
+// os espaços das pontas. Recusa (nunca troca nem marca, como o cortar): UTF-8 inválido, mais de
+// MaxTexto runas, a barra invertida (o `maestri ask --raw` lê \n, \e e \xNN como teclas) e tudo
+// o que não é visível: controle (inclusive quebra de linha, tab e ESC), C1, bidi e largura
+// zero (Cc e Cf), separador de linha e de parágrafo, uso privado e não atribuído. Só passa o que
+// o unicode.IsGraphic aceita: letras, marcas, números, pontuação, símbolos e espaços. A quebra
+// de linha é recusada porque, no terminal, ela manda a resposta pela metade.
+func ValidarTexto(s string) (string, error) {
+	if !utf8.ValidString(s) {
+		return "", ErrTextoProibido
+	}
+	if utf8.RuneCountInString(s) > MaxTexto {
+		return "", ErrTextoGrande
+	}
+	for _, r := range s {
+		if r == '\\' || !unicode.IsGraphic(r) {
+			return "", ErrTextoProibido
+		}
+	}
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", ErrTextoVazio
+	}
+	return s, nil
 }
 
 // Cortar é o cortar em MaxResumo, só o texto.

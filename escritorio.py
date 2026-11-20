@@ -4209,10 +4209,12 @@ class Pagina(BaseHTTPRequestHandler):
         return papel(usuario, ANDAR_PRINCIPAL) == "admin" or _normalizar_usuario(usuario) in PONTE_DECISORES
 
     def _post_decidir_ponte(self, rota):
-        """Permitir ou Negar um pedido de permissão da ponte pelo servidor (o celular, outra máquina): {"id", "acao"},
-        JSON de até 2 KiB, só quem decide, 20 por minuto por pessoa. A decisão vai para a fila que a ponte busca (GET
-        /api/ponte/decisoes). 410: o pedido não existe, venceu ou já foi decidido. O log leva quem, o id, a ação, a
-        ferramenta e a espera; nunca o resumo, o cookie nem o Bearer."""
+        """Permitir ou Negar um pedido de permissão da ponte pelo servidor (o celular, outra máquina): {"id", "acao"};
+        ou responder uma pergunta: {"id", "acao": "responder", "texto"} (ponte_espelho.texto_resposta). JSON de até 8 KiB,
+        só quem decide, 20 por minuto por pessoa. A decisão vai para a fila que a ponte busca (GET /api/ponte/decisoes).
+        410: o pedido não existe, venceu ou já foi decidido; 409: tipo errado, resumo incompleto ou o terminal saiu da
+        pergunta. O log leva quem, o id, a ação, a ferramenta, o tamanho do texto e a espera; nunca o resumo, o texto, o
+        cookie nem o Bearer."""
         if not self._mesma_origem():
             log(evento="http", rota=rota[:40], resultado="origem_recusada")
             return self._json(*erro(403, "origem", "Origem não permitida."))
@@ -4232,25 +4234,36 @@ class Pagina(BaseHTTPRequestHandler):
         if not espelho.limite_decisao(usuario):
             return self._json(*erro(429, "limite", "Respostas demais; espere um pouco."))
         tam = self.headers.get("Content-Length", "")
-        if not re.fullmatch(r"[0-9]{1,7}", tam) or int(tam) > 2048:
+        if not re.fullmatch(r"[0-9]{1,7}", tam) or int(tam) > 8192:
             return self._json(*erro(413, "tamanho", "Pedido grande demais."))
-        dados = self._json_pedido(2048)
+        dados = self._json_pedido(8192)
         if dados is False:
             return self._json(*erro(415, "tipo", "Mande JSON."))
-        if not dados or set(dados) != {"id", "acao"} or dados["acao"] not in ponte_espelho.ACOES \
-                or not ponte_espelho.id_valido(dados["id"]):
+        responder = isinstance(dados, dict) and dados.get("acao") == ponte_espelho.RESPONDER
+        if not dados or set(dados) != ({"id", "acao", "texto"} if responder else {"id", "acao"}) \
+                or not (responder or dados["acao"] in ponte_espelho.ACOES) or not ponte_espelho.id_valido(dados["id"]):
             return self._json(*erro(400, "pedido", "Pedido inválido."))
+        texto_ = ponte_espelho.texto_resposta(dados["texto"]) if responder else None
+        if responder and texto_ is None:
+            return self._json(*erro(400, "texto", "A resposta vai numa linha só, até 1000 caracteres, sem barra invertida nem caracteres invisíveis."))
+        extra = {"tamanho": len(texto_)} if responder else {}   # do texto, só o tamanho
         inicio = time.monotonic()
         try:
-            p = espelho.decidir(dados["id"], dados["acao"])
+            p = espelho.decidir(dados["id"], dados["acao"], texto_)
         except ponte_espelho.Encerrado:
-            log(evento="ponte_decisao", resultado="encerrado", usuario=usuario, id=dados["id"][:8], acao=dados["acao"])
+            log(evento="ponte_decisao", resultado="encerrado", usuario=usuario, id=dados["id"][:8], acao=dados["acao"], **extra)
             return self._json(*erro(410, "encerrado", "Esse pedido já foi respondido ou venceu."))
         except ponte_espelho.Incompleto:
             log(evento="ponte_decisao", resultado="incompleto", usuario=usuario, id=dados["id"][:8], acao=dados["acao"])
             return self._json(*erro(409, "incompleto", "O resumo não mostra o pedido inteiro: só dá para negar daqui; para permitir, responda no terminal."))
+        except ponte_espelho.TipoErrado:
+            log(evento="ponte_decisao", resultado="tipo", usuario=usuario, id=dados["id"][:8], acao=dados["acao"])
+            return self._json(*erro(409, "tipo", "Esse pedido não aceita essa resposta."))
+        except ponte_espelho.ForaDaPergunta:
+            log(evento="ponte_decisao", resultado="fora_da_pergunta", usuario=usuario, id=dados["id"][:8], acao=dados["acao"], **extra)
+            return self._json(*erro(409, "estado", "O terminal não está mais esperando uma resposta."))
         log(evento="ponte_decisao", resultado="aceita", usuario=usuario, id=dados["id"][:8], acao=dados["acao"],
-            ferramenta=p["ferramenta"], origem="remoto", latencia_ms=int((time.monotonic() - inicio) * 1000))
+            ferramenta=p["ferramenta"], tipo=p["tipo"], origem="remoto", latencia_ms=int((time.monotonic() - inicio) * 1000), **extra)
         return self._json(200, {"ok": True})
 
     def _get_decisoes_ponte(self, caminho):

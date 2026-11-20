@@ -120,7 +120,7 @@ func (s *Servidor) ws(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 	defer s.desinscrever(cl)
 
-	go s.lerComandos(ctx, c, cancelar)
+	go s.lerComandos(ctx, c, cl)
 	for {
 		select {
 		case <-ctx.Done():

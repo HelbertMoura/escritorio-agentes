@@ -1082,13 +1082,14 @@ function linhaTerminal(d, espera) {
 
 // ---------- responder pelo escritório (ponte.js): Permitir/Negar um pedido de permissão do terminal, com a ferramenta,
 // o resumo mascarado e o tempo que falta. Só aparece para quem o servidor diz que decide. Tudo por textContent
-const PRIVACIDADE_DECISAO = "Pelo celular (se ligado com --decidir-remoto na máquina dos terminais), só a ferramenta e um resumo mascarado (até 300 caracteres) passam pelo servidor. Quem responder primeiro, aqui ou no terminal, leva.";
+const PRIVACIDADE_DECISAO = "Pelo celular (se ligado com --decidir-remoto na máquina dos terminais), só a ferramenta, um resumo mascarado (até 300 caracteres) e a resposta que você escrever passam pelo servidor. Quem responder primeiro, aqui ou no terminal, leva.";
 const restaDecisao = ate => `vence em ${Math.max(0, Math.ceil((ate - Date.now()) / 1000))} s`;
 function blocoDecisao(d, compacto) {
   const ps = window.Ponte && typeof Ponte.pendentes === "function" ? Ponte.pendentes(d.id) : [];
   if (!ps.length) return null;
   const caixa = elem("div", "decisao" + (compacto ? " compacta" : ""));
   for (const p of ps) {
+    if (p.tipo === "pergunta") { caixa.append(blocoPergunta(d, p, compacto)); continue; }
     const item = elem("div", "decisao-item"), oque = elem("p", "decisao-oque");
     oque.append(elem("strong", null, p.ferramenta || "Ferramenta"), p.resumo ? ` · ${p.resumo}` : "");
     const resta = elem("span", "decisao-resta", restaDecisao(p.ate)); resta.dataset.ate = String(p.ate);
@@ -1108,6 +1109,41 @@ function blocoDecisao(d, compacto) {
   }
   if (!compacto) caixa.append(elem("p", "decisao-nota", PRIVACIDADE_DECISAO));
   return caixa;
+}
+// a pergunta: no cartão do terminal, o campo e "Responder" (o texto é digitado no terminal, com Enter); na linha
+// compacta, só o botão que abre o cartão (a lista se redesenha a cada mudança e apagaria o que se digita). O rascunho
+// fica por pedido e o foco volta ao campo quando o cartão se redesenha
+const rascunhos = new Map();
+const NOTA_PERGUNTA = { maestri: "O texto é digitado no terminal, seguido de Enter, como se você o escrevesse lá.",
+  opencode: "O texto vai como resposta à pergunta do OpenCode." };
+function blocoPergunta(d, p, compacto) {
+  const item = elem("div", "decisao-item"), oque = elem("p", "decisao-oque");
+  oque.append(elem("strong", null, "Pergunta"), p.resumo ? ` · ${p.resumo}` : " · o texto dela está no terminal");
+  const resta = elem("span", "decisao-resta", restaDecisao(p.ate)); resta.dataset.ate = String(p.ate);
+  item.append(oque, resta);
+  if (compacto) {
+    const acoes = elem("div", "decisao-acoes"), b = elem("button", "botao decisao-sim", "Responder"); b.type = "button";
+    b.setAttribute("aria-label", `Responder ${d.nome}`);
+    b.addEventListener("click", () => { irParaEscritorio(); abrirFichaTerminal(d.id); });
+    acoes.append(b); item.append(acoes);
+  } else {
+    const foco = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.pergunta === p.id;
+    const form = elem("form", "decisao-acoes decisao-resposta"), campo = elem("input"), nota = elem("p", "decisao-nota", NOTA_PERGUNTA[p.via] || NOTA_PERGUNTA.maestri);
+    campo.type = "text"; campo.maxLength = Ponte.MAX_TEXTO; campo.autocomplete = "off"; campo.enterKeyHint = "send";
+    campo.dataset.pergunta = p.id; campo.value = rascunhos.get(p.id) || ""; campo.disabled = p.enviando;
+    nota.id = `nota-${p.id}`; campo.setAttribute("aria-describedby", nota.id); campo.setAttribute("aria-label", `Resposta para ${d.nome}`);
+    campo.placeholder = "Sua resposta";
+    campo.addEventListener("input", () => rascunhos.set(p.id, campo.value));
+    const b = elem("button", "botao decisao-sim", p.enviando ? "Enviando…" : "Responder"); b.type = "submit"; b.disabled = p.enviando;
+    form.addEventListener("submit", async ev => {
+      ev.preventDefault();
+      if (await Ponte.responder(p.id, campo.value)) rascunhos.delete(p.id);
+    });
+    form.append(campo, b); item.append(form, nota);
+    if (foco) setTimeout(() => { campo.focus(); campo.setSelectionRange(campo.value.length, campo.value.length); }, 0);
+  }
+  if (p.erro) item.append(elem("p", "decisao-erro", p.erro));
+  return item;
 }
 setInterval(() => { for (const r of document.querySelectorAll(".decisao-resta[data-ate]")) r.textContent = restaDecisao(Number(r.dataset.ate)); }, 1000);
 addEventListener("ponte", () => { if (estado) desenharPainel(); if (fichaTerm && !$("ficha").hidden) renderFicha(); });   // um terminal entrou, mudou ou saiu

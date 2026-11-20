@@ -194,3 +194,99 @@ func TestAssinatura(t *testing.T) {
 		t.Fatalf("HMAC diferente do plugin: %s", got)
 	}
 }
+
+func TestValidarTextoRecusaCadaClasseProibida(t *testing.T) {
+	ruins := map[string]string{
+		"vazio":              "",
+		"só espaços":         "   ",
+		"quebra de linha":    "sim\nnão",
+		"retorno":            "sim\r",
+		"tab":                "a\tb",
+		"ESC":                "\x1b[A",
+		"NUL":                "a\x00b",
+		"DEL":                "a\x7fb",
+		"C1":                 "a\u0085b",
+		"CSI de 8 bits":      "a\u009bb",
+		"barra invertida":    `a\nb`,
+		"escape \\e":         `\e[A`,
+		"escape \\x":         `\x03`,
+		"bidi RLO":           "a\u202eb",
+		"bidi isolado":       "a\u2066b",
+		"largura zero":       "a\u200bb",
+		"ZWJ":                "a\u200db",
+		"BOM":                "\ufeffa",
+		"separador de linha": "a\u2028b",
+		"separador de par.":  "a\u2029b",
+		"uso privado":        "a\ue000b",
+		"tag":                "a\U000E0041b",
+		"UTF-8 inválido":     "a\xffb",
+		"1001 runas":         strings.Repeat("é", 1001),
+	}
+	for nome, s := range ruins {
+		_, err := ValidarTexto(s)
+		if err == nil {
+			t.Errorf("%s: %q passou", nome, s)
+		} else if s != "" && strings.Contains(err.Error(), s) {
+			t.Errorf("%s: o erro traz o texto", nome)
+		}
+	}
+	bons := map[string]string{
+		"  sim  ":                      "sim",
+		"Pode seguir, é isso mesmo ✓":  "Pode seguir, é isso mesmo ✓",
+		"1":                            "1",
+		"日本語 テスト":                      "日本語 テスト",
+		"emoji 👍🏽 e acento é":          "emoji 👍🏽 e acento é",
+		"a\u00a0b":                     "a\u00a0b",
+		strings.Repeat("é", 1000):      strings.Repeat("é", 1000),
+		`"aspas" $(x) ; | & * ~ -- -x`: `"aspas" $(x) ; | & * ~ -- -x`,
+	}
+	for s, want := range bons {
+		if got, err := ValidarTexto(s); err != nil || got != want {
+			t.Errorf("%q: %q %v", s, got, err)
+		}
+	}
+}
+
+func TestPerguntaSoAceitaResponderUmaVez(t *testing.T) {
+	r := NovoRegistro(nil)
+	p, fim, err := r.AbrirPergunta("t1", "Qual\u202e banco?", ViaMaestri, time.Minute)
+	if err != nil || p.Tipo != TipoPergunta || p.Via != ViaMaestri || p.Completo || p.Resumo != "Qual‹U+202E› banco?" {
+		t.Fatalf("abrir: %v %+v", err, p)
+	}
+	if _, _, ok := r.Decidir(p.ID, Permitir, PorLocal); ok {
+		t.Fatal("pergunta não aceita permitir")
+	}
+	if _, ok := r.Responder(p.ID, "", PorLocal); ok {
+		t.Fatal("texto vazio não vale")
+	}
+	if _, ok := r.Responder(p.ID, "Postgres", PorRemoto); !ok {
+		t.Fatal("responder")
+	}
+	if res := <-fim; res.Acao != Responder || res.Texto != "Postgres" || res.Por != PorRemoto {
+		t.Fatalf("resultado: %+v", res)
+	}
+	if _, ok := r.Responder(p.ID, "de novo", PorLocal); ok {
+		t.Fatal("uso único")
+	}
+	q, _, _ := r.Abrir("t1", "Bash", Resumo{"ls", true}, time.Minute)
+	if _, ok := r.Responder(q.ID, "sim", PorLocal); ok {
+		t.Fatal("permissão não aceita texto")
+	}
+	if ids := r.DoMorador("t1", TipoPergunta); len(ids) != 0 {
+		t.Fatalf("só perguntas: %v", ids)
+	}
+	if ids := r.DoMorador("t1", ""); len(ids) != 1 || ids[0] != q.ID {
+		t.Fatalf("todos: %v", ids)
+	}
+}
+
+func TestPerguntaVencidaNaoRecebeResposta(t *testing.T) {
+	agora := time.Unix(1000, 0)
+	r := NovoRegistro(func() time.Time { return agora })
+	p, fim, _ := r.AbrirPergunta("t1", "", ViaMaestri, time.Second)
+	agora = agora.Add(2 * time.Second)
+	r.Responder(p.ID, "tarde", PorLocal)
+	if res := <-fim; res.Acao != "" || res.Por != PorExpirou {
+		t.Fatalf("vencida: %+v", res)
+	}
+}

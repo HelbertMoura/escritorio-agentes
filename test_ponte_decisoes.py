@@ -27,8 +27,18 @@ def pendente(id_=ID1, segundos=60, **extra):
             "completo": True, "expira_em": iso(segundos), **extra}
 
 
-def v2(*pendentes):
-    return corpo(v=2, pendentes=list(pendentes))
+def v2(*pendentes, **extra):
+    return corpo(v=2, pendentes=list(pendentes), **extra)
+
+
+def pergunta(id_=ID1, **extra):
+    return {"id": id_, "morador_id": "m1", "tipo": "pergunta", "ferramenta": "", "resumo": "", "completo": False,
+            "via": "maestri", "expira_em": iso(60), **extra}
+
+
+def morador_ponte(estado):
+    return {"id": "m1", "nome": "Ada", "provedor": "claude_code", "estado": {"pergunta": "esperando_resposta",
+                                                                             "aprovacao": "esperando_permissao"}[estado]}
 
 
 class Espelho(unittest.TestCase):
@@ -114,6 +124,32 @@ class Espelho(unittest.TestCase):
         self.assertTrue(self.esp.limite_decisao("ana"))
 
 
+class Respostas(unittest.TestCase):
+    def test_texto_resposta_recusa_cada_classe(self):
+        for ruim in ("", "   ", "a\nb", "a\rb", "a\tb", "\x1b[A", "a\x00b", "a\x7fb", "a\u0085b", "a\u009bb", "a\\nb",
+                     "a\u202eb", "a\u2066b", "a\u200bb", "a\u200db", "\ufeffa", "a\u2028b", "a\u2029b", "a\ue000b",
+                     "a\U000E0041b", "a\ud800b", "é" * 1001, None, 5):
+            self.assertIsNone(pe.texto_resposta(ruim), repr(ruim))
+        for bom, limpo in (("  sim  ", "sim"), ("é" * 1000, "é" * 1000), ("👍🏽 日本語 ✓", "👍🏽 日本語 ✓"),
+                           ('"aspas" $(x) ; | -x', '"aspas" $(x) ; | -x'), ("a\u00a0b", "a\u00a0b")):
+            self.assertEqual(pe.texto_resposta(bom), limpo)
+
+    def test_pergunta_no_espelho(self):
+        esp = pe.Espelho(CHAVE, relogio=lambda: 1000.0)
+        esp.receber(v2(pergunta(resumo="Qual\u202e banco?", ferramenta="X", completo=True), pergunta(ID2, via="tmux"),
+                       moradores=[morador_ponte("pergunta")]))
+        ps = esp.ler(decide=True)["pendentes"]
+        self.assertEqual(len(ps), 1, "via desconhecida sai")
+        self.assertEqual((ps[0]["resumo"], ps[0]["ferramenta"], ps[0]["completo"], ps[0]["via"]),
+                         ("Qual‹U+202E› banco?", "", False, "maestri"))
+        with self.assertRaises(ValueError):
+            esp.decidir(ID1, "responder", "a\nb")
+        with self.assertRaises(pe.TipoErrado):
+            esp.decidir(ID1, "negar")
+        self.assertEqual(esp.decidir(ID1, "responder", " ok ")["tipo"], "pergunta")
+        self.assertEqual(esp.esperar_decisoes(0)[0], [{"id": ID1, "acao": "responder", "texto": "ok"}])
+
+
 class Http(unittest.TestCase):
     """Modo clássico: o andar da ponte é o principal."""
     setUpClass = classmethod(tm.Membros.setUpClass.__func__)
@@ -175,7 +211,7 @@ class Http(unittest.TestCase):
                             json.dumps({"id": ID1, "acao": "negar"}).encode(), "POST")
         self.assertEqual(st, 415)
         st, _, _ = self.req("/api/ponte/decidir", {**self.dono, "Origin": self.base, "Content-Type": "application/json"},
-                            json.dumps({"id": ID1, "acao": "negar", "x": "a" * 3000}).encode(), "POST")
+                            json.dumps({"id": ID1, "acao": "negar", "x": "a" * 9000}).encode(), "POST")
         self.assertEqual(st, 413)
         for _ in range(pe.DECISOES_POR_MIN - 7):   # as 7 de cima já contaram
             self.decidir(self.dono, "C" * 22)
@@ -191,6 +227,41 @@ class Http(unittest.TestCase):
         st, d, _ = self.decidir(self.dono)
         self.assertEqual((st, d["erro"]), (409, "incompleto"))
         self.assertEqual(self.decidir(self.dono, acao="negar")[0], 200)
+
+    def test_responder_pergunta(self):
+        self.agora[0] += 2
+        st, _, _ = self.req("/api/ponte/espelho", {"Content-Type": "application/json", "Authorization": "Bearer " + CHAVE},
+                            json.dumps(v2(pergunta(), pendente(ID2), moradores=[morador_ponte("pergunta")])).encode(), "POST")
+        self.assertEqual(st, 204)
+        st, d, _ = self.req("/api/ponte", self.dono)
+        p = json.loads(d)["pendentes"][0]
+        self.assertEqual((p["tipo"], p["via"], p["completo"]), ("pergunta", "maestri", False))
+
+        def responder(id_=ID1, texto="sim, pode"):
+            return self.post("/api/ponte/decidir", {"id": id_, "acao": "responder", "texto": texto}, self.dono)
+        for ruim in ("linha\noutra", "a\\nb", "\x1b[A", "a\u202eb", "", 5):
+            st, d, _ = responder(texto=ruim)
+            self.assertEqual((st, d["erro"]), (400, "texto"), ruim)
+        self.assertEqual(self.post("/api/ponte/decidir", {"id": ID1, "acao": "responder"}, self.dono)[0], 400, "sem o texto")
+        self.assertEqual(self.post("/api/ponte/decidir", {"id": ID1, "acao": "permitir", "texto": "x"}, self.dono)[0], 400)
+        self.assertEqual(responder(ID2)[1]["erro"], "tipo", "permissão não recebe texto")
+        self.assertEqual(self.decidir(self.dono, ID1, "permitir")[1]["erro"], "tipo", "pergunta não recebe permitir")
+        self.assertEqual(responder(texto="  sim, pode  ")[:2], (200, {"ok": True}))
+        self.assertEqual(responder()[0], 410, "uso único")
+        st, bruto, _ = self.buscar()
+        self.assertEqual(json.loads(bruto)["decisoes"], [{"id": ID1, "acao": "responder", "texto": "sim, pode"}])
+        st, _, _ = self.req("/api/ponte/decidir", {**self.dono, "Origin": self.base, "Content-Type": "application/json"},
+                            json.dumps({"id": ID1, "acao": "responder", "texto": "é" * 1000}, ensure_ascii=False).encode(), "POST")
+        self.assertNotEqual(st, 413, "mil caracteres cabem no corpo")
+
+    def test_pergunta_fora_do_estado_e_so_quem_decide(self):
+        self.agora[0] += 2
+        self.req("/api/ponte/espelho", {"Content-Type": "application/json", "Authorization": "Bearer " + CHAVE},
+                 json.dumps(v2(pergunta(), moradores=[morador_ponte("aprovacao")])).encode(), "POST")
+        st, d, _ = self.post("/api/ponte/decidir", {"id": ID1, "acao": "responder", "texto": "1"}, self.dono)
+        self.assertEqual((st, d["erro"]), (409, "estado"), "na aprovação, nunca")
+        ana = self.membro("anaresponde")
+        self.assertEqual(self.post("/api/ponte/decidir", {"id": ID1, "acao": "responder", "texto": "1"}, ana)[0], 403)
 
     def test_long_poll_so_com_a_chave(self):
         self.assertEqual(self.buscar(chave="c1" * 32)[0], 401)

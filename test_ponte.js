@@ -22,7 +22,7 @@ function criar(tokenSalvo) {
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout() {},
     document: { readyState: "complete", hidden: false, getElementById: () => null, addEventListener() {} },
     location: { origin: "https://escritorio.exemplo.com" },
-    fetch: async (url, op) => { pedidos.push({ url, op }); const r = respostaSrv; return { ok: r.status === 200, status: r.status, text: async () => r.corpo }; },
+    fetch: async (url, op) => { pedidos.push({ url, op }); const r = respostaSrv; return { ok: r.status === 200, status: r.status, text: async () => r.corpo, json: async () => JSON.parse(r.corpo || "{}") }; },
   };
   contexto.window = { dispatchEvent: e => eventos.push(e.type), addEventListener() {} };
   vm.runInNewContext(fs.readFileSync("static/ponte.js", "utf8"), contexto);
@@ -252,6 +252,50 @@ assert.equal(religar().ms, 6000, "a espera dobra");
   q = criar(TOKEN); await solta();
   abertos[0].readyState = 1; abertos[0].onopen();
   assert.equal(abertos[0].enviados, undefined, "quem não decide não atende");
+
+  // ---------- perguntas: o texto conferido aqui (recusa, nunca troca), pelo /ws ou pelo servidor ----------
+  const tr = q.Ponte.textoResposta;
+  for (const ruim of ["", "   ", "a\nb", "a\rb", "a\tb", "\u001b[A", "a\u0000b", "a\u007fb", "a\u0085b", "a\u009bb", "a\\nb",
+    "a\u202eb", "a\u2066b", "a\u200bb", "a\u200db", "\ufeffa", "a\u2028b", "a\u2029b", "a\ue000b", "a\u{E0041}b", "a\ud800b", "é".repeat(1001), null, 5]) {
+    assert.equal(tr(ruim), null, JSON.stringify(ruim));
+  }
+  assert.equal(tr("  sim, pode  "), "sim, pode");
+  assert.equal(tr("é".repeat(1000)), "é".repeat(1000));
+  assert.equal(tr("👍🏽 日本語 ✓ \"x\" $(y) -z"), "👍🏽 日本語 ✓ \"x\" $(y) -z");
+
+  respostaSrv = { status: 200, corpo: JSON.stringify({ ativo: false, decidir: true }) };
+  q = criar(TOKEN); await solta();
+  const pw = abertos[0];
+  pw.readyState = 1; pw.onopen();
+  const PID = "P".repeat(22);
+  mensagem(pw, { v: 1, tipo: "pendente", pendente: { id: PID, morador_id: "l1", tipo: "pergunta", via: "maestri", ferramenta: "", resumo: "", completo: true, expira_em: expira } });
+  const pp = q.Ponte.pendentes("l1")[0];
+  assert.equal(pp.tipo, "pergunta");
+  assert.equal(pp.via, "maestri");
+  assert.equal(pp.completo, false, "pergunta nunca é completa");
+  await q.Ponte.decidir(PID, "permitir");
+  assert.equal(pw.enviados.length, 1, "pergunta não recebe permitir");
+  assert.equal(await q.Ponte.responder(PID, "linha\noutra"), false);
+  assert.equal(pw.enviados.length, 1, "texto recusado não sai");
+  assert.match(q.Ponte.pendentes("l1")[0].erro, /linha só/);
+  assert.equal(await q.Ponte.responder(PID, " sim "), true);
+  assert.deepEqual(JSON.parse(pw.enviados.at(-1)), { v: 1, tipo: "responder", id: PID, texto: "sim" });
+  mensagem(pw, { v: 1, tipo: "recusado", id: PID, motivo: "estado" });
+  assert.equal(q.Ponte.pendentes("l1")[0].erro, "O terminal não está mais esperando uma resposta.");
+  assert.equal(q.Ponte.pendentes("l1")[0].enviando, false, "recusado: dá para tentar de novo");
+
+  // pela ponte de outra máquina: o mesmo POST, com a ação responder e o texto
+  const perguntaSrv = { id: PID, morador_id: "s1", tipo: "pergunta", via: "opencode", ferramenta: "", resumo: "Qual banco?", completo: false, resta_s: 120 };
+  respostaSrv = espelho([morador("s1", "esperando_resposta")], { decidir: true, pendentes: [perguntaSrv] });
+  q = criar(null); await solta();
+  assert.equal(q.Ponte.pendentes("s1")[0].via, "opencode");
+  respostaSrv = { status: 409, corpo: JSON.stringify({ erro: "estado" }) };
+  assert.equal(await q.Ponte.responder(PID, "Postgres"), false);
+  assert.deepEqual(JSON.parse(pedidos.at(-1).op.body), { id: PID, acao: "responder", texto: "Postgres" });
+  assert.equal(q.Ponte.pendentes("s1")[0].erro, "O terminal não está mais esperando uma resposta.");
+  respostaSrv = { status: 200, corpo: "{}" };
+  assert.equal(await q.Ponte.responder(PID, "Postgres"), true);
+  assert.equal(q.Ponte.pendentes("s1").length, 0, "respondida, sai");
 
   console.log("test_ponte.js: ok");
 })().catch(e => { console.error(e); process.exit(1); });

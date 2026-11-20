@@ -11,6 +11,7 @@ import (
 	"path"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/coder/websocket"
 
@@ -29,8 +30,9 @@ import (
 const (
 	// validadeAtender é quanto vale o último "atender" do navegador neste PC.
 	validadeAtender = 60 * time.Second
-	// maxComando é o maior quadro de comando que o /ws lê ("atender" e "decidir" são pequenos).
-	maxComando = 1 << 10
+	// maxComando é o maior quadro de comando que o /ws lê ("responder" leva até 1000 runas,
+	// que no JSON chegam a uns 6 KiB).
+	maxComando = 8 << 10
 )
 
 // Mensagens do /ws (ponte → jogo e navegador).
@@ -47,10 +49,12 @@ type msgResolvido struct {
 	Por  string `json:"por"`
 }
 
-// pedido é o que a ponte tira do corpo: a sessão, a ferramenta e o resumo.
+// pedido é o que a ponte tira do corpo: a sessão, a ferramenta e o resumo. pergunta: é a
+// pergunta do OpenCode (o resumo é o texto dela).
 type pedido struct {
 	fonte, sessao, ferramenta string
 	resumo                    decisao.Resumo
+	pergunta                  bool
 }
 
 // semDecisao são as ferramentas cujo "pedido" é uma pergunta ou um plano, não um comando: o
@@ -109,6 +113,24 @@ func lerPedido(rota string, corpo []byte) (pedido, bool) {
 		// só o "bash" do OpenCode (os padrões são o comando) pode ser completo; "edit" e o resto, nunca
 		resumo.Completo = e.Permission == "bash" && dentro && resumo.Texto != "" && len([]rune(resumo.Texto)) < decisao.MaxResumo
 		return pedido{fonte: mundo.ProvedorOpenCode, sessao: sessao, ferramenta: e.Permission, resumo: resumo}, true
+	case "opencode-pergunta":
+		// o plugin só manda a pergunta única que aceita texto livre (custom); o texto dela vai
+		// mascarado e cortado, como o resumo da permissão
+		var e struct {
+			SessionID string `json:"sessionID"`
+			Pai       string `json:"pai"`
+			ID        string `json:"id"`
+			Pergunta  string `json:"pergunta"`
+		}
+		if json.Unmarshal(corpo, &e) != nil || e.SessionID == "" || e.ID == "" {
+			return pedido{}, false
+		}
+		sessao := e.SessionID
+		if e.Pai != "" {
+			sessao = e.Pai
+		}
+		texto := mascara.Mascarar(strings.Join(strings.Fields(e.Pergunta), " "))
+		return pedido{fonte: mundo.ProvedorOpenCode, sessao: sessao, resumo: decisao.Resumo{Texto: texto}, pergunta: true}, true
 	}
 	return pedido{}, false
 }
@@ -154,7 +176,8 @@ func (s *Servidor) pendente(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
-	if err != nil || s.demo != nil || !s.atendendo() {
+	// a pergunta espera mesmo sem ninguém atendendo agora: quem abrir o mapa depois ainda responde
+	if err != nil || s.demo != nil || !s.atendendo() && rota != "opencode-pergunta" {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -167,7 +190,13 @@ func (s *Servidor) pendente(w http.ResponseWriter, r *http.Request) {
 		espera = s.op.EsperaDecisao
 	}
 	morador := s.reg.IDDe(r.Header.Get("X-Maestri-Terminal-Id"), ped.fonte, ped.sessao)
-	p, fim, err := s.dec.Abrir(morador, ped.ferramenta, ped.resumo, espera)
+	var p decisao.Pendente
+	var fim <-chan decisao.Resultado
+	if ped.pergunta {
+		p, fim, err = s.dec.AbrirPergunta(morador, ped.resumo.Texto, decisao.ViaOpenCode, espera)
+	} else {
+		p, fim, err = s.dec.Abrir(morador, ped.ferramenta, ped.resumo, espera)
+	}
 	if err != nil {
 		w.WriteHeader(http.StatusNoContent) // cheio: este não espera
 		return
@@ -190,9 +219,11 @@ func (s *Servidor) pendente(w http.ResponseWriter, r *http.Request) {
 		s.dec.Encerrar(p.ID, decisao.PorExpirou)
 		res = <-fim
 	}
-	s.mu.Lock()
-	s.transmitir(msgResolvido{V: 1, Tipo: "resolvido", ID: p.ID, Por: res.Por})
-	s.mu.Unlock()
+	s.resolvido(p.ID, res.Por)
+	if p.Tipo == decisao.TipoPergunta {
+		s.respostaOpenCode(w, p, res, nonce)
+		return
+	}
 	acao := res.Acao
 	if acao == "" {
 		acao = "sem decisão"
@@ -208,6 +239,20 @@ func (s *Servidor) pendente(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"acao": res.Acao,
 		"assinatura": decisao.Assinar(s.op.Token, []byte(nonce), []byte(res.Acao))})
+}
+
+// respostaOpenCode devolve ao plugin a resposta da pergunta, assinada sobre o nonce, a ação e
+// o texto (HMAC(token, nonce‖"responder"‖texto)). Sem resposta, 204. O log leva só o tamanho.
+func (s *Servidor) respostaOpenCode(w http.ResponseWriter, p decisao.Pendente, res decisao.Resultado, nonce string) {
+	if res.Acao != decisao.Responder {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	log.Printf("resposta: pedido %s… (opencode) %d caracteres por %s: entregue ao plugin", p.ID[:6], utf8.RuneCountInString(res.Texto), res.Por)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"acao": res.Acao, "texto": res.Texto,
+		"assinatura": decisao.Assinar(s.op.Token, []byte(nonce), []byte(res.Acao), []byte(res.Texto))})
 }
 
 func nonceValido(nonce string) bool {
@@ -230,8 +275,9 @@ func (s *Servidor) decidir(id, acao, por string) bool {
 	return ok
 }
 
-// respondidoNoTerminal fecha os pedidos do morador quando ele sai da espera de permissão (o
-// terminal respondeu) ou sai do mundo (estado vazio). Chamar com s.mu.
+// respondidoNoTerminal fecha os pedidos de permissão do morador quando ele sai da espera de
+// permissão (o terminal respondeu), as perguntas quando ele sai da pergunta, e todos quando ele
+// sai do mundo (estado vazio). Chamar com s.mu.
 func (s *Servidor) respondidoNoTerminal(id string, estado mundo.Estado) {
 	antes := s.estados[id]
 	if estado == "" {
@@ -239,11 +285,13 @@ func (s *Servidor) respondidoNoTerminal(id string, estado mundo.Estado) {
 	} else {
 		s.estados[id] = estado
 	}
-	if estado == mundo.EsperandoPermissao || estado != "" && antes != mundo.EsperandoPermissao {
-		return
-	}
-	for _, p := range s.dec.DoMorador(id) {
-		s.dec.Encerrar(p, decisao.PorTerminal)
+	for tipo, espera := range map[string]mundo.Estado{decisao.TipoPermissao: mundo.EsperandoPermissao, decisao.TipoPergunta: mundo.EsperandoResposta} {
+		if estado != "" && (antes != espera || estado == espera) {
+			continue
+		}
+		for _, p := range s.dec.DoMorador(id, tipo) {
+			s.dec.Encerrar(p, decisao.PorTerminal)
+		}
 	}
 }
 
@@ -256,10 +304,12 @@ func (s *Servidor) avisarPendente() {
 }
 
 // lerComandos lê o que o cliente (já autenticado pelo token) manda no /ws: {"v":1,"tipo":
-// "atender"} e {"v":1,"tipo":"decidir","id","acao":"permitir|negar"}. O resto é ignorado;
-// quadro acima do limite de leitura ou conexão fechada encerram o cliente.
-func (s *Servidor) lerComandos(ctx context.Context, c *websocket.Conn, cancelar context.CancelFunc) {
-	defer cancelar()
+// "atender"}, {"v":1,"tipo":"decidir","id","acao":"permitir|negar"} e {"v":1,"tipo":
+// "responder","id","texto"} (recusado, só este cliente recebe {"tipo":"recusado","id",
+// "motivo"}). O resto é ignorado; quadro acima do limite de leitura ou conexão fechada encerram
+// o cliente.
+func (s *Servidor) lerComandos(ctx context.Context, c *websocket.Conn, cl *cliente) {
+	defer cl.fechar()
 	for {
 		tipo, dados, err := c.Read(ctx)
 		if err != nil {
@@ -269,10 +319,11 @@ func (s *Servidor) lerComandos(ctx context.Context, c *websocket.Conn, cancelar 
 			continue
 		}
 		var cmd struct {
-			V    int    `json:"v"`
-			Tipo string `json:"tipo"`
-			ID   string `json:"id"`
-			Acao string `json:"acao"`
+			V     int    `json:"v"`
+			Tipo  string `json:"tipo"`
+			ID    string `json:"id"`
+			Acao  string `json:"acao"`
+			Texto string `json:"texto"`
 		}
 		dec := json.NewDecoder(bytes.NewReader(dados))
 		dec.DisallowUnknownFields()
@@ -284,6 +335,16 @@ func (s *Servidor) lerComandos(ctx context.Context, c *websocket.Conn, cancelar 
 			s.atendLocal.Store(time.Now().UnixNano())
 		case "decidir":
 			s.decidir(cmd.ID, cmd.Acao, decisao.PorLocal)
+		case "responder":
+			if motivo := s.responder(cmd.ID, cmd.Texto, decisao.PorLocal); motivo != "" {
+				if !decisao.IDValido(cmd.ID) {
+					cmd.ID = ""
+				}
+				select {
+				case cl.fila <- codificar(msgRecusado{V: 1, Tipo: "recusado", ID: cmd.ID, Motivo: motivo}):
+				default:
+				}
+			}
 		}
 	}
 }

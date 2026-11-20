@@ -74,6 +74,9 @@ type Opcoes struct {
 	// EsperaRemota o long-poll das decisões do servidor (zero: EsperaRemota). Os testes trocam.
 	EsperaDecisao time.Duration
 	EsperaRemota  time.Duration
+	// Maestri acha o `maestri` que digita a resposta de uma pergunta (respostas.go). nil:
+	// maestri.AcharCLI; os testes trocam.
+	Maestri func() (maestri.CLI, bool)
 }
 
 // normalizadores liga cada rota de /evento ao normalizador do provedor.
@@ -106,6 +109,10 @@ type Servidor struct {
 	atendLocal  atomic.Int64      // UnixNano do último "atender" de um cliente do /ws
 	atendRemoto atomic.Int64      // UnixNano do último long-poll em que o servidor disse "atendendo"
 
+	muResp      sync.Mutex      // respostas.go
+	perguntando map[string]bool // moradores com a pergunta do Maestri aberta
+	respostas   []time.Time     // as tentativas de resposta do último minuto
+
 	muPID     sync.Mutex
 	agentes   map[string]agente // fonte:sessão → agente já resolvido
 	agenteLog map[string]bool   // fontes cujo agente resolvido já foi registrado
@@ -115,6 +122,7 @@ type Servidor struct {
 	mu         sync.Mutex
 	clientes   map[*cliente]bool
 	workspaces []maestri.Workspace
+	terminais  []mundo.MetaTerminal    // os terminais do Maestri, de todos os workspaces (respostas.go)
 	ambiente   clima.Estado            // clima e datas do dia
 	estados    map[string]mundo.Estado // o último estado publicado de cada morador (decisoes.go)
 
@@ -146,6 +154,9 @@ func Novo(op Opcoes) *Servidor {
 	if op.Clima == nil {
 		op.Clima = clima.NovaFonte(clima.Config{}, "")
 	}
+	if op.Maestri == nil {
+		op.Maestri = acharMaestri
+	}
 	if op.EsperaEspelho <= 0 {
 		op.EsperaEspelho = EsperaEspelho
 	}
@@ -160,6 +171,7 @@ func Novo(op Opcoes) *Servidor {
 		espPendente: make(chan struct{}, 1),
 		dec:         decisao.NovoRegistro(nil),
 		estados:     map[string]mundo.Estado{},
+		perguntando: map[string]bool{},
 		agentes:     map[string]agente{},
 		agenteLog:   map[string]bool{},
 		clientes:    map[*cliente]bool{},
@@ -442,6 +454,7 @@ func (s *Servidor) vincular(workspaces []maestri.Workspace, metas []mundo.MetaTe
 	defer s.mu.Unlock()
 	if workspaces != nil {
 		s.workspaces = workspaces
+		s.terminais = metas                             // o leitor manda sempre todos os terminais junto com os workspaces
 		s.reg.DefinirPastas(maestri.Pastas(workspaces)) // antes das metas e dos sinais
 	}
 	for _, meta := range metas {
@@ -460,7 +473,11 @@ func (s *Servidor) publicar(m *mundo.Morador, saiu string) {
 	if m == nil {
 		return
 	}
+	antes := s.estados[m.ID]
 	s.respondidoNoTerminal(m.ID, m.Estado)
+	if m.Estado == mundo.EsperandoResposta && antes != mundo.EsperandoResposta {
+		s.abrirPerguntaMaestri(m)
+	}
 	if s.op.Historico != nil {
 		e := historico.EventoHist{TS: instante(m), MoradorID: m.ID, Estado: m.Estado}
 		if m.Atividade != nil {

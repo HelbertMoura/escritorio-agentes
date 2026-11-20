@@ -10,6 +10,9 @@
 // ("pendente"/"resolvido" no /ws) ou do servidor (no GET /api/ponte, só para quem decide). Permitir/Negar vai pelo /ws
 // (pedido local) ou por POST /api/ponte/decidir (pedido do espelho). Quem decide é o servidor que diz ("decidir": true no
 // /api/ponte); só então a página manda "atender" à ponte local, enquanto está visível.
+// Perguntas (fase 2): o terminal na pergunta vira um pedido do tipo "pergunta", e a resposta (uma linha, até 1000
+// caracteres visíveis, sem barra invertida: textoResposta) vai pelo /ws ("responder") ou pelo mesmo POST, com "texto".
+// A ponte a digita no terminal (Maestri) ou responde pela API do OpenCode; recusada, ela diz o motivo ("recusado").
 "use strict";
 const Ponte = (() => {
   const URL_PONTE = "ws://127.0.0.1:47820/ws", PROTOCOLO = "firmopolis.v1", CHAVE = "firmopolis.ponte";
@@ -73,14 +76,24 @@ const Ponte = (() => {
   const ENGANOSO = /[\p{Cc}\p{Cf}]/gu;
   const visivel = (v, max) => (typeof v === "string"
     ? v.replace(/\t/g, " ").replace(ENGANOSO, c => `‹U+${c.codePointAt(0).toString(16).toUpperCase().padStart(4, "0")}›`).trim().slice(0, max) : "");
-  // completo: a ponte disse que o resumo conta o pedido inteiro e nada mudou aqui; senão, a tela só oferece Negar
+  // completo: a ponte disse que o resumo conta o pedido inteiro e nada mudou aqui; senão, a tela só oferece Negar.
+  // Na pergunta: o resumo é o texto dela (quando o agente o dá) e via, por onde a resposta chega (maestri ou opencode)
   function pedido(p, ate, local) {
     if (!p || typeof p !== "object" || typeof p.id !== "string" || !ID_PEDIDO.test(p.id) || !texto(p.morador_id, 200) || !Number.isFinite(ate)) return null;
-    const ferramenta = visivel(p.ferramenta, 80), resumo = visivel(p.resumo, 300);
-    return { id: p.id, morador: texto(p.morador_id, 200), ferramenta, resumo,
-      completo: p.completo === true && !!ferramenta && !!resumo && ferramenta === p.ferramenta && resumo === p.resumo,
+    const ferramenta = visivel(p.ferramenta, 80), resumo = visivel(p.resumo, 300), pergunta = p.tipo === "pergunta";
+    return { id: p.id, morador: texto(p.morador_id, 200), tipo: pergunta ? "pergunta" : "permissao", ferramenta, resumo,
+      via: pergunta ? (p.via === "opencode" ? "opencode" : "maestri") : "",
+      completo: !pergunta && p.completo === true && !!ferramenta && !!resumo && ferramenta === p.ferramenta && resumo === p.resumo,
       ate: Math.min(ate, Date.now() + PRAZO_MAX), local, enviando: false, erro: "" };
   }
+  // a resposta de uma pergunta, como a ponte confere (decisao.ValidarTexto): recusa, nunca troca. Só letras, marcas,
+  // números, pontuação, símbolos e espaços (nada de quebra de linha, tab, ESC, bidi, largura zero...), sem a barra
+  // invertida (o maestri lê \n e \e como teclas), até 1000 caracteres; sem os espaços das pontas. null: recusada
+  const MAX_TEXTO = 1000, PROIBIDO = /[^\p{L}\p{M}\p{N}\p{P}\p{S}\p{Zs}]|\\/u;
+  const textoResposta = v => (typeof v !== "string" || [...v].length > MAX_TEXTO || PROIBIDO.test(v) ? null : v.trim() || null);
+  const AVISO_TEXTO = "Uma linha só, até 1000 caracteres, sem barra invertida nem caracteres invisíveis.";
+  const RECUSAS = { texto: AVISO_TEXTO, estado: "O terminal não está mais esperando uma resposta.",
+    encerrado: "Essa pergunta já foi respondida ou venceu.", limite: "Respostas demais; espere um pouco." };
   function guardarPedido(p) {
     if (!p || p.ate <= Date.now() || (!st.pendentes.has(p.id) && st.pendentes.size >= MAX_PEND)) return false;
     const antes = st.pendentes.get(p.id);
@@ -96,9 +109,33 @@ const Ponte = (() => {
   function atender() {
     if (st.decide && st.ws && st.ws.readyState === 1 && !document.hidden) { try { st.ws.send('{"v":1,"tipo":"atender"}'); } catch (e) { /* caiu */ } }
   }
+  // responde a pergunta id; true: foi (o "resolvido" ou a recusa chegam depois, pelo /ws, no pedido local)
+  async function responder(id, valor) {
+    const p = st.pendentes.get(id);
+    if (!p || p.tipo !== "pergunta" || p.enviando) return false;
+    const t = textoResposta(valor);
+    if (!t) { p.erro = AVISO_TEXTO; mudou(); return false; }
+    p.enviando = true; p.erro = ""; mudou();
+    if (p.local) {
+      if (st.ws && st.ws.readyState === 1) { try { st.ws.send(JSON.stringify({ v: 1, tipo: "responder", id, texto: t })); return true; } catch (e) { /* cai abaixo */ } }
+      p.enviando = false; p.erro = "A ponte deste computador não respondeu."; mudou(); return false;
+    }
+    let ok = false;
+    try {
+      const url = window.Andar ? Andar.com("api/ponte/decidir") : "api/ponte/decidir";
+      const r = await fetch(url, { method: "POST", credentials: "same-origin", cache: "no-store",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, acao: "responder", texto: t }) });
+      const d = r.ok ? {} : await r.json().catch(() => ({}));
+      ok = r.ok;
+      if (r.ok || r.status === 410) st.pendentes.delete(id);
+      else { p.enviando = false; p.erro = r.status === 429 ? RECUSAS.limite : r.status === 400 ? AVISO_TEXTO : r.status === 409 && d.erro === "estado" ? RECUSAS.estado : "Não deu certo agora. Responda no terminal."; }
+    } catch (e) { p.enviando = false; p.erro = "Sem conexão com o servidor."; }
+    mudou();
+    return ok;
+  }
   async function decidir(id, acao) {
     const p = st.pendentes.get(id);
-    if (!p || p.enviando || (acao !== "permitir" && acao !== "negar") || (acao === "permitir" && !p.completo)) return;
+    if (!p || p.tipo !== "permissao" || p.enviando || (acao !== "permitir" && acao !== "negar") || (acao === "permitir" && !p.completo)) return;
     p.enviando = true; p.erro = ""; mudou();
     if (p.local) {
       if (st.ws && st.ws.readyState === 1) { try { st.ws.send(JSON.stringify({ v: 1, tipo: "decidir", id, acao })); return; } catch (e) { /* cai abaixo */ } }
@@ -121,6 +158,11 @@ const Ponte = (() => {
       return;
     }
     if (d.tipo === "resolvido") { if (typeof d.id === "string" && st.pendentes.delete(d.id)) mudou(); return; }
+    if (d.tipo === "recusado") {   // a ponte recusou a resposta deste navegador: o motivo aparece no pedido
+      const p = typeof d.id === "string" && st.pendentes.get(d.id);
+      if (p) { p.enviando = false; p.erro = RECUSAS[d.motivo] || "Não deu certo agora. Responda no terminal."; mudou(); }
+      return;
+    }
     if (d.tipo === "snapshot" && Array.isArray(d.moradores)) { guardarSnapshot(d); mudou(); }
     else if (d.tipo === "dia") { guardarDia(d.eventos); mudou(); }
     else if (d.tipo === "morador") {
@@ -299,7 +341,7 @@ const Ponte = (() => {
     // responder pelo escritório: os pedidos ainda no prazo de um terminal, se quem está aqui decide
     podeDecidir: () => st.decide,
     pendentes: id => (st.decide ? [...st.pendentes.values()].filter(p => p.morador === id && p.ate > Date.now()).map(p => ({ ...p })) : []),
-    decidir,
+    decidir, responder, textoResposta, MAX_TEXTO,
     dia: id => (st.dia.get(id) || []).map(e => ({ ...e })),
     workspace: id => (ws(id) ? ws(id).nome : ""), band: (wsId, bandId) => (ws(wsId) && ws(wsId).bands.get(bandId)) || "",
     // as salas em uso: o nome do workspace de cada terminal vivo, sem repetir (as bands costumam ter nome genérico, "Banda #2")
