@@ -35,8 +35,10 @@ Objetivo: o mapa mostrar também os terminais da máquina (Claude Code, Codex, a
 - Os **terminaizinhos** têm um monitor CRT como cabeça, um cursor como boca e a cor da moldura conforme o programa. O desenho já existe em `site/sprites.js` e vai para o mapa em escala de jogo.
 - A **gente** é você e as visitas. As visitas já têm presença; a espécie só troca o boneco. Feito: `desenharGente` (app.js) usa `Sprites.gente`, com a blusa na cor do perfil e cabelo, pele e calça pela semente da pessoa. Olhos e acessório do perfil continuam valendo só para o bichinho (convite, perfil).
 
-## Onda 4: mecânicas "Sims"
+## Onda 4: mecânicas "Sims" (feita)
 Necessidades e rotinas da Vivo (café, pausa, conversa no corredor), reescritas sobre o `vida.js`. O GDScript não é portado linha a linha. O gatilho continua sendo o estado real do agente, e nada é inventado.
+
+Feita nos terminaizinhos (`vida.js`, `viverTerminal`). Cada um tem duas necessidades, café e conversa, que caem com o tempo: 20 minutos ocupado esvaziam o café, e parado leva uma hora. Livre e parado na sala, depois de uma pausa de 5 a 20 s, ele cuida da mais baixa (abaixo de 60). Vai à cafeteira, ou chama o terminal livre mais perto para um papo no corredor, com os balõezinhos de xícara e de "Hi!". Deixou de estar livre, larga o que fazia, e o parceiro volta à sala. Os bichinhos do agentes.chat já tinham a vida social deles e não mudaram.
 
 ## Onda 5: acabamento
 - Revisão visual com capturas no desktop e no celular.

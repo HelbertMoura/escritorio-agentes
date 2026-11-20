@@ -481,12 +481,14 @@ function desenharBoneco(b, t) {
 }
 
 // terminalzinho da ponte local (sprites.js): andando, dá o passo; parado, a telinha mostra o estado (código subindo
-// quando ocupado, "!" âmbar quando espera você, olhos quando livre). t: o relógio dos objetos (parado com menos movimento)
+// quando ocupado, "!" âmbar quando espera você, olhos quando livre; no papo, a carinha feliz e a mão). t: o relógio dos objetos
 function desenharTerminal(k, t) {
-  const d = k.dado, acao = k.rota.length ? "andar" : d.estado === "ocupado" ? "parar" : d.estado === "livre" ? "ficar" : "esperar";
+  const d = k.dado, acao = k.rota.length ? "andar" : k.balao === "oi" ? "acenar" : d.estado === "ocupado" ? "parar" : d.estado === "livre" ? "ficar" : "esperar";
   ctx.globalAlpha = combina(k) ? 1 : 0.3;
   if (escala !== 1) { ctx.save(); ctx.scale(escala, escala); }
   Sprites.terminal(ctx, Math.round(k.x - 6), Math.round(k.y), Math.floor(k.anda / 4) % 4, k.lado < 0, k.cor, t, acao);
+  // vida.js, onda 4: o café e o papo, no balãozinho do lado de trás (em cima, a etiqueta do nome o cobriria)
+  if (k.balao && !k.rota.length) Sprites.balao(ctx, k.balao, Math.round(k.x) + (k.lado < 0 ? 7 : -16), Math.round(k.y) - 19);
   if (escala !== 1) ctx.restore();
   ctx.globalAlpha = 1;
 }
