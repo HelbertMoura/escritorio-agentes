@@ -119,12 +119,16 @@ func (m *Morador) copia() *Morador {
 //     só um sinal com Inicio (a sessão abriu ou foi retomada agora) a traz de volta.
 //   - Espera e AceitaTexto acompanham o Estado (valem só com ele): o tipo exato da espera e se
 //     ela aceita uma resposta digitada. AceitaTexto é uma lista positiva no normalizador; na
-//     dúvida (tipo desconhecido, diálogo de opções), falso.
+//     dúvida (tipo desconhecido, diálogo de opções), falso. EsperaFraca: o sinal só vale para
+//     o estado; com o morador já nesse estado, a Espera e o AceitaTexto dele ficam (o
+//     "input needed" do arquivo do Claude, que vale para toda elicitação, inclusive a de link:
+//     só o hook, que distingue, liga o AceitaTexto).
 type Sinal struct {
 	Fonte, SessaoID, TerminalID string
 	Estado                      Estado
 	Espera                      string
 	AceitaTexto                 bool
+	EsperaFraca                 bool // não troca a Espera nem o AceitaTexto de quem já está no mesmo estado
 	ExcetoOcioso                bool
 	Ferramenta, Alvo            string
 	Cwd                         string

@@ -106,7 +106,7 @@ func perguntando(t *testing.T, f *falsoMaestri, metas []mundo.MetaTerminal) (*am
 	t.Helper()
 	a := subir(t, Opcoes{Maestri: f.cli}, true)
 	a.s.vincular([]maestri.Workspace{{ID: "w1"}, {ID: "w2"}}, metas)
-	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta, Espera: "arquivo:input needed", AceitaTexto: true}})
+	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta, Espera: "notificacao:elicitation_dialog", AceitaTexto: true}})
 	var p decisao.Pendente
 	esperar(t, func() bool {
 		l := a.s.dec.Lista()
@@ -182,7 +182,7 @@ func TestPerguntaSemAlvoNaoAbre(t *testing.T) {
 			f := &falsoMaestri{conectados: c.conectados}
 			a := subir(t, Opcoes{Maestri: f.cli}, true)
 			a.s.vincular([]maestri.Workspace{{ID: "w1"}, {ID: "w2"}}, c.metas)
-			a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta, Espera: "arquivo:input needed", AceitaTexto: true}})
+			a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta, Espera: "notificacao:elicitation_dialog", AceitaTexto: true}})
 			time.Sleep(100 * time.Millisecond)
 			if l := a.s.dec.Lista(); len(l) != 0 {
 				t.Fatalf("sem alvo, sem pergunta: %v", l)
@@ -192,7 +192,7 @@ func TestPerguntaSemAlvoNaoAbre(t *testing.T) {
 	// sem o binário ou o socket: nem o list roda
 	a := subir(t, Opcoes{}, true)
 	a.s.vincular([]maestri.Workspace{{ID: "w1"}}, metasTeste)
-	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta, Espera: "arquivo:input needed", AceitaTexto: true}})
+	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta, Espera: "notificacao:elicitation_dialog", AceitaTexto: true}})
 	time.Sleep(100 * time.Millisecond)
 	if len(a.s.dec.Lista()) != 0 {
 		t.Fatal("sem o maestri, sem pergunta")
@@ -244,7 +244,7 @@ func TestPerguntaPeloWSRecusaEResponde(t *testing.T) {
 	ler(t, c)
 	ler(t, c)
 	a.s.vincular([]maestri.Workspace{{ID: "w1"}}, metasTeste)
-	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta, Espera: "arquivo:input needed", AceitaTexto: true}})
+	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta, Espera: "notificacao:elicitation_dialog", AceitaTexto: true}})
 	p := lerTipo(t, c, "pendente")["pendente"].(map[string]any)
 	id := p["id"].(string)
 	if p["tipo"] != "pergunta" || p["via"] != "maestri" {
@@ -269,7 +269,7 @@ func TestPerguntaVenceEReabre(t *testing.T) {
 	f := &falsoMaestri{conectados: listaAlvo}
 	a := subir(t, Opcoes{Maestri: f.cli, EsperaDecisao: 80 * time.Millisecond}, true)
 	a.s.vincular([]maestri.Workspace{{ID: "w1"}}, metasTeste)
-	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta, Espera: "arquivo:input needed", AceitaTexto: true}})
+	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta, Espera: "notificacao:elicitation_dialog", AceitaTexto: true}})
 	var primeiro string
 	esperar(t, func() bool {
 		l := a.s.dec.Lista()
@@ -310,7 +310,7 @@ const perguntaOpenCode = `{"sessionID":"ses_1","id":"que_1","pergunta":"Qual ban
 
 func TestPerguntaDoOpenCodeVoltaAssinada(t *testing.T) {
 	a := subir(t, Opcoes{}, true) // sem ninguém atendendo: a pergunta espera mesmo assim
-	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorOpenCode, SessaoID: "ses_1", TerminalID: "T1", Estado: mundo.EsperandoResposta, Espera: "arquivo:input needed", AceitaTexto: true}})
+	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorOpenCode, SessaoID: "ses_1", TerminalID: "T1", Estado: mundo.EsperandoResposta, Espera: "notificacao:elicitation_dialog", AceitaTexto: true}})
 	resp := a.pedirPendente(t, "opencode-pergunta", perguntaOpenCode, context.Background())
 	nonce := fmt.Sprintf("%032x", nonceSeq.Load()) // o assinarPendente roda antes de o pedido sair
 	var p decisao.Pendente
@@ -341,7 +341,7 @@ func TestPerguntaNaoAceitaDecidirNemPermissaoAceitaResponder(t *testing.T) {
 	a, c := atendido(t, Opcoes{})
 	resp := a.pedirPendente(t, "claude", pedidoBash, context.Background())
 	id := lerTipo(t, c, "pendente")["pendente"].(map[string]any)["id"].(string)
-	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta, Espera: "arquivo:input needed", AceitaTexto: true}})
+	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta, Espera: "notificacao:elicitation_dialog", AceitaTexto: true}})
 	if m := a.s.responder(id, "sim", decisao.PorLocal); m != MotivoEncerrado {
 		t.Fatalf("permissão não recebe texto: %q", m)
 	}
@@ -373,7 +373,7 @@ func TestDialogoDeOpcoesNaoAbrePergunta(t *testing.T) {
 	if l := a.s.dec.Lista(); len(l) != 0 || len(f.chamadas) != 0 {
 		t.Fatalf("diálogo de opções: %v %v", l, f.chamadas)
 	}
-	a.s.aplicar(espera(mundo.EsperandoResposta, "arquivo:input needed", true))
+	a.s.aplicar(espera(mundo.EsperandoResposta, "notificacao:elicitation_dialog", true))
 	var p decisao.Pendente
 	esperar(t, func() bool {
 		l := a.s.dec.Lista()
@@ -399,7 +399,7 @@ func TestEsperaMudaAntesDeDigitar(t *testing.T) {
 	f := &falsoMaestri{conectados: listaAlvo}
 	a, p := perguntando(t, f, metasTeste)
 	f.aoListar = func() {
-		a.s.aplicar(espera(mundo.EsperandoResposta, "notificacao:elicitation_dialog", true))
+		a.s.aplicar(espera(mundo.EsperandoResposta, "notificacao:agent_needs_input", true))
 	}
 	if m := a.s.responder(p.ID, "sim", decisao.PorLocal); m != "" {
 		t.Fatalf("recusou: %s", m)

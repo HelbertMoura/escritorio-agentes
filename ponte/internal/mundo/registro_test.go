@@ -52,6 +52,49 @@ func TestGeracaoEAceitaTexto(t *testing.T) {
 	}
 }
 
+// O "input needed" do arquivo (fraco, nunca aceita texto) e o hook, nas duas ordens: só o hook
+// liga o AceitaTexto, e o arquivo no mesmo estado não desfaz o que o hook disse (nem o do link).
+func TestArquivoNaoTrocaAEsperaDoHook(t *testing.T) {
+	arquivo := Sinal{Fonte: ProvedorClaude, SessaoID: "s1", TerminalID: "t1", Estado: EsperandoResposta, Espera: "arquivo:input needed", EsperaFraca: true}
+	hook := func(tipo string, aceita bool) Sinal {
+		return Sinal{Fonte: ProvedorClaude, SessaoID: "s1", TerminalID: "t1", Estado: EsperandoResposta, Espera: "notificacao:" + tipo, AceitaTexto: aceita}
+	}
+	estado := func(r *Registro) Morador { return r.Snapshot()[0] }
+	casos := []struct {
+		nome   string
+		sinais []Sinal
+		aceita bool
+		espera string
+	}{
+		{"hook do link e depois o arquivo", []Sinal{hook("elicitation_url_dialog", false), arquivo}, false, "notificacao:elicitation_url_dialog"},
+		{"arquivo e depois o hook do link", []Sinal{arquivo, hook("elicitation_url_dialog", false)}, false, "notificacao:elicitation_url_dialog"},
+		{"hook de texto e depois o arquivo", []Sinal{hook("elicitation_dialog", true), arquivo}, true, "notificacao:elicitation_dialog"},
+		{"arquivo e depois o hook de texto", []Sinal{arquivo, hook("elicitation_dialog", true)}, true, "notificacao:elicitation_dialog"},
+		{"só o arquivo", []Sinal{arquivo}, false, "arquivo:input needed"},
+		{"hook de texto e depois um diálogo de opções no arquivo", []Sinal{hook("agent_needs_input", true),
+			{Fonte: ProvedorClaude, SessaoID: "s1", TerminalID: "t1", Estado: EsperandoResposta, Espera: "arquivo:dialog open"}}, false, "arquivo:dialog open"},
+	}
+	for _, c := range casos {
+		r := novoRegistro()
+		r.Vincular(jarvis)
+		var geracao uint64
+		for i, s := range c.sinais {
+			s.TS = t0.Add(time.Duration(i+1) * time.Second)
+			r.Aplicar(s)
+			if i == len(c.sinais)-2 {
+				geracao = estado(r).Geracao
+			}
+		}
+		m := estado(r)
+		if m.AceitaTexto != c.aceita || m.Espera != c.espera {
+			t.Errorf("%s: aceita=%v espera=%q", c.nome, m.AceitaTexto, m.Espera)
+		}
+		if c.sinais[len(c.sinais)-1].EsperaFraca && len(c.sinais) > 1 && m.Geracao != geracao {
+			t.Errorf("%s: o arquivo depois do hook não muda a geração", c.nome)
+		}
+	}
+}
+
 func TestSinalComTerminalCriaMoradorVinculado(t *testing.T) {
 	r := novoRegistro()
 	r.Vincular(jarvis)

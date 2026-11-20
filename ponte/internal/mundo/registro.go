@@ -171,6 +171,9 @@ func (r *Registro) Aplicar(s Sinal) (mudou *Morador, saiu string) {
 	}
 
 	if !atrasado {
+		if s.EsperaFraca && s.Estado == novo.Estado {
+			s.Espera, s.AceitaTexto = novo.Espera, novo.AceitaTexto // mesmo estado: fica a espera de quem sabe (o hook)
+		}
 		if s.Estado != "" && (s.Estado != novo.Estado || s.Espera != novo.Espera) && !(s.ExcetoOcioso && novo.Estado == Ocioso) {
 			if s.Estado != novo.Estado {
 				novo.Desde = s.TS
