@@ -493,13 +493,12 @@ function desenharTerminal(k, t) {
   ctx.globalAlpha = 1;
 }
 
-// gente (sprites.js, Firmópolis onda 3): você e as visitas. A blusa é a cor do perfil; cabelo, pele e calça vêm da
-// semente da pessoa, sempre os mesmos. O passo segue o caminho andado (vida.js: passos, de 0 a 11)
+// gente (sprites.js, Firmópolis onda 3): você e as visitas. A blusa é a cor do perfil, e cabelo e pele, os escolhidos no
+// perfil (onda 5); sem escolha, e a calça sempre, vêm da semente da pessoa. O passo segue o caminho andado (vida.js: passos, de 0 a 11)
 function desenharGente(p, t) {
   const acao = p.pose === "andando" ? "andar" : p.pose === "acenando" ? "acenar" : "parar";
-  const blusa = p.ap ? (Avatar.CORES[p.ap.color] || {}).base || (/^#[0-9a-f]{6}$/i.test(p.ap.color) ? p.ap.color : "") : "";
   if (escala !== 1) { ctx.save(); ctx.scale(escala, escala); }
-  Sprites.gente(ctx, Math.round(p.x - 6), Math.round(p.y), Math.floor(p.passos / 3) % 4, p.lado < 0, p.semente, acao, menosMovimento.matches ? 0 : t, blusa);
+  Sprites.gente(ctx, Math.round(p.x - 6), Math.round(p.y), Math.floor(p.passos / 3) % 4, p.lado < 0, p.semente, acao, menosMovimento.matches ? 0 : t, Avatar.visualGente(p.ap));
   if (escala !== 1) ctx.restore();
 }
 

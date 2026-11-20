@@ -34,6 +34,9 @@ COR_OK = re.compile(r"#[0-9a-fA-F]{6}")
 CORES = {"sky", "indigo", "violet", "rose", "amber", "green", "teal", "graphite"}
 OLHOS = {"happy", "sleepy", "round", "wide", "dots"}
 ACESSORIOS = {"crown", "hat", "headphones", "headset", "flower", "antenna", "cap", "bow", ""}
+# a gente do mapa (Firmópolis, onda 5): cabelo e pele de quem tem conta; a blusa é a "color". Opcionais no avatar
+CABELOS = {"castanho", "preto", "dourado", "ruivo", "platinado", "roxo", "azul"}
+PELES = {"clara", "media", "morena", "escura"}
 ICONES_OK = {"codigo", "megafone", "servidor", "coroa", "sino", "controle", "xicara", "pessoas", "grafico", "pincel", "estrela"}
 TIPOS = ("mesas", "ops", "gabinete")
 CAMPOS_TIME = {"nome", "tipo", "cor", "icone", "parede", "piso", "agentes"}

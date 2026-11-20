@@ -292,16 +292,30 @@ const Avatar = (() => {
     cores: [["sky", "Céu"], ["indigo", "Anil"], ["violet", "Violeta"], ["rose", "Rosa"], ["amber", "Âmbar"], ["green", "Verde"], ["teal", "Turquesa"], ["graphite", "Grafite"]],
     olhos: [["happy", "Felizes"], ["sleepy", "Sonolentos"], ["round", "Redondos"], ["wide", "Arregalados"], ["dots", "Pontinhos"]],
     acessorios: [["", "Nenhum"], ["crown", "Coroa"], ["hat", "Chapéu"], ["headphones", "Fones"], ["headset", "Headset"], ["flower", "Flor"], ["antenna", "Antena"], ["cap", "Boné"], ["bow", "Laço"]],
+    // a gente do mapa (sprites.js): na mesma ordem dos CABELOS e das PELES de lá
+    cabelos: [["castanho", "Castanho"], ["preto", "Preto"], ["dourado", "Dourado"], ["ruivo", "Ruivo"], ["platinado", "Platinado"], ["roxo", "Roxo"], ["azul", "Azul"]],
+    peles: [["clara", "Clara"], ["media", "Média"], ["morena", "Morena"], ["escura", "Escura"]],
   };
+  // a aparência da conta como a gente do mapa a desenha: a blusa é a cor; cabelo e pele, o índice (sem escolha, -1: a semente decide)
+  const indice = (lista, v) => lista.findIndex(([k]) => k === v);
+  const visualGente = ap => (ap && typeof ap === "object" ? { blusa: (CORES[ap.color] || {}).base || (/^#[0-9a-f]{6}$/i.test(ap.color) ? ap.color : ""),
+    cabelo: indice(OPCOES.cabelos, ap.hair), pele: indice(OPCOES.peles, ap.skin) } : {});
+  // Firmópolis, onda 5: a pessoa escolhe a gente do mapa (blusa, cabelo e pele). Olhos e acessório, do bichinho do
+  // agentes.chat, seguem como estavam (o servidor ainda pede os dois)
   function seletor(raiz, inicial, aoMudar, prefixo) {
     const noLista = (lista, v, reserva) => (lista.some(([k]) => k === v) ? v : reserva);
     const ap = { color: noLista(OPCOES.cores, inicial && inicial.color, "amber"), eyes: noLista(OPCOES.olhos, inicial && inicial.eyes, "happy"),
-      accessory: noLista(OPCOES.acessorios, inicial && inicial.accessory, "") };
+      accessory: noLista(OPCOES.acessorios, inicial && inicial.accessory, ""),
+      hair: noLista(OPCOES.cabelos, inicial && inicial.hair, "castanho"), skin: noLista(OPCOES.peles, inicial && inicial.skin, "clara") };
     const cv = document.createElement("canvas"), campos = document.createElement("div"), c = cv.getContext("2d");
-    cv.width = cv.height = TAM * 4; cv.className = "boneco-previa"; cv.setAttribute("role", "img"); cv.setAttribute("aria-label", "Prévia do seu boneco");
+    cv.width = cv.height = TAM * 4; cv.className = "boneco-previa"; cv.setAttribute("role", "img"); cv.setAttribute("aria-label", "Prévia de como você aparece no mapa");
     campos.className = "boneco-campos";
-    const desenhar = () => { c.clearRect(0, 0, cv.width, cv.height); c.imageSmoothingEnabled = false; c.drawImage(desenharAvatar({ ...ap }), 0, 0, cv.width, cv.height); };   // cópia nova a cada vez: o cache guarda por objeto
-    for (const [chave, rotulo, lista] of [["color", "Cor", OPCOES.cores], ["eyes", "Olhos", OPCOES.olhos], ["accessory", "Acessório", OPCOES.acessorios]]) {
+    const desenhar = () => {
+      c.clearRect(0, 0, cv.width, cv.height); c.imageSmoothingEnabled = false;
+      if (!window.Sprites) { c.drawImage(desenharAvatar({ ...ap }), 0, 0, cv.width, cv.height); return; }   // cópia nova a cada vez: o cache guarda por objeto
+      c.save(); c.scale(4, 4); Sprites.gente(c, 5, 20, 0, false, 0, "parar", 0, visualGente(ap)); c.restore();
+    };
+    for (const [chave, rotulo, lista] of [["color", "Blusa", OPCOES.cores], ["hair", "Cabelo", OPCOES.cabelos], ["skin", "Pele", OPCOES.peles]]) {
       const campo = document.createElement("div"), l = document.createElement("label"), s = document.createElement("select");
       s.id = `${prefixo}-${chave}`; l.htmlFor = s.id; l.textContent = rotulo;
       for (const [k, nome] of lista) { const o = document.createElement("option"); o.value = k; o.textContent = nome; s.append(o); }
@@ -313,7 +327,7 @@ const Avatar = (() => {
     return { valor: () => ({ ...ap }) };
   }
 
-  return { desenhar: desenharAvatar, boneco, chapeu, padrao: aparenciaPadrao, OPCOES, seletor, TAM, CORES, POSES };
+  return { desenhar: desenharAvatar, boneco, chapeu, padrao: aparenciaPadrao, OPCOES, seletor, visualGente, TAM, CORES, POSES };
 })();
 
 window.Avatar = Avatar;

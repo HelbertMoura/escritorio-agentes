@@ -44,3 +44,4 @@ Feita nos terminaizinhos (`vida.js`, `viverTerminal`). Cada um tem duas necessid
 - Revisão visual com capturas no desktop e no celular.
 - Os READMEs e o CHANGELOG com o nome novo.
 - O vídeo narrado da versão nova entra no lugar do chiado da TV do site.
+- Feito: o seletor do perfil e do convite escolhe a gente do mapa (blusa, cabelo e pele), com prévia. Cabelo e pele vão no avatar da conta como `hair` e `skin`, opcionais; olhos e acessório, do bichinho do agentes.chat, ficam como estavam.

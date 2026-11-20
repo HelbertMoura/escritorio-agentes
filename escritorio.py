@@ -2721,7 +2721,7 @@ def geometria_visita(config, foto, planta):
     return {"grupos": grupos, "planta": {"rev": 0, "salas": pinturas, "moveis": moveis, "novos": novos}}
 
 
-PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "convite.html", "convite.js", "convite.css", "fontes/figtree.ttf", "fontes/silkscreen.ttf", "fontes/source-sans-3.woff2",
+PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "sprites.js", "convite.html", "convite.js", "convite.css", "fontes/figtree.ttf", "fontes/silkscreen.ttf", "fontes/source-sans-3.woff2",
             "visita.html", "visita.js", "visita.css", "mapa.js", "tema/atlas.png", "tema/atlas.json",
             "mundo.html", "mundo.js", "ceu.js", "clima.js", "som.js",  # bairro público: só código de desenho e som, sem dados
             # mapa do mundo: imagens, cidades e código de desenho, sem dados do escritório
