@@ -309,9 +309,10 @@ const Avatar = (() => {
   function seletor(raiz, inicial, aoMudar, prefixo, usuario) {
     const noLista = (lista, v, reserva) => (lista.some(([k]) => k === v) ? v : reserva);
     let v = semente(usuario);
+    const doUsuario = { hair: () => OPCOES.cabelos[v % 7][0], skin: () => OPCOES.peles[(v >> 2) % 4][0] }, mexeu = new Set();
     const ap = { color: noLista(OPCOES.cores, inicial && inicial.color, "amber"), eyes: noLista(OPCOES.olhos, inicial && inicial.eyes, "happy"),
       accessory: noLista(OPCOES.acessorios, inicial && inicial.accessory, ""),
-      hair: noLista(OPCOES.cabelos, inicial && inicial.hair, OPCOES.cabelos[v % 7][0]), skin: noLista(OPCOES.peles, inicial && inicial.skin, OPCOES.peles[(v >> 2) % 4][0]) };
+      hair: noLista(OPCOES.cabelos, inicial && inicial.hair, doUsuario.hair()), skin: noLista(OPCOES.peles, inicial && inicial.skin, doUsuario.skin()) };
     const cv = document.createElement("canvas"), campos = document.createElement("div"), c = cv.getContext("2d");
     cv.width = cv.height = TAM * 4; cv.className = "boneco-previa"; cv.setAttribute("role", "img"); cv.setAttribute("aria-label", "Prévia de como você aparece no mapa");
     campos.className = "boneco-campos";
@@ -325,11 +326,17 @@ const Avatar = (() => {
       s.id = `${prefixo}-${chave}`; l.htmlFor = s.id; l.textContent = rotulo;
       for (const [k, nome] of lista) { const o = document.createElement("option"); o.value = k; o.textContent = nome; s.append(o); }
       s.value = ap[chave];
-      s.addEventListener("change", () => { ap[chave] = s.value; desenhar(); if (aoMudar) aoMudar({ ...ap }); });
+      s.addEventListener("change", () => { ap[chave] = s.value; mexeu.add(chave); desenhar(); if (aoMudar) aoMudar({ ...ap }); });
       campo.append(l, s); campos.append(campo);
     }
     raiz.replaceChildren(cv, campos); desenhar();
-    return { valor: () => ({ ...ap }), usuario: u => { v = semente(u); desenhar(); } };
+    // no convite: cabelo e pele que a pessoa não escolheu acompanham o usuário digitado, como a semente dele mostra no mapa
+    const usuarioNovo = u => {
+      v = semente(u);
+      for (const k of ["hair", "skin"]) if (!(inicial && inicial[k]) && !mexeu.has(k)) { ap[k] = doUsuario[k](); campos.querySelector(`#${prefixo}-${k}`).value = ap[k]; }
+      desenhar();
+    };
+    return { valor: () => ({ ...ap }), usuario: usuarioNovo };
   }
 
   return { desenhar: desenharAvatar, boneco, chapeu, padrao: aparenciaPadrao, OPCOES, seletor, visualGente, semente, TAM, CORES, POSES };
