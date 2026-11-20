@@ -364,3 +364,26 @@ details p { margin: 0; padding: 0 20px 20px; color: var(--texto-2); }
   .folhas { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 100px; overflow-x: auto; padding: 8px 4px 14px; scroll-snap-type: x mandatory; }
   .folhas li { scroll-snap-align: start; }
 }
+
+/* ---------- Novidades (novidades.html, gerada de CHANGELOG.pt-BR.md por ferramentas/montar_novidades_site.py) ---------- */
+.novidades { padding-block: 56px 72px; }
+.novidades-cabeca { max-width: 68ch; margin-bottom: 40px; }
+.novidades-cabeca p { color: var(--texto-2); }
+.versao { display: grid; grid-template-columns: 220px 1fr; gap: 32px; padding-block: 32px; border-top: 2px solid var(--linha); }
+.versao-cabeca { align-self: start; position: sticky; top: 88px; }
+.versao-rotulo { display: inline-block; margin: 0 0 10px; padding: 2px 8px; background: var(--ambar); color: var(--noite); font: .8125rem/1.6 var(--fonte-pixel); }
+.versao h2 { margin: 0 0 6px; color: var(--creme); font: 1.375rem/1.25 var(--fonte-pixel); text-wrap: balance; }
+.versao-data { margin: 0; color: var(--texto-2); font-size: .9375rem; }
+.versao-corpo { max-width: 72ch; }
+.versao-corpo h3 { margin: 0 0 8px; color: var(--ambar-claro); font: 1rem/1.4 var(--fonte-pixel); }
+.versao-corpo h3:not(:first-child) { margin-top: 24px; }
+.versao-corpo ul { margin: 0; padding-left: 1.1em; }
+.versao-corpo li { margin-bottom: 10px; }
+.versao-corpo li::marker { color: var(--ambar); }
+.versao-corpo strong { color: var(--creme); }
+.versao-corpo code { padding: 1px 5px; background: var(--grafite-2); color: var(--ambar-claro); font-size: .875em; }
+@media (max-width: 760px) {
+  .versao { grid-template-columns: 1fr; gap: 12px; }
+  .versao-cabeca { position: static; }
+  .versao-corpo code { overflow-wrap: anywhere; }
+}
