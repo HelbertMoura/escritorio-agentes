@@ -105,6 +105,12 @@ func (s *Servidor) decisoesRemotas(ctx context.Context) {
 					log.Print("decisões pelo servidor: voltou")
 				}
 				falhas = 0
+				// relê o espelho.json: um --sem-decidir-remoto durante o long-poll vale já, e as
+				// decisões que chegaram com ele não são aplicadas
+				if agora, ok := s.op.Espelho(); !ok || !agora.DecidirRemoto {
+					s.atendRemoto.Store(0)
+					continue
+				}
 				if atendendo {
 					s.atendRemoto.Store(time.Now().UnixNano())
 				} else {

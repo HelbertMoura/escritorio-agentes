@@ -78,7 +78,7 @@ func lerPedido(rota string, corpo []byte) (pedido, bool) {
 		if rota == "codex" {
 			fonte = mundo.ProvedorCodex
 		}
-		return pedido{fonte: fonte, sessao: e.SessionID, ferramenta: e.ToolName, resumo: decisao.Resumir(entrada, e.Cwd)}, true
+		return pedido{fonte: fonte, sessao: e.SessionID, ferramenta: e.ToolName, resumo: decisao.Resumir(e.ToolName, entrada, e.Cwd)}, true
 	case "opencode":
 		var e struct {
 			SessionID  string   `json:"sessionID"`
@@ -106,7 +106,8 @@ func lerPedido(rota string, corpo []byte) (pedido, bool) {
 		}
 		texto := mascara.Mascarar(strings.Join(strings.Fields(strings.Join(partes, " ")), " "))
 		resumo := decisao.Resumo{Texto: decisao.Cortar(texto)}
-		resumo.Completo = dentro && resumo.Texto != "" && len([]rune(resumo.Texto)) < decisao.MaxResumo
+		// só o "bash" do OpenCode (os padrões são o comando) pode ser completo; "edit" e o resto, nunca
+		resumo.Completo = e.Permission == "bash" && dentro && resumo.Texto != "" && len([]rune(resumo.Texto)) < decisao.MaxResumo
 		return pedido{fonte: mundo.ProvedorOpenCode, sessao: sessao, ferramenta: e.Permission, resumo: resumo}, true
 	}
 	return pedido{}, false
@@ -138,7 +139,7 @@ func (s *Servidor) pendente(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	nonce := r.Header.Get("X-Ponte-Nonce")
-	if len(nonce) != 32 || !ehHex(nonce) {
+	if !nonceValido(nonce) {
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
@@ -149,7 +150,7 @@ func (s *Servidor) pendente(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// O token nunca vai no pedido: só o HMAC dele sobre o nonce e o corpo.
-	if err == nil && !decisao.ConfereAssinatura(s.op.Token, r.Header.Get("X-Ponte-Assinatura"), []byte(nonce), decisao.Soma(corpo)) {
+	if err == nil && !s.assinado(r, corpo) {
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
@@ -209,8 +210,15 @@ func (s *Servidor) pendente(w http.ResponseWriter, r *http.Request) {
 		"assinatura": decisao.Assinar(s.op.Token, []byte(nonce), []byte(res.Acao))})
 }
 
-func ehHex(s string) bool {
-	return strings.Trim(strings.ToLower(s), "0123456789abcdef") == ""
+func nonceValido(nonce string) bool {
+	return len(nonce) == 32 && strings.Trim(strings.ToLower(nonce), "0123456789abcdef") == ""
+}
+
+// assinado confere X-Ponte-Assinatura = HMAC(token, nonce‖sha256(corpo)): o pedido veio de quem
+// tem o token, sem o token viajar (/evento e /pendente).
+func (s *Servidor) assinado(r *http.Request, corpo []byte) bool {
+	nonce := r.Header.Get("X-Ponte-Nonce")
+	return nonceValido(nonce) && decisao.ConfereAssinatura(s.op.Token, r.Header.Get("X-Ponte-Assinatura"), []byte(nonce), decisao.Soma(corpo))
 }
 
 // decidir entrega uma decisão (do /ws ou do servidor). Só um id que esta ponte criou.

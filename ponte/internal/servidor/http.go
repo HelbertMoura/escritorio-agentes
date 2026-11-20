@@ -237,7 +237,11 @@ func (s *Servidor) evento(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	if !iguais(r.Header.Get("X-Ponte-Token"), s.op.Token) {
+	// O hook e o plugin atuais assinam (nonce e HMAC do token sobre o corpo, como o /pendente): o
+	// token não viaja. X-Ponte-Token puro ainda vale só para o plugin do OpenCode de uma versão
+	// anterior, até o próximo `ponte setup --aplicar` trocá-lo (transição; sai numa versão futura).
+	token := r.Header.Get("X-Ponte-Token")
+	if token != "" && !iguais(token, s.op.Token) || token == "" && !nonceValido(r.Header.Get("X-Ponte-Nonce")) {
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
@@ -249,6 +253,10 @@ func (s *Servidor) evento(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if token == "" && !s.assinado(r, corpo) {
+		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 	// Corpo que não se lê não é erro para o agente: responde 204 e ignora.

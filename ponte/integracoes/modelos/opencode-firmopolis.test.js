@@ -50,7 +50,9 @@ test("manda o evento para a ponte com os headers certos", async () => {
   const { url, opcoes, corpo } = chamadas[0]
   assert.equal(url, "http://127.0.0.1:47820/evento/opencode")
   assert.equal(opcoes.method, "POST")
-  assert.equal(opcoes.headers["X-Ponte-Token"], "tok-123")
+  assert.equal(opcoes.headers["X-Ponte-Token"], undefined, "o token não viaja")
+  assert.equal(opcoes.headers["X-Ponte-Assinatura"],
+    assinarTeste("tok-123", opcoes.headers["X-Ponte-Nonce"], createHash("sha256").update(opcoes.body).digest()))
   assert.equal(opcoes.headers["X-Maestri-Terminal-Id"], "T1")
   assert.equal(opcoes.headers["Content-Type"], "application/json")
   assert.deepEqual(corpo, { type: "session.status", properties: { sessionID: "s1", status: { type: "busy" } }, cwd: "C:\\proj\\loja", pid: process.pid })
@@ -141,7 +143,8 @@ test("quem ainda tem a pasta antiga (EscritorioVivo) segue mandando", async () =
   await ganchos.event({ event: { type: "session.idle", properties: { sessionID: "s1" } } })
   await espera()
   assert.equal(chamadas.length, 1)
-  assert.equal(chamadas[0].opcoes.headers["X-Ponte-Token"], "tok-antigo")
+  const h = chamadas[0].opcoes.headers
+  assert.equal(h["X-Ponte-Assinatura"], assinarTeste("tok-antigo", h["X-Ponte-Nonce"], createHash("sha256").update(chamadas[0].opcoes.body).digest()))
 })
 
 // ---------- responder pelo escritório ----------

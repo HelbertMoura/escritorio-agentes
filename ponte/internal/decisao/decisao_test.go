@@ -107,38 +107,46 @@ func TestIDsDiferentesECom128Bits(t *testing.T) {
 }
 
 func TestResumoMascaraCortaENaoLevaAPasta(t *testing.T) {
-	cmd := Resumir(map[string]any{"command": "curl -H 'Authorization: Bearer abcdefghijklmnop' x\nrm -rf /tmp/x"}, "/home/ana/loja")
+	cmd := Resumir("Bash", map[string]any{"command": "curl -H 'Authorization: Bearer abcdefghijklmnop' x\nrm -rf /tmp/x"}, "/home/ana/loja")
 	if strings.Contains(cmd.Texto, "abcdefghijklmnop") || !strings.Contains(cmd.Texto, "rm -rf /tmp/x") || !strings.Contains(cmd.Texto, "↵") || !cmd.Completo {
 		t.Errorf("comando: %+v", cmd)
 	}
-	if got := Resumir(map[string]any{"command": "echo " + strings.Repeat("a ", 400)}, ""); len([]rune(got.Texto)) != MaxResumo || !strings.HasSuffix(got.Texto, "…") || got.Completo {
+	if got := Resumir("Bash", map[string]any{"command": "echo " + strings.Repeat("a ", 400)}, ""); len([]rune(got.Texto)) != MaxResumo || !strings.HasSuffix(got.Texto, "…") || got.Completo {
 		t.Errorf("corte: %d %v", len([]rune(got.Texto)), got.Completo)
 	}
 	casos := []struct {
-		entrada  map[string]any
-		cwd      string
-		texto    string
-		completo bool
+		ferramenta string
+		entrada    map[string]any
+		cwd        string
+		texto      string
+		completo   bool
 	}{
-		{map[string]any{"file_path": "/home/ana/loja/src/app.go"}, "/home/ana/loja", "src/app.go", true},
-		{map[string]any{"file_path": "/home/ana/.ssh/authorized_keys"}, "/home/ana/loja", "fora do projeto: …/.ssh/authorized_keys", false},
-		{map[string]any{"file_path": "/home/ana/loja/../.bashrc"}, "/home/ana/loja", "fora do projeto: …/ana/.bashrc", false},
-		{map[string]any{"file_path": "/etc"}, "/home/ana/loja", "fora do projeto: /etc", false},
-		{map[string]any{"file_path": `C:\Users\ana\loja\a.txt`}, `C:\Users\ana\loja`, "a.txt", true},
-		{map[string]any{"url": "https://u:senha@x.com/a?token=1"}, "", "https://x.com/a", false},
-		{map[string]any{"url": "https://x.com/a"}, "", "https://x.com/a", true},
-		{map[string]any{"prompt": "segredo do usuário"}, "", "", false},
+		{"Bash", map[string]any{"command": "ls", "description": "x", "timeout": 5.0, "run_in_background": false}, "", "ls", true},
+		{"Bash", map[string]any{"command": "ls", "dangerouslyDisableSandbox": true}, "", "ls", false},
+		{"mcp__srv__run", map[string]any{"command": "ls", "args": []any{"-la"}}, "", "ls", false},
+		{"Write", map[string]any{"file_path": "/home/ana/loja/src/app.go", "content": "x"}, "/home/ana/loja", "src/app.go", false},
+		{"Edit", map[string]any{"file_path": "/home/ana/loja/a.go", "old_string": "a", "new_string": "b"}, "/home/ana/loja", "a.go", false},
+		{"MultiEdit", map[string]any{"file_path": "/home/ana/loja/a.go"}, "/home/ana/loja", "a.go", false},
+		{"NotebookEdit", map[string]any{"notebook_path": "/home/ana/loja/n.ipynb"}, "/home/ana/loja", "n.ipynb", false},
+		{"Read", map[string]any{"file_path": "/home/ana/.ssh/authorized_keys"}, "/home/ana/loja", "fora do projeto: …/.ssh/authorized_keys", false},
+		{"Read", map[string]any{"file_path": "/home/ana/loja/../.bashrc"}, "/home/ana/loja", "fora do projeto: …/ana/.bashrc", false},
+		{"Read", map[string]any{"file_path": "/etc"}, "/home/ana/loja", "fora do projeto: /etc", false},
+		{"Read", map[string]any{"file_path": `C:\Users\ana\loja\a.txt`}, `C:\Users\ana\loja`, "a.txt", false},
+		{"WebFetch", map[string]any{"url": "https://u:senha@x.com/a?token=1"}, "", "https://x.com/a", false},
+		{"WebFetch", map[string]any{"url": "https://x.com/a", "prompt": "resuma"}, "", "https://x.com/a", true},
+		{"WebFetch", map[string]any{"url": "https://x.com/a", "headers": "x"}, "", "https://x.com/a", false},
+		{"Bash", map[string]any{"prompt": "segredo do usuário"}, "", "", false},
 	}
 	for _, c := range casos {
-		if got := Resumir(c.entrada, c.cwd); got.Texto != c.texto || got.Completo != c.completo {
-			t.Errorf("%v: %+v", c.entrada, got)
+		if got := Resumir(c.ferramenta, c.entrada, c.cwd); got.Texto != c.texto || got.Completo != c.completo {
+			t.Errorf("%s %v: %+v", c.ferramenta, c.entrada, got)
 		}
 	}
 }
 
 // Bidi, largura zero e controle (C0 e C1) viram uma marca visível: nada se esconde nem inverte.
 func TestCaracteresEnganososFicamVisiveis(t *testing.T) {
-	got := Resumir(map[string]any{"command": "echo ok \u202e;tsil-tes \u200b\u2066x \x1b[2J"}, "")
+	got := Resumir("Bash", map[string]any{"command": "echo ok \u202e;tsil-tes \u200b\u2066x \x1b[2J"}, "")
 	if c := Cortar("a\u0085b\u00adc"); c != "a‹U+0085›b‹U+00AD›c" {
 		t.Errorf("C1 e Cf: %q", c)
 	}

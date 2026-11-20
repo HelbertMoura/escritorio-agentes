@@ -233,12 +233,51 @@ func novoID() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
+// Lista fechada do que pode ser permitido de longe: o resumo é o pedido inteiro só no Bash com
+// estas chaves (nada como dangerouslyDisableSandbox) e no WebFetch de URL sem query. Qualquer
+// outra ferramenta (escrita, MCP, leitura) ou chave fica completo=false: de longe, só Negar.
+var chavesCompletas = map[string]map[string]bool{
+	"Bash":     {"command": true, "description": true, "timeout": true, "run_in_background": true},
+	"WebFetch": {"url": true, "prompt": true},
+}
+
+func soChaves(entrada map[string]any, permitidas map[string]bool) bool {
+	if permitidas == nil {
+		return false
+	}
+	for k := range entrada {
+		if !permitidas[k] {
+			return false
+		}
+	}
+	return true
+}
+
 // Resumir monta o resumo do pedido: o comando inteiro (com as quebras de linha à vista, para
 // nada se esconder nas linhas de baixo), o arquivo relativo à pasta da sessão (fora dela,
 // "fora do projeto: …/pasta/arquivo", nunca a pasta inteira) ou a URL sem credenciais.
-// Mascara antes de cortar em MaxResumo. Completo só quando nada foi cortado nem escondido
-// (URL sem query, arquivo dentro do projeto, texto não vazio).
-func Resumir(entrada map[string]any, cwd string) Resumo {
+// Mascara antes de cortar em MaxResumo. Completo só na lista fechada (chavesCompletas) e
+// quando nada foi cortado nem escondido.
+func Resumir(ferramenta string, entrada map[string]any, cwd string) Resumo {
+	r := resumirTexto(entrada, cwd)
+	ok := soChaves(entrada, chavesCompletas[ferramenta])
+	switch ferramenta {
+	case "Bash":
+		ok = ok && strings.TrimSpace(textoDe(entrada, "command")) != ""
+	case "WebFetch":
+		u := textoDe(entrada, "url")
+		ok = ok && u != "" && !strings.ContainsAny(u, "?#@")
+	}
+	r.Completo = r.Completo && ok
+	return r
+}
+
+func textoDe(entrada map[string]any, chave string) string {
+	v, _ := entrada[chave].(string)
+	return v
+}
+
+func resumirTexto(entrada map[string]any, cwd string) Resumo {
 	texto := func(chave string) string {
 		v, _ := entrada[chave].(string)
 		return strings.TrimSpace(v)

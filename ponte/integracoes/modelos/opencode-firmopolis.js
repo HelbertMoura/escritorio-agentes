@@ -51,14 +51,18 @@ function enviar(corpo) {
   const token = lerToken()
   if (!token) return
   try {
+    // o token não viaja: um nonce e o HMAC dele sobre o nonce e o corpo, como no pedido de permissão
+    const texto = JSON.stringify(corpo)
+    const nonce = randomBytes(16).toString("hex")
     fetch(URL_PONTE, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Ponte-Token": token,
+        "X-Ponte-Nonce": nonce,
+        "X-Ponte-Assinatura": assinar(token, nonce, createHash("sha256").update(texto).digest()),
         "X-Maestri-Terminal-Id": process.env.MAESTRI_TERMINAL_ID || "",
       },
-      body: JSON.stringify(corpo),
+      body: texto,
       signal: AbortSignal.timeout(1000),
     }).catch(() => {})
   } catch {

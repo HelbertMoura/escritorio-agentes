@@ -458,3 +458,90 @@ func TestIncompletoRecusaPermitirRemoto(t *testing.T) {
 		t.Fatalf("resposta: %+v", r)
 	}
 }
+
+// Desligou o --decidir-remoto durante o long-poll: as decisões que chegaram com ele não valem.
+func TestSemDecidirRemotoNoMeioDoLongPoll(t *testing.T) {
+	var mu sync.Mutex
+	ligado, id := true, ""
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		ligado = false // a pessoa rodou --sem-decidir-remoto enquanto a resposta vinha
+		dec := id
+		mu.Unlock()
+		w.Header().Set("X-Ponte-Atendendo", "1")
+		if dec == "" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"decisoes": []DecisaoRemota{{ID: dec, Acao: "negar"}}})
+	}))
+	t.Cleanup(ts.Close)
+	espelho := func() (ConfigEspelho, bool) {
+		mu.Lock()
+		defer mu.Unlock()
+		return ConfigEspelho{URL: ts.URL, Chave: chaveTeste, DecidirRemoto: ligado}, true
+	}
+	a, c := atendido(t, Opcoes{Espelho: espelho, EsperaRemota: time.Second})
+	ctxP, cancelarP := context.WithCancel(context.Background())
+	defer cancelarP()
+	a.pedirPendente(t, "claude", pedidoBash, ctxP)
+	p := lerTipo(t, c, "pendente")["pendente"].(map[string]any)
+	mu.Lock()
+	id, ligado = p["id"].(string), true
+	mu.Unlock()
+	ctx, cancelar := context.WithCancel(context.Background())
+	t.Cleanup(cancelar)
+	go a.s.decisoesRemotas(ctx)
+	time.Sleep(1500 * time.Millisecond)
+	if len(a.s.dec.Lista()) != 1 {
+		t.Fatal("a decisão que veio depois do --sem-decidir-remoto não vale")
+	}
+}
+
+// /evento: assinado (o hook e o plugin atuais) vale; assinatura errada não; o token puro ainda
+// vale na transição (o plugin do OpenCode de uma versão anterior).
+func TestEventoAssinado(t *testing.T) {
+	a := subir(t, Opcoes{}, true)
+	corpo := `{"session_id":"s1","hook_event_name":"Stop"}`
+	for _, c := range []struct {
+		assinar bool
+		token   string
+		quero   int
+	}{{true, "", http.StatusNoContent}, {false, tokenTeste, http.StatusNoContent}, {false, "", http.StatusForbidden}, {false, "errado", http.StatusForbidden}} {
+		req, _ := http.NewRequest(http.MethodPost, a.url+"/evento/claude", strings.NewReader(corpo))
+		if c.assinar {
+			assinarPendente(req, tokenTeste, corpo)
+		}
+		if c.token != "" {
+			req.Header.Set("X-Ponte-Token", c.token)
+		}
+		resp, err := clienteHTTP.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != c.quero {
+			t.Errorf("%+v: %d", c, resp.StatusCode)
+		}
+	}
+	req, _ := http.NewRequest(http.MethodPost, a.url+"/evento/claude", strings.NewReader(corpo))
+	assinarPendente(req, chaveTeste, corpo) // outra chave
+	resp, err := clienteHTTP.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("assinatura com outra chave: %d", resp.StatusCode)
+	}
+}
+
+// OpenCode: só o "bash" pode ser completo; "edit" e o resto, nunca.
+func TestOpenCodeSoBashCompleto(t *testing.T) {
+	for perm, quero := range map[string]bool{"bash": true, "edit": false, "webfetch": false} {
+		p, ok := lerPedido("opencode", []byte(`{"sessionID":"ses1","id":"per1","permission":"`+perm+`","patterns":["git push"]}`))
+		if !ok || p.resumo.Completo != quero {
+			t.Errorf("%s: %+v", perm, p)
+		}
+	}
+}

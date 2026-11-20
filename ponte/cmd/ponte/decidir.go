@@ -68,15 +68,18 @@ func decidir(args []string, saida io.Writer) {
 	}
 }
 
+// novoNonce são 128 bits de crypto/rand em hex (o rand do Go não falha).
+func novoNonce() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
 // pedirDecisao devolve "permitir", "negar" ou "" (sem decisão). O token nunca vai no pedido: vai
 // um nonce e o HMAC do token sobre ele e o corpo. A resposta só vale com o HMAC do token sobre
 // o nonce e a ação, então outro processo na porta não decide nem aprende o token.
 func pedirDecisao(ctx context.Context, url, token string, corpo []byte) string {
-	bruto := make([]byte, 16)
-	if _, err := rand.Read(bruto); err != nil {
-		return ""
-	}
-	nonce := hex.EncodeToString(bruto)
+	nonce := novoNonce()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(corpo))
 	if err != nil {
 		return ""
