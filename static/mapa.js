@@ -1,6 +1,6 @@
 // Monta o prédio do escritório a partir dos times.
 // Em cima: recepção (logo) + uma sala por time (cresce com o número de agentes).
-// No meio: corredor. Embaixo: sala de reunião, sala comunal (montada por "cantinhos") e cozinha.
+// No meio: corredor. Embaixo: sala de reunião, sala comunal (montada por "cantinhos") , cozinha e banheiro.
 // Todo móvel é ancorado pela base (centro, chão); peça que o tema não tem é simplesmente pulada.
 "use strict";
 
@@ -499,7 +499,7 @@ function montar(atlas, config, grupos, planta) {
   // parede de cima, no máximo 2 fileiras de mesas) até as duas fileiras ficarem com larguras parecidas.
   const largCima = n => Math.min(Math.max(n, 2), 4) * MESA_W + 5;
   const largBaixo = n => Math.max(2, Math.ceil(n / 2)) * MESA_W + 5;
-  const minimoBaixo = 12 + 1 + 32 + 1 + 14 + 1 + WC_W;  // reunião + comunal + cozinha + banheiro
+  const minimoBaixo = 12 + 1 + 40 + 1 + 14 + 1 + WC_W;  // reunião + comunal + cozinha + banheiro
   const qtd = g => Math.max(1, g.handles.length);
   let emCima = grupos.length, wCima = recepcao.tw + 1 + grupos.reduce((t, g) => t + largCima(qtd(g)), 0), wBaixo = minimoBaixo + 1;
   while (emCima > 1 && wCima - wBaixo > 30) {   // até ~6 times cabe tudo em cima (a sala comunal só cresce)
