@@ -410,7 +410,7 @@ const Ajustes = (() => {
     bulb: "estrela", book: "pincel", calendar: "sino" };
   const doSetor = s => ({ cor: Object.hasOwn(Avatar.CORES, s.cor || "") ? Avatar.CORES[s.cor].base : /^#[0-9a-f]{6}$/i.test(s.cor || "") ? s.cor.toLowerCase() : null,
     icone: Object.hasOwn(ICONE_SETOR, s.icone || "") ? ICONE_SETOR[s.icone] : null });
-  const ORIGEM = { lista: "pela lista", "agentes.chat": "pelo setor do agentes.chat", nome: "pelo nome", papel: "pelo papel", juntado: "os menores juntos", band: "sala da band, sem agentes" };
+  const ORIGEM = { lista: "pela lista", "agentes.chat": "pelo setor do agentes.chat", nome: "pelo nome", papel: "pelo papel", juntado: "os menores juntos", band: "sala do workspace, sem agentes" };
   const NOME_TIPO = Object.fromEntries(TIPOS), NOME_ICONE = Object.fromEntries(ICONES);
   let auto = null;   // { times, novos, avisos } da prévia aberta
   const bandsDaPonte = () => (window.Ponte && typeof window.Ponte.bands === "function" ? window.Ponte.bands() : []);
@@ -432,7 +432,7 @@ const Ajustes = (() => {
     const nomes = new Map((lidos() || []).map(a => [a.handle, typeof a.nome === "string" && a.nome ? a.nome : a.handle]));
     const bands = bandsDaPonte(), { times, fora } = timesDaPrevia();
     $("auto-bands-rot").hidden = !bands.length;
-    $("auto-bands-txt").textContent = `Criar salas para as bands do Maestri em uso agora (${bands.join(", ")})`;
+    $("auto-bands-txt").textContent = `Criar salas para os workspaces do Maestri em uso agora (${bands.join(", ")})`;
     const comAgente = auto.times.reduce((n, t) => n + t.agentes.length, 0);
     $("auto-resumo").textContent = times.length
       ? `Vou criar ${times.length === 1 ? "este time" : `estes ${times.length} times`} com ${comAgente} ${comAgente === 1 ? "agente" : "agentes"}` +
@@ -466,13 +466,13 @@ const Ajustes = (() => {
         });
         p.append(el("span", null, nomes.get(h) || h), x); return p;
       }));
-      if (!t.agentes.length) pessoas.append(el("li", "suave", band ? "Os terminais desta band vêm para cá." : "Sem agentes: a sala fica vazia."));
+      if (!t.agentes.length) pessoas.append(el("li", "suave", band ? "Os terminais deste workspace vêm para cá." : "Sem agentes: a sala fica vazia."));
       li.append(topo, pessoas); return li;
     }));
     $("auto-novos").textContent = auto.novos.length
       ? `Sem time (vão para “Novos”): ${auto.novos.map(h => nomes.get(h) || h).join(", ")}.` : "";
     const avisos = [feito, ...auto.avisos].filter(Boolean);
-    if (fora.length) avisos.push(`Só cabem ${TimesAuto.MAX_TIMES} times: as bands ${fora.join(", ")} ficaram sem sala.`);
+    if (fora.length) avisos.push(`Só cabem ${TimesAuto.MAX_TIMES} times: os workspaces ${fora.join(", ")} ficaram sem sala.`);
     if (!times.length) avisos.push("Nenhuma fonte deu um time: o agentes.chat não mandou setor, os nomes não têm “ · Setor” e os papéis estão vazios ou longos. " +
       "Renomeie os agentes no agentes.chat com “ · Setor” (por exemplo “Gandalf · Maestro”), cole uma lista “handle, time” aqui embaixo ou atualize o agentes.chat para a versão que manda o setor de cada agente.");
     aviso("auto-aviso", avisos.join(" "), times.length ? "" : "ruim");
