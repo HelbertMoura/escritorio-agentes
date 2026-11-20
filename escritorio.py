@@ -2174,8 +2174,9 @@ def validar_radio(valor):
     except ValueError:   # porta fora de 0-65535, colchetes quebrados
         raise ValueError(MSG_RADIO) from None
     host = u.hostname or ""
-    if u.scheme.lower() != "https" or "@" in u.netloc or u.fragment or not RADIO_HOST.fullmatch(host) or porta == 0:
-        raise ValueError(MSG_RADIO)
+    if u.scheme.lower() != "https" or "@" in u.netloc or u.fragment or not RADIO_HOST.fullmatch(host) or porta == 0 \
+            or len(host) > 100 or host.rsplit(".", 1)[-1].isdigit() or host.startswith("0x") or ".0x" in host:
+        raise ValueError(MSG_RADIO)   # IP e host numérico ("10.0.0.1", "0x7f.1") ficam de fora: seria a rede interna
     return urllib.parse.urlunsplit(("https", host + (f":{porta}" if porta else ""), u.path or "/", u.query, ""))
 
 
@@ -3902,7 +3903,7 @@ class Pagina(BaseHTTPRequestHandler):
         for id_andar, andar in ((ANDAR_PRINCIPAL, None), *getattr(self.server, "andares", {}).items()):
             if self._pode_andar(id_andar):
                 origens.add(origem_radio(_ler_marca(andar.arq_marca if andar else None).get("radio")))
-        return tuple(o for o in origens if o)
+        return tuple(sorted(o for o in origens if o))[:12]   # teto: o cabeçalho CSP não cresce sem limite
 
     def _post_resposta(self, rota):
         """Fase R (R2 e R2a): Origin obrigatório e igual à BASE (sem a volta para o Referer), sessão e JSON exato."""
