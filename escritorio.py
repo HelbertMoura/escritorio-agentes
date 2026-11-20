@@ -62,6 +62,7 @@ from planta import PLANTA_BYTES, Planta, validar_planta  # noqa: E402
 from social import PLACAR_BYTES, PLACAR_MAX, PLACAR_TETO, Social  # noqa: E402
 from visitas_sala import Salas, LimiteRequisicoes  # noqa: E402
 from presenca import Limite as LimitePresenca, Presenca  # noqa: E402
+import ponte_espelho  # noqa: E402
 
 VERSAO = "2.0.0"
 AGENTES_PADRAO = "https://app.agentes.chat"
@@ -95,6 +96,12 @@ LIGADO, DESLIGADO = ("1", "true", "sim", "yes", "on"), ("", "0", "false", "nao",
 TELA_VISITAS_BRUTA = os.environ.get("ESCRITORIO_VISITAS_TELA", "").strip().lower()
 TELA_VISITAS = TELA_VISITAS_BRUTA in LIGADO
 MAX_TEXTO_VISITA = 1000
+# espelho da ponte local (ponte_espelho.py), opt-in: a chave (hex de 64) que a ponte manda no Bearer do POST
+# /api/ponte/espelho. Vazia, vale a que o admin do prédio gera na tela (ARQ_PONTE_CHAVE); sem nenhuma, a rota dá 404. O
+# espelho aparece só no andar ESCRITORIO_PONTE_ANDAR (vazio: o principal do modo clássico; no saguão, nunca, porque o
+# saguão é de todo o prédio)
+PONTE_CHAVE_BRUTA = os.environ.get("ESCRITORIO_PONTE_CHAVE", "").strip()
+PONTE_ANDAR = os.environ.get("ESCRITORIO_PONTE_ANDAR", "").strip()
 ROTAS_ADMIN_VISITAS = ("/api/visitas/criar", "/api/visitas/revogar", "/api/visitas/anfitrioes",
                        "/api/visitas/recepcionista")
 ORG = os.environ.get("AGENTES_ORG", "").strip().lower()  # id da organização no agentes.chat; obrigatório no main()
@@ -2235,6 +2242,7 @@ ID_PLACAR = re.compile(r"[A-Za-z0-9_-]{1,100}")
 ARQ_PLANTA = os.path.join(DADOS, "planta.json")   # modo construção; só o POST /api/planta grava, sob a trava da Planta
 ARQ_PUSH = os.path.join(DADOS, "push.json")   # assinaturas do aviso no celular (avisos.py); gravadas sob a trava dele
 ARQ_VAPID = os.path.join(DADOS, "vapid.json")   # a chave privada VAPID (vapid.py), 0600; nunca sai do servidor
+ARQ_PONTE_CHAVE = os.path.join(DADOS, "ponte-espelho.chave")   # a chave do espelho da ponte gerada pela tela, 0600
 ARQ_SEGREDO_PESSOA = os.path.join(DADOS, "pessoa.chave")   # o segredo do id opaco do saguão (IdPessoa), 0600; nunca sai
 ARQ_JORNAL = os.path.join(DADOS, "jornal.json")   # jornal da semana (jornal.py); só a leitura grava, no máximo 1 vez por minuto
 
@@ -2755,7 +2763,8 @@ REUNIAO_POST = frozenset({"/api/reunioes/marcar", "/api/reunioes/editar", "/api/
 REUNIAO_ADMIN_POST = frozenset({"/api/reunioes/link", "/api/reunioes/convocar"})
 EQUIPE_GET, EQUIPE_POST = EQUIPE_GET | REUNIAO_GET, EQUIPE_POST | REUNIAO_POST
 MEMBRO_GET = frozenset({"/", "", "/api/estado", "/api/config", "/api/social", "/api/social/placar", "/api/jornal",
-                        "/api/linha", "/api/fora", "/api/novidades", "/api/avisos", "/api/push/chave", "/api/perfil", "/api/ao-vivo"}) | EQUIPE_GET
+                        "/api/linha", "/api/fora", "/api/novidades", "/api/avisos", "/api/push/chave", "/api/perfil", "/api/ao-vivo",
+                        "/api/ponte"}) | EQUIPE_GET
 MEMBRO_POST = frozenset({"/sair", "/api/sair-todos", "/api/push/assinar", "/api/push/sair", "/api/perfil",
                          "/api/presenca", "/api/sala/enviar"}) | EQUIPE_POST
 # 1.6: a guarda decide pelo papel NO ANDAR do pedido (?andar=). Do prédio, para toda conta com pelo menos 1 andar: a
@@ -2777,7 +2786,7 @@ SAGUAO_POST = PREDIO_POST | {"/api/presenca", "/api/sala/enviar", "/api/canal/en
                              "/api/status", "/api/aceno"}
 SAGUAO_NAO_TEM = frozenset({"/api/social", "/api/social/placar", "/api/jornal", "/api/linha", "/api/fora",
                             "/api/conversa", "/oauth/conectar",
-                            "/api/dm", "/api/pessoas", "/api/anexo"}) | AUDITORIA_GET | REUNIAO_GET   # 404
+                            "/api/dm", "/api/pessoas", "/api/anexo", "/api/ponte"}) | AUDITORIA_GET | REUNIAO_GET   # 404
 SALAS_FIXAS = frozenset({"", "recepcao", "reuniao", "cozinha", "lounge"})   # "": o corredor (mapa.js: chave de cada sala)
 
 
@@ -2798,7 +2807,7 @@ def aparencia_da_conta(usuario, perfil):
 # POST sem sessão (cada um confere o que precisa): login, convite e as visitas de fora
 POST_PUBLICOS = frozenset({"/entrar", "/primeiro-acesso", "/convite/ver", "/convite/aceitar", "/api/visitas/entrar",
                            "/api/visitas/enviar", "/api/visitas/receber", "/api/visitas/sair", "/api/visitas/mapa",
-                           "/api/visitas/recepcao", "/api/mundo/clima"})
+                           "/api/visitas/recepcao", "/api/mundo/clima", "/api/ponte/espelho"})
 
 
 def pagina_login(erro="", primeiro=False):
@@ -3504,6 +3513,8 @@ class Pagina(BaseHTTPRequestHandler):
             return barrado
         if rota in EQUIPE_GET or rota in AUDITORIA_GET:   # as conversas da equipe e a auditoria de DM (Onda 2)
             return self._get_equipe(rota, caminho, usuario)
+        if rota == "/api/ponte":
+            return self._get_ponte()
         por_andar =("/api/estado", "/api/config", "/api/social", "/api/social/placar", "/api/jornal", "/api/conversa",
                      "/oauth/conectar", "/api/ao-vivo", "/api/membros", "/api/linha", "/api/fora")
         andar = self._andar() if rota in por_andar else None
@@ -3973,6 +3984,84 @@ class Pagina(BaseHTTPRequestHandler):
         except (ValueError, RecursionError):
             return None
         return dados if isinstance(dados, dict) else None
+
+    def _get_ponte(self):
+        """O espelho da ponte para quem é do andar dele (a guarda já barrou o saguão e quem não tem papel): fresco (até
+        90 s), ou {"ativo": false}. Sem cache (o _envia manda no-store)."""
+        andar = self._andar()
+        if andar is None:
+            return self._sem_andar()
+        espelho = getattr(self.server, "espelho_ponte", None)
+        resposta = {"ativo": False}
+        if espelho is not None and not andar.saguao and andar.id == (PONTE_ANDAR or ANDAR_PRINCIPAL):
+            resposta = espelho.ler()
+        if self._admin_do_predio():   # a tela mostra o gerar/desligar só a quem pode; a chave nunca volta aqui
+            resposta["espelho"] = espelho.origem() if espelho is not None else ""
+        return self._json(200, resposta)
+
+    def _post_chave_ponte(self, rota):
+        """Personalizar > Ponte local, só o admin do prédio (a guarda nega o resto): {"acao": "gerar"} cria uma chave
+        nova (a antiga para de valer) e devolve, só nesta resposta, o comando pronto para a máquina dos terminais;
+        {"acao": "desligar"} apaga a chave. Com a ESCRITORIO_PONTE_CHAVE definida, 409: quem manda é a variável."""
+        if not self._mesma_origem():
+            log(evento="http", rota=rota[:40], resultado="origem_recusada")
+            return self._json(*erro(403, "origem", "Origem não permitida."))
+        if self._previa():
+            return self._json(*erro(403, "previa", "Na prévia não há espelho da ponte."))
+        if not self._usuario():
+            return self._json(401, {"erro": "entre de novo"})
+        if not self._admin_do_predio():
+            return self._proibido(rota)
+        dados = self._json_pedido(1024)
+        if not dados or dados.get("acao") not in ("gerar", "desligar") or len(dados) != 1:
+            return self._json(*erro(400, "pedido", "Pedido inválido."))
+        espelho = self.server.espelho_ponte
+        try:
+            if dados["acao"] == "desligar":
+                espelho.desligar()
+                log(evento="ponte_espelho", resultado="desligado", usuario=self._usuario())
+                return self._json(200, {"espelho": ""})
+            chave = espelho.gerar()
+        except ValueError:
+            return self._json(*erro(409, "variavel", "A chave vem da variável ESCRITORIO_PONTE_CHAVE do servidor."))
+        except OSError as x:
+            log(evento="ponte_espelho", resultado="nao_gravou", detalhe=type(x).__name__)
+            return self._json(*erro(500, "gravar", "Não deu para salvar a chave agora."))
+        log(evento="ponte_espelho", resultado="chave_gerada", usuario=self._usuario())   # a chave nunca vai ao log
+        return self._json(200, {"espelho": "tela", "comando": f"ponte conectar {BASE} {chave}"})
+
+    def _post_espelho_ponte(self, rota):
+        """A ponte local manda o espelho (Bearer com a ESCRITORIO_PONTE_CHAVE). Sem a chave no servidor, 404; chave
+        errada, 401. Limite por origem (o das visitas) e um envio aceito por segundo. Nada do corpo nem do cabeçalho vai
+        ao log."""
+        espelho = getattr(self.server, "espelho_ponte", None)
+        if espelho is None or not espelho.ligado():
+            return self._json(404, {"erro": "nao_encontrado"})
+        try:
+            origem = origem_visita(self.client_address[0], self.headers, self.server.proxy_visitas,
+                                   getattr(self.server, "cabecalho_visitas", "X-Real-IP"))
+            self.server.salas_visitas.limitar_origem(origem, publica=True)
+        except LimiteRequisicoes:
+            return self._json(*erro(429, "limite", "Envios demais; espere um pouco."))
+        except ValueError:
+            return self._json(*erro(403, "origem", "Origem não permitida."))
+        if not espelho.autorizado(self.headers.get("Authorization")):
+            log(evento="ponte_espelho", resultado="chave_recusada")
+            return self._json(*erro(401, "chave", "Chave da ponte recusada."))
+        tam = self.headers.get("Content-Length", "")
+        if not re.fullmatch(r"[0-9]{1,7}", tam) or int(tam) > ponte_espelho.CORPO_MAX:
+            self.close_connection = True   # o corpo fica por ler
+            return self._json(*erro(413, "tamanho", "O espelho passou do tamanho."))
+        dados = self._json_pedido(ponte_espelho.CORPO_MAX)
+        if dados is False:
+            return self._json(*erro(415, "tipo", "Mande JSON."))
+        try:
+            espelho.receber(dados)
+        except ponte_espelho.Limite:
+            return self._json(*erro(429, "limite", "Envios demais; espere um pouco."))
+        except ValueError:
+            return self._json(*erro(400, "pedido", "Espelho inválido."))
+        return self._envia(204)
 
     def _post_convite(self, rota):
         """Página pública do convite: ver o nome sugerido e aceitar (cria a conta de membro e já entra). Origin igual à
@@ -4971,6 +5060,10 @@ class Pagina(BaseHTTPRequestHandler):
             barrado = self._barrado("POST", rota)
             if barrado is not None:
                 return barrado
+        if rota == "/api/ponte/espelho":
+            return self._post_espelho_ponte(rota)
+        if rota == "/api/ponte/chave":
+            return self._post_chave_ponte(rota)
         if rota in ("/convite/ver", "/convite/aceitar"):
             return self._post_convite(rota)
         if rota == "/api/perfil":
@@ -5076,6 +5169,9 @@ class Servidor(ThreadingHTTPServer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.salas_visitas = Salas()
+        # o espelho da ponte: a chave da variável ou a que a tela gera (dados/ponte-espelho.chave, 0600); sem as duas,
+        # desligado
+        self.espelho_ponte = ponte_espelho.Espelho(PONTE_CHAVE_BRUTA, ARQ_PONTE_CHAVE)
         self.presenca = Presenca()   # as pessoas da equipe no mapa e o chat das salas (só na memória)
         self.id_pessoa = IdPessoa(ARQ_SEGREDO_PESSOA)   # o id opaco das pessoas no saguão (M2)
         self.andares, self.registro_andares = {}, None   # o main() põe os andares extras (andares.py)
@@ -5256,6 +5352,8 @@ def main():
         sys.exit("ESCRITORIO_VISITAS_CANAL precisa ser o id (uuid) de um canal do agentes.chat só para visitas")
     if bool(ANFITRIOES_VISITAS) != bool(CANAL_VISITAS):
         sys.exit("agente na sala de visitas: defina ESCRITORIO_VISITAS_ANFITRIOES e ESCRITORIO_VISITAS_CANAL juntas")
+    if PONTE_CHAVE_BRUTA and not ponte_espelho.chave_valida(PONTE_CHAVE_BRUTA):
+        sys.exit("ESCRITORIO_PONTE_CHAVE precisa ter 64 letras hexadecimais (0 a 9, a a f); gere com: openssl rand -hex 32")
     # o docker stop (e o systemctl stop) mandam SIGTERM; como PID 1 num container, o Python o ignoraria até o SIGKILL.
     # Toda gravação é atômica, então sair na hora não deixa arquivo pela metade
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
@@ -5335,7 +5433,8 @@ def main():
     srv.ponte_visitas.start()
     if BIND == "0.0.0.0":
         log(evento="inicio", aviso="use só em container, atrás de um proxy HTTPS")
-    log(evento="inicio", versao=VERSAO, onde=f"{BIND}:{PORTA}", base=BASE, terreo="saguao" if registro.saguao else "classico")
+    log(evento="inicio", versao=VERSAO, onde=f"{BIND}:{PORTA}", base=BASE, terreo="saguao" if registro.saguao else "classico",
+        espelho_ponte=srv.espelho_ponte.origem() or "desligado")   # a chave nunca vai ao log
     srv.serve_forever()
 
 

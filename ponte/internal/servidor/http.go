@@ -64,6 +64,11 @@ type Opcoes struct {
 	Terminal func(pid int) string
 	// Clima dá o clima e as datas do dia (Rodar a liga). nil: sem cidade, só as datas.
 	Clima *clima.Fonte
+	// Espelho dá o espelho.json (relido a cada envio: o setup não pede reiniciar). nil: o
+	// espelho nem roda. EsperaEspelho e VidaEspelho: zero vale o padrão; os testes trocam.
+	Espelho       func() (ConfigEspelho, bool)
+	EsperaEspelho time.Duration
+	VidaEspelho   time.Duration
 }
 
 // normalizadores liga cada rota de /evento ao normalizador do provedor.
@@ -89,6 +94,7 @@ type Servidor struct {
 
 	fila        chan func()
 	descartados atomic.Int64
+	espMudou    chan struct{} // avisa o laço do espelho (espelho.go) de que algo mudou
 
 	muPID     sync.Mutex
 	agentes   map[string]agente // fonte:sessão → agente já resolvido
@@ -129,10 +135,17 @@ func Novo(op Opcoes) *Servidor {
 	if op.Clima == nil {
 		op.Clima = clima.NovaFonte(clima.Config{}, "")
 	}
+	if op.EsperaEspelho <= 0 {
+		op.EsperaEspelho = EsperaEspelho
+	}
+	if op.VidaEspelho <= 0 {
+		op.VidaEspelho = VidaEspelho
+	}
 	s := &Servidor{
 		op:         op,
 		reg:        mundo.NovoRegistro(nil),
 		fila:       make(chan func(), TamanhoFila),
+		espMudou:   make(chan struct{}, 1),
 		agentes:    map[string]agente{},
 		agenteLog:  map[string]bool{},
 		clientes:   map[*cliente]bool{},
@@ -183,6 +196,9 @@ func (s *Servidor) Rodar(ctx context.Context) error {
 	}
 	go s.Consumir(ctx)
 	go s.op.Clima.Rodar(ctx, s.definirAmbiente)
+	if s.op.Espelho != nil {
+		go s.espelhar(ctx)
+	}
 	go func() {
 		<-ctx.Done()
 		desligar, cancelar := context.WithTimeout(context.Background(), 2*time.Second)

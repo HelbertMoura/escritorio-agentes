@@ -168,6 +168,7 @@ func ignorarLeituras(ctx context.Context, c *websocket.Conn, cancelar context.Ca
 
 // transmitir põe a mensagem na fila de cada cliente. Chamar com s.mu.
 func (s *Servidor) transmitir(msg any) {
+	s.avisarEspelho()
 	if len(s.clientes) == 0 {
 		return
 	}

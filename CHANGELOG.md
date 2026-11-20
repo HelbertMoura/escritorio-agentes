@@ -6,6 +6,9 @@ All notable changes to this project are listed here, newest first. The format fo
 
 ## Unreleased
 
+### Added
+- **Bridge mirror:** the terminals of another machine (a VM, for example) show up on the map from any browser, with no tunnel. The building admin generates the key in **Personalizar > Ponte local**, and a single command on the terminals' machine (`ponte conectar <address> <key>`) tests the key, installs the hooks, saves the mirror and, on Linux with `--servico`, creates the service. It is off by default; when on, the names of the terminals and projects go to the server, but never a file, command or target. See [Mirror](./README.md#mirror-the-terminals-of-another-machine-with-no-tunnel).
+
 ### Changed
 - **The site's identity across the whole app:** the sign-in screen, first access, invitation, visit page, World and the app itself use the same brand as [firmopolis.devmaniacs.com.br](https://firmopolis.devmaniacs.com.br): Figtree for text, Pixeloid for headings, the night, graphite, cream, amber and indigo palette, square or stepped corners, bevelled buttons and hard shadows. The outside screens got the night sky with the office's lit window. The map and the pixel art did not change.
 - The Source Sans 3 and Doto fonts are gone; Pixeloid Sans (OFL) is in `static/fontes/`.

@@ -5,6 +5,8 @@
 //	ponte setup --plano | --aplicar --cidade NOME [--escolha N] [--pais XX]
 //	ponte setup --plano | --aplicar --sem-cidade
 //	ponte setup --plano | --aplicar --origem URL | --sem-origem URL
+//	ponte setup --plano | --aplicar --espelho URL --chave-espelho CHAVE | --sem-espelho
+//	ponte conectar URL CHAVE [--servico]
 //	ponte hook <claude|agy|codex|mcode>
 //
 // Lê os agentes (hooks, plugins, ~/.claude/sessions, ~/.codex/sessions e ~/.maestri),
@@ -49,6 +51,12 @@ func main() {
 		case "hook":
 			hook(os.Args[2:])
 			os.Exit(0)
+		case "conectar":
+			if err := conectar(os.Args[2:], os.Stdout); err != nil {
+				fmt.Fprintln(os.Stderr, "\nponte conectar:", err)
+				os.Exit(1)
+			}
+			return
 		case "setup":
 			if err := setup(os.Args[2:], os.Stdout); err != nil {
 				fmt.Fprintln(os.Stderr, "ponte setup:", err)
@@ -112,6 +120,10 @@ func rodar(porta int, demo bool) error {
 	}
 	op := servidor.Opcoes{Porta: porta, Token: token, Demo: demo,
 		Origens: func() []string { return servidor.LerOrigens(config) }}
+	op.Espelho = func() (servidor.ConfigEspelho, bool) { return servidor.LerEspelho(config) }
+	if c, ok := servidor.LerEspelho(config); ok {
+		log.Printf("espelho: ligado, enviando a %s (ponte setup --sem-espelho desliga)", c.URL) // nunca a chave
+	}
 	if n := len(servidor.LerOrigens(config)); n > 0 {
 		log.Printf("navegador: %d endereço(s) do Firmópolis podem ler a ponte (ponte setup --origem)", n)
 	}

@@ -6,13 +6,14 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 
 const TOKEN = "ab".repeat(32);
-const abertos = [], timers = [];
+const abertos = [], timers = [], pedidos = [];
+let respostaSrv = { status: 404, corpo: "" };   // o GET /api/ponte (o espelho no servidor)
 class FalsoWS {
   constructor(url, protocolos) { this.url = url; this.protocolos = protocolos; abertos.push(this); }
   close() { this.fechado = true; }
 }
 function criar(tokenSalvo) {
-  abertos.length = 0; timers.length = 0;
+  abertos.length = 0; timers.length = 0; pedidos.length = 0;
   const guardado = new Map(tokenSalvo ? [["firmopolis.ponte", tokenSalvo]] : []), eventos = [];
   const contexto = {
     WebSocket: FalsoWS, JSON, Object, Math, Map, Array, CustomEvent: class { constructor(t) { this.type = t; } },
@@ -20,6 +21,7 @@ function criar(tokenSalvo) {
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout() {},
     document: { readyState: "complete", hidden: false, getElementById: () => null, addEventListener() {} },
     location: { origin: "https://escritorio.exemplo.com" },
+    fetch: async (url, op) => { pedidos.push({ url, op }); const r = respostaSrv; return { ok: r.status === 200, status: r.status, text: async () => r.corpo }; },
   };
   contexto.window = { dispatchEvent: e => eventos.push(e.type), addEventListener() {} };
   vm.runInNewContext(fs.readFileSync("static/ponte.js", "utf8"), contexto);
@@ -124,16 +126,72 @@ mensagem(ws, { v: 1, tipo: "dia", eventos: [{ ts: "2026-11-20T10:00:00Z", morado
 // JSON quebrado não derruba nada
 ws.onmessage({ data: "{nao" });
 
+const religar = () => timers.filter(t => t.fn.name === "conectar").at(-1);
 // a ponte caiu: os terminais saem do mapa e a reconexão é agendada, com espera crescente
 ws.onclose();
 assert.equal(Ponte.terminais().length, 0);
 assert.equal(Ponte.dia("m").length, 0, "o dia sai junto");
 assert.equal(Ponte.workspace("w1"), "", "e os workspaces");
 assert.equal(Ponte.situacao(), "sem-ponte");
-assert.equal(timers.at(-1).ms, 3000);
-timers.at(-1).fn();
+assert.equal(religar().ms, 3000);
+religar().fn();
 assert.equal(abertos.length, 2, "tentou de novo");
 abertos[1].onclose();
-assert.equal(timers.at(-1).ms, 6000, "a espera dobra");
+assert.equal(religar().ms, 6000, "a espera dobra");
 
-console.log("test_ponte.js: ok");
+// ---------- espelho: sem a ponte local, lê do servidor, com a mesma conferência; a local tem prioridade ----------
+(async () => {
+  const solta = () => new Promise(r => setImmediate(r));
+  const lerSrv = () => timers.filter(t => t.fn.name === "lerServidor").at(-1);
+  const espelho = (moradores, extra = {}) => ({ status: 200, corpo: JSON.stringify({ ativo: true, idade_s: 3, moradores,
+    workspaces: [{ id: "w1", nome: "Loja\u0007", bands: [] }], dia: [{ ts: "2026-11-20T10:00:00Z", morador_id: "s1", estado: "ocupado", ferramenta: "Edit", alvo: "x" }], ...extra }) });
+
+  respostaSrv = { status: 200, corpo: JSON.stringify({ ativo: false }) };
+  let q = criar(null); await solta();
+  assert.equal(pedidos[0].url, "api/ponte", "sem token, pergunta ao servidor");
+  assert.equal(pedidos[0].op.cache, "no-store");
+  assert.equal(q.Ponte.situacao(), "desligada");
+  assert.equal(lerSrv().ms, 30000, "sem espelho, pergunta devagar");
+
+  respostaSrv = espelho([morador("s1", "ocupado", { nome: "x".repeat(90) }), morador("s2", "dormindo"), null]);
+  lerSrv().fn(); await solta();
+  assert.equal(q.Ponte.situacao(), "servidor");
+  assert.deepEqual([...q.Ponte.terminais().map(t => t.id)], ["s1"], "a mesma conferência");
+  assert.equal(q.Ponte.terminais()[0].nome.length, 40);
+  assert.equal(q.Ponte.workspace("w1"), "Loja");
+  assert.equal(q.Ponte.dia("s1").length, 1); assert.ok(!("alvo" in q.Ponte.dia("s1")[0]));
+  assert.equal(lerSrv().ms, 3000, "ativo: a cada 3 s");
+  const v1 = q.Ponte.versao();
+  respostaSrv = espelho([morador("s1", "ocupado", { nome: "x".repeat(90) }), morador("s2", "dormindo"), null], { idade_s: 6 });
+  lerSrv().fn(); await solta();
+  assert.equal(q.Ponte.versao(), v1, "igual (só a idade mudou): a tela não redesenha");
+
+  respostaSrv = { status: 200, corpo: JSON.stringify({ ativo: false }) };
+  lerSrv().fn(); await solta();
+  assert.equal(q.Ponte.terminais().length, 0, "o espelho parou: os terminais saem");
+  assert.equal(q.Ponte.situacao(), "desligada");
+
+  respostaSrv = { status: 403, corpo: "" };
+  lerSrv().fn(); await solta();
+  assert.equal(lerSrv().ms, 60000, "sem permissão (saguão): espaça");
+
+  // com a ponte local: o espelho só enquanto ela não liga; ligada, ela manda e o servidor nem é lido
+  respostaSrv = espelho([morador("s1", "ocupado")]);
+  q = criar(TOKEN); await solta();
+  assert.equal(q.Ponte.situacao(), "servidor");
+  const local = abertos[0];
+  local.onopen();
+  assert.equal(q.Ponte.situacao(), "ligada");
+  mensagem(local, { v: 1, tipo: "snapshot", moradores: [morador("l1", "ocioso")] });
+  const n = pedidos.length;
+  lerSrv().fn(); await solta();
+  assert.equal(pedidos.length, n, "ligada, o servidor não é lido");
+  assert.deepEqual([...q.Ponte.terminais().map(t => t.id)], ["l1"]);
+  local.onclose(); await solta();
+  assert.equal(q.Ponte.situacao(), "servidor", "a local caiu: volta ao espelho na hora");
+  assert.deepEqual([...q.Ponte.terminais().map(t => t.id)], ["s1"]);
+  abertos.at(-1).onclose(); await solta();
+  assert.deepEqual([...q.Ponte.terminais().map(t => t.id)], ["s1"], "tentar a local de novo não apaga o espelho");
+
+  console.log("test_ponte.js: ok");
+})().catch(e => { console.error(e); process.exit(1); });

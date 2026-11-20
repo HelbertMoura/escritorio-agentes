@@ -158,6 +158,22 @@ O comando grava o endereço em `origens.txt` (na pasta da ponte) e mostra o toke
 - Liberar um endereço é confiar em tudo o que esse endereço serve: libere só o do seu Firmópolis. O mesmo token vale para os hooks; se desconfiar que vazou, apague o arquivo `token` da pasta da ponte e rode o `setup --aplicar` de novo.
 - No Chrome, a primeira conexão de um site da internet para 127.0.0.1 pode pedir a permissão de acesso à rede local.
 
+## 5. Espelho: ver os terminais desta máquina de outro navegador (opcional)
+Para quem roda os terminais numa máquina (uma VM, por exemplo) e abre o Firmópolis em outra, sem túnel. Vem desligado. No Firmópolis, o admin do prédio gera a chave em Personalizar > Ponte local, e a tela mostra o comando pronto. Rode na máquina dos terminais:
+
+```bash
+ponte conectar https://escritorio.exemplo.com <chave>             # testa, instala os hooks e grava o espelho
+ponte conectar https://escritorio.exemplo.com <chave> --servico   # no Linux, também cria e liga o serviço systemd do usuário
+```
+
+O `conectar` testa a chave antes de mudar qualquer coisa (o teste não troca o que o servidor mostra), roda o `setup --aplicar`, grava `espelho.json` na pasta da ponte (0600) e diz o próximo passo. O `--servico` cria `~/.config/systemd/user/firmopolis-ponte.service` e roda `systemctl --user enable --now`; se a unit já existe, fica como está.
+
+Só o espelho, sem mexer nos hooks: `setup --aplicar --espelho <endereço> --chave-espelho <chave>`; para desligar, `setup --aplicar --sem-espelho`. Vale na hora, sem reiniciar a ponte: o `espelho.json` é relido a cada envio.
+
+- Vai ao servidor a mesma versão reduzida do navegador (moradores sem o alvo, workspaces e bands só com os nomes, o dia sem alvo), num `POST <endereço>/api/ponte/espelho` com `Authorization: Bearer <chave>` e `User-Agent: Firmopolis-ponte/<versão>`. **Os nomes dos terminais e dos projetos passam a ir ao servidor.**
+- Envia uns 2 s depois de uma mudança (juntando as que vierem nesse meio-tempo) e, sem mudança, a cada 30 s. Na falha, espera de 5 s a 5 min, sem travar a ponte. O log diz só quando para e quando volta, nunca a chave.
+- Corpo de até 200 KiB: passou, o dia perde os eventos mais velhos. Timeout de 10 s. Só https, ou http no próprio PC para desenvolvimento.
+
 ## Testes
 ```powershell
 go test ./...

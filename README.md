@@ -455,6 +455,20 @@ The bridge (`ponte/`, written in Go) reads the AI terminals on this machine (Cla
 - **Security:** the bridge only listens on 127.0.0.1 and only accepts the WebSocket from a listed origin with the right token. The browser gets a reduced version, without the activity target (file or command) and without the day's history.
 - **Without the bridge:** the app retries with a growing wait of up to 1 minute and shows no error on screen. In Chrome, the first connection may ask for the local network access permission. Safari may refuse `ws://` from an https page.
 
+### Mirror: the terminals of another machine, with no tunnel
+
+If your terminals run on one machine (a VM, for example) and you open Firmópolis on another, turn on the mirror. The bridge on that machine sends the server the same reduced version the browser gets, and the floor's members see the terminals on the map from any browser. The mirror is off by default.
+
+1. In **Personalizar > Ponte local**, the building admin clicks **Gerar chave** (generate key). The page shows the ready-made command, only once: `ponte conectar https://<your Firmópolis> <key>`.
+2. Run that command on the machine with the terminals. It tests the key before changing anything, installs the hooks, saves the mirror and tells you the next step. On Linux, `ponte conectar ... --servico` creates and starts the `firmopolis-ponte` systemd user service.
+3. The terminals show up on the map, and **Personalizar > Ponte local** says "Pelo servidor" (through the server).
+
+- **With an environment variable instead:** set `ESCRITORIO_PONTE_CHAVE` on the server (generate it with `openssl rand -hex 32`) and run `ponte conectar https://<your Firmópolis> <the same key>` on the terminals' machine. With the variable set, the page neither generates nor turns off the key. With `instalar.sh`, prefer the key from the page: it lives in `dados/` and survives a reinstall, which rewrites `/etc/escritorio.env`.
+- **Just the commands:** `ponte setup --aplicar --espelho https://<your Firmópolis> --chave-espelho <key>` saves the mirror without touching the hooks, and `ponte setup --aplicar --sem-espelho` turns it off. Both take effect right away, with no bridge restart.
+- **Which floor shows it:** in classic mode, the main floor. In lobby mode, the lobby never gets the mirror; set `ESCRITORIO_PONTE_ANDAR` to the id of the company floor that should see the terminals.
+- **How it works:** the bridge sends a `POST /api/ponte/espelho` with the key in `Authorization: Bearer`, over https only, about 2 s after each change and at least every 30 s. When the server does not answer, it waits longer after each failure, up to 5 minutes, without blocking. The server keeps it in memory only, and the app reads `GET /api/ponte` every 3 s. After 90 s with nothing new, the mirror counts as off. The local bridge on this computer, when connected, takes priority.
+- **Security:** with the mirror on, **the names of the terminals, projects, workspaces and bands go to the server**, along with the states and tool names. The activity target (file or command) and the band members never leave the machine. The server checks everything with the app's own limits (48 terminals, names up to 40 characters, 32 workspaces, 200 events per terminal for the day) and accepts up to 256 KB per send, at most one per second. Only the floor's members can read it; the lobby, visitors and signed-out users get nothing. The key lives in `espelho.json` in the bridge folder (readable only by your user) and in `dados/ponte-espelho.chave` on the server (0600). It never goes to the log. Generating a new key makes the old one stop working right away.
+
 ## Newspaper
 
 The **Jornal** (newspaper) page, in the menu, tells the office's week as a newspaper: the issue number (the week of the year), the period, the headline, the notes and a table with everyone.
