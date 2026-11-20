@@ -427,7 +427,13 @@ class Credenciais:
             return self.dados["access_token"]
 
 
+# um User-Agent próprio: o padrão do Python (Python-urllib) é barrado pela Cloudflare (erro 1010) na frente de self-hosts
+AGENTE_HTTP = f"Firmopolis/{VERSAO} (+https://github.com/HelbertMoura/escritorio-agentes)"
+
+
 def _abrir(req):
+    if not req.has_header("User-agent"):
+        req.add_header("User-Agent", AGENTE_HTTP)
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
             return r.status, dict(r.headers), r.read(2_000_000)

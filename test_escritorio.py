@@ -4540,5 +4540,26 @@ class SocialPlacar(unittest.TestCase):
             shutil.rmtree(pasta, ignore_errors=True)
 
 
+class AgenteHttp(unittest.TestCase):
+    """Toda chamada ao agentes.chat sai com o User-Agent da Firmópolis: o Python-urllib é barrado pela Cloudflare (1010)."""
+    def test_user_agent_proprio_sem_trocar_o_que_ja_veio(self):
+        vistos = []
+
+        class Resp:
+            status, headers = 200, {}
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self, n): return b"{}"
+        original = e.urllib.request.urlopen
+        e.urllib.request.urlopen = lambda req, timeout=None: (vistos.append(req.get_header("User-agent")), Resp())[1]
+        try:
+            _ORIGINAIS["_abrir"](e.urllib.request.Request("https://agentes.exemplo.com/mcp"))
+            _ORIGINAIS["_abrir"](e.urllib.request.Request("https://agentes.exemplo.com/mcp", headers={"User-Agent": "outro"}))
+        finally:
+            e.urllib.request.urlopen = original
+        self.assertEqual(vistos, [e.AGENTE_HTTP, "outro"])
+        self.assertTrue(e.AGENTE_HTTP.startswith("Firmopolis/" + e.VERSAO + " "))
+
+
 if __name__ == "__main__":
     unittest.main()
