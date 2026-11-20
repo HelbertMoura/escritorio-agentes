@@ -1950,7 +1950,7 @@ const Vida = (() => {
     if (mudou !== null) t.mudou = mudou;
   }
   // o banheiro (a porta WC no fim do corredor, mapa.js: predio.banheiro), como no Escritório Vivo (sim.gd: _entrar_na_fila,
-  // _arrumar_fila): quem precisa entra no fim da fila, de 10 em 10 px para a esquerda da porta, e um entra por vez (some
+  // _arrumar_fila): quem precisa entra no fim da fila, de 14 em 14 px para a esquerda da porta, e um entra por vez (some
   // de 5 a 8 s). Apertado (bexiga abaixo de 15), fura a fila na frente de quem não está, e cada um que ele passou perde
   // 10 de afinidade com ele. Mudou de estado, saiu do livre ou fechou: sai da fila na hora (sairDaFila)
   const APERTO = 15, WC_T = [5, 8];
@@ -1969,7 +1969,7 @@ const Vida = (() => {
   function arrumarFila(m) {
     const b = m.predio.banheiro;
     term.fila.forEach((u, k) => {
-      const p = [b.x - 10 * k, b.y];
+      const p = [b.x - 14 * k, b.y];
       if (u.ativ.p && u.ativ.p[0] === p[0] && u.ativ.p[1] === p[1]) return;
       u.ativ.p = p; u.rota = rotaAte(m, [u.x, u.y], p) || [p]; u.parado = "dir";
     });
