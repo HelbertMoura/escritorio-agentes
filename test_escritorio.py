@@ -143,12 +143,24 @@ class Resumo(unittest.TestCase):
                  {"id": "a4", "name": "Antigo", "handle": "antigo", "role": ""}]
         a1, a2, a3, a4 = e.resumir(bruto, [])["agentes"]
         self.assertEqual(a1["setor"], {"nome": "Engenharia", "cor": "teal", "icone": "code", "ordem": 2})
-        self.assertEqual(a1["aparencia"], {"color": "rose", "eyes": "happy", "accessory": ""})   # cachecol: o escritório não desenha
-        self.assertEqual(a2["setor"], {"nome": "X", "cor": None, "icone": None, "ordem": 999})
-        self.assertIsNone(a2["aparencia"])   # cor própria (#rrggbb) o boneco do escritório não tem
+        self.assertEqual(a1["aparencia"], {"color": "rose", "eyes": "happy"})   # cachecol: o escritório não desenha, a tela completa
+        self.assertEqual(a2["setor"], {"nome": "X", "cor": "#ff0000", "icone": None, "ordem": 999})   # #rrggbb vale como cor do time
+        self.assertEqual(a2["aparencia"], {"color": "graphite", "eyes": "happy", "accessory": "crown"})   # #123456: a mais próxima
         self.assertEqual((a3["setor"], a3["aparencia"]), (None, None))
         self.assertNotIn("setor", a4)   # agentes.chat que ainda não manda: a tela diz para atualizar
         self.assertNotIn("aparencia", a4)
+
+    def test_setor_so_com_o_nome_e_aparencia_parcial(self):
+        # o list_agents pode mandar o department só como o nome do grupo; valor fora das listas é ignorado campo a campo
+        self.assertEqual(e.setor_do_agente("  Infra "), {"nome": "Infra", "cor": None, "icone": None, "ordem": 999})
+        self.assertIsNone(e.setor_do_agente("   "))
+        self.assertEqual(e.setor_do_agente({"name": "Arte", "color": ["x"], "icon": {"a": 1}})["cor"], None)   # sem quebrar
+        self.assertEqual(e.aparencia_do_agente({"color": "#f00", "eyes": ["x"], "accessory": {}}), {"color": "rose"})
+        self.assertEqual(e.aparencia_do_agente({"color": "#3a92e6", "eyes": "wide", "accessory": ""}),
+                         {"color": "sky", "eyes": "wide", "accessory": ""})
+        self.assertIsNone(e.aparencia_do_agente({"color": "vermelho", "eyes": "x", "accessory": "scarf"}))
+        self.assertIsNone(e.aparencia_do_agente({"color": "#12345"}))   # hex quebrado: ignorado
+        self.assertIsNone(e.aparencia_do_agente("rose"))
 
 
 def tarefa(run_id, status, agente="a1"):

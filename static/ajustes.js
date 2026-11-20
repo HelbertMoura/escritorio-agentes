@@ -387,45 +387,111 @@ const Ajustes = (() => {
     mostrarTimes(`eq-t${eq.times.length - 1}-nome`); mostrarAgentes(); estadoEq();
   });
   $("equipe-desfazer").addEventListener("click", () => { eq = copiaEq(eqSalvo); renomeOk = false; mostrarTimes("equipe-novo"); mostrarAgentes(); estadoEq("Mudanças desfeitas."); });
-  // ---------- puxar os setores do agentes.chat ----------------------------------------------
-  // copia para esta tela os setores (nome, cor, ícone) e a aparência de cada agente, da última leitura; nada vale antes do Salvar
+  // ---------- montar os times automaticamente (lógica pura: times_auto.js) ------------------
+  // fontes, na ordem: a lista colada, o setor do agentes.chat, o fim do nome ("Gandalf · Maestro") e o papel. Primeiro a
+  // prévia, que deixa renomear, tirar um agente e juntar dois times; "Usar estes times" põe na tela, e o Salvar times grava.
   const ICONE_SETOR = { shield: "coroa", code: "codigo", pullRequest: "codigo", wallet: "grafico", chart: "grafico", mail: "megafone",
     globe: "megafone", message: "pessoas", person: "pessoas", bolt: "servidor", plug: "servidor", eye: "servidor", flag: "estrela",
     bulb: "estrela", book: "pincel", calendar: "sino" };
-  // o nome do setor no formato dos times (letras, números, espaço e . ' & -, até 40)
-  const nomeDoSetor = n => n.replace(/[^\p{L}\p{N}_ .'&\-]/gu, " ").replace(/\s+/g, " ").trim().slice(0, 40).trim();
-  function puxarSetores() {
+  const doSetor = s => ({ cor: Object.hasOwn(Avatar.CORES, s.cor || "") ? Avatar.CORES[s.cor].base : /^#[0-9a-f]{6}$/i.test(s.cor || "") ? s.cor.toLowerCase() : null,
+    icone: Object.hasOwn(ICONE_SETOR, s.icone || "") ? ICONE_SETOR[s.icone] : null });
+  const ORIGEM = { lista: "pela lista", "agentes.chat": "pelo setor do agentes.chat", nome: "pelo nome", papel: "pelo papel", juntado: "os menores juntos", band: "sala da band, sem agentes" };
+  const NOME_TIPO = Object.fromEntries(TIPOS), NOME_ICONE = Object.fromEntries(ICONES);
+  let auto = null;   // { times, novos, avisos } da prévia aberta
+  const bandsDaPonte = () => (window.Ponte && typeof window.Ponte.bands === "function" ? window.Ponte.bands() : []);
+  // os times da prévia como vão ficar: os dos agentes e, com a caixa marcada, as salas das bands com terminal vivo agora
+  const timesDaPrevia = () => ($("auto-bands").checked ? TimesAuto.comBands(auto.times, bandsDaPonte()) : { times: auto.times, fora: [] });
+  function montarPrevia() {
     const ag = lidos();
-    if (!ag) { aviso("equipe-aviso", "Esperando a primeira leitura do agentes.chat. Tente de novo em alguns segundos.", "ruim"); return; }
-    if (!ag.some(a => Object.hasOwn(a, "setor"))) {
-      aviso("equipe-aviso", "O seu agentes.chat ainda não manda os setores. Atualize-o para a versão em que o list_agents traz o setor de cada agente.", "ruim");
-      return;
-    }
-    const setores = new Map();   // nome -> {setor, handles}, na ordem dos setores do agentes.chat
-    for (const a of [...ag].filter(x => x.setor && typeof x.handle === "string").sort((x, y) => x.setor.ordem - y.setor.ordem)) {
-      const nome = nomeDoSetor(a.setor.nome) || `Setor ${a.setor.ordem + 1}`, chave = semCaixa(nome);
-      if (!setores.has(chave)) setores.set(chave, { nome, setor: a.setor, handles: [] });
-      setores.get(chave).handles.push(a.handle);
-    }
-    if (!setores.size) { aviso("equipe-aviso", "Nenhum agente está em um setor no agentes.chat. Crie os setores lá e tente de novo.", "ruim"); return; }
-    const antes = new Map(eq.times.map(t => [semCaixa(t.nome), t]));   // time de mesmo nome guarda o tipo, a cor sem setor, a parede e o piso
-    const cabem = [...setores.values()].slice(0, MAX_TIMES);
-    const semVaga = cabem.reduce((n, s) => n + Math.max(0, s.handles.length - MAX_POR_TIME), 0);
-    eq.times = cabem.map(({ nome, setor, handles }, i) => {
-      const t = antes.get(semCaixa(nome));
-      return { nome, tipo: t ? t.tipo : "mesas", cor: setor.cor ? Avatar.CORES[setor.cor].base : t ? t.cor : CORES_TIME[i % CORES_TIME.length],
-        icone: ICONE_SETOR[setor.icone] || "pessoas", parede: t ? t.parede : i % 6, piso: t ? t.piso : i % 10,
-        agentes: handles.slice(0, MAX_POR_TIME), de: t ? t.de : undefined };
-    });
-    let looks = 0;
-    for (const a of ag) if (a.aparencia && typeof a.handle === "string") { eq.aparencia[a.handle] = { ...a.aparencia }; looks++; }
-    renomeOk = false; mostrarTimes(); mostrarAgentes();
-    const fora = (setores.size > MAX_TIMES ? ` Só cabem ${MAX_TIMES} times: os setores depois do ${MAX_TIMES}º ficaram de fora.` : "") +
-      (semVaga ? ` Cada time leva até ${MAX_POR_TIME} agentes: ${semVaga} ${semVaga === 1 ? "ficou" : "ficaram"} de fora, na sala “Novos”.` : "");
-    estadoEq(`${eq.times.length} ${eq.times.length === 1 ? "time copiado" : "times copiados"} dos setores` +
-      (looks ? `, com a aparência de ${looks} ${looks === 1 ? "agente" : "agentes"}` : "") + `. Confira e clique em Salvar times.${fora}`, "ok");
+    if (!ag) { aviso("equipe-aviso", "Esperando a primeira leitura do agentes.chat. Tente de novo em alguns segundos.", "ruim"); return false; }
+    const r = TimesAuto.agrupar(ag, $("auto-lista").value), avisos = [];
+    if (r.juntados.length) avisos.push(`Passou de ${TimesAuto.MAX_TIMES} times: ${r.juntados.join(", ")} ${r.juntados.length === 1 ? "foi" : "foram"} para “${TimesAuto.OUTROS}”.`);
+    if (r.foraDaLeitura.length) avisos.push(`A lista cita ${r.foraDaLeitura.map(h => "@" + h).join(", ")}, fora da última leitura: ficou de fora.`);
+    if (r.errosLista.length) avisos.push(`Linhas da lista sem “handle, time” válido: ${r.errosLista.join(", ")}.`);
+    const f = r.fontes, partes = [[f.lista, "pela lista"], [f["agentes.chat"], "pelo setor do agentes.chat"], [f.nome, "pelo nome"], [f.papel, "pelo papel"]]
+      .filter(([n]) => n).map(([n, t]) => `${n} ${t}`);
+    auto = { times: r.times, novos: r.novos, avisos, fontes: partes };
+    return true;
   }
-  $("equipe-puxar").addEventListener("click", puxarSetores);
+  function mostrarPrevia(focoEm, feito) {   // feito: o que a última edição fez, antes dos avisos
+    const nomes = new Map((lidos() || []).map(a => [a.handle, typeof a.nome === "string" && a.nome ? a.nome : a.handle]));
+    const bands = bandsDaPonte(), { times, fora } = timesDaPrevia();
+    $("auto-bands-rot").hidden = !bands.length;
+    $("auto-bands-txt").textContent = `Criar salas para as bands do Maestri em uso agora (${bands.join(", ")})`;
+    const comAgente = auto.times.reduce((n, t) => n + t.agentes.length, 0);
+    $("auto-resumo").textContent = times.length
+      ? `Vou criar ${times.length === 1 ? "este time" : `estes ${times.length} times`} com ${comAgente} ${comAgente === 1 ? "agente" : "agentes"}` +
+        (auto.fontes.length ? ` (${auto.fontes.join(", ")})` : "") + "."
+      : "";
+    const atuais = new Map(eq.times.map(t => [TimesAuto.chave(t.nome), t]));
+    $("auto-times").replaceChildren(...times.map((t, i) => {
+      const li = el("li", "auto-time"), topo = el("div", "auto-topo"), band = t.origem === "band";
+      const antes = atuais.get(TimesAuto.chave(t.nome)), tipo = antes ? antes.tipo : TimesAuto.tipoSugerido(t.nome);
+      const icone = (t.setor && doSetor(t.setor).icone) || TimesAuto.iconeSugerido(t.nome);
+      const nome = el("input"); nome.maxLength = 40; nome.autocomplete = "off"; nome.value = t.nome; nome.disabled = band;
+      nome.addEventListener("change", () => { t.nome = nome.value.trim(); mostrarPrevia(); });
+      topo.append(campo("Nome do time", nome, `auto-t${i}-nome`),
+        el("span", "suave", `${NOME_TIPO[tipo]} · ícone ${NOME_ICONE[icone]} · ${ORIGEM[t.origem] || ""}${antes ? " · já existe" : ""}`));
+      if (!band && auto.times.length > 1) {
+        const jt = el("select");
+        opcoes(jt, [["", "Juntar com…"], ...auto.times.map((o, j) => [String(j), o.nome]).filter(([j]) => +j !== i)], "");
+        jt.addEventListener("change", () => {
+          if (jt.value === "") return;
+          const j = +jt.value, alvo = auto.times[j].nome;
+          auto.times = TimesAuto.juntar(auto.times, i, j); mostrarPrevia(`auto-t${j > i ? j - 1 : j}-nome`, `${t.nome} entrou em ${alvo}.`);
+        });
+        topo.append(campo("Juntar", jt, `auto-t${i}-juntar`));
+      }
+      const pessoas = el("ul", "auto-agentes");
+      pessoas.append(...t.agentes.map(h => {
+        const p = el("li", "auto-agente"), x = el("button", "auto-tirar", "×");
+        x.type = "button"; x.setAttribute("aria-label", `Tirar ${nomes.get(h) || h} de ${t.nome}`);
+        x.addEventListener("click", () => {
+          auto.times = TimesAuto.tirar(auto.times, h); auto.novos.push(h); mostrarPrevia(`auto-t${i}-nome`, `${nomes.get(h) || h} vai para “Novos”.`);
+        });
+        p.append(el("span", null, nomes.get(h) || h), x); return p;
+      }));
+      if (!t.agentes.length) pessoas.append(el("li", "suave", band ? "Os terminais desta band vêm para cá." : "Sem agentes: a sala fica vazia."));
+      li.append(topo, pessoas); return li;
+    }));
+    $("auto-novos").textContent = auto.novos.length
+      ? `Sem time (vão para “Novos”): ${auto.novos.map(h => nomes.get(h) || h).join(", ")}.` : "";
+    const avisos = [feito, ...auto.avisos].filter(Boolean);
+    if (fora.length) avisos.push(`Só cabem ${TimesAuto.MAX_TIMES} times: as bands ${fora.join(", ")} ficaram sem sala.`);
+    if (!times.length) avisos.push("Nenhuma fonte deu um time: o agentes.chat não mandou setor, os nomes não têm “ · Setor” e os papéis estão vazios ou longos. " +
+      "Renomeie os agentes no agentes.chat com “ · Setor” (por exemplo “Gandalf · Maestro”), cole uma lista “handle, time” aqui embaixo ou atualize o agentes.chat para a versão que manda o setor de cada agente.");
+    aviso("auto-aviso", avisos.join(" "), times.length ? "" : "ruim");
+    if (!times.length) $("auto-lista-det").open = true;
+    $("auto-usar").disabled = !times.length;
+    if (focoEm && $(focoEm)) $(focoEm).focus();
+  }
+  function fecharPrevia(foco) { $("auto-previa").hidden = true; $("equipe-puxar").setAttribute("aria-expanded", "false"); auto = null; if (foco) $("equipe-puxar").focus(); }
+  $("equipe-puxar").addEventListener("click", () => {
+    if (!$("auto-previa").hidden) { fecharPrevia(); return; }
+    if (!montarPrevia()) return;
+    $("auto-previa").hidden = false; $("equipe-puxar").setAttribute("aria-expanded", "true");
+    mostrarPrevia("auto-resumo");
+  });
+  $("auto-reler").addEventListener("click", () => { if (montarPrevia()) mostrarPrevia(); });
+  $("auto-bands").addEventListener("change", () => mostrarPrevia());
+  $("auto-cancelar").addEventListener("click", () => { fecharPrevia(true); estadoEq("Nada mudou."); });
+  $("auto-usar").addEventListener("click", () => {
+    const { times } = timesDaPrevia(), erro = TimesAuto.erroPrevia(times);
+    if (erro) { aviso("auto-aviso", erro, "ruim"); return; }
+    const r = TimesAuto.montar(times, eq.times, doSetor, CORES_TIME);
+    eq.times = r.times;
+    // a aparência do agentes.chat (só o que está nas listas; o que faltar vem do boneco automático)
+    let looks = 0;
+    for (const a of lidos() || []) if (a.aparencia && typeof a.aparencia === "object" && typeof a.handle === "string") {
+      const ap = { ...Avatar.padrao(a.handle), ...a.aparencia };
+      eq.aparencia[a.handle] = { color: ap.color, eyes: ap.eyes, accessory: ap.accessory }; looks++;
+    }
+    fecharPrevia(); renomeOk = false; mostrarTimes(); mostrarAgentes();
+    estadoEq(`${eq.times.length} ${eq.times.length === 1 ? "time montado" : "times montados"}` +
+      (looks ? `, com a aparência de ${looks} ${looks === 1 ? "agente" : "agentes"} do agentes.chat` : "") + ". Confira e clique em Salvar times." +
+      (r.semVaga ? ` Cada time leva até ${TimesAuto.MAX_POR_TIME} agentes: ${r.semVaga} ${r.semVaga === 1 ? "ficou" : "ficaram"} na sala “Novos”.` : ""), "ok");
+    $("equipe-salvar").focus();
+  });
   async function salvarEq(corpo, botao) {
     botao.disabled = true; aviso("equipe-aviso", "Salvando…");
     try {

@@ -1775,6 +1775,10 @@ const Vida = (() => {
       const reuniao = d.gerente && salaDaChave(m, "reuniao");
       if (reuniao) return reuniao;
       const times = salas.filter(s => typeof s.chave === "string" && s.chave.startsWith("time:"));   // a mesma band (ou workspace) fica junta
+      // a band (ou, sem band, o workspace) com o nome de um time (sem acento nem caixa) vai para a sala dele; senão, a semente escolhe
+      const band = window.TimesAuto ? TimesAuto.chave(d.band ? Ponte.band(d.workspace, d.band) : Ponte.workspace(d.workspace)) : "";
+      const daBand = band && times.find(s => TimesAuto.chave(s.nome) === band);
+      if (daBand) return daBand;
       return times.length ? times[semente(d.band || d.workspace || d.id) % times.length] : recepcao;
     }
     if (TERM_ESPERA.has(d.estado)) return recepcao;

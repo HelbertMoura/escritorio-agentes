@@ -11,10 +11,10 @@
   <meta name="theme-color" content="#0f0f0e">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <link rel="stylesheet" href="estilo.css?v=123">
-  <link rel="stylesheet" href="chat_sala.css?v=123">
-  <link rel="stylesheet" href="reunioes.css?v=123">
-  <link rel="stylesheet" href="linha_tempo.css?v=123">
+  <link rel="stylesheet" href="estilo.css?v=124">
+  <link rel="stylesheet" href="chat_sala.css?v=124">
+  <link rel="stylesheet" href="reunioes.css?v=124">
+  <link rel="stylesheet" href="linha_tempo.css?v=124">
 </head>
 <body>
   <a class="pular" href="#principal">Ir para o conteúdo</a>
@@ -431,7 +431,23 @@
             <p class="ajuda">Cada time ganha uma sala no prédio, com a cor e o ícone da placa. Quem não está em nenhum time senta na sala “Novos”. Tipo de sala: “Mesas” para um time comum, “Ops” com sala de servidores e telas de monitoramento, “Gabinete” sem divisórias e com tapete. A pintura e os móveis de cada sala são do Modo construção.</p>
             <p id="equipe-origem" class="origem"></p>
             <h3 class="ajuste-sub">Times</h3>
-            <p class="acoes"><button id="equipe-puxar" class="botao secundario" type="button">Puxar os setores do agentes.chat</button></p>
+            <p class="acoes"><button id="equipe-puxar" class="botao secundario" type="button" aria-expanded="false" aria-controls="auto-previa">Montar os times automaticamente</button></p>
+            <div id="auto-previa" class="auto-previa" role="region" aria-labelledby="t-auto" hidden>
+              <h4 id="t-auto">Prévia dos times</h4>
+              <p class="ajuda">Cada agente entra no time da primeira fonte que der um: a lista colada, o setor do agentes.chat, o que vem depois de “ · ” no nome (“Gandalf · Maestro”) ou o papel. Nada muda antes de “Usar estes times” e do “Salvar times”.</p>
+              <p id="auto-resumo" class="auto-resumo" tabindex="-1"></p>
+              <ol id="auto-times" class="auto-times"></ol>
+              <p id="auto-novos" class="ajuda"></p>
+              <label id="auto-bands-rot" class="marcar" hidden><input id="auto-bands" type="checkbox"><span id="auto-bands-txt">Criar salas para as bands do Maestri em uso</span></label>
+              <details id="auto-lista-det" class="auto-lista">
+                <summary>Colar uma lista (handle, time)</summary>
+                <label for="auto-lista" class="ajuda">Uma por linha, por exemplo <code>gandalf, Maestro</code>. Vale acima das outras fontes.</label>
+                <textarea id="auto-lista" rows="5" spellcheck="false" autocomplete="off"></textarea>
+                <button id="auto-reler" class="botao secundario" type="button">Montar de novo com a lista</button>
+              </details>
+              <p id="auto-aviso" class="aviso-form" role="status"></p>
+              <div class="acoes"><button id="auto-usar" class="botao" type="button">Usar estes times</button><button id="auto-cancelar" class="botao fantasma" type="button">Cancelar</button></div>
+            </div>
             <p id="equipe-sem-times" class="ajuda">Nenhum time ainda: todo mundo fica na sala “Novos”.</p>
             <ol id="equipe-times" class="times-lista"></ol>
             <button id="equipe-novo" class="botao secundario" type="button">Novo time</button>
@@ -785,33 +801,34 @@
       </div>
     </div>
   </dialog>
-  <script src="abertura.js?v=123"></script>
-  <script src="avatar.js?v=123"></script>
-  <script src="mapa.js?v=123"></script>
-  <script src="expediente.js?v=123"></script>
-  <script src="vida.js?v=123"></script>
-  <script src="apresentacao.js?v=123"></script>
-  <script src="sprites.js?v=123"></script>
-  <script src="ponte.js?v=123"></script>
-  <script src="som.js?v=123"></script>
-  <script src="ceu.js?v=123"></script>
-  <script src="clima.js?v=123"></script>
-  <script src="festas.js?v=123"></script>
-  <script src="simular.js?v=123"></script>
-  <script src="efeitos.js?v=123"></script>
-  <script src="brincar.js?v=123"></script>
-  <script src="tv.js?v=123"></script>
-  <script src="jornal.js?v=123"></script>
-  <script src="novidades.js?v=123"></script>
-  <script src="timelapse.js?v=123"></script>
-  <script src="avisar.js?v=123"></script>
-  <script src="resposta_rapida.js?v=123"></script>
-  <script src="linha_tempo.js?v=123"></script>
-  <script src="reunioes.js?v=123"></script>
-  <script src="app.js?v=123"></script>
-  <script src="personalizar.js?v=123"></script>
-  <script src="ajustes.js?v=123"></script>
-  <script src="assistente.js?v=123"></script>
-  <script src="chat_sala.js?v=123"></script>
+  <script src="abertura.js?v=124"></script>
+  <script src="avatar.js?v=124"></script>
+  <script src="mapa.js?v=124"></script>
+  <script src="expediente.js?v=124"></script>
+  <script src="vida.js?v=124"></script>
+  <script src="apresentacao.js?v=124"></script>
+  <script src="sprites.js?v=124"></script>
+  <script src="ponte.js?v=124"></script>
+  <script src="som.js?v=124"></script>
+  <script src="ceu.js?v=124"></script>
+  <script src="clima.js?v=124"></script>
+  <script src="festas.js?v=124"></script>
+  <script src="simular.js?v=124"></script>
+  <script src="efeitos.js?v=124"></script>
+  <script src="brincar.js?v=124"></script>
+  <script src="tv.js?v=124"></script>
+  <script src="jornal.js?v=124"></script>
+  <script src="novidades.js?v=124"></script>
+  <script src="timelapse.js?v=124"></script>
+  <script src="avisar.js?v=124"></script>
+  <script src="resposta_rapida.js?v=124"></script>
+  <script src="linha_tempo.js?v=124"></script>
+  <script src="reunioes.js?v=124"></script>
+  <script src="app.js?v=124"></script>
+  <script src="personalizar.js?v=124"></script>
+  <script src="times_auto.js?v=124"></script>
+  <script src="ajustes.js?v=124"></script>
+  <script src="assistente.js?v=124"></script>
+  <script src="chat_sala.js?v=124"></script>
 </body>
 </html>
