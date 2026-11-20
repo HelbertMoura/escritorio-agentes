@@ -1,5 +1,6 @@
 // Personalizar > Clima e Datas comemorativas. O clima salva na hora, a cada escolha (POST /api/clima), e o céu muda
-// sem recarregar; a busca de cidade passa pelo servidor (GET /api/clima/busca), que fala com o Open-Meteo. As datas
+// sem recarregar; num andar extra, a mesma seção escolhe a cidade do andar (POST /api/clima/andar, com o fuso dela) ou
+// volta a herdar a do prédio; a busca de cidade passa pelo servidor (GET /api/clima/busca), que fala com o Open-Meteo. As datas
 // juntam as mudanças e salvam de uma vez (POST /api/festas) com a revisão (rev) que veio no /api/config: se outra aba
 // salvou antes, o 409 pede para recarregar; deu certo, a página recarrega para o mapa usar as datas novas.
 // Texto que vem do servidor ou da busca vai para a tela só por textContent.
@@ -9,7 +10,8 @@ const Ajustes = (() => {
   const CHAPEUS = { noel: "gorro de Papai Noel", festa: "chapéu de festa", palha: "chapéu de palha", bruxa: "chapéu de bruxa", coelho: "orelhas de coelho" };
   const MAX_ANDARES = 6, MAX_DATAS = 24, PENDENTE = "Há mudanças que ainda não valem: clique em Salvar datas.";
   let cfg = null;
-  let clima = null, origemClima = "nenhum";   // o que vale agora e de onde vem ("tela", "arquivo" ou "nenhum")
+  let clima = null, origemClima = "nenhum";   // o que vale agora e de onde vem ("tela", "arquivo", "nenhum" ou "andar")
+  let modoAndar = false;                       // num andar extra: a cidade é a do andar (a própria ou a herdada do prédio)
   let climaArquivo = true;                     // o times.json tem cidade? (ajustes.clima_arquivo; sem o campo, supõe que sim)
   let salvo = null, edicao = null;             // datas: { rev, proprias, desligadas } do servidor e a cópia em edição
   let editando = -1;                           // índice da data aberta no formulário (-1: nova)
@@ -40,19 +42,23 @@ const Ajustes = (() => {
     // o tempo de agora é o do estado (clima.js); só vale se já for da cidade escolhida (o servidor zera ao trocar)
     const agora = clima && window.Clima ? Clima.texto() : "";
     $("clima-tempo").textContent = !clima ? "—" : agora.endsWith(` · ${clima.cidade}`) ? agora.slice(0, -(clima.cidade.length + 3)) : "Ainda sem resposta do Open-Meteo";
-    const ORIGENS = { tela: "Escolhida nesta tela.", arquivo: "Vem do times.json do servidor." };
-    $("clima-origem").textContent = Object.hasOwn(ORIGENS, origemClima) ? ORIGENS[origemClima] : "";
-    $("clima-arquivo").hidden = origemClima !== "tela" || !climaArquivo;
-    $("clima-sem").hidden = !clima;
+    const ORIGENS = { tela: "Escolhida nesta tela.", arquivo: "Vem do times.json do servidor.", andar: "Escolhida para este andar." };
+    $("clima-origem").textContent = modoAndar && origemClima !== "andar" ? "Herdada do prédio." : Object.hasOwn(ORIGENS, origemClima) ? ORIGENS[origemClima] : "";
+    $("t-clima").textContent = modoAndar ? "Clima deste andar" : "Clima";
+    $("clima-andar-ajuda").hidden = !modoAndar;
+    $("clima-arquivo").textContent = modoAndar ? "Usar a cidade do prédio" : "Voltar ao times.json";
+    $("clima-arquivo").hidden = modoAndar ? origemClima !== "andar" : origemClima !== "tela" || !climaArquivo;
+    $("clima-sem").hidden = modoAndar || !clima;
   }
   async function salvarClima(corpo, feito) {
     const botoes = [...document.querySelectorAll("#a-clima button")];
     botoes.forEach(b => { b.disabled = true; });
     aviso("clima-aviso", "Salvando…");
     try {
-      const d = await pedir("api/clima", corpo, true);
+      const d = await (modoAndar ? pedir("api/clima/andar", corpo) : pedir("api/clima", corpo, true));
       clima = climaOk(d.clima) ? d.clima : null; origemClima = typeof d.origem === "string" ? d.origem : clima ? "tela" : "nenhum";
-      cfg.clima = clima;
+      cfg.clima = clima; cfg.ajustes = { ...(cfg.ajustes || {}), clima: origemClima };
+      if (window.Ceu) Ceu.definirFuso(clima && clima.fuso);   // a hora do mapa muda junto com a cidade
       mostrarClima(); aviso("clima-aviso", feito(clima), "ok");
     } catch (e) { aviso("clima-aviso", `Não salvou: ${e.message}`, "ruim"); }
     finally {
@@ -65,14 +71,15 @@ const Ajustes = (() => {
 
   // busca de cidade (aqui e no assistente): espera 400 ms de pausa na digitação e faz uma de cada vez (a última
   // digitada roda quando a anterior volta). "Usar esta" chama usar(resultado).
-  function ligarBusca(q, lista, status, usar) {
+  // doPredio(): a busca vai sem o andar (a do prédio e o assistente) ou com ele (a cidade de um andar extra)
+  function ligarBusca(q, lista, status, usar, doPredio = () => true) {
     let pausa = 0, buscando = false, pendente = null;
     async function buscar(texto) {
       if (buscando) { pendente = texto; return; }
       if (texto.length < 2) { lista.replaceChildren(); status.textContent = texto ? "Digite pelo menos 2 letras." : ""; return; }
       buscando = true; status.textContent = "Buscando…";
       try {
-        const d = await pedir(`api/clima/busca?q=${encodeURIComponent(texto)}`, undefined, true);
+        const d = await pedir(`api/clima/busca?q=${encodeURIComponent(texto)}`, undefined, doPredio());
         if (pendente === null) mostrar(Array.isArray(d.resultados) ? d.resultados : []);
       } catch (e) { if (pendente === null) { lista.replaceChildren(); status.textContent = e.message; } }
       finally {
@@ -96,20 +103,28 @@ const Ajustes = (() => {
     q.addEventListener("keydown", ev => { if (ev.key === "Enter") { ev.preventDefault(); clearTimeout(pausa); buscar(q.value.trim()); } });
     return () => { clearTimeout(pausa); q.value = ""; lista.replaceChildren(); status.textContent = ""; };   // limpa a busca
   }
-  // "Usar esta" do assistente: grava a cidade pelo /api/clima e devolve o clima que passou a valer
+  // o config é de um andar extra? (a cidade, então, é a do andar)
+  const andarExtra = c => !!c && Andar.valido(c.andar) && c.andar !== Andar.PRINCIPAL;
+  // a cidade escolhida: a do andar leva também o fuso (a hora local do mapa), quando o geocoding manda
+  const escolhida = (r, doAndar) => ({ cidade: r.nome, lat: r.lat, lon: r.lon, ...(doAndar && typeof r.fuso === "string" && r.fuso ? { fuso: r.fuso } : {}) });
+  // "Usar esta" do assistente: grava a cidade (a do prédio, ou a do andar extra) e devolve o clima que passou a valer
   async function usarCidade(r, c) {
-    const d = await pedir("api/clima", { clima: { cidade: r.nome, lat: r.lat, lon: r.lon } }, true);
+    const doAndar = andarExtra(c);
+    const d = await (doAndar ? pedir("api/clima/andar", { clima: escolhida(r, true) }) : pedir("api/clima", { clima: escolhida(r, false) }, true));
     clima = climaOk(d.clima) ? d.clima : null; origemClima = typeof d.origem === "string" ? d.origem : "tela";
     for (const x of new Set([c, cfg])) if (x) { x.clima = clima; x.ajustes = { ...(x.ajustes || {}), clima: origemClima }; }   // o Personalizar abre já com a cidade nova
+    if (window.Ceu) Ceu.definirFuso(clima && clima.fuso);
     if (cfg) mostrarClima();
     return clima;
   }
-  const limparBusca = ligarBusca($("clima-q"), $("clima-lista"), $("clima-status"), r => salvarClima({ clima: { cidade: r.nome, lat: r.lat, lon: r.lon } }, c => {
+  const limparBusca = ligarBusca($("clima-q"), $("clima-lista"), $("clima-status"), r => salvarClima({ clima: escolhida(r, modoAndar) }, c => {
     limparBusca(); $("clima-q").focus();
     return `Pronto: o tempo agora é o de ${c ? c.cidade : r.nome}. O céu muda em até 1 minuto.`;
-  }));
+  }), () => !modoAndar);
   $("clima-sem").addEventListener("click", () => salvarClima({ clima: null }, () => "Pronto: sem clima, o céu fica sempre limpo."));
-  $("clima-arquivo").addEventListener("click", () => salvarClima({ limpar: true }, c => (c ? `Pronto: vale de novo a cidade do times.json (${c.cidade}).` : "Pronto: o times.json não tem cidade, então fica sem clima.")));
+  $("clima-arquivo").addEventListener("click", () => salvarClima({ limpar: true }, c => (modoAndar
+    ? (c ? `Pronto: o andar volta a usar a cidade do prédio (${c.cidade}).` : "Pronto: o andar volta a usar o clima do prédio, que está sem cidade.")
+    : c ? `Pronto: vale de novo a cidade do times.json (${c.cidade}).` : "Pronto: o times.json não tem cidade, então fica sem clima.")));
   setInterval(() => { if (cfg && !$("v-personalizar").hidden) mostrarClima(); }, 10000);   // o tempo chega com o /api/estado
 
   // ---------- datas comemorativas -----------------------------------------------------------
@@ -533,7 +548,8 @@ const Ajustes = (() => {
   function linhaAndar(a) {
     const li = el("li", "andar-linha"), topo = el("div", "andar-topo"), info = el("div", "andar-info");
     info.append(el("strong", null, a.nome), el("span", "andar-org", a.org || ""),
-      Object.assign(el("span", "andar-conexao", Andar.rotuloConexao(a.conexao)), { title: "Estado da conexão deste andar" }));
+      Object.assign(el("span", "andar-conexao", Andar.rotuloConexao(a.conexao)), { title: "Estado da conexão deste andar" }),
+      Object.assign(el("span", "andar-org", a.cidade ? `Clima: ${a.cidade}` : "Clima do prédio"), { title: "A cidade do clima e da hora deste andar" }));
     const conectar = el("a", "botao secundario", a.conexao === "conectado" ? "Reconectar" : "Conectar");
     conectar.href = `/oauth/conectar?andar=${encodeURIComponent(a.id)}`;
     conectar.setAttribute("aria-label", `${conectar.textContent} o andar ${a.nome} ao agentes.chat`);
@@ -608,7 +624,7 @@ const Ajustes = (() => {
     try {
       const d = await pedirAndares();
       andaresExtras = (Array.isArray(d.andares) ? d.andares : []).filter(a => a && Andar.valido(a.id) && a.id !== Andar.PRINCIPAL && typeof a.nome === "string")
-        .map(a => ({ id: a.id, nome: a.nome, org: typeof a.org === "string" ? a.org : "", conexao: typeof a.conexao === "string" ? a.conexao : "" }));
+        .map(a => ({ id: a.id, nome: a.nome, org: typeof a.org === "string" ? a.org : "", conexao: typeof a.conexao === "string" ? a.conexao : "", cidade: Andar.cidadeOk(a.cidade) }));
       $("a-andares").hidden = false;
       mostrarAndares();
     } catch (e) { if (e.status === 401) return; $("a-andares").hidden = true; }
@@ -864,12 +880,15 @@ const Ajustes = (() => {
     const primeira = !cfg; cfg = c;
     const aj = c.ajustes && typeof c.ajustes === "object" ? c.ajustes : {};
     clima = climaOk(c.clima) ? c.clima : null;
-    origemClima = ["tela", "arquivo", "nenhum"].includes(aj.clima) ? aj.clima : clima ? "arquivo" : "nenhum";
+    origemClima = ["tela", "arquivo", "nenhum", "andar"].includes(aj.clima) ? aj.clima : clima ? "arquivo" : "nenhum";
     climaArquivo = aj.clima_arquivo !== false;
+    modoAndar = andarExtra(c);
     mostrarClima();
-    // o que cada perfil vê: clima, datas e andares são do prédio (só o admin do prédio); no saguão não há times nem conexão
+    // o que cada perfil vê: datas e andares são do prédio (só o admin do prédio), e o clima também, menos num andar
+    // extra, onde quem administra o andar escolhe a cidade dele; no saguão não há times nem conexão
     const p = Andar.perfil(c);
-    $("a-clima").hidden = $("a-datas").hidden = !p.predio;
+    $("a-datas").hidden = !p.predio;
+    $("a-clima").hidden = modoAndar ? !p.admin : !p.predio;
     $("a-equipe").hidden = p.noSaguao;
     if (p.admin) { if (p.predio) lerAndares(); else $("a-andares").hidden = true; lerMembros(); }   // membro e pessoa não têm estas abas (o servidor também barra)
     mostrarConexaoAndar();
@@ -899,6 +918,6 @@ const Ajustes = (() => {
   setInterval(() => { if (eq && !agentesVistos && !$("v-personalizar").hidden && lidos()) mostrarAgentes(); }, 2000);
   // trocou de andar: os times e a aparência em edição eram do outro; a próxima abertura refaz a partir do config novo
   function esquecerAndar() { eqSalvo = eq = null; agentesVistos = false; cfg = null; }
-  return { abrir, ligarBusca, usarCidade, pedir, esquecerAndar };
+  return { abrir, ligarBusca, usarCidade, andarExtra, pedir, esquecerAndar };
 })();
 window.Ajustes = Ajustes;

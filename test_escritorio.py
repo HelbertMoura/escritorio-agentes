@@ -2840,7 +2840,7 @@ class Busca(unittest.TestCase):
         self.assertEqual(st, 200)
         self.assertEqual(r["resultados"][1], {"nome": "Recife", "regiao": "Pernambuco", "pais": "Brasil", "lat": -8.05, "lon": -34.88})
         self.assertEqual(r["resultados"][0], {"nome": "Olinda", "regiao": ("Pernam buco" + "x" * 80)[:60].strip(), "pais": "",
-                                              "lat": -8, "lon": -34.85})
+                                              "lat": -8, "lon": -34.85, "fuso": "America/Recife"})   # o fuso IANA passa
         self.assertEqual(len(r["resultados"]), 2)
         url = urllib.parse.urlsplit(b.urls[0])
         self.assertEqual((url.scheme, url.netloc, url.path), ("https", "geocoding-api.open-meteo.com", "/v1/search"))

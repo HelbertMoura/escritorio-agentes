@@ -70,6 +70,7 @@ function aplicarConfig() {
   // (mesmo se o salvar do nome e da cor falhar depois), sem esperar recarregar
   let logoAtual = config.logo;
   Object.defineProperty(config, "logo", { configurable: true, enumerable: true, get: () => logoAtual, set: v => { logoAtual = v; trocarLogo(v); } });
+  Ceu.definirFuso(config.clima && config.clima.fuso);   // a hora do mapa é a da cidade do andar (sem fuso: Brasília)
   Festas.configurar(config.festas, config.cor);   // datas próprias e festas desligadas (Personalizar)
   festa = Festas.ativa();
   aplicarMarca();
@@ -2616,7 +2617,7 @@ let andares = [], chaveElevador = "", trocando = false;
 function lerAndares(c) {   // só ids e nomes conferidos; texto vem do servidor e entra por textContent
   const lista = c && Array.isArray(c.andares) ? c.andares : [];
   return lista.filter(a => a && Andar.valido(a.id) && typeof a.nome === "string" && a.nome && a.nome.length <= 80)
-    .map(a => ({ id: a.id, nome: a.nome, conexao: typeof a.conexao === "string" ? a.conexao : "" })).slice(0, 7);
+    .map(a => ({ id: a.id, nome: a.nome, conexao: typeof a.conexao === "string" ? a.conexao : "", cidade: Andar.cidadeOk(a.cidade) })).slice(0, 7);
 }
 const nomeDoAndar = id => (andares.find(a => a.id === id) || { nome: "principal" }).nome;
 const anunciarAndar = t => { $("modo-anuncio").textContent = t; };
@@ -2634,12 +2635,13 @@ function mostrarElevador() {
     if (!varios) continue;
     const sel = caixa.querySelector("select");
     if (chave !== chaveElevador || sel.options.length !== andares.length) {   // sem refazer a lista aberta a cada leitura
-      sel.replaceChildren(...andares.map(a => { const o = elem("option", null, a.conexao && a.conexao !== "conectado" ? `${a.nome} · ${Andar.rotuloConexao(a.conexao)}` : a.nome); o.value = a.id; return o; }));
+      sel.replaceChildren(...andares.map(a => { const o = elem("option", null, Andar.rotuloAndar(a)); o.value = a.id; return o; }));
     }
     sel.value = atual.id;
     caixa.querySelector(".elevador-led").dataset.conexao = atual.conexao;
     const estadoAndar = caixa.querySelector(".elevador-estado"); if (estadoAndar) { textoSe(estadoAndar, Andar.estadoDoAndar(atual.conexao)); estadoAndar.dataset.conexao = atual.conexao; }
-    sel.title = atual.conexao ? `Andar ${atual.nome}: ${Andar.rotuloConexao(atual.conexao)}` : `Andar ${atual.nome}`;
+    const onde = atual.cidade ? ` · ${atual.cidade}` : "";
+    sel.title = atual.conexao ? `Andar ${atual.nome}${onde}: ${Andar.rotuloConexao(atual.conexao)}` : `Andar ${atual.nome}${onde}`;
   }
   chaveElevador = chave;
   document.body.classList.toggle("com-andares", varios);
