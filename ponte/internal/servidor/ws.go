@@ -228,6 +228,16 @@ func paraNavegador(msg any) any {
 			ms[i] = semAlvo(x)
 		}
 		m.Moradores = ms
+		// dos workspaces, só os nomes: a tela não usa o projeto nem os membros das bands
+		wss := make([]maestri.Workspace, len(m.Workspaces))
+		for i, w := range m.Workspaces {
+			bs := make([]maestri.Band, len(w.Bands))
+			for j, b := range w.Bands {
+				bs[j] = maestri.Band{ID: b.ID, Nome: b.Nome}
+			}
+			wss[i] = maestri.Workspace{ID: w.ID, Nome: w.Nome, Bands: bs}
+		}
+		m.Workspaces = wss
 		return m
 	case msgMorador:
 		m.Morador = semAlvo(m.Morador)
