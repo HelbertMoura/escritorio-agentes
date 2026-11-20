@@ -223,20 +223,31 @@ function ajustarEscala() {
   if (!cam.ajustada) { verTudo(true); cam.ajustada = true; }
 }
 
-// O zoom mínimo cobre o quadro inteiro (nunca sobra área vazia) e a câmera não sai do mundo.
+// Zoom em valores inteiros (pixel de tela por pixel do mundo): a pixel art fica nítida. O mínimo é o maior inteiro que cabe
+// no quadro (a borda que sobra é gramado); com o prédio maior que o quadro mesmo a 1x, a vista geral reduzida é o mínimo.
+// A câmera não sai do mundo
 function encaixe() { return Math.max(vw / predio.W, vh / predio.H) * dpr; }
-function limitarK(k) { return Math.max(encaixe(), Math.min(10 * dpr, k)); }
+function kMinimo() { const f = encaixe(); return f < 1 ? f : Math.floor(f); }
+function prenderK(k) { return Math.max(kMinimo(), Math.min(10 * dpr, k)); }
+function limitarK(k) {
+  const min = kMinimo();
+  k = prenderK(k);
+  if (k < 1) return k < (min + 1) / 2 ? min : 1;   // entre a vista geral reduzida e o 1x não há meio-termo nítido
+  return Math.max(min, Math.min(10 * dpr, Math.round(k)));
+}
+// um degrau de zoom (botões e teclado): o próximo inteiro para cima ou para baixo
+function degrau(sobe) { const k = cam.alvo ? cam.alvo.k : cam.k; return sobe ? (k < 1 ? 1 : Math.round(k) + 1) : (k <= 1 ? kMinimo() : Math.round(k) - 1); }
 function prenderCamera(c) {
   const meiaW = tela.width / (2 * c.k), meiaH = tela.height / (2 * c.k);
   c.x = predio.W <= meiaW * 2 ? predio.W / 2 : Math.max(meiaW, Math.min(predio.W - meiaW, c.x));
   c.y = predio.H <= meiaH * 2 ? predio.H / 2 : Math.max(meiaH, Math.min(predio.H - meiaH, c.y));
 }
-function verTudo(ja) { moverCamera({ x: predio.W / 2, y: predio.H / 2, k: encaixe() }, ja); }
+function verTudo(ja) { moverCamera({ x: predio.W / 2, y: predio.H / 2, k: kMinimo() }, ja); }
 function moverCamera(alvo, ja) { alvo.k = limitarK(alvo.k); prenderCamera(alvo); if (ja) Object.assign(cam, alvo, { alvo: null }); else cam.alvo = alvo; }
 function enquadrar(s, ja) {
-  const k = Math.min((vw * dpr) / (s.pw + 40), (vh * dpr) / (s.ph + 60));
+  const k = Math.min((vw * dpr) / (s.pw + 40), (vh * dpr) / (s.ph + 60)), kInteiro = k >= 1 ? Math.floor(k) : k;   // a sala inteira, em zoom nítido
   seguir = null;
-  moverCamera({ x: s.px + s.pw / 2, y: s.py + s.ph / 2 - 6, k }, ja);
+  moverCamera({ x: s.px + s.pw / 2, y: s.py + s.ph / 2 - 6, k: kInteiro }, ja);
 }
 function focarSala(s) { enquadrar(s); marcarSala(s); }
 function paraMundo(cx, cy) {
@@ -296,15 +307,17 @@ function desenharCena(t) {
   if (cam.alvo) { // anima a câmera até o alvo
     const f = 0.14;
     cam.x += (cam.alvo.x - cam.x) * f; cam.y += (cam.alvo.y - cam.y) * f; cam.k += (cam.alvo.k - cam.k) * f;
-    if (Math.abs(cam.alvo.k - cam.k) < 0.002 && Math.abs(cam.alvo.x - cam.x) < 0.3) cam.alvo = null;
+    if (Math.abs(cam.alvo.k - cam.k) < 0.002 && Math.abs(cam.alvo.x - cam.x) < 0.3) { cam.k = cam.alvo.k; cam.alvo = null; }
   }
-  cam.k = limitarK(cam.k); prenderCamera(cam);
+  cam.k = cam.alvo ? prenderK(cam.k) : limitarK(cam.k); prenderCamera(cam);   // parada, a câmera fica num zoom inteiro
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, tela.width, tela.height);
+  ctx.fillStyle = "#5f9e4a"; ctx.fillRect(0, 0, tela.width, tela.height);   // o zoom inteiro pode sobrar borda: é mais gramado
   ctx.setTransform(cam.k, 0, 0, cam.k, tela.width / 2 - cam.x * cam.k, tela.height / 2 - cam.y * cam.k);
-  ctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled = cam.k < 1;   // de 1x para cima, pixel inteiro (nítido); abaixo, a vista geral reduzida sem serrilhar
   const ceu = Ceu.agora(), ta = menosMovimento.matches ? 0 : t;   // ta: relógio dos objetos (parado com menos movimento)
   ctx.drawImage(predio.fundo, 0, 0);
+  const rg = predio.ringue, luta = !!rg && !!mundo.cenaSocial && mundo.cenaSocial.tipo === "briga";   // o ringue só aparece na briga
+  if (luta && rg.arte) ctx.drawImage(rg.arte.cv, rg.arte.x, rg.arte.y);
   Efeitos.exterior(ctx, dtQuadro, t, ceu);
   for (const j of predio.janelas) { Ceu.janela(ctx, j, ceu, ta); Clima.naJanela(ctx, j, t); }
   Efeitos.painelLogo(ctx, t, ceu);
@@ -315,9 +328,10 @@ function desenharCena(t) {
   Efeitos.robo(ctx, dtQuadro, t, ceu);
   for (const a of predio.animados) if (a.parede) desenharAnimado(a, ta);
   for (const s of [...predio.salas, ...predio.baixo]) if (s.mural) desenharMural(s.mural);
-  if (predio.ringue && predio.ringue.quadro) Efeitos.placar(ctx, predio.ringue.quadro, placarDaTela(), mundo);   // top 3 da semana na parede do ringue
+  if (luta && rg.quadro) { const q = rg.quadro; Mapa.pintarQuadroPlacar(ctx, q.x, q.y, q.w, q.h); Efeitos.placar(ctx, q, placarDaTela(), mundo); }   // top 3 da semana
+  for (const r of predio.rotulos || []) desenharRotulo(r);
   const cena = [];
-  for (const o of predio.objetos) cena.push({ chave: o.chave, desenha: () => desenharObjeto(o, ta) });
+  for (const o of predio.objetos) if (!o.luta || luta) cena.push({ chave: o.chave, desenha: () => desenharObjeto(o, ta) });
   for (const a of predio.animados) if (!a.parede) cena.push({ chave: a.chave, desenha: () => desenharAnimado(a, ta) });
   for (const s of [...predio.salas, ...predio.baixo]) if (s.placa) cena.push({ chave: s.placa.y + Mapa.PLACA_H, desenha: () => { desenharPlaca(s); } });
   const ent = mundo.entrega;   // entrega da greve atendida (vida.js): o item no ponto e o entregador, na ordem da cena
@@ -354,7 +368,7 @@ function desenharCena(t) {
   for (const b of visiveis) Efeitos.emote(ctx, b, t, ceu.escuro);
   const faixa = Efeitos.faixaVencedor(ctx, mundo, t); if (faixa) ocupadas.push(faixa);   // os balões desviam da faixa do vencedor
   const faixaEntrega = Efeitos.entregaAr(ctx, mundo.entrega, t); if (faixaEntrega) ocupadas.push(faixaEntrega);   // e da faixa do pedido atendido
-  const baloes = !(window.Apresentacao && Apresentacao.ligado());   // na apresentação, sem balão de fala
+  const baloes = !(window.Apresentacao && Apresentacao.ligado()) && cam.k / dpr >= 2;   // sem balão na apresentação e na vista geral
   if (baloes) for (const b of visiveis.filter(b => b.fala).sort((a, b) => b.y - a.y || a.x - b.x)) desenharBalao(b, ocupadas);
   if (baloes) for (const v of visitas) if (v.fala) desenharBalao(v, ocupadas);   // o aceno e o "Toc, toc!" das pessoas (vida.js)
   if (baloes) for (const v of Z ? [...npcs.filter(n => n.fala), ...Z.falas()] : []) desenharBalao(v, ocupadas);   // a equipe, "Quebrada!" e "Interditado"
@@ -546,7 +560,7 @@ function desenharLuzes(dt, ceu) {
     if (b.destino && b.destino.mesa) ocupadas.add(b.destino.mesa.sala);
   }
   const noite = ceu.escuro; // 0 = dia claro, 1 = noite
-  if (noite > 0.02) { ctx.fillStyle = `rgba(8,10,34,${noite * 0.5})`; ctx.fillRect(0, 0, predio.W, predio.H); }
+  if (noite > 0.02) { const v = vistaMundo(); ctx.fillStyle = `rgba(8,10,34,${noite * 0.5})`; ctx.fillRect(Math.min(0, v.l), Math.min(0, v.t), Math.max(predio.W, v.r) - Math.min(0, v.l), Math.max(predio.H, v.b) - Math.min(0, v.t)); }
   const agora = performance.now();
   for (const s of [...predio.salas, ...predio.baixo]) {
     const acesa = s.tipo === "recepcao" || ocupadas.has(s) || (s.tipo === "banheiro" && banheiroEmUso());
@@ -576,7 +590,7 @@ function desenharLuzes(dt, ceu) {
       }
       else if (/arcade|rack_tv|estacao_gamer|aquario|neon|tv_parede/.test(o.nome || "")) brilho(o.x + o.w / 2, o.y + o.h / 3, 26, `rgba(140,110,255,${0.22 * noite})`);
     }
-    for (const l of predio.luzesTeto || []) { // luminárias de teto do corredor: lâmpada acesa e a luz no chão
+    for (const l of [...(predio.luzesTeto || []), ...(predio.luzesTeto2 || [])]) { // luminárias de teto dos corredores: lâmpada acesa e a luz no chão
       if (window.Zeladoria && Zeladoria.lampadaApagada(l, menosMovimento.matches ? 0 : performance.now())) continue;   // a quebrada pisca (zeladoria.js)
       brilho(l.x, l.y + 22, 34, `rgba(255,214,150,${0.32 * noite})`);
       ctx.fillStyle = `rgba(255,236,180,${0.9 * noite})`; ctx.fillRect(l.x - 2, l.y + 3, 5, 1);
@@ -601,46 +615,79 @@ function vistaMundo() { const mw = tela.width / (2 * cam.k), mh = tela.height / 
 function tamMundo(mult) { return Math.max((11 * dpr) / cam.k, mult); }
 function fonte(peso, mult) { return `${peso} ${tamMundo(mult)}px Figtree, system-ui, sans-serif`; }
 
+// O nome sobre o boneco. Na vista geral (zoom abaixo de 2x) só o boneco e o selo "!"/"?" de quem espera você; de 2x
+// para cima, o nome curto ("Maestro · Opus High · Claude Code" → "Maestro"; o completo fica no cartão). Nome nunca
+// encavala: sem lugar, some (o selo fica). Corpo fora da tela: nada, e quem espera você vira uma setinha na borda
+const nomeCurto = n => String(n || "").split(" · ")[0];
 function desenharEtiqueta(b, t, ocupadas) {
-  const S = escala, topo = (b.y - Avatar.TAM - 1) * S, v = vistaMundo();
+  const S = escala, topo = (b.y - Avatar.TAM - 1) * S, v = vistaMundo(), bx0 = b.x * S;
+  const est = b.trabalho && estadoDe(b.trabalho.status), espera = !!(est && est.balao);
+  b.etq = null; b.selo = null;
   ctx.font = fonte(700, 4.6);
-  const tam = tamMundo(4.6), est0 = b.trabalho && estadoDe(b.trabalho.status);
-  const px = b.status && Mapa.iconeStatus(b.status) ? Math.max(1, Math.round(tam / 6)) : 0, iw = px ? px * 9 + tam * 0.35 : 0;   // status da pessoa (1.6): o ícone à esquerda do nome
-  // tela estreita (celular): o terminal sai sem o programa ("Maestro · Opus High · Claude Code +2" → "Maestro · Opus High +2")
-  const nome = b.terminal && tela.clientWidth < 600 ? b.nome.replace(/ · [^·]+?( \+\d+)?$/, "$1") : b.nome;
-  const w = ctx.measureText(nome).width + tam + iw, h = tam + 6, folga = est0 && est0.balao ? tam * 2.4 : 0;
-  const x = Math.max(v.l + 2, Math.min(v.r - w - 2 - folga, b.x * S - w / 2)), cx = x + w / 2;   // nunca cortado na borda da tela
-  let y = Math.max(v.t + 2, topo - h);
-  const bate = () => ocupadas.some(r => x < r.x + r.w + 3 && x + w + 3 > r.x && y < r.y + r.h + 2 && y + h + 2 > r.y);
-  for (let i = 0, n = tela.clientWidth < 600 ? 2 : 6; i < n && bate(); i++) y -= h + 3;   // no celular, pilha curta
-  // sem lugar mesmo subindo: o nome some (volta ao aproximar), menos o selecionado e quem espera você (o selo "!" ou "?")
-  if (bate() && selecionado !== b.id && !(est0 && est0.balao)) { b.etq = null; b.selo = null; return; }
-  ocupadas.push({ x, y, w, h });
-  b.etq = { x, y, w, h };
+  const tam = tamMundo(4.6);
+  if (bx0 < v.l || bx0 > v.r || b.y * S < v.t || topo > v.b) { if (espera) setaNaBorda(b, est, v, tam, t, ocupadas); return; }
+  const sel = selecionado === b.id, comNome = sel || cam.k / dpr >= 2;
+  const px = comNome && b.status && Mapa.iconeStatus(b.status) ? Math.max(1, Math.round(tam / 6)) : 0, iw = px ? px * 9 + tam * 0.35 : 0;   // status da pessoa (1.6): o ícone à esquerda do nome
+  const nome = nomeCurto(b.nome), w = ctx.measureText(nome).width + tam + iw, h = tam + 6;
+  let pilula = null;
+  if (comNome) {
+    const x = bx0 - w / 2;
+    const bate = y => ocupadas.some(r => x < r.x + r.w + 3 && x + w + 3 > r.x && y < r.y + r.h + 2 && y + h + 2 > r.y);
+    let y = topo - h;
+    for (let i = 0, n = tela.clientWidth < 600 ? 0 : 1; i < n && bate(y); i++) y -= h + 3;   // no celular, nada de pilha
+    if (sel || !bate(y)) pilula = { x, y, w, h };
+  }
   ctx.globalAlpha = combina(b) ? 1 : 0.35;
-  ctx.fillStyle = selecionado === b.id ? "#f2f2f3" : "rgba(15,15,17,.85)";
-  arred(x, y, w, h, h / 2); ctx.fill();
-  ctx.fillStyle = selecionado === b.id ? "#111" : "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.fillText(nome, cx + iw / 2, y + h / 2 + 1);
-  if (px) Mapa.desenharStatus(ctx, b.status, Math.round(x + tam * 0.4), Math.round(y + (h - 9 * px) / 2), px);
-  const est = b.trabalho && estadoDe(b.trabalho.status);
-  b.selo = null;
-  if (est && est.balao) { // selo "!" (aprovação) ou "?" (pergunta): pulsa até a pessoa resolver no agentes.chat
-    const aprov = est.classe === "aprovacao", calmo = menosMovimento.matches;
-    const r = tam * (aprov ? 1.1 : 0.9), bx = x + w + r * 0.8, by = y + h / 2 - (calmo ? 0 : Math.floor(t / 400) % 2);
-    const cor = Mapa.rgb(Mapa.cor(aprov ? "ambar" : "azul"));
-    if (!calmo) { // anel que cresce e some
-      const f = (t % 1400) / 1400;
-      ctx.strokeStyle = `rgba(${cor},${0.85 * (1 - f)})`; ctx.lineWidth = Math.max(0.6, (1.6 * dpr) / cam.k);
-      ctx.beginPath(); ctx.arc(bx, by, r * (1 + f * 1.1), 0, Math.PI * 2); ctx.stroke();
-    }
-    ctx.fillStyle = "#1b1a26"; ctx.beginPath(); ctx.arc(bx, by, r + Math.max(0.5, dpr / cam.k), 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = `rgb(${cor})`; ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#111"; ctx.font = fonte(800, aprov ? 5.6 : 4.6); ctx.fillText(est.balao, bx, by + 1);
-    if (b.trabalho.url) b.selo = { x: bx, y: by, r: r * 1.6 };
+  if (pilula) {
+    const { x, y } = pilula;
+    ocupadas.push(pilula); b.etq = pilula;
+    ctx.fillStyle = sel ? "#f2f2f3" : "rgba(15,15,17,.85)";
+    arred(x, y, w, h, h / 2); ctx.fill();
+    ctx.fillStyle = sel ? "#111" : "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(nome, x + w / 2 + iw / 2, y + h / 2 + 1);
+    if (px) Mapa.desenharStatus(ctx, b.status, Math.round(x + tam * 0.4), Math.round(y + (h - 9 * px) / 2), px);
+  }
+  if (espera) { // selo "!" (aprovação) ou "?" (pergunta): sempre aparece; pulsa até a pessoa resolver no agentes.chat
+    const r = tam * (est.classe === "aprovacao" ? 1.1 : 0.9) * (pilula ? 1 : 0.8);   // sozinho (vista geral), um pouco menor
+    const bx = pilula ? pilula.x + w + r * 0.8 : bx0, by = pilula ? pilula.y + h / 2 : topo - r - 1;
+    desenharSelo(b, est, bx, by, r, t);
     ocupadas.push({ x: bx - r * 1.3, y: by - r * 1.3, w: r * 2.6, h: r * 2.6 });   // balões não cobrem o selo
   }
   ctx.globalAlpha = 1;
+}
+function desenharSelo(b, est, bx, by, r, t) {
+  const aprov = est.classe === "aprovacao", calmo = menosMovimento.matches;
+  by -= calmo ? 0 : Math.floor(t / 400) % 2;
+  const cor = Mapa.rgb(Mapa.cor(aprov ? "ambar" : "azul"));
+  if (!calmo) { // anel que cresce e some
+    const f = (t % 1400) / 1400;
+    ctx.strokeStyle = `rgba(${cor},${0.85 * (1 - f)})`; ctx.lineWidth = Math.max(0.6, (1.6 * dpr) / cam.k);
+    ctx.beginPath(); ctx.arc(bx, by, r * (1 + f * 1.1), 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.fillStyle = "#1b1a26"; ctx.beginPath(); ctx.arc(bx, by, r + Math.max(0.5, dpr / cam.k), 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = `rgb(${cor})`; ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#111"; ctx.font = fonte(800, aprov ? 5.6 : 4.6); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(est.balao, bx, by + 1);
+  if (b.trabalho.url) b.selo = { x: bx, y: by, r: r * 1.6 };
+}
+// quem espera você e está fora da tela: o selo pequeno na borda, com a ponta virada para onde ele está (tocar abre o pedido)
+function setaNaBorda(b, est, v, tam, t, ocupadas) {
+  const m = tam * 1.4, r = tam * 0.8, ax = b.x * escala, ay = (b.y - 10) * escala;
+  let x = Math.max(v.l + m, Math.min(v.r - m, ax)), y = Math.max(v.t + m, Math.min(v.b - m, ay));
+  const lado = x !== ax, bate = () => ocupadas.some(o => Math.abs(o.x + o.w / 2 - x) < r * 2.4 && Math.abs(o.y + o.h / 2 - y) < r * 2.4);
+  for (let i = 0; i < 8 && bate(); i++) { if (lado) y = Math.min(v.b - m, y + r * 2.6); else x = Math.min(v.r - m, x + r * 2.6); }   // uma do lado da outra, ao longo da borda
+  if (bate()) return;
+  ocupadas.push({ x: x - r * 1.3, y: y - r * 1.3, w: r * 2.6, h: r * 2.6 });
+  const ang = Math.atan2(ay - y, ax - x);
+  const cor = Mapa.rgb(Mapa.cor(est.classe === "aprovacao" ? "ambar" : "azul"));
+  ctx.fillStyle = "#1b1a26"; ctx.beginPath();
+  ctx.moveTo(x + Math.cos(ang) * r * 2, y + Math.sin(ang) * r * 2);
+  ctx.lineTo(x + Math.cos(ang + 2.2) * r * 1.1, y + Math.sin(ang + 2.2) * r * 1.1); ctx.lineTo(x + Math.cos(ang - 2.2) * r * 1.1, y + Math.sin(ang - 2.2) * r * 1.1);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = `rgb(${cor})`; ctx.beginPath();
+  ctx.moveTo(x + Math.cos(ang) * r * 1.7, y + Math.sin(ang) * r * 1.7);
+  ctx.lineTo(x + Math.cos(ang + 2.3) * r * 0.9, y + Math.sin(ang + 2.3) * r * 0.9); ctx.lineTo(x + Math.cos(ang - 2.3) * r * 0.9, y + Math.sin(ang - 2.3) * r * 0.9);
+  ctx.closePath(); ctx.fill();
+  desenharSelo(b, est, x, y, r, t);
 }
 
 // Mural da sala (1.6): o quadro de cortiça já está no fundo (mapa.js); com aviso fixado no canal (o mural_v do
@@ -742,7 +789,7 @@ function clarear(hex, k) {
 function desenharPlaca(s) {
   const p = s.placa, c = ctx; if (!p) return;
   const px = (x, y, w, h, cor) => { c.fillStyle = cor; c.fillRect(x, y, w, h); };
-  const cor = corDaSala(s), txt = Mapa.nomePlaca(s.nome).toUpperCase(), h = Mapa.PLACA_H, contador = s.mesas && s.mesas.length;
+  const cor = corDaSala(s), txt = Mapa.nomePlaca(s.nome).toUpperCase(), h = Mapa.PLACA_H, contador = s.mesas && s.mesas.length && !s.projeto;
   const w = Math.max(30, Math.min(p.w, p.max - (contador ? p.total - p.w : 0))), x = p.x, y = p.y;
   s.placaRet = { x, y, w, h };
   c.font = Mapa.PLACA_FONTE; c.textBaseline = "middle"; c.textAlign = "left";
@@ -765,6 +812,15 @@ function desenharPlaca(s) {
     px(x + w + 3, y + 3, lw, h - 6, na ? "#163a24" : "#26262b");
     c.fillStyle = na ? "#6ee7a0" : "#a1a1aa"; c.fillText(etq, x + w + 6, y + h / 2 + 1);
   }
+}
+
+// Faixa com o nome de um bloco do prédio (mapa.js: predio.rotulos), na parede grossa acima dele: "PROJETOS"
+function desenharRotulo(r) {
+  const c = ctx; c.font = Mapa.PLACA_FONTE; c.textBaseline = "middle"; c.textAlign = "left";
+  const w = Math.ceil(c.measureText(r.texto).width) + 10, h = 10;
+  c.fillStyle = "#1b1a26"; c.fillRect(r.x - 1, r.y - 1, w + 2, h + 2);
+  c.fillStyle = "#33303f"; c.fillRect(r.x, r.y, w, h);
+  c.fillStyle = "#f2ead8"; c.fillText(r.texto, r.x + 5, r.y + h / 2 + 1);
 }
 
 function arred(x, y, w, h, r) {
@@ -1052,7 +1108,7 @@ function atualizarSalas() {
   for (const s of [...predio.salas, ...predio.baixo]) {
     const b = $("salas").querySelector(`[data-sala="${CSS.escape(s.nome)}"]`); if (!b) continue;
     let txt, ativa, espera = false;
-    if (s.mesas && s.mesas.length) { // time: quem está na mesa trabalhando, de quantos; âmbar se alguém espera você
+    if (s.mesas && s.mesas.length && !s.projeto) { // time: quem está na mesa trabalhando, de quantos; âmbar se alguém espera você
       const donos = bs.filter(x => (s.handles || []).includes(x.handle));
       const na = donos.filter(x => x.lugar && x.lugar.tipo === "mesa" && x.trabalho).length;
       txt = `${na}/${donos.length}`; ativa = na > 0; espera = donos.some(x => situacao(x) === "esp");
@@ -2218,10 +2274,13 @@ document.addEventListener("click", ev => { if (!$("painel-som").contains(ev.targ
 atualizarBotaoSom();
 
 // ---------- câmera: mouse, toque (um dedo arrasta, dois dão pinça) e teclado ----------
+let roda = null;   // o zoom livre da roda, que a tela arredonda
 tela.addEventListener("wheel", ev => {
   if (!predio) return; ev.preventDefault(); TV.tocou();
-  const antes = paraMundo(ev.clientX, ev.clientY);
-  cam.alvo = null; seguir = null; cam.k = limitarK(cam.k * Math.exp(-ev.deltaY * 0.0015));
+  const antes = paraMundo(ev.clientX, ev.clientY), agora = performance.now();
+  // a roda acumula num zoom livre e a tela mostra o inteiro mais perto (o touchpad dá passos pequenos)
+  roda = { k: prenderK((roda && agora - roda.t < 500 ? roda.k : cam.k) * Math.exp(-ev.deltaY * 0.0015)), t: agora };
+  cam.alvo = null; seguir = null; cam.k = limitarK(roda.k);
   const depois = paraMundo(ev.clientX, ev.clientY);
   cam.x += antes.x - depois.x; cam.y += antes.y - depois.y;
 }, { passive: false });
@@ -2344,8 +2403,8 @@ function mostrarCartao(perto, cx, cy) {
 }
 tela.addEventListener("pointerleave", () => { $("cartao-agente").hidden = true; Brincar.sobre({ x: -1e9, y: -1e9 }); });
 tela.addEventListener("dblclick", ev => { const s = predio && salaEm(paraMundo(ev.clientX, ev.clientY)); if (s) { fecharFicha(); focarSala(s); } });
-$("zoom-mais").addEventListener("click", () => moverCamera({ x: cam.x, y: cam.y, k: cam.k * 1.4 }));
-$("zoom-menos").addEventListener("click", () => { seguir = null; moverCamera({ x: cam.x, y: cam.y, k: cam.k / 1.4 }); });
+$("zoom-mais").addEventListener("click", () => moverCamera({ x: cam.x, y: cam.y, k: degrau(true) }));
+$("zoom-menos").addEventListener("click", () => { seguir = null; moverCamera({ x: cam.x, y: cam.y, k: degrau(false) }); });
 $("ver-tudo").addEventListener("click", () => { fecharFicha(); marcarSala(null); verTudo(); });
 function telaCheia(ligar) {
   const c = $("palco-cartao"); if (ligar === c.classList.contains("cheio")) return;
@@ -2372,8 +2431,8 @@ document.addEventListener("keydown", ev => {
   if (!predio || $("v-escritorio").hidden || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
   if (["+", "=", "-", "0"].includes(ev.key)) TV.tocou();
   if (ev.key === "/" && !ev.ctrlKey && !ev.metaKey) { ev.preventDefault(); irParaBusca(); }
-  else if (ev.key === "+" || ev.key === "=") moverCamera({ x: cam.x, y: cam.y, k: cam.k * 1.3 });
-  else if (ev.key === "-") { seguir = null; moverCamera({ x: cam.x, y: cam.y, k: cam.k / 1.3 }); }
+  else if (ev.key === "+" || ev.key === "=") moverCamera({ x: cam.x, y: cam.y, k: degrau(true) });
+  else if (ev.key === "-") { seguir = null; moverCamera({ x: cam.x, y: cam.y, k: degrau(false) }); }
   else if (ev.key === "0") { fecharFicha(); verTudo(); }
 });
 // ---------- visitantes: quem mais está olhando (o /api/estado manda os outros, sem a própria sessão) ----------
