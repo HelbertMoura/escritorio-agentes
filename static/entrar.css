@@ -84,8 +84,16 @@ button { margin-top: 14px; height: 48px; border: 0; border-radius: 0; background
 .nao-sou:hover { color: var(--creme); text-decoration-color: currentColor; }
 
 /* rodapé de parceria: fixo (não segue a personalização), com os mesmos valores do index; no pé da coluna do formulário */
-.parceria { font: 400 12px/1.5 Figtree, system-ui, sans-serif; color: #a9a294; text-align: center; }
+.parceria { font: 400 13px/1.5 Figtree, system-ui, sans-serif; color: #a9a294; text-align: center; }
 .parceria p { margin: 0; }
+/* a marca da Firmópolis em cima, num degrau: fica a mesma em toda instalação (a empresa do cliente está no topo) */
+.par-marca { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 6px !important; padding: 6px 10px;
+  background: var(--grafite-2, #26262e); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .35); clip-path: var(--degrau, none);
+  color: var(--creme); font: 400 14px/1 var(--fonte-pixel); }
+.par-marca img { image-rendering: pixelated; }
+.parceria a.par-selo { min-height: 0; padding: 4px 7px; color: #1b1a2b; text-decoration: none; }
+.parceria a.par-selo:hover { color: #1b1a2b; background: var(--creme); }
+.par-selo { padding: 3px 6px; background: var(--ambar-texto); color: #1b1a2b; font: 400 10px/1 var(--fonte-pixel); letter-spacing: .06em; text-transform: uppercase; }
 .par-fonte { white-space: nowrap; }   /* o "·" quebra junto com o link */
 .parceria a { color: var(--texto); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: rgba(233, 227, 212, .45);
   display: inline-flex; align-items: center; min-height: 32px; padding: 0 4px; }
