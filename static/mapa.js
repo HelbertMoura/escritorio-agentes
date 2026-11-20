@@ -10,7 +10,8 @@ const PAREDE = 3;              // altura da parede, em tiles
 const MESA_W = 3, MESA_H = 3;  // célula de mesa, em tiles
 const BAIXO_PISO = 8;          // piso das salas de baixo, em tiles
 const CORREDOR_H = 3;
-const MX = 5, MY = 4, MB = 11;  // área externa: laterais, topo e rua embaixo (em tiles)
+const MX = 5, MY = 4, MB = 13;  // área externa: laterais, topo e rua embaixo (em tiles)
+const FACHADA = 32;  // px: a frente do prédio vista de frente, embaixo da planta (Firmópolis); empurra a rua para baixo
 const ESTILOS_MESA = [
   { tampo: "#c9a777", brilho: "#dcbd8c", frente: "#8a6a45", borda: "#6e5236", pe: "#2b2b36" },   // madeira clara
   { tampo: "#7a5236", brilho: "#946646", frente: "#53361f", borda: "#3e2716", pe: "#1f1f26" },   // madeira escura
@@ -445,7 +446,7 @@ function montar(atlas, config, grupos, planta) {
   pintaPx(c, cx1, cT0, 3, corredor.h * T, "#23212f");                                        // fundo do corredor
   pintaPx(c, cx0 - 3, cT0, 3, 8, "#23212f"); pintaPx(c, cx0 - 3, cB0 - 8, 3, 8, "#23212f");   // batentes da entrada
   { // lado de fora: calçada de pedra portuguesa (ondas) da porta até a rua, capacho na porta e soleira por dentro
-    const px0 = predioRet.x - 26, fimCaminho = predioRet.y + predioRet.h + 68;
+    const px0 = predioRet.x - 26, fimCaminho = predioRet.y + predioRet.h + FACHADA + 68;
     const pedra = (x, y, w, h) => {
       pintaPx(c, x, y, w, h, "#ece8de");
       c.fillStyle = "#5c5c64";
@@ -1194,10 +1195,11 @@ function pintarExterior(c, atlas, W, H, p, marca) {
   c.fillStyle = "#a7a49c";
   for (let x = p.x - m; x < p.x + p.w + m; x += 8) { c.fillRect(x, p.y - m, 1, m); c.fillRect(x, p.y + p.h, 1, m); }
   for (let y = p.y - m; y < p.y + p.h + m; y += 8) { c.fillRect(p.x - m, y, m, 1); c.fillRect(p.x + p.w, y, m, 1); }
-  // sombra do prédio
-  c.fillStyle = "rgba(0,0,0,.22)"; c.fillRect(p.x + 4, p.y + p.h, p.w, 5); c.fillRect(p.x + p.w, p.y + 4, 5, p.h);
+  // sombra do prédio (embaixo, a fachada faz a sombra)
+  c.fillStyle = "rgba(0,0,0,.22)"; c.fillRect(p.x + p.w, p.y + 4, 5, p.h + FACHADA);
+  pintarFachada(c, atlas, p, r);
   // rua: meio-fio, asfalto e faixas
-  const yRua = p.y + p.h + 84, alt = 44;
+  const yRua = p.y + p.h + FACHADA + 84, alt = 44;
   c.fillStyle = "#d7d4cc"; c.fillRect(0, yRua - 4, W, 4);
   c.fillStyle = "#3d3f46"; c.fillRect(0, yRua, W, alt);
   for (let i = 0; i < W * alt / 30; i++) { c.fillStyle = r() < 0.5 ? "#45474f" : "#36383f"; c.fillRect(Math.floor(r() * W), yRua + Math.floor(r() * alt), 1, 1); }
@@ -1223,8 +1225,30 @@ function pintarExterior(c, atlas, W, H, p, marca) {
   c.fillStyle = "#4f8a3c"; for (let i = 0; i < W / 40; i++) c.fillRect(Math.floor(r() * W), yRua - 17, 1, 2);   // tufos de grama no meio-fio
 }
 
+// A frente do prédio, vista de frente, numa faixa embaixo da planta: reboco, cornija, rodapé de pedra, janelas, a porta de
+// vidro no meio com arandelas dos lados e floreiras no chão. As peças são do PixelLab (arte/pixellab/fachada); a parede, daqui.
+function pintarFachada(c, atlas, p, r) {
+  const y0 = p.y + p.h, x0 = p.x, x1 = p.x + p.w, h = FACHADA;
+  c.fillStyle = "#e6cfa6"; c.fillRect(x0, y0, p.w, h);
+  for (let i = 0; i < p.w * h / 14; i++) { c.fillStyle = r() < 0.5 ? "#dcc298" : "#efdab4"; c.fillRect(x0 + Math.floor(r() * p.w), y0 + 3 + Math.floor(r() * (h - 6)), 1, 1); }
+  c.fillStyle = "#b8956a"; c.fillRect(x0, y0, p.w, 3); c.fillStyle = "#d9bd8f"; c.fillRect(x0, y0 + 3, p.w, 1);   // cornija
+  c.fillStyle = "#958d80"; c.fillRect(x0, y0 + h - 3, p.w, 3); c.fillStyle = "#7d766b"; c.fillRect(x0, y0 + h - 1, p.w, 1);   // rodapé
+  for (let x = x0 + 40; x < x1; x += 80) { c.fillStyle = "#d4b88c"; c.fillRect(x, y0 + 4, 2, h - 7); }   // pilastras
+  const peca = (n, cx, base) => { const s = sprite(atlas, n); if (s) c.drawImage(atlas.img, s[0], s[1], s[2], s[3], Math.round(cx - s[2] / 2), base - s[3], s[2], s[3]); return s; };
+  const porta = Math.round(x0 + p.w / 2), fora = [porta - 34, porta + 34];
+  for (let x = x0 + 20; x < x1 - 10; x += 40) if (Math.abs(x - porta) > 30) peca("fachada_janela", x, y0 + h - 3);
+  peca("fachada_porta", porta, y0 + h - 2);
+  for (const x of [porta - 18, porta + 18]) peca("fachada_arandela", x, y0 + 22);
+  // calçadinha na frente da fachada e floreiras entre as janelas
+  c.fillStyle = "#b9b6ae"; c.fillRect(x0, y0 + h, p.w, 6); c.fillStyle = "#a7a49c"; for (let x = x0; x < x1; x += 8) c.fillRect(x, y0 + h, 1, 6);
+  c.fillStyle = "rgba(0,0,0,.18)"; c.fillRect(x0, y0 + h, p.w, 2);
+  for (let x = x0 + 40; x < x1 - 20; x += 160) if (!fora.some(f => Math.abs(f - x) < 40)) peca("fachada_floreira", x, y0 + h + 8);
+}
+// onde ficam as arandelas da fachada (acendem à noite, com os postes)
+const arandelas = p => { const porta = Math.round(p.x + p.w / 2); return [porta - 18, porta + 18].map(x => ({ x, y: p.y + p.h + 8 })); };
+
 function montarExterior(atlas, obj0, W, H, p, marca, portaY) {
-  const r = rng(marca ^ 11), ext = { carros: [], postes: [], ruaY: p.y + p.h + 84, ruaAlt: 44 };
+  const r = rng(marca ^ 11), ext = { carros: [], postes: [], ruaY: p.y + p.h + FACHADA + 84, ruaAlt: 44 };
   const tem = n => !!sprite(atlas, n), alto = n => sprite(atlas, n)[3], larg = n => sprite(atlas, n)[2];
   // planta e árvore saem espelhadas metade das vezes (pixel art não escala sem borrar: a variação vem do espelho e do deslocamento)
   // fora: árvores e plantas daqui balançam com o vento do clima (efeitos.js)
@@ -1233,7 +1257,7 @@ function montarExterior(atlas, obj0, W, H, p, marca, portaY) {
   // expediente (aberto/fechado, desenhada no efeitos.js) e, depois dela, o bicicletário. A placa vem antes de tudo do gramado
   // (os outros desviam dela) e fica fora da rota de quem sai: pelo caminho até a calçada e de lá para a esquerda (vida.js)
   obj("planta2", p.x - 14, portaY - 12);
-  obj("placa_expediente", p.x + 26, p.y + p.h + 59); obj("bicicletario", p.x + 84, p.y + p.h + 40);
+  obj("placa_expediente", p.x + 26, p.y + p.h + FACHADA + 59); obj("bicicletario", p.x + 84, p.y + p.h + FACHADA + 40);
   // cada empresa ganha sua rua: 3 espécies de árvore sorteadas (as outras aparecem de vez em quando) e seu ritmo
   const especies = ["arvore1", "arvore2", "arvore3", "arvore_ipe", "arvore_jacaranda"].filter(tem);
   for (let i = especies.length - 1; i > 0; i--) { const k = Math.floor(r() * (i + 1)); [especies[i], especies[k]] = [especies[k], especies[i]]; }
@@ -1263,6 +1287,7 @@ function montarExterior(atlas, obj0, W, H, p, marca, portaY) {
   for (let x = 30 + r() * 70; x < W - 20; x += passo + (r() - 0.5) * 40) {
     const o = obj("poste", x, meioFio); if (o) ext.postes.push({ x: o.x + o.w / 2, y: o.y + 4 });
   }
+  ext.postes.push(...arandelas(p));
   obj("caixa_correio", p.x - 6, meioFio);
   const urbano = ["banco", "banco", "lixeira_rua", "lixeira_rua", "hidrante", "hidrante", "orelhao", "ponto_onibus", "banca_jornal"].filter(tem);
   const vagasRua = Math.max(4, Math.floor((W - p.x - 40) / 130));
@@ -1272,7 +1297,7 @@ function montarExterior(atlas, obj0, W, H, p, marca, portaY) {
     obj(n, x, n === "banco" ? meioFio - 2 : meioFio, true);
   }
   // gramado entre o prédio e a rua: uma pracinha (mesa de piquenique e árvore) e canteiros espalhados
-  const yGrama = p.y + p.h + 44, praca = p.x + 120 + Math.floor(r() * Math.max(1, p.w - 300));
+  const yGrama = p.y + p.h + FACHADA + 44, praca = p.x + 120 + Math.floor(r() * Math.max(1, p.w - 300));
   if (tem("mesa_piquenique")) { obj("mesa_piquenique", praca, yGrama + 8, true); if (especies.length) obj(arvore(), praca + 44, yGrama + 2, true); }
   for (let x = p.x + 30; x < p.x + p.w - 20; x += 64 + Math.floor(r() * 34)) {
     if (ext.postes.some(q => Math.abs(q.x - x) < 34) || Math.abs(x - praca) < 70) continue;   // nada atrás de poste nem em cima da praça
