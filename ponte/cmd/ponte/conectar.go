@@ -144,7 +144,7 @@ func proximoPasso(saida io.Writer, servico bool) error {
 			return criarServico(saida)
 		}
 		fmt.Fprintln(saida, "  Deixe a ponte rodando como serviço (sobe no login e volta se cair):")
-		fmt.Fprintln(saida, "    ponte conectar <a mesma URL e chave> --servico")
+		fmt.Fprintln(saida, "    ponte conectar <a mesma URL> --servico")
 		fmt.Fprintln(saida, "  Ou, só para ver agora, rode num terminal: ponte")
 	case "windows":
 		fmt.Fprintln(saida, "  Para a ponte subir sozinha no login: ponte setup --aplicar --autostart")
