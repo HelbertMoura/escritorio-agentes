@@ -176,8 +176,9 @@ class Http(unittest.TestCase):
         self.assertEqual(self.post("/api/ponte/chave", {"acao": "gerar"}, {})[0], 401)
         st, d, _ = self.post("/api/ponte/chave", {"acao": "gerar"}, self.dono)
         self.assertEqual(st, 200)
-        chave = d["comando"].split()[-1]
-        self.assertEqual(d["comando"], f"ponte conectar {e.BASE} {chave}")
+        chave = d["chave"]
+        self.assertEqual(d["comando"], f"ponte conectar {e.BASE}")   # a chave não vai no comando (histórico do shell)
+        self.assertRegex(chave, r"^[0-9a-f]{64}$")
         self.assertEqual(self.ler(self.dono)[1]["espelho"], "tela")
         self.assertEqual(self.enviar(corpo(), chave=chave)[0], 204)
         self.assertTrue(self.ler(ana)[1]["ativo"])

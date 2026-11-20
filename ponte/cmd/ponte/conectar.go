@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -17,7 +18,8 @@ import (
 	"firmopolis/ponte/internal/servidor"
 )
 
-const usoConectar = `uso: ponte conectar URL CHAVE [--servico]
+const usoConectar = `uso: ponte conectar URL [--servico]          (a chave é pedida em seguida)
+     ponte conectar URL CHAVE [--servico]    (para scripts: a chave fica no histórico)
 
   Liga esta máquina ao Firmópolis de uma vez: testa a chave, instala os hooks dos
   agentes e grava o espelho. Os terminais daqui aparecem no mapa de qualquer navegador.
@@ -47,7 +49,26 @@ var (
 	}
 )
 
-// conectar é o `ponte conectar URL CHAVE`: testa antes de mudar qualquer coisa, depois
+// entradaChave é de onde o conectar lê a chave quando ela não vem como argumento (os testes trocam).
+var entradaChave io.Reader = os.Stdin
+
+// lerChave pega a chave da variável FIRMOPOLIS_CHAVE ou, sem ela, de uma linha da entrada.
+func lerChave(saida io.Writer) (string, error) {
+	if ch := strings.TrimSpace(os.Getenv("FIRMOPOLIS_CHAVE")); ch != "" {
+		return ch, nil
+	}
+	fmt.Fprint(saida, "Cole a chave de Personalizar > Ponte local e tecle Enter: ")
+	linha, err := bufio.NewReader(io.LimitReader(entradaChave, 512)).ReadString('\n')
+	if strings.TrimSpace(linha) == "" {
+		if err == nil {
+			err = errors.New("chave vazia")
+		}
+		return "", fmt.Errorf("não li a chave (%v)", err)
+	}
+	return strings.TrimSpace(linha), nil
+}
+
+// conectar é o `ponte conectar URL [CHAVE]`: testa antes de mudar qualquer coisa, depois
 // instala os hooks e grava o espelho, e diz o próximo passo.
 func conectar(args []string, saida io.Writer) error {
 	var pos []string
@@ -62,6 +83,13 @@ func conectar(args []string, saida io.Writer) error {
 			}
 			pos = append(pos, a)
 		}
+	}
+	if len(pos) == 1 { // a chave não vai na linha de comando: nem no histórico do shell, nem no /proc/<pid>/cmdline
+		ch, err := lerChave(saida)
+		if err != nil {
+			return err
+		}
+		pos = append(pos, ch)
 	}
 	if len(pos) != 2 {
 		return errors.New(usoConectar)

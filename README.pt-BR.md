@@ -459,7 +459,7 @@ A ponte (`ponte/`, em Go) lê os terminais de IA desta máquina (Claude Code, Co
 
 Se os terminais rodam numa máquina (uma VM, por exemplo) e você abre o Firmópolis em outra, ligue o espelho. A ponte daquela máquina manda ao servidor a mesma versão reduzida que o navegador recebe, e quem é do andar vê os terminais no mapa, de qualquer navegador. O espelho vem desligado.
 
-1. Em **Personalizar > Ponte local**, o admin do prédio clica em **Gerar chave**. A tela mostra o comando pronto, uma vez só: `ponte conectar https://<seu Firmópolis> <chave>`.
+1. Em **Personalizar > Ponte local**, o admin do prédio clica em **Gerar chave**. A tela mostra o comando pronto, uma vez só: `ponte conectar https://<seu Firmópolis>`, e a chave para colar quando ele pedir.
 2. Rode o comando na máquina dos terminais. Ele testa a chave antes de mudar qualquer coisa, instala os hooks, grava o espelho e diz o próximo passo. No Linux, `ponte conectar ... --servico` cria e liga o serviço `firmopolis-ponte` do systemd do usuário.
 3. No mapa, os terminais aparecem, e **Personalizar > Ponte local** mostra "Pelo servidor".
 

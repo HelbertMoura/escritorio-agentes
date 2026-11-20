@@ -202,3 +202,25 @@ func TestCodificarEspelhoCortaODia(t *testing.T) {
 		t.Fatal("ficam os mais novos")
 	}
 }
+
+// Um redirecionamento nunca leva a chave adiante: o destino não recebe Authorization nem corpo, e o 3xx vira erro.
+func TestEspelhoNaoSegueRedirecionamento(t *testing.T) {
+	var vazou sync.Mutex
+	recebeu := ""
+	destino := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		vazou.Lock()
+		recebeu = r.Header.Get("Authorization")
+		vazou.Unlock()
+	}))
+	defer destino.Close()
+	origem := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, destino.URL+r.URL.Path, http.StatusPermanentRedirect)
+	}))
+	defer origem.Close()
+	err := EnviarEspelho(context.Background(), clienteEspelho(), ConfigEspelho{URL: origem.URL, Chave: chaveTeste}, []byte("{}"))
+	vazou.Lock()
+	defer vazou.Unlock()
+	if err == nil || recebeu != "" {
+		t.Fatalf("seguiu o redirecionamento: err=%v auth=%q", err, recebeu)
+	}
+}

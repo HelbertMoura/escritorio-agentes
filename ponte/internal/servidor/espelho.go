@@ -179,7 +179,7 @@ func EnviarEspelho(ctx context.Context, cliente *http.Client, c ConfigEspelho, c
 func TestarEspelho(ctx context.Context, c ConfigEspelho) error {
 	corpo, _ := json.Marshal(corpoEspelho{V: 1, Teste: true, Moradores: []mundo.Morador{},
 		Workspaces: []maestri.Workspace{}, Dia: []historico.EventoHist{}})
-	return EnviarEspelho(ctx, &http.Client{Timeout: tempoEspelho}, c, corpo)
+	return EnviarEspelho(ctx, clienteEspelho(), c, corpo)
 }
 
 // avisarEspelho acorda o laço do espelho (sem travar: um aviso pendente já basta).
@@ -203,7 +203,7 @@ func (s *Servidor) corpoDoEspelho() ([]byte, error) {
 // a cada VidaEspelho. Na falha, espera crescente (5 s a 5 min), sem travar a ponte; o log
 // diz só quando para e quando volta.
 func (s *Servidor) espelhar(ctx context.Context) {
-	cliente := &http.Client{Timeout: tempoEspelho}
+	cliente := clienteEspelho()
 	falhas := 0
 	for {
 		espera, mudou := s.op.VidaEspelho, s.espMudou
@@ -249,4 +249,11 @@ func (s *Servidor) espelhar(ctx context.Context) {
 		}
 		falhas = 0
 	}
+}
+
+// clienteEspelho nunca segue redirecionamento: o Go repassa o Authorization a um redirect para o mesmo host em
+// http:// (ou a um subdomínio), e a chave iria em texto puro. Um 3xx vira "o servidor respondeu 30x".
+func clienteEspelho() *http.Client {
+	return &http.Client{Timeout: tempoEspelho,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 }

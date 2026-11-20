@@ -4028,7 +4028,7 @@ class Pagina(BaseHTTPRequestHandler):
             log(evento="ponte_espelho", resultado="nao_gravou", detalhe=type(x).__name__)
             return self._json(*erro(500, "gravar", "Não deu para salvar a chave agora."))
         log(evento="ponte_espelho", resultado="chave_gerada", usuario=self._usuario())   # a chave nunca vai ao log
-        return self._json(200, {"espelho": "tela", "comando": f"ponte conectar {BASE} {chave}"})
+        return self._json(200, {"espelho": "tela", "comando": f"ponte conectar {BASE}", "chave": chave})
 
     def _post_espelho_ponte(self, rota):
         """A ponte local manda o espelho (Bearer com a ESCRITORIO_PONTE_CHAVE). Sem a chave no servidor, 404; chave

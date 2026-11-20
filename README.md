@@ -459,7 +459,7 @@ The bridge (`ponte/`, written in Go) reads the AI terminals on this machine (Cla
 
 If your terminals run on one machine (a VM, for example) and you open Firmópolis on another, turn on the mirror. The bridge on that machine sends the server the same reduced version the browser gets, and the floor's members see the terminals on the map from any browser. The mirror is off by default.
 
-1. In **Personalizar > Ponte local**, the building admin clicks **Gerar chave** (generate key). The page shows the ready-made command, only once: `ponte conectar https://<your Firmópolis> <key>`.
+1. In **Personalizar > Ponte local**, the building admin clicks **Gerar chave** (generate key). The page shows the ready-made command, only once: `ponte conectar https://<your Firmópolis>`, plus the key to paste when it asks.
 2. Run that command on the machine with the terminals. It tests the key before changing anything, installs the hooks, saves the mirror and tells you the next step. On Linux, `ponte conectar ... --servico` creates and starts the `firmopolis-ponte` systemd user service.
 3. The terminals show up on the map, and **Personalizar > Ponte local** says "Pelo servidor" (through the server).
 

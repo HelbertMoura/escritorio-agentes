@@ -52,11 +52,11 @@ def hora(v):
 
 
 def _morador(m):
-    if not isinstance(m, dict) or not texto(m.get("id"), 200) or m.get("estado") not in ESTADOS:
+    if not isinstance(m, dict) or not texto(m.get("id"), 200) or not isinstance(m.get("estado"), str) or m.get("estado") not in ESTADOS:
         return None
     at, aj = m.get("atividade"), m.get("ajudantes")
     return {"id": texto(m["id"], 200), "nome": texto(m.get("nome"), 40),
-            "provedor": m["provedor"] if m.get("provedor") in PROVEDORES else "", "estado": m["estado"],
+            "provedor": m["provedor"] if isinstance(m.get("provedor"), str) and m["provedor"] in PROVEDORES else "", "estado": m["estado"],
             "projeto": texto(m.get("projeto"), 60),
             "atividade": {"ferramenta": texto(at.get("ferramenta"), 40)} if isinstance(at, dict) else None,
             "gerente": m.get("gerente") is True, "papel": texto(m.get("papel"), 40),
@@ -84,7 +84,7 @@ def _dia(eventos):
     validos = []
     for e in eventos if isinstance(eventos, list) else []:
         quando = hora(e.get("ts")) if isinstance(e, dict) else None
-        if quando is None or not texto(e.get("morador_id"), 200) or e.get("estado") not in ESTADOS:
+        if quando is None or not texto(e.get("morador_id"), 200) or not isinstance(e.get("estado"), str) or e.get("estado") not in ESTADOS:
             continue
         validos.append((quando, {"ts": e["ts"], "morador_id": texto(e["morador_id"], 200), "estado": e["estado"],
                                  "ferramenta": texto(e.get("ferramenta"), 40)}))
@@ -101,7 +101,7 @@ def _dia(eventos):
 
 def validar(dados):
     """O corpo da ponte já conferido e cortado, ou ValueError (400)."""
-    if not isinstance(dados, dict) or dados.get("v") != 1 or not isinstance(dados.get("moradores"), list):
+    if not isinstance(dados, dict) or type(dados.get("v")) is not int or dados.get("v") != 1 or not isinstance(dados.get("moradores"), list):
         raise ValueError("formato")
     moradores, ids = [], set()
     for m in dados["moradores"][:MAX_MORADORES]:

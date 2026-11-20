@@ -133,3 +133,19 @@ func TestSetupEspelho(t *testing.T) {
 		}
 	}
 }
+
+// Sem a chave na linha de comando, ela vem da entrada (uma linha) e nunca aparece na saída.
+func TestConectarLeAChaveDaEntrada(t *testing.T) {
+	antes := entradaChave
+	defer func() { entradaChave = antes }()
+	entradaChave = strings.NewReader("\n")
+	var saida strings.Builder
+	if err := conectar([]string{"https://firmopolis.exemplo.com"}, &saida); err == nil {
+		t.Fatal("aceitou chave vazia")
+	}
+	entradaChave = strings.NewReader(strings.Repeat("ab", 32) + "\n")
+	ch, err := lerChave(&saida)
+	if err != nil || ch != strings.Repeat("ab", 32) || strings.Contains(saida.String(), ch) {
+		t.Fatalf("lerChave: %q %v %q", ch, err, saida.String())
+	}
+}

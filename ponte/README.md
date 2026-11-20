@@ -162,8 +162,8 @@ O comando grava o endereço em `origens.txt` (na pasta da ponte) e mostra o toke
 Para quem roda os terminais numa máquina (uma VM, por exemplo) e abre o Firmópolis em outra, sem túnel. Vem desligado. No Firmópolis, o admin do prédio gera a chave em Personalizar > Ponte local, e a tela mostra o comando pronto. Rode na máquina dos terminais:
 
 ```bash
-ponte conectar https://escritorio.exemplo.com <chave>             # testa, instala os hooks e grava o espelho
-ponte conectar https://escritorio.exemplo.com <chave> --servico   # no Linux, também cria e liga o serviço systemd do usuário
+ponte conectar https://escritorio.exemplo.com             # pede a chave, testa, instala os hooks e grava o espelho
+ponte conectar https://escritorio.exemplo.com --servico   # no Linux, também cria e liga o serviço systemd do usuário
 ```
 
 O `conectar` testa a chave antes de mudar qualquer coisa (o teste não troca o que o servidor mostra), roda o `setup --aplicar`, grava `espelho.json` na pasta da ponte (0600) e diz o próximo passo. O `--servico` cria `~/.config/systemd/user/firmopolis-ponte.service` e roda `systemctl --user enable --now`; se a unit já existe, fica como está.

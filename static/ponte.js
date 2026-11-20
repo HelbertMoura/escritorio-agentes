@@ -193,6 +193,8 @@ const Ponte = (() => {
       if (!r.ok) return mostrarEspelho(typeof d.mensagem === "string" ? d.mensagem.slice(0, 200) : "Não deu certo agora.", "ruim");
       st.espelho = typeof d.espelho === "string" ? d.espelho : st.espelho;
       cmd.textContent = typeof d.comando === "string" ? d.comando.slice(0, 400) : ""; cmd.hidden = !cmd.textContent;
+      const ch = $("pt-esp-chave"), rot = $("pt-esp-chave-rot");   // a chave fica fora do comando: não vai ao histórico do shell
+      ch.textContent = typeof d.chave === "string" && /^[0-9a-f]{64}$/.test(d.chave) ? d.chave : ""; ch.hidden = rot.hidden = !ch.textContent;
       mostrarEspelho(cmd.textContent ? "Rode isto na máquina dos terminais (a chave aparece só agora; não mande para ninguém):" : "", "ok");
       if (!cmd.textContent) mostrarEspelho();
     } catch (e) { mostrarEspelho("Sem conexão com o servidor.", "ruim"); }
