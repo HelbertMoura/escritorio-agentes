@@ -4,6 +4,12 @@
 
 All notable changes to this project are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Since 1.1.0, versions follow [SemVer](https://semver.org/); older entries are dated milestones.
 
+## Unreleased
+
+### Changed
+- **The site's identity across the whole app:** the sign-in screen, first access, invitation, visit page, World and the app itself use the same brand as [firmopolis.devmaniacs.com.br](https://firmopolis.devmaniacs.com.br): Figtree for text, Pixeloid for headings, the night, graphite, cream, amber and indigo palette, square or stepped corners, bevelled buttons and hard shadows. The outside screens got the night sky with the office's lit window. The map and the pixel art did not change.
+- The Source Sans 3 and Doto fonts are gone; Pixeloid Sans (OFL) is in `static/fontes/`.
+
 ## 2.0.0 · 2026-11-20 · Firmópolis
 
 Release [`v2.0.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2.0.0). Commits: [`v1.6.0...v2.0.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.6.0...v2.0.0).

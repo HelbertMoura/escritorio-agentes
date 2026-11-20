@@ -791,12 +791,12 @@ class Http(unittest.TestCase):
         self.assertEqual((st, json.loads(corpo)["logo"]), (200, f"/logo?v={padrao}"))
 
     def test_fontes_publicas_com_tipo_e_cache(self):
-        for nome, tipo in (("fontes/source-sans-3.woff2", "font/woff2"), ("fontes/doto.woff2", "font/woff2"), ("fontes/figtree.ttf", "font/ttf")):
+        for nome, tipo in (("fontes/PixeloidSans.woff2", "font/woff2"), ("fontes/figtree.ttf", "font/ttf")):
             st, corpo, h = self.req("/" + nome)   # sem sessão: a tela de entrar usa
             self.assertEqual((st, h["Content-Type"], h["Cache-Control"]), (200, tipo, "public, max-age=3600"), nome)
             with open(os.path.join(e.ESTATICO, nome), "rb") as f:
                 self.assertEqual(corpo, f.read(), nome)
-        self.assertEqual(self.req("/fontes/OFL-source-sans-3-doto.txt")[0], 302)   # fora da lista fechada: vai para /entrar
+        self.assertEqual(self.req("/fontes/PixeloidSans-LICENCA-OFL.txt")[0], 302)   # fora da lista fechada: vai para /entrar
 
     def test_logo_publico_so_como_imagem(self):
         # a tela de entrar mostra o logo personalizado: sem sessão, só PNG/JPEG/WEBP pelos bytes; o resto vira o padrão
@@ -928,7 +928,7 @@ class Estaticos(unittest.TestCase):
 
     def test_css_so_carrega_o_que_o_servidor_serve(self):
         # as fontes entram pelo @font-face, url(...), que o teste das páginas não lê; o que o entrar.css usa tem que ser público
-        for folha, publico in (("estilo.css", False), ("entrar.css", True)):
+        for folha, publico in (("estilo.css", False), ("entrar.css", True), ("visita.css", True)):
             with open(os.path.join(e.ESTATICO, folha), encoding="utf-8") as f:
                 css = f.read()
             locais = [u for u in re.findall(r"url\(\s*[\"']?([^\"')]+?)[\"']?\s*\)", css) if not re.match(r"[a-z][a-z0-9+.-]*:|//|#", u, re.I)]

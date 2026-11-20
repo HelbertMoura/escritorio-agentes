@@ -617,7 +617,7 @@ The art (`arte/pixellab` and `static/tema`) is released under the same license a
 
 ## Third-party
 
-- **Fonts** Figtree, Silkscreen, Source Sans 3 and Doto: SIL Open Font License 1.1 (`static/fontes`, licenses in `static/fontes/OFL-*.txt`).
+- **Fonts** Figtree, Silkscreen and Pixeloid Sans: SIL Open Font License 1.1 (`static/fontes`, licenses in `static/fontes/OFL-figtree-silkscreen.txt` and `static/fontes/PixeloidSans-LICENCA-OFL.txt`).
 - **Weather:** [Open-Meteo](https://open-meteo.com) (no key), with data under CC BY 4.0. Its free API is **for non-commercial use only** ([terms](https://open-meteo.com/en/terms)): a company, or a site with subscriptions or ads, needs a paid Open-Meteo plan or its own Open-Meteo server ([open source](https://github.com/open-meteo/open-meteo)). The city search uses Open-Meteo's geocoding (`geocoding-api.open-meteo.com`), under the same terms. This server calls the free addresses (in the `Clima` and `BuscaCidades` classes of `escritorio.py`), so either option means changing those addresses (and adding the plan's key). Otherwise, turn the weather off: **Sem clima** on **Customize**, or remove `clima` from `times.json`.
 
 ## License
@@ -632,4 +632,4 @@ Built for [agentes.chat](https://agentes.chat), with permission from its develop
 
 - The agentes.chat team, for the read-only MCP connector and for supporting an open-source office.
 - [Open-Meteo](https://open-meteo.com), [Tailscale](https://tailscale.com) and [PixelLab](https://pixellab.ai).
-- The designers of Figtree, Silkscreen, Source Sans 3 and Doto, for releasing them under the OFL.
+- The designers of Figtree, Silkscreen and Pixeloid Sans, for releasing them under the OFL.
