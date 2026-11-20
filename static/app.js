@@ -298,6 +298,8 @@ function desenharCena(t) {
   for (const j of predio.janelas) { Ceu.janela(ctx, j, ceu, ta); Clima.naJanela(ctx, j, t); }
   Efeitos.painelLogo(ctx, t, ceu);
   Efeitos.festaChao(ctx, festa);
+  const Z = window.Zeladoria && window.Sprites ? Zeladoria : null, npcs = Z ? Z.npcs() : [];   // a equipe do prédio (zeladoria.js)
+  if (Z) Z.chao(ctx);   // migalhas e copos no chão
   Efeitos.robo(ctx, dtQuadro, t, ceu);
   for (const a of predio.animados) if (a.parede) desenharAnimado(a, ta);
   for (const s of [...predio.salas, ...predio.baixo]) if (s.mural) desenharMural(s.mural);
@@ -319,9 +321,11 @@ function desenharCena(t) {
   for (const v of visitas) cena.push({ chave: v.chave ?? v.y + 0.5, desenha: () => (window.Sprites ? desenharGente(v, t) : Avatar.boneco(ctx, v, t, escala)) });
   const terminais = window.Sprites ? Vida.terminais().filter(k => !k.dentro) : [];   // os terminais deste computador, pela ponte local (ponte.js); no banheiro, some com etiqueta e tudo
   for (const k of terminais) cena.push({ chave: k.chave ?? k.y + 0.5, desenha: () => desenharTerminal(k, ta) });
+  for (const n of npcs) cena.push({ chave: n.chave ?? n.y + 0.5, desenha: () => naEscala(() => Z.npc(ctx, n, ta)) });
   cena.sort((a, b) => a.chave - b.chave).forEach(c => c.desenha());
   desenharPortas(t);
   for (const s of [...predio.salas, ...predio.baixo]) if (Vida.emReuniao(s.chave)) Mapa.desenharPlacaReuniao(ctx, s);   // a placa "em reunião" na porta (mapa.js)
+  if (Z) naEscala(() => Z.ar(ctx, ta));   // moscas, a placa de interditado, a cafeteira quebrada, o brilho e as faíscas
   Clima.desenhar(ctx, predio, dtQuadro, t, Som.ligado ? Som : null);
   desenharLuzes(dt0(t), ceu);
   Efeitos.luzesNoite(ctx, ceu);
@@ -334,15 +338,18 @@ function desenharCena(t) {
   visiveis.sort((a, b) => b.y - a.y || a.x - b.x).forEach(b => desenharEtiqueta(b, t, ocupadas));
   for (const v of visitas) desenharEtiqueta(v, t, ocupadas);   // depois dos agentes: o nome deles tem a preferência
   for (const k of terminais) desenharEtiqueta(k, t, ocupadas);
+  for (const n of npcs) desenharEtiqueta(n, t, ocupadas);
   for (const b of visiveis) Efeitos.emote(ctx, b, t, ceu.escuro);
   const faixa = Efeitos.faixaVencedor(ctx, mundo, t); if (faixa) ocupadas.push(faixa);   // os balões desviam da faixa do vencedor
   const faixaEntrega = Efeitos.entregaAr(ctx, mundo.entrega, t); if (faixaEntrega) ocupadas.push(faixaEntrega);   // e da faixa do pedido atendido
   const baloes = !(window.Apresentacao && Apresentacao.ligado());   // na apresentação, sem balão de fala
   if (baloes) for (const b of visiveis.filter(b => b.fala).sort((a, b) => b.y - a.y || a.x - b.x)) desenharBalao(b, ocupadas);
   if (baloes) for (const v of visitas) if (v.fala) desenharBalao(v, ocupadas);   // o aceno e o "Toc, toc!" das pessoas (vida.js)
+  if (baloes) for (const v of Z ? [...npcs.filter(n => n.fala), ...Z.falas()] : []) desenharBalao(v, ocupadas);   // a equipe, "Quebrada!" e "Interditado"
   Brincar.desenhar(ctx);   // realce, reações dos objetos e a festa do Konami
 }
 
+function naEscala(f) { if (escala !== 1) { ctx.save(); ctx.scale(escala, escala); } f(); if (escala !== 1) ctx.restore(); }
 function visivel(b) { return !(b.lugar && b.lugar.tipo === "fora" && !b.rota.length) && b.x > -20; }
 
 // Zona de passagem de cada porta (os pés de quem atravessa passam por ela)
@@ -459,7 +466,7 @@ function naHoraExtra(mesa) {
 
 function desenharAnimado(a, t) {
   if (a.tipo === "gato") spr(quadroAnim("gato", 2, t), a.x, a.y);
-  else if (a.tipo === "cafe") spr(quadroAnim("cafe", 5, t), a.x, a.y);
+  else if (a.tipo === "cafe") spr(quadroAnim("cafe", 5, window.Zeladoria && Zeladoria.quebrado("cafe") ? 0 : t), a.x, a.y);   // quebrada: sem vapor
   else if (a.tipo === "tela") { // TV: videogame quando alguém joga, canais quando alguém assiste (e mais apagada sem ninguém)
     let modo = "fraca";
     for (const b of mundo.bonecos.values()) {
@@ -495,7 +502,7 @@ function desenharTerminal(k, t) {
     ctx.fillStyle = "#b9791c"; ctx.fillRect(x, y + 2, 6, 1);
   }
   // vida.js, onda 4: o café e o papo, no balãozinho do lado de trás (em cima, a etiqueta do nome o cobriria)
-  if (k.balao && !k.rota.length) Sprites.balao(ctx, k.balao, Math.round(k.x) + (k.lado < 0 ? 7 : -16), Math.round(k.y) - 19);
+  if (k.balao && (!k.rota.length || k.reacao)) Sprites.balao(ctx, k.balao, Math.round(k.x) + (k.lado < 0 ? 7 : -16), Math.round(k.y) - 19);
   if (escala !== 1) ctx.restore();
   ctx.globalAlpha = 1;
 }
@@ -556,6 +563,7 @@ function desenharLuzes(dt, ceu) {
       else if (/arcade|rack_tv|estacao_gamer|aquario|neon|tv_parede/.test(o.nome || "")) brilho(o.x + o.w / 2, o.y + o.h / 3, 26, `rgba(140,110,255,${0.22 * noite})`);
     }
     for (const l of predio.luzesTeto || []) { // luminárias de teto do corredor: lâmpada acesa e a luz no chão
+      if (window.Zeladoria && Zeladoria.lampadaApagada(l, menosMovimento.matches ? 0 : performance.now())) continue;   // a quebrada pisca (zeladoria.js)
       brilho(l.x, l.y + 22, 34, `rgba(255,214,150,${0.32 * noite})`);
       ctx.fillStyle = `rgba(255,236,180,${0.9 * noite})`; ctx.fillRect(l.x - 2, l.y + 3, 5, 1);
     }
@@ -2225,6 +2233,8 @@ tela.addEventListener("pointerup", ev => {
   if (selo && esperaVoce(selo)) { window.open(selo.trabalho.url, "_blank", "noopener"); return; }   // aprovar continua só no agentes.chat
   const perto = agenteEm(p, ev.pointerType === "touch" ? 16 : 12);
   if (perto) { focarAgente(perto); return; }
+  const npc = window.Zeladoria && Zeladoria.npcEm(p);
+  if (npc) { cartaoNpc(npc, ev.clientX, ev.clientY); return; }   // a equipe do prédio: o cartão diz o que está fazendo
   const tm = terminalEm(p);
   if (tm) { moverCamera({ x: tm.x, y: tm.y - 10, k: Math.max(cam.k, 3.2 * dpr) }); abrirFichaTerminal(tm.dado.id); return; }
   const q = muralEm(p);
@@ -2242,10 +2252,22 @@ tela.addEventListener("pointermove", ev => {
   const card = $("cartao-agente");
   if (ev.pointerType !== "mouse" || !mundo || (arrasto && arrasto.moveu)) { card.hidden = true; return; }
   const p = paraMundo(ev.clientX, ev.clientY);
-  const perto = seloEm(p) || agenteEm(p, 11), objeto = Brincar.sobre(p) || muralEm(p) || pessoaEm(p, 11) || terminalEm(p);
+  const perto = seloEm(p) || agenteEm(p, 11), npc = !perto && window.Zeladoria && Zeladoria.npcEm(p), objeto = npc || Brincar.sobre(p) || muralEm(p) || pessoaEm(p, 11) || terminalEm(p);
   tela.style.cursor = perto || objeto ? "pointer" : "";
-  mostrarCartao(perto, ev.clientX, ev.clientY);
+  if (npc) cartaoNpc(npc, ev.clientX, ev.clientY); else mostrarCartao(perto, ev.clientX, ev.clientY);
 });
+// o cartão rápido de alguém da equipe do prédio (zeladoria.js): o nome, a função e o que está fazendo
+function cartaoNpc(n, cx, cy) {
+  const card = $("cartao-agente");
+  const cv = document.createElement("canvas"); cv.width = cv.height = 44; cv.className = "mini"; cv.setAttribute("aria-hidden", "true");
+  const c = cv.getContext("2d"); c.imageSmoothingEnabled = false; c.scale(2, 2);
+  Zeladoria.npc(c, { ...n, x: 10, y: 21, rota: [], pose: "parado", acao: null, lado: 1 }, 0);   // o mesmo boneco do mapa, parado
+  card.replaceChildren(cv, elem("strong", null, n.nome), elem("span", "chips", ""), elem("p", null, n.fazendo));
+  card.querySelector(".chips").append(elem("span", "chip", n.funcao));
+  const r = $("palco").getBoundingClientRect();
+  card.style.left = `${Math.min(cx - r.left + 14, r.width - 254)}px`; card.style.top = `${Math.max(8, cy - r.top - 20)}px`;
+  card.hidden = false;
+}
 // cartão rápido de um agente perto do ponteiro (null esconde)
 function mostrarCartao(perto, cx, cy) {
   const card = $("cartao-agente");
