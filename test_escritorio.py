@@ -1998,12 +1998,12 @@ class R1(unittest.TestCase):
         self.times({"conversas": "responder"})
         estado, cliente, escopo = self.estado_de(self.cred().url_autorizacao())
         self.assertEqual((escopo, self.oauth.registros[0]["scope"], self.oauth.registros[0]["client_name"]),
-                         ("read write", "read write", "Escritório dos agentes"))   # sem "(leitura)" na tela de consentimento
+                         ("read write", "read write", "Firmópolis"))   # sem "(leitura)" na tela de consentimento
         self.times({"conversas": "ler"})
         c = self.cred()
         self.assertEqual(self.estado_de(c.url_autorizacao())[2], "read")
         self.assertEqual((self.oauth.registros[1]["scope"], self.oauth.registros[1]["client_name"]),
-                         ("read", "Escritório dos agentes (leitura)"))
+                         ("read", "Firmópolis (leitura)"))
         self.times({"conversas": "responder"})   # o escopo mudou: registro novo
         c.url_autorizacao()
         self.assertEqual(len(self.oauth.registros), 3)

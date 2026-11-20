@@ -4,17 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>Escritório</title>
+  <title>Firmópolis</title>
   <link rel="icon" href="logo.png">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icone-180.png">
   <meta name="theme-color" content="#0f0f0e">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <link rel="stylesheet" href="estilo.css?v=108">
-  <link rel="stylesheet" href="chat_sala.css?v=108">
-  <link rel="stylesheet" href="reunioes.css?v=108">
-  <link rel="stylesheet" href="linha_tempo.css?v=108">
+  <link rel="stylesheet" href="estilo.css?v=119">
+  <link rel="stylesheet" href="chat_sala.css?v=119">
+  <link rel="stylesheet" href="reunioes.css?v=119">
+  <link rel="stylesheet" href="linha_tempo.css?v=119">
 </head>
 <body>
   <a class="pular" href="#principal">Ir para o conteúdo</a>
@@ -505,6 +505,20 @@
               <div class="acoes"><button id="cv-link-fechar" class="botao fantasma" type="button">Já copiei, fechar</button></div>
             </div>
           </section>
+          <section id="a-ponte" class="cartao ajuste" aria-labelledby="t-ponte">
+            <h2 id="t-ponte">Ponte local</h2>
+            <p class="ajuda">Mostra no mapa os terminais deste computador (Claude Code, Codex, agy, OpenCode, MiniMax e o Maestri) como terminaizinhos: ocupado trabalha na sala do time, esperando você vai para a recepção, livre fica na sala comunal. Quem lê a ponte é este navegador, direto do seu computador: nada vai para o servidor do escritório, e só você vê os seus terminais.</p>
+            <ol class="ajuda ponte-passos">
+              <li>Com a ponte instalada (pasta <code>ponte/</code> do repositório), rode no terminal:<code id="pt-comando" class="ponte-comando">ponte setup --aplicar --origem</code></li>
+              <li>Cole aqui o token que ele mostrar. Ele fica só neste navegador.</li>
+            </ol>
+            <form id="form-ponte" class="sair-todos" novalidate>
+              <label for="pt-token">Token da ponte</label>
+              <div class="st-linha"><input id="pt-token" type="password" autocomplete="off" spellcheck="false" maxlength="200" aria-describedby="pt-estado"><button id="pt-ligar" class="botao secundario" type="submit">Ligar</button></div>
+              <p id="pt-estado" class="aviso-form" role="status"></p>
+              <div class="acoes"><button id="pt-desligar" class="botao fantasma" type="button" hidden>Desligar a ponte</button></div>
+            </form>
+          </section>
           <section id="a-acesso" class="cartao ajuste" aria-labelledby="t-acesso">
             <h2 id="t-acesso">Acesso</h2>
             <p id="st-ajuda" class="ajuda">Ficou um aparelho com o escritório aberto, ou a senha pode ter vazado? Encerre todas as sessões de uma vez, inclusive esta. Depois é só entrar de novo com o usuário e a senha.</p>
@@ -541,7 +555,7 @@
           <div class="cartao faq-lista">
             <details><summary>O que é este escritório?</summary><p>Uma visão ao vivo do seu time de agentes do agentes.chat, desenhada como um escritório em pixel art. Cada agente tem uma mesa na sala do seu time; quando recebe uma tarefa, vai para a mesa e digita; quando fica livre, vai para a sala comunal jogar, conversar ou tomar café.</p></details>
             <details><summary>O que significam o “!” e o “?”?</summary><p>“!” (âmbar, com a mão levantada): o agente espera a sua aprovação. “?” (azul): ele tem uma pergunta para você. Tocar no selo abre o pedido certo no agentes.chat; os mesmos pedidos aparecem em “Esperando você”, com há quanto tempo cada um espera.</p></details>
-            <details><summary>Dá para ler as conversas dos agentes por aqui?</summary><p>Dá, se quem instalou ligou as conversas (<code>"conversas": "ler"</code> no <code>times.json</code>; vem desligado). Aí a página Conversas mostra a lista do dia: primeiro o que espera você, depois as tarefas em andamento e as que terminaram hoje, até a meia-noite de Brasília. A ficha do agente ganha “Ver conversa”. Aparecem as 20 mensagens mais recentes de cada conversa, lidas só quando você abre; numa tarefa que já terminou, só até o fim dela. Os nomes das pessoas e os anexos não aparecem (só a contagem). Quem tem a senha, ou vê uma tela logada, lê o que a conta conectada ao agentes.chat lê. A lista fica só na memória: some à meia-noite e quando o serviço reinicia. Com <code>"conversas": "responder"</code> (e a conexão com o agentes.chat com permissão de escrita), dá também para mandar mensagens nas conversas diretas de hoje que esperam sua resposta ou já terminaram (em canal, por enquanto, responda no agentes.chat): o primeiro envio pede a senha do escritório e abre o modo resposta por 1 hora neste navegador, renovado a cada envio e fechado de vez em 8 horas ou no “Fechar agora” do selo. A mensagem sai como a conta conectada, marcada “via Escritório dos agentes”, e pode começar uma tarefa nova do agente. Imagens e arquivos continuam no agentes.chat. Não abra o modo numa tela que outras pessoas usam. Na demonstração e na Simulação, as conversas não aparecem.</p></details>
+            <details><summary>Dá para ler as conversas dos agentes por aqui?</summary><p>Dá, se quem instalou ligou as conversas (<code>"conversas": "ler"</code> no <code>times.json</code>; vem desligado). Aí a página Conversas mostra a lista do dia: primeiro o que espera você, depois as tarefas em andamento e as que terminaram hoje, até a meia-noite de Brasília. A ficha do agente ganha “Ver conversa”. Aparecem as 20 mensagens mais recentes de cada conversa, lidas só quando você abre; numa tarefa que já terminou, só até o fim dela. Os nomes das pessoas e os anexos não aparecem (só a contagem). Quem tem a senha, ou vê uma tela logada, lê o que a conta conectada ao agentes.chat lê. A lista fica só na memória: some à meia-noite e quando o serviço reinicia. Com <code>"conversas": "responder"</code> (e a conexão com o agentes.chat com permissão de escrita), dá também para mandar mensagens nas conversas diretas de hoje que esperam sua resposta ou já terminaram (em canal, por enquanto, responda no agentes.chat): o primeiro envio pede a senha do escritório e abre o modo resposta por 1 hora neste navegador, renovado a cada envio e fechado de vez em 8 horas ou no “Fechar agora” do selo. A mensagem sai como a conta conectada, marcada “via Firmópolis”, e pode começar uma tarefa nova do agente. Imagens e arquivos continuam no agentes.chat. Não abra o modo numa tela que outras pessoas usam. Na demonstração e na Simulação, as conversas não aparecem.</p></details>
             <details><summary>Posso aprovar pedidos por aqui?</summary><p>Não, de propósito: aprovar é sempre no agentes.chat, onde você vê o pedido completo. O botão “Revisar pedido” abre exatamente a conversa do pedido.</p></details>
             <details><summary>Como navego pelo mapa?</summary><p>No computador: arraste para mover, use a roda do mouse para dar zoom onde está o cursor e dê duplo clique numa sala para focar. No celular: arraste com um dedo e use a pinça para o zoom. Em qualquer tela, a lista “Salas” leva a câmera até a sala, “Ver tudo” volta ao prédio inteiro e o botão de tela cheia amplia o mapa. Toque num agente para abrir o cartão dele; com “Seguir”, a câmera acompanha o agente.</p></details>
             <details><summary>Dá para brincar com o mapa?</summary><p>Sim. Clique ou toque em objetos como a TV, o fliperama, a jukebox, a cafeteira, o aquário, o relógio, as luminárias, o gato, o quadro de avisos, a lousa e o sino de vendas; pelo teclado, a tecla Tab passa pelos objetos visíveis do mapa e Enter aciona. O botão de câmera abre o modo foto, que esconde a interface e salva um PNG no seu aparelho (Esc sai). Para mostrar o produto sem dados reais, abra a <a href="?demo=1">demonstração</a>. E tem um segredo para quem conhece videogame.</p></details>
@@ -771,30 +785,33 @@
       </div>
     </div>
   </dialog>
-  <script src="avatar.js?v=108"></script>
-  <script src="mapa.js?v=108"></script>
-  <script src="expediente.js?v=108"></script>
-  <script src="vida.js?v=108"></script>
-  <script src="apresentacao.js?v=108"></script>
-  <script src="som.js?v=108"></script>
-  <script src="ceu.js?v=108"></script>
-  <script src="clima.js?v=108"></script>
-  <script src="festas.js?v=108"></script>
-  <script src="simular.js?v=108"></script>
-  <script src="efeitos.js?v=108"></script>
-  <script src="brincar.js?v=108"></script>
-  <script src="tv.js?v=108"></script>
-  <script src="jornal.js?v=108"></script>
-  <script src="novidades.js?v=108"></script>
-  <script src="timelapse.js?v=108"></script>
-  <script src="avisar.js?v=108"></script>
-  <script src="resposta_rapida.js?v=108"></script>
-  <script src="linha_tempo.js?v=108"></script>
-  <script src="reunioes.js?v=108"></script>
-  <script src="app.js?v=108"></script>
-  <script src="personalizar.js?v=108"></script>
-  <script src="ajustes.js?v=108"></script>
-  <script src="assistente.js?v=108"></script>
-  <script src="chat_sala.js?v=108"></script>
+  <script src="abertura.js?v=119"></script>
+  <script src="avatar.js?v=119"></script>
+  <script src="mapa.js?v=119"></script>
+  <script src="expediente.js?v=119"></script>
+  <script src="vida.js?v=119"></script>
+  <script src="apresentacao.js?v=119"></script>
+  <script src="sprites.js?v=119"></script>
+  <script src="ponte.js?v=119"></script>
+  <script src="som.js?v=119"></script>
+  <script src="ceu.js?v=119"></script>
+  <script src="clima.js?v=119"></script>
+  <script src="festas.js?v=119"></script>
+  <script src="simular.js?v=119"></script>
+  <script src="efeitos.js?v=119"></script>
+  <script src="brincar.js?v=119"></script>
+  <script src="tv.js?v=119"></script>
+  <script src="jornal.js?v=119"></script>
+  <script src="novidades.js?v=119"></script>
+  <script src="timelapse.js?v=119"></script>
+  <script src="avisar.js?v=119"></script>
+  <script src="resposta_rapida.js?v=119"></script>
+  <script src="linha_tempo.js?v=119"></script>
+  <script src="reunioes.js?v=119"></script>
+  <script src="app.js?v=119"></script>
+  <script src="personalizar.js?v=119"></script>
+  <script src="ajustes.js?v=119"></script>
+  <script src="assistente.js?v=119"></script>
+  <script src="chat_sala.js?v=119"></script>
 </body>
 </html>

@@ -2,9 +2,11 @@
 
 <div align="center">
 
-# Escritório de agentes
+# Firmópolis
 
-### Um escritório em pixel art, ao vivo, para o seu time do [agentes.chat](https://agentes.chat)
+### Um escritório em pixel art, ao vivo, para o seu time do [agentes.chat](https://agentes.chat) e para os terminais do seu computador
+
+*Antes chamado Escritório de agentes. Agora junta também o Escritório Vivo.*
 
 **Veja quem está na mesa, quem joga sinuca na sala comunal e quem espera a sua aprovação. Só leitura (fora do modo opcional de responder), a cada 30 segundos, sem IA e sem gastar tokens.**
 
@@ -18,7 +20,7 @@
   <img src="./docs/demo.gif" alt="Demonstração animada do escritório no modo demonstração, com agentes fictícios: o mapa em pixel art de dia, com agentes andando e trabalhando; a câmera aproxima de um agente com um balão de pergunta '?'; depois o cursor vai até um pedido da lista Esperando você (um clique leva até esse agente). Legendas curtas explicam cada passo." width="900">
 </picture>
 
-[Recursos](#recursos) · [Capturas](#capturas) · [Instalar](#instalar) · [Andares](#andares-vários-workspaces-no-mesmo-prédio) · [Equipe](#equipe) · [Personalizar](#personalizar-white-label) · [Vida social](#vida-social) · [Modo construção](#modo-construção) · [Modo TV](#modo-tv) · [Modo apresentação](#modo-apresentação) · [App instalável](#app-instalável-pwa) · [Visitantes](#visitantes) · [Visitas por convite](#visitas-por-convite) · [Jornal](#jornal) · [Time-lapse](#time-lapse) · [Avisar no celular](#avisar-no-celular) · [Segurança](#segurança) · [Arquitetura](#arquitetura) · [Desenvolvimento](#desenvolvimento) · [Histórico de mudanças](./CHANGELOG.pt-BR.md) · [Contribuir](./CONTRIBUTING.md) · [Código de conduta](./CODE_OF_CONDUCT.md)
+[Recursos](#recursos) · [Capturas](#capturas) · [Instalar](#instalar) · [Andares](#andares-vários-workspaces-no-mesmo-prédio) · [Equipe](#equipe) · [Personalizar](#personalizar-white-label) · [Vida social](#vida-social) · [Modo construção](#modo-construção) · [Modo TV](#modo-tv) · [Modo apresentação](#modo-apresentação) · [App instalável](#app-instalável-pwa) · [Visitantes](#visitantes) · [Visitas por convite](#visitas-por-convite) · [Ponte local](#ponte-local-os-terminais-deste-computador) · [Jornal](#jornal) · [Time-lapse](#time-lapse) · [Avisar no celular](#avisar-no-celular) · [Segurança](#segurança) · [Arquitetura](#arquitetura) · [Desenvolvimento](#desenvolvimento) · [Histórico de mudanças](./CHANGELOG.pt-BR.md) · [Contribuir](./CONTRIBUTING.md) · [Código de conduta](./CODE_OF_CONDUCT.md)
 
 🎬 **[Vídeo de lançamento](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2026.11.06)** (narração em português do Brasil, com legenda), anexado à release. 🌎 **[Vídeo do mundo e das visitas](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.3.0)** (1.3.0), também narrado e com legenda.
 
@@ -38,7 +40,9 @@
 
 ## O que é
 
-O Escritório de agentes é uma página web pequena, que você mesmo hospeda, e que transforma o seu workspace do agentes.chat num escritório vivo. Ele lê o agentes.chat pelo conector de apps externos (MCP, escopo OAuth **só de leitura**; escrita só se você ligar o modo `"responder"`) a cada 30 segundos e desenha o seu time como pessoas em pixel art, num prédio que se monta sozinho a partir dos seus times.
+O Firmópolis é uma página web pequena, que você mesmo hospeda, e que transforma o seu workspace do agentes.chat num escritório vivo. Ele lê o agentes.chat pelo conector de apps externos (MCP, escopo OAuth **só de leitura**; escrita só se você ligar o modo `"responder"`) a cada 30 segundos e desenha o seu time como pessoas em pixel art, num prédio que se monta sozinho a partir dos seus times.
+
+Com a [ponte local](#ponte-local-os-terminais-deste-computador), opcional, o mapa mostra também os terminais do seu computador (Claude Code, Codex, agy, OpenCode, MiniMax e Maestri), sem que esses dados passem pelo servidor. No prédio vivem três espécies: os **bichinhos de feltro** são os agentes do agentes.chat, os **terminaizinhos** são os terminais deste computador e a **gente** são você e as visitas.
 
 Ele **não chama nenhum modelo de IA** e não gasta tokens. Aprovar é sempre no agentes.chat; responder também, fora do modo opcional `"responder"`. No resto, o escritório só mostra o que está acontecendo e leva você até lá.
 
@@ -47,6 +51,7 @@ Ele **não chama nenhum modelo de IA** e não gasta tokens. Aprovar é sempre no
 ## Recursos
 
 - 🏢 **Prédio montado pelos seus times:** recepção com o seu logo, uma sala por time (cresce com o número de agentes), corredor, sala de reunião, sala comunal e cozinha. Agente novo ganha mesa na sala "Novos".
+- 🖥️ **Terminais deste computador:** com a ponte local, cada terminal vira um terminalzinho no mapa. Ocupado, trabalha na sala do time; quando espera você, vai para a recepção com o "!" ou o "?"; livre, toma café e conversa no corredor com outro terminal livre (veja [Ponte local](#ponte-local-os-terminais-deste-computador)).
 - 🧑‍💻 **Mapa vivo:** os agentes vão para a mesa e digitam quando recebem tarefa. Livres, jogam sozinhos fliperama, videogame, sinuca, pebolim, pingue-pongue, xadrez, dardos e basquete, tocam piano ou violão, tomam café ou conversam em dupla. Chegam de manhã e vão embora à noite pela porta da frente.
 - ✋ **Aprovações num relance:** um "!" ou "?" sobre quem espera a sua aprovação ou resposta, e a lista **"Esperando você"**, com há quanto tempo cada pedido espera. Cada um abre o pedido certo no agentes.chat (aprovar é sempre lá).
 - 🎵 **Vida e sons:** 21 poses, jogos em dupla até 3 pontos com torcida, roda de café, "toca aqui", robô aspirador à noite e mais. 45 efeitos de som opcionais, sintetizados no navegador (teclado, conversas em "simlês" com voz própria por agente, jogos, avisos, o ringue e a greve, chuva e trovão), com volume e liga/desliga por categoria. O áudio só começa depois que você interage com a página.
@@ -60,7 +65,7 @@ Ele **não chama nenhum modelo de IA** e não gasta tokens. Aprovar é sempre no
 - 📺 **Modo TV:** tela cheia, tela sempre acesa e um diretor de câmera que corre para os pedidos, as brigas e as greves, com uma faixa de notícias (veja [Modo TV](#modo-tv)).
 - 📲 **App e aviso no celular:** instale o escritório na tela de início e receba um aviso quando um agente pedir a sua aprovação ou fizer uma pergunta (veja [App instalável](#app-instalável-pwa) e [Avisar no celular](#avisar-no-celular)).
 - 🏬 **Andares:** cada workspace do agentes.chat vira um andar do prédio, e o elevador da barra troca de andar (veja [Andares](#andares-vários-workspaces-no-mesmo-prédio)).
-- 👥 **Equipe:** contas de membro por convite, com nome e boneco no mapa; conversas da equipe (geral, salas e DM, com menções, reações, anexos e busca), mural, status, reuniões com agenda e o resumo de enquanto você esteve fora (veja [Equipe](#equipe)).
+- 👥 **Equipe:** contas de membro por convite, com nome e boneco no mapa (blusa, cabelo e pele escolhidos no perfil); conversas da equipe (geral, salas e DM, com menções, reações, anexos e busca), mural, status, reuniões com agenda e o resumo de enquanto você esteve fora (veja [Equipe](#equipe)).
 - 🙈 **Modo apresentação:** troca os nomes por "Agente 1" e "Pessoa 2" e esconde o que é sensível, para mostrar a tela a um cliente (veja [Modo apresentação](#modo-apresentação)).
 - 👀 **Visitantes:** quem mais da equipe está com o escritório aberto aparece no mapa com o próprio nome e boneco (veja [Visitantes](#visitantes)).
 - 🚪 **Visitas por convite:** um link de 1 hora traz alguém de fora para a sala de reunião, sem senha (veja [Visitas por convite](#visitas-por-convite)).
@@ -436,6 +441,19 @@ Quem só instala não precisa de nada disto: os arquivos de `static/mundo/` já 
 - **Arte:** `arte/pixellab/mundo/` (marcos, prédios, casas, árvores, carros, serras). Sem a arte de um marco, a cidade usa um prédio genérico.
 - **Terreno:** `arte/mundo/biomas.json` e `serras.json`, mais os recortes do Natural Earth em `arte/mundo/fontes/` (contornos, rios, rodovias e cidades; a origem de cada um está em `LICENCA.md`).
 - **Remontar:** `python ferramentas/montar_mundo.py` regrava `static/mundo/` em cerca de um minuto. Precisa do [Pillow](https://python-pillow.org) na sua máquina; o servidor nunca roda essa ferramenta.
+
+## Ponte local: os terminais deste computador
+
+A ponte (`ponte/`, em Go) lê os terminais de IA desta máquina (Claude Code, Codex, agy, OpenCode, MiniMax e Maestri) e os entrega ao mapa. Quem lê é o seu navegador, direto em `ws://127.0.0.1:47820`, e nada passa pelo servidor do Firmópolis.
+
+1. Compile e instale a ponte seguindo o [`ponte/README.md`](./ponte/README.md).
+2. Rode `ponte setup --aplicar --origem https://<endereço do seu Firmópolis>`. O comando grava o endereço na lista de origens aceitas e mostra o token.
+3. No Firmópolis, abra **Personalizar > Ponte local** e cole o token. Ele fica só naquele navegador.
+
+- **No mapa:** cada terminal entra pela rua com o nome e o programa na etiqueta ("Ada · Codex"). Ocupado, trabalha na sala do primeiro time. Quando espera a sua aprovação ou resposta, ou deu erro, vai para a recepção com o "!" ou o "?". Livre, fica na sala comunal ou na cozinha.
+- **Café e conversa:** cada terminal tem as duas necessidades, que caem mais depressa enquanto ele trabalha. Livre, depois de uma pausa, vai à cafeteira ou chama outro terminal livre para um papo no corredor. É só cosmético, e o estado real manda: se o terminal volta a trabalhar, larga o café na hora.
+- **Segurança:** a ponte só escuta em 127.0.0.1 e só aceita o WebSocket de uma origem da lista com o token certo. O navegador recebe uma versão reduzida: sem o alvo da atividade (arquivo ou comando) e sem o histórico do dia.
+- **Sem a ponte:** o app tenta de novo, com espera crescente até 1 minuto, e não mostra erro na tela. No Chrome, a primeira conexão pode pedir a permissão de acesso à rede local. O Safari pode recusar `ws://` vindo de uma página https.
 
 ## Jornal
 

@@ -4,6 +4,19 @@
 
 As mudanças que importam neste projeto ficam aqui, da mais nova para a mais antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Desde a 1.1.0, as versões seguem o [SemVer](https://semver.org/lang/pt-BR/); as entradas mais antigas são marcos com data.
 
+## Não lançado · Firmópolis
+
+### Adicionado
+- **Novo nome: Firmópolis.** O Escritório de agentes se juntou ao Escritório Vivo. A aba, o app instalável, o convite e o modo construção trazem o nome e os ícones novos, e uma abertura curta roda uma vez por sessão (pode ser pulada, e não roda no modo TV).
+- **Ponte local:** a ponte em Go do Escritório Vivo veio para `ponte/`. O navegador a lê direto em `127.0.0.1`, e os terminais deste computador (Claude Code, Codex, agy, OpenCode, MiniMax e Maestri) aparecem no mapa como terminaizinhos, sem passar pelo servidor. Veja [Ponte local](./README.pt-BR.md#ponte-local-os-terminais-deste-computador).
+- **Três espécies no mapa:** os bichinhos de feltro são os agentes do agentes.chat, os terminaizinhos são os terminais locais e a gente são você e as visitas.
+- **Café e conversa dos terminais:** livres, os terminaizinhos vão à cafeteira ou conversam no corredor, conforme as necessidades que caem enquanto trabalham.
+- **Seletor da gente:** no perfil e no convite, você escolhe a blusa, o cabelo e a pele de como aparece no mapa.
+
+### Mudado
+- **Integrações da ponte:** a marca dos hooks passou de `escritorio-vivo` para `firmopolis`. O `ponte setup --aplicar` migra quem vem do Escritório Vivo, com a config, o token e o histórico, e só apaga um plugin antigo quando confirma que foi a ponte que o instalou.
+- **Avatar da conta:** aceita `hair` e `skin`, opcionais. Os avatares já salvos continuam valendo.
+
 ## 1.6.0 · 2026-11-16 · Escritório da equipe
 
 Release [`v1.6.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.6.0). Commits: [`v1.5.2...v1.6.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.5.2...v1.6.0).

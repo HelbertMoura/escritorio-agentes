@@ -1,6 +1,6 @@
 # Copyright (C) 2026 Dev Maniac's
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Escritório dos agentes: página que mostra quem do time do agentes.chat está trabalhando.
+"""Firmópolis: página que mostra quem do time do agentes.chat está trabalhando.
 
 Lê o agentes.chat pelo conector MCP de apps externos (OAuth, escopo "read"; "read write" só com
 "conversas": "responder"), a cada ESCRITORIO_INTERVALO segundos, e guarda um resumo em memória.
@@ -159,11 +159,13 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "index.html": "text/html; charset=utf-8", "app.js": "text/javascript; charset=utf-8",
     "avatar.js": "text/javascript; charset=utf-8", "mapa.js": "text/javascript; charset=utf-8",
     "vida.js": "text/javascript; charset=utf-8", "som.js": "text/javascript; charset=utf-8",
+    "sprites.js": "text/javascript; charset=utf-8", "ponte.js": "text/javascript; charset=utf-8",
     "ceu.js": "text/javascript; charset=utf-8", "clima.js": "text/javascript; charset=utf-8",
     "festas.js": "text/javascript; charset=utf-8", "efeitos.js": "text/javascript; charset=utf-8",
     "estilo.css": "text/css; charset=utf-8", "tema/atlas.png": "image/png", "tema/atlas.json": "application/json",
     "mundo/terra.png": "image/png", "mundo/brasil.png": "image/png", "mundo/mundo.json": "application/json",
     "mundo/atlas.png": "image/png", "mundo/atlas.json": "application/json",
+    "mundo/bairro.png": "image/png", "mundo/bairro.json": "application/json",
     "logo.png": "image/png", "fontes/figtree.ttf": "font/ttf", "fontes/silkscreen.ttf": "font/ttf",
     "fontes/source-sans-3.woff2": "font/woff2", "fontes/doto.woff2": "font/woff2",
     "entrar.css": "text/css; charset=utf-8", "entrar.js": "text/javascript; charset=utf-8",
@@ -182,6 +184,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "reunioes.js": "text/javascript; charset=utf-8", "reunioes.css": "text/css; charset=utf-8",
     "linha_tempo.js": "text/javascript; charset=utf-8", "linha_tempo.css": "text/css; charset=utf-8",
     "apresentacao.js": "text/javascript; charset=utf-8",
+    "abertura.js": "text/javascript; charset=utf-8",
     "manifest.webmanifest": "application/manifest+json", "icone-180.png": "image/png", "icone-192.png": "image/png",
     "icone-512.png": "image/png", "icone-mascara-512.png": "image/png",
 }
@@ -280,7 +283,7 @@ class Credenciais:
         for p in self.pendentes.values():
             if agora - p["em"] < self.VALIDADE and p["escopo"] == escopo and p["redirect_uri"] == self.redirect_uri():
                 return p["client_id"]
-        nome = "Escritório dos agentes" if "write" in escopo.split() else "Escritório dos agentes (leitura)"
+        nome = "Firmópolis" if "write" in escopo.split() else "Firmópolis (leitura)"
         corpo = {"client_name": nome, "redirect_uris": [self.redirect_uri()],
                  "grant_types": ["authorization_code", "refresh_token"], "response_types": ["code"],
                  "token_endpoint_auth_method": "none", "scope": escopo}
@@ -2719,11 +2722,11 @@ def geometria_visita(config, foto, planta):
     return {"grupos": grupos, "planta": {"rev": 0, "salas": pinturas, "moveis": moveis, "novos": novos}}
 
 
-PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "convite.html", "convite.js", "convite.css", "fontes/figtree.ttf", "fontes/silkscreen.ttf", "fontes/source-sans-3.woff2",
+PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "sprites.js", "convite.html", "convite.js", "convite.css", "fontes/figtree.ttf", "fontes/silkscreen.ttf", "fontes/source-sans-3.woff2",
             "visita.html", "visita.js", "visita.css", "mapa.js", "tema/atlas.png", "tema/atlas.json",
             "mundo.html", "mundo.js", "ceu.js", "clima.js", "som.js",  # bairro público: só código de desenho e som, sem dados
             # mapa do mundo: imagens, cidades e código de desenho, sem dados do escritório
-            "mundo/terra.png", "mundo/brasil.png", "mundo/mundo.json", "mundo/atlas.png", "mundo/atlas.json",
+            "mundo/terra.png", "mundo/brasil.png", "mundo/mundo.json", "mundo/atlas.png", "mundo/atlas.json", "mundo/bairro.png", "mundo/bairro.json",
             "mundo_globo.js", "mundo_mapa.js", "mundo_mapa_arte.js", "mundo_cidade.js", "mundo_cidade_planta.js", "mundo_bairro.js",
             "mundo_festa.js", "mundo_cidade_chao.js", "mundo_cidade_letreiro.js", "mundo_mapa_perto.js", *AZULEJOS_PERTO, "mundo/perto/ufs.json",
             "festas.js",  # o calendário embutido; as datas próprias só chegam pelo /api/config
@@ -3008,7 +3011,7 @@ class Pagina(BaseHTTPRequestHandler):
             self.send_header("Strict-Transport-Security", "max-age=31536000")
         self.send_header("Content-Security-Policy",
                          "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; "
-                         "connect-src 'self'; frame-ancestors " + ("'self'" if moldura else "'none'") +
+                         "connect-src 'self' ws://127.0.0.1:47820; frame-ancestors " + ("'self'" if moldura else "'none'") +
                          "; base-uri 'none'; form-action 'self'")
 
     def _envia(self, status, corpo=b"", tipo="text/plain; charset=utf-8", extra=None, cache="no-store", moldura=False):

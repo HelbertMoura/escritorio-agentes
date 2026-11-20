@@ -2,9 +2,11 @@
 
 <div align="center">
 
-# Escritório de agentes
+# Firmópolis
 
-### A live pixel-art office for your [agentes.chat](https://agentes.chat) team
+### A live pixel-art office for your [agentes.chat](https://agentes.chat) team and for the terminals on your computer
+
+*Formerly Escritório de agentes. It now also brings in Escritório Vivo.*
 
 **See who is at their desk, who is playing pool in the lounge and who is waiting for your approval. Read-only (except for the optional reply mode), every 30 seconds, no AI and no tokens spent.**
 
@@ -18,7 +20,7 @@
   <img src="./docs/demo.gif" alt="Animated demo of the office in demo mode, with fictional agents: the pixel-art map by day with agents walking and working, the camera zooming in on an agent with a '?' question bubble, then the pointer moves to a request in the Waiting for you list (one click takes you to that agent). Short captions in Portuguese explain each step." width="900">
 </picture>
 
-[Features](#features) · [Screenshots](#screenshots) · [Install](#install) · [Floors](#floors-several-workspaces-in-one-building) · [Team](#team) · [Customize](#customize-white-label) · [Social life](#social-life) · [Construction mode](#construction-mode) · [TV mode](#tv-mode) · [Presentation mode](#presentation-mode) · [Installable app](#installable-app-pwa) · [Visitors](#visitors) · [Visits by invitation](#visits-by-invitation) · [Newspaper](#newspaper) · [Time-lapse](#time-lapse) · [Phone alerts](#phone-alerts) · [Security](#security) · [Architecture](#architecture) · [Development](#development) · [Changelog](./CHANGELOG.md) · [Contributing](./CONTRIBUTING.md) · [Code of Conduct](./CODE_OF_CONDUCT.md)
+[Features](#features) · [Screenshots](#screenshots) · [Install](#install) · [Floors](#floors-several-workspaces-in-one-building) · [Team](#team) · [Customize](#customize-white-label) · [Social life](#social-life) · [Construction mode](#construction-mode) · [TV mode](#tv-mode) · [Presentation mode](#presentation-mode) · [Installable app](#installable-app-pwa) · [Visitors](#visitors) · [Visits by invitation](#visits-by-invitation) · [Local bridge](#local-bridge-the-terminals-on-this-computer) · [Newspaper](#newspaper) · [Time-lapse](#time-lapse) · [Phone alerts](#phone-alerts) · [Security](#security) · [Architecture](#architecture) · [Development](#development) · [Changelog](./CHANGELOG.md) · [Contributing](./CONTRIBUTING.md) · [Code of Conduct](./CODE_OF_CONDUCT.md)
 
 🎬 **[Launch video](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2026.11.06)** (narrated in Brazilian Portuguese, with subtitles), attached to the release. 🌎 **[Video of the world and the visits](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.3.0)** (1.3.0), also narrated in Portuguese, with subtitles.
 
@@ -38,7 +40,9 @@
 
 ## What it is
 
-Escritório de agentes ("agents' office") is a small self-hosted web page that turns your agentes.chat workspace into a living office. It reads agentes.chat through the external apps connector (MCP, **read-only** OAuth scope; write only if you turn on the `"responder"` mode) every 30 seconds and draws your team as pixel-art people in a building that assembles itself from your teams.
+Firmópolis (formerly Escritório de agentes, "agents' office") is a small self-hosted web page that turns your agentes.chat workspace into a living office. It reads agentes.chat through the external apps connector (MCP, **read-only** OAuth scope; write only if you turn on the `"responder"` mode) every 30 seconds and draws your team as pixel-art people in a building that assembles itself from your teams.
+
+With the optional [local bridge](#local-bridge-the-terminals-on-this-computer), the map also shows the terminals on your computer (Claude Code, Codex, agy, OpenCode, MiniMax and Maestri), and that data never goes through the server. Three species live in the building: the **felt critters** are the agentes.chat agents, the **little terminals** are the terminals on this computer, and the **people** are you and your visitors.
 
 It **does not call any AI model** and does not spend tokens. Approving always happens in agentes.chat; answering too, except in the optional `"responder"` mode. Otherwise, the office only shows what is going on and links you there.
 
@@ -47,6 +51,7 @@ It **does not call any AI model** and does not spend tokens. Approving always ha
 ## Features
 
 - 🏢 **A building made from your teams:** reception with your logo, one room per team (it grows with the number of agents), corridor, meeting room, lounge and kitchen. A new agent gets a desk in the "New" room.
+- 🖥️ **Terminals on this computer:** with the local bridge, each terminal becomes a little terminal on the map. Busy, it works in the team room. Waiting for you, it goes to the reception with a "!" or "?". Free, it gets coffee and chats in the hallway with another free terminal (see [Local bridge](#local-bridge-the-terminals-on-this-computer)).
 - 🧑‍💻 **Live map:** agents go to their desk and type when they get a task. When they are free they play arcade, video games, pool, foosball, ping-pong, chess, darts and basketball by themselves, play the piano or the guitar, grab a coffee or chat in pairs. They arrive in the morning and leave at night through the front door.
 - ✋ **Approvals at a glance:** a "!" or "?" over anyone waiting for your approval or answer, and a **"Waiting for you"** list with how long each request has been waiting. Each one opens the right request in agentes.chat (approving is always done there).
 - 🎵 **Life and sounds:** 21 poses, games in pairs up to 3 points with a cheering crowd, a coffee circle, high-fives, a robot vacuum at night and more. 45 optional sound effects synthesized in the browser (keyboard, "simlish" chatter with a voice per agent, games, alerts, the ring and the strike, rain and thunder), with a volume control and on/off per category. Audio only starts after you interact with the page.
@@ -60,7 +65,7 @@ It **does not call any AI model** and does not spend tokens. Approving always ha
 - 📺 **TV mode:** full screen, the screen kept on and a camera director that rushes to requests, fights and strikes, with a news ticker (see [TV mode](#tv-mode)).
 - 📲 **App and phone alerts:** install the office on your home screen and get an alert when an agent asks for your approval or asks a question (see [Installable app](#installable-app-pwa) and [Phone alerts](#phone-alerts)).
 - 🏬 **Floors:** each agentes.chat workspace becomes a floor of the building, and the elevator in the top bar switches floors (see [Floors](#floors-several-workspaces-in-one-building)).
-- 👥 **Team:** member accounts by invitation, with a name and a character on the map; team conversations (general, rooms and DMs, with mentions, reactions, attachments and search), a board, status, meetings with a calendar and a summary of what happened while you were away (see [Team](#team)).
+- 👥 **Team:** member accounts by invitation, with a name and a character on the map (shirt, hair and skin chosen in the profile); team conversations (general, rooms and DMs, with mentions, reactions, attachments and search), a board, status, meetings with a calendar and a summary of what happened while you were away (see [Team](#team)).
 - 🙈 **Presentation mode:** replaces names with "Agente 1" and "Pessoa 2" and hides what is sensitive, for showing the screen to a client (see [Presentation mode](#presentation-mode)).
 - 👀 **Visitors:** whoever else on the team has the office open shows up on the map with their own name and character (see [Visitors](#visitors)).
 - 🚪 **Visits by invitation:** a 1-hour link brings someone from outside into the meeting room, with no password (see [Visits by invitation](#visits-by-invitation)).
@@ -436,6 +441,19 @@ If you only install the office you need none of this: the files in `static/mundo
 - **Art:** `arte/pixellab/mundo/` (landmarks, buildings, houses, trees, cars, mountain ranges). Without a landmark's art, the city uses a generic building.
 - **Terrain:** `arte/mundo/biomas.json` and `serras.json`, plus the Natural Earth extracts in `arte/mundo/fontes/` (outlines, rivers, highways and cities; the source of each is in `LICENCA.md`).
 - **Rebuild:** `python ferramentas/montar_mundo.py` rewrites `static/mundo/` in about a minute. It needs [Pillow](https://python-pillow.org) on your machine; the server never runs this tool.
+
+## Local bridge: the terminals on this computer
+
+The bridge (`ponte/`, written in Go) reads the AI terminals on this machine (Claude Code, Codex, agy, OpenCode, MiniMax and Maestri) and hands them to the map. Your browser reads it directly at `ws://127.0.0.1:47820`, and nothing goes through the Firmópolis server.
+
+1. Build and install the bridge following [`ponte/README.md`](./ponte/README.md) (in Portuguese).
+2. Run `ponte setup --aplicar --origem https://<your Firmópolis address>`. It adds the address to the list of accepted origins and prints the token.
+3. In Firmópolis, open **Personalizar > Ponte local** and paste the token. It stays in that browser only.
+
+- **On the map:** each terminal walks in from the street with its name and program on the label ("Ada · Codex"). Busy, it works in the first team's room. Waiting for your approval or answer, or after an error, it goes to the reception with a "!" or "?". Free, it stays in the common room or the kitchen.
+- **Coffee and chats:** each terminal has these two needs, and they drop faster while it works. When it is free, after a short break, it goes to the coffee machine or asks another free terminal for a chat in the hallway. It is cosmetic only, and the real state wins: when the terminal gets back to work, it drops the coffee right away.
+- **Security:** the bridge only listens on 127.0.0.1 and only accepts the WebSocket from a listed origin with the right token. The browser gets a reduced version, without the activity target (file or command) and without the day's history.
+- **Without the bridge:** the app retries with a growing wait of up to 1 minute and shows no error on screen. In Chrome, the first connection may ask for the local network access permission. Safari may refuse `ws://` from an https page.
 
 ## Newspaper
 
