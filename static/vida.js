@@ -264,10 +264,17 @@ const Vida = (() => {
     return rota;
   }
 
-  function entradas(m, s) { // ponto logo dentro de cada porta e o trecho até o corredor
-    const cy = m.predio.corredorY;
-    if (s.portas) return s.portas.map(px => ({ dentro: [px, s.chao + 8], fora: [[px, cy]] }));
-    return [{ dentro: [s.porta.x, s.py + s.ph - 8], fora: [[s.porta.x, s.py + s.ph + 6], [s.porta.x, cy]] }];
+  // sala de um corredor de baixo (mapa.js: s.corY e s.lig): da porta ao corredor dela e pela ligação até o principal
+  const corDa = (m, s) => (s.corY === undefined ? m.predio.corredorY : s.corY), ligDa = s => s.lig || [];
+  function entradas(m, s) { // ponto logo dentro de cada porta e o trecho até o corredor principal
+    const cy = corDa(m, s), lig = ligDa(s);
+    if (s.portas) return s.portas.map(px => ({ dentro: [px, s.chao + 8], fora: [[px, cy], ...lig] }));
+    return [{ dentro: [s.porta.x, s.py + s.ph - 8], fora: [[s.porta.x, s.py + s.ph + 6], [s.porta.x, cy], ...lig] }];
+  }
+  // de um ponto num corredor até a linha do principal (num corredor de baixo, pela ligação)
+  function viaCorredor(m, x, y) {
+    const k = (m.predio.corredores || []).find(c => c.lig.length && y >= c.topo && y <= c.topo + c.alt);
+    return k ? [[x, k.y], ...k.lig] : [[x, m.predio.corredorY]];
   }
   const portaPerto = (m, s, x) => entradas(m, s).reduce((a, b) => (Math.abs(b.dentro[0] - x) < Math.abs(a.dentro[0] - x) ? b : a));
 
@@ -276,8 +283,8 @@ const Vida = (() => {
   function saidaMesa(m, k) {
     const s = k.sala;
     if (s.porta.emCima) // sala de time na fileira de baixo: a porta fica na parede de cima
-      return [[k.saida, k.pe], [k.saida, k.corredor], [s.faixaX, k.corredor], [s.faixaX, s.chao + 8], [s.porta.x, s.chao + 8], [s.porta.x, m.predio.corredorY]];
-    return [[k.saida, k.pe], [k.saida, k.corredor], [s.faixaX, k.corredor], [s.faixaX, s.py + s.ph - 6], [s.porta.x, s.py + s.ph + 6], [s.porta.x, m.predio.corredorY]];
+      return [[k.saida, k.pe], [k.saida, k.corredor], [s.faixaX, k.corredor], [s.faixaX, s.chao + 8], [s.porta.x, s.chao + 8], [s.porta.x, corDa(m, s)], ...ligDa(s)];
+    return [[k.saida, k.pe], [k.saida, k.corredor], [s.faixaX, k.corredor], [s.faixaX, s.py + s.ph - 6], [s.porta.x, s.py + s.ph + 6], [s.porta.x, corDa(m, s)], ...ligDa(s)];
   }
 
   function rotaRua(m) { // da ponta do corredor até sumir na calçada, à esquerda
@@ -302,6 +309,13 @@ const Vida = (() => {
     return [...[...e.fora].reverse(), e.dentro, ...(rotaNaSala(m, l.vaga.sala, e.dentro, p) || [p])];
   }
 
+  // ida e volta pela mesma ligação (duas salas do mesmo corredor de baixo): corta o trecho repetido e não sobe à toa
+  function junta(ida, volta) {
+    let i = ida.length, j = 0;
+    while (i > 0 && j < volta.length && ida[i - 1][0] === volta[j][0] && ida[i - 1][1] === volta[j][1]) { i--; j++; }
+    return j < 2 ? [...ida, ...volta] : [...ida.slice(0, i), ...volta.slice(j)];   // um ponto só em comum é a porta: segue igual
+  }
+
   function caminho(m, de, para) {
     const k = de && de.tipo !== "fora" && mesaDe(de);
     if (k && para.tipo !== "fora" && mesaDe(para) === k) return [[k.saida, k.pe], pontoDe(para)];   // ali do lado da própria mesa
@@ -310,7 +324,7 @@ const Vida = (() => {
       if (r) return r;
     }
     const ida = !de ? [] : de.tipo === "fora" ? rotaRua(m).reverse().slice(1) : sair(m, de);
-    return para.tipo === "fora" ? [...ida, ...rotaRua(m)] : [...ida, ...entrar(m, para)];
+    return para.tipo === "fora" ? [...ida, ...rotaRua(m)] : junta(ida, entrar(m, para));
   }
 
   // --- estado vindo do agentes.chat ------------------------------------------------------
@@ -1612,19 +1626,19 @@ const Vida = (() => {
 
   // de a até b, com o caminho dos agentes: dentro da sala, porta, corredor, porta e dentro da outra sala
   function rotaAte(m, a, b) {
-    const sa = salaEm(m, a[0], a[1]), sb = salaEm(m, b[0], b[1]), cy = m.predio.corredorY;
+    const sa = salaEm(m, a[0], a[1]), sb = salaEm(m, b[0], b[1]);
     if (sa && sa === sb) return rotaNaSala(m, sa, a, b);
-    const ida = sa ? rotaDaSala(m, sa, a) : [[a[0], cy]];
-    if (!sb) return [...ida, [b[0], cy], [b[0], b[1]]];
+    const ida = sa ? rotaDaSala(m, sa, a) : viaCorredor(m, a[0], a[1]);
+    if (!sb) return junta(ida, [...viaCorredor(m, b[0], b[1]).reverse(), [b[0], b[1]]]);
     const e = portaPerto(m, sb, b[0]), dentro = rotaNaSala(m, sb, e.dentro, b);
-    return dentro && [...ida, ...[...e.fora].reverse(), e.dentro, ...dentro];
+    return dentro && junta(ida, [...[...e.fora].reverse(), e.dentro, ...dentro]);
   }
   // o ponto de chão livre mais perto do clique, numa sala ou no corredor; fora disso (rua, telhado), nenhum
   function pontoDoClique(m, x, y) {
     const s = salaEm(m, x, y), p = m.predio;
     if (!s) {
-      const r = p.predioRet, topo = p.corredorTopo;
-      return x >= r.x + 16 && x <= r.x + r.w - 16 && y >= topo && y <= topo + p.corredorAlt ? [x, Math.max(topo + 8, Math.min(topo + p.corredorAlt - 4, y))] : null;
+      const r = p.predioRet, k = (p.corredores || [{ topo: p.corredorTopo, alt: p.corredorAlt }]).find(c => y >= c.topo && y <= c.topo + c.alt);
+      return k && x >= r.x + 16 && x <= r.x + r.w - 16 ? [x, Math.max(k.topo + 8, Math.min(k.topo + k.alt - 4, y))] : null;
     }
     const g = grade(m, s), i0 = Math.floor((x - g.x0) / GRADE), j0 = Math.floor((y - g.y0) / GRADE);
     let melhor = null, dm = 1e9;
