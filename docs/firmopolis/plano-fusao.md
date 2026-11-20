@@ -1,15 +1,11 @@
 # Firmópolis: plano da fusão
 
-Este plano junta o Escritório de agentes (este repositório, web e AGPL, com arte PixelLab) e o Escritório Vivo (`~/projetos/EscritorioVivo`, feito em Godot, com uma ponte em Go e arte LimeZu). O resultado se chama Firmópolis. A base é a web. Da Vivo, a ponte em Go entra como segunda fonte de dados, e as mecânicas "Sims" são reescritas no canvas. O Godot e a arte LimeZu ficam de fora, porque a licença da LimeZu proíbe redistribuir e o projeto é aberto.
+Este plano junta o Escritório de agentes (este repositório, web e AGPL, com arte PixelLab) e o Escritório Vivo (feito em Godot, com uma ponte em Go e arte LimeZu). O resultado se chama Firmópolis. A base é a web. Da Vivo, a ponte em Go entra como segunda fonte de dados, e as mecânicas "Sims" são reescritas no canvas. O Godot e a arte LimeZu ficam de fora, porque a licença da LimeZu proíbe redistribuir e o projeto é aberto.
 
 Branch: `firmopolis`. O deploy em produção (o app e o site firmopolis.devmaniacs.com.br) só sai com o GO do Helbert.
 
 ## O site no ar
-O site (`site/`) está em https://firmopolis.devmaniacs.com.br desde 19/11/2026, com o GO do Helbert.
-- Na VPS de produção, os arquivos ficam em `/srv/firmopolis-site/html`. Os symlinks `abertura.js` e `avatar.js` são resolvidos na cópia (`rsync -aL site/`).
-- O container `firmopolis-site` (nginx:alpine, 64 MB, `127.0.0.1:8894`) usa a config `docs/firmopolis/site-nginx.conf`, que traz CSP, gzip e cache: o HTML não fica em cache; CSS e JS ficam em cache longo, renovado pelo `?v=`; imagens e fontes ficam em cache por uma semana.
-- O túnel da Cloudflare é **configurado pelo painel**: a regra de entrada fica na configuração remota do túnel (API `cfd_tunnel/.../configurations`), não no `config.yml` local. O CNAME foi criado com `cloudflared tunnel route dns`.
-- Para atualizar, suba o `?v=` do arquivo que mudou, rode `rsync -aL --delete site/ devmaniacs-prod:/srv/firmopolis-site/html/` e confira com Playwright.
+O site (`site/`) está em https://firmopolis.devmaniacs.com.br desde 19/11/2026. A config do nginx fica em `docs/firmopolis/site-nginx.conf` (CSP, gzip e cache): o HTML não fica em cache; CSS e JS ficam em cache longo, renovado pelo `?v=`; imagens e fontes ficam em cache por uma semana. Para atualizar, suba o `?v=` do arquivo que mudou, copie `site/` resolvendo os links simbólicos (`rsync -aL`) e confira com Playwright.
 
 ## Onda 1: nome, ícones e abertura (feita)
 - A aba, o PWA, o convite, o modo construção e o nome do app OAuth agora dizem "Firmópolis". A aba fica `<empresa> · Firmópolis`. A palavra "Escritório" continua como nome da página do mapa, porque o escritório é um lugar dentro de Firmópolis.
