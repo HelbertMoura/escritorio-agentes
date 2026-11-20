@@ -2375,6 +2375,12 @@ def clima_proprio(andar):
     return tela["clima"] if tela else None
 
 
+def fuso_do_andar(andar):
+    """O fuso do relógio do andar (vida social, jornal e expediente): o da cidade própria, senão o de Brasília. É o mesmo
+    que a tela usa no Ceu, para o ringue e a hora extra valerem igual na tela e no servidor."""
+    return ajustes.zona((clima_proprio(andar) or {}).get("fuso")) or FUSO
+
+
 def foto_clima(clima, andar):
     """O tempo de agora no andar, do Clima do servidor: o da cidade própria, senão o do prédio (como sempre foi)."""
     if not clima:
@@ -2684,6 +2690,8 @@ def salvar_clima_andar(dados, usuario, andar):
             log(evento="clima", resultado="nao_gravou", andar=andar.id, detalhe=type(x).__name__)
             return erro(500, "gravar", "Não deu para salvar o clima agora.")
         proprio = clima_proprio(andar)
+        if hasattr(andar, "acertar_fuso"):   # a vida social e o jornal do andar passam ao relógio da cidade nova
+            andar.acertar_fuso()
     # sem a cidade nem as coordenadas no log
     log(evento="clima", resultado="salvo", usuario=usuario, andar=andar.id, origem="andar" if proprio else "predio")
     if proprio:
@@ -3017,6 +3025,11 @@ class Andar:
         self.social = Social(self.leitor, lambda: config_publica(self), log, FUSO, guardar=lambda dados: gravar(arq_placar, dados),
                              placar=ler_placar(arq_placar), contar_jornal=self.jornal.contar)
         self.planta = Planta(self.arq_planta, log, lambda dados: gravar(self.arq_planta, dados))
+        self.acertar_fuso()
+
+    def acertar_fuso(self):
+        """A vida social e o jornal leem self.fuso a cada uso: trocam para o fuso da cidade do andar na hora."""
+        self.social.fuso = self.jornal.fuso = fuso_do_andar(self)
 
     def iniciar(self):
         self.leitor.start()

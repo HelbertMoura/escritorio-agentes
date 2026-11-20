@@ -99,9 +99,21 @@ def inteiro(x, minimo, maximo, msg):
 FUSO_OK = re.compile(r"(?:[A-Z][A-Za-z_-]*)(?:/[A-Za-z0-9_+-]+){1,2}|UTC")   # IANA, como "America/Sao_Paulo"
 
 
+def zona(f):
+    """O ZoneInfo do fuso IANA, ou None: fora do formato, desconhecido no tzdata da máquina, ou sem zoneinfo."""
+    if not isinstance(f, str) or len(f) > 40 or not FUSO_OK.fullmatch(f):
+        return None
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo(f)
+    except Exception:   # ZoneInfoNotFoundError, ImportError, ValueError: o fuso não vale aqui
+        return None
+
+
 def validar_fuso(f):
-    """O fuso IANA (até 40 caracteres) que o geocoding devolve, ou None quando não vem ou vem fora do formato."""
-    return f if isinstance(f, str) and len(f) <= 40 and FUSO_OK.fullmatch(f) else None
+    """O fuso IANA (até 40 caracteres) que o geocoding devolve, ou None quando não vem, vem fora do formato ou não existe
+    no tzdata (o relógio do servidor precisa conhecer o fuso que a tela usa)."""
+    return f if zona(f) is not None else None
 
 
 def validar_clima(c, fuso=False):

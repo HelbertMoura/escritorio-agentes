@@ -49,7 +49,7 @@ class Validacao(unittest.TestCase):
         self.assertEqual(ajustes.validar_clima(BH, fuso=True), BH)   # o fuso é opcional
         with self.assertRaises(ValueError):   # o clima do prédio continua sem fuso, como sempre
             ajustes.validar_clima(LISBOA)
-        for ruim in ("../etc", "America/Sao_Paulo;x", "", "a" * 41, 3, "sao_paulo"):
+        for ruim in ("../etc", "America/Sao_Paulo;x", "", "a" * 41, 3, "sao_paulo", "Foo/Bar"):   # Foo/Bar: não existe
             with self.assertRaises(ValueError, msg=ruim):
                 ajustes.validar_clima({**LISBOA, "fuso": ruim}, fuso=True)
         self.assertEqual(ajustes.validar_fuso("America/Argentina/Buenos_Aires"), "America/Argentina/Buenos_Aires")
@@ -158,6 +158,7 @@ class Http(unittest.TestCase):
         for a in (self.b, self.c):
             if os.path.exists(a.arq_clima):
                 os.unlink(a.arq_clima)
+            a.acertar_fuso()   # o arquivo saiu por fora da rota: o relógio volta a Brasília
         self.log = contextlib.redirect_stdout(io.StringIO())
         self.log.__enter__()
         self.addCleanup(self.log.__exit__, None, None, None)
@@ -225,6 +226,25 @@ class Http(unittest.TestCase):
         st, corpo = self.post("/api/clima/andar" + q, {"limpar": True})
         self.assertEqual((st, corpo), (200, {"clima": BH, "origem": "tela"}))
         self.assertFalse(os.path.exists(self.b.arq_clima))
+
+    def test_vida_social_e_jornal_no_relogio_da_cidade(self):
+        """A regra: o expediente do servidor (ringue e hora extra) usa o mesmo fuso que a tela usa no Ceu."""
+        import datetime
+        import social
+        q = f"?andar={self.b.id}"
+        self.assertEqual((self.b.social.fuso, self.b.jornal.fuso), (e.FUSO, e.FUSO))   # sem cidade própria: Brasília
+        self.post("/api/clima/andar" + q, {"clima": LISBOA})
+        lisboa = ajustes.zona("Europe/Lisbon")
+        self.assertEqual((self.b.social.fuso, self.b.jornal.fuso), (lisboa, lisboa))
+        self.assertEqual((self.c.social.fuso, self.c.jornal.fuso), (e.FUSO, e.FUSO))   # o outro andar não muda
+        self.assertEqual(e.Andar({"id": self.b.id, "nome": "B", "org": ORG_B}, self.dados).social.fuso, lisboa)   # ao subir
+        # 06:00 em Brasília é 09:00 em Lisboa: com o expediente 07:00-20:00, o ringue de B está aberto, como na tela
+        agora = datetime.datetime(2026, 11, 20, 6, 0, tzinfo=e.FUSO).timestamp()
+        expediente = {"abre": "07:00", "fecha": "20:00"}
+        self.assertIsNotNone(social.fechamento(agora, expediente, self.b.social.fuso))
+        self.assertIsNone(social.fechamento(agora, expediente, self.c.social.fuso))
+        self.post("/api/clima/andar" + q, {"limpar": True})   # voltou a herdar: volta a Brasília
+        self.assertEqual((self.b.social.fuso, self.b.jornal.fuso), (e.FUSO, e.FUSO))
 
     def test_config_v_muda_com_a_cidade_do_andar(self):
         antes = e.config_v(self.b)
