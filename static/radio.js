@@ -585,3 +585,9 @@ const Radio = (() => {
     get tocando() { return ligado; }, get estado() { return estado(); } };
 })();
 if (typeof window !== "undefined") window.Radio = Radio;
+// o botão da barra da câmera (index.html): o rádio também abre por ali, mesmo quando a parede da sala comunal não tem lugar
+if (typeof document !== "undefined") {
+  const ligarBotao = () => { const b = document.getElementById("abrir-radio"); if (b) b.addEventListener("click", () => Radio.abrir(b)); };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ligarBotao); else ligarBotao();
+}
+
