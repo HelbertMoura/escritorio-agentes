@@ -347,6 +347,17 @@ For showing the screen on a call with a client or posting a screenshot without l
 - **What changes:** the avatars stay, but the names become "Agente 1", "Pessoa 2" and "Você" (you), numbered in the order they show up; the speech bubbles disappear; and the screen hides whatever shows a person's or agent's name, task title, conversation, room chat, mural, status note, the scoreboard, the Conversas, Aprovações and Jornal pages, the meeting titles and guests, and the meeting room links in **Personalizar** (a Zoom link can carry the password in `?pwd=`). The 5-minute meeting alert only says "Uma reunião começa em breve".
 - **Screen only, not access control:** the mode only hides things on this screen. Whoever holds the session still reads everything through the API and the browser DevTools, and the server answers the same. Do not hand a signed-in browser to someone who should not see the data.
 
+## Office radio
+
+A radio on the wall of the Sala comunal (common room). Click it (or reach it with `Tab` and press `Enter`) to open its controls: on and off, station and volume.
+
+- **Rádio Firmópolis, made in the browser:** three stations composed on the fly with Web Audio, with no audio files and no copyright: **Lo-fi da firma** (calm, for working), **Chiptune do fliperama** (arcade chiptune) and **Jazz da cafeteria** (café jazz). Each song draws a key, tempo, chord progression and form (intro, A and B parts, ending); the melody comes back with variations and the drums change groove, so there is no short loop. Station and volume changes fade smoothly.
+- **Everyone turns on their own:** the radio only plays after a click (browsers block sound on their own) and only for whoever turned it on. Station and volume are remembered in this browser; the volume starts low. The radio is independent of the sound panel.
+- **On the map:** while it plays, little notes float out of it and, now and then, free agents standing nearby dance a little; free little terminals make their happy face. With reduced motion set in the system, nobody dances.
+- **TV mode and presentation mode** play nothing: turning either on turns the radio off.
+- **Internet radio (optional):** in **Personalizar > Rádio da internet**, the floor's admin pastes the `https://` address of an audio stream. It shows up as a fourth station. The server accepts only `https`, a single host, no user or password, up to 300 characters, and allows only that host in the page's CSP (`media-src`). **The rights to play that station belong to whoever configures it.**
+- To check the sound without playing it, `Radio.renderizar("lofi", 30)` (in the browser console) returns a clip recorded with `OfflineAudioContext`.
+
 ## Installable app (PWA)
 
 The office can go on a phone's home screen or become an app on a computer, with its own icon and no browser bar.

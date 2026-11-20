@@ -166,6 +166,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "index.html": "text/html; charset=utf-8", "app.js": "text/javascript; charset=utf-8",
     "avatar.js": "text/javascript; charset=utf-8", "mapa.js": "text/javascript; charset=utf-8",
     "vida.js": "text/javascript; charset=utf-8", "som.js": "text/javascript; charset=utf-8",
+    "radio.js": "text/javascript; charset=utf-8",
     "sprites.js": "text/javascript; charset=utf-8", "ponte.js": "text/javascript; charset=utf-8",
     "ceu.js": "text/javascript; charset=utf-8", "clima.js": "text/javascript; charset=utf-8",
     "festas.js": "text/javascript; charset=utf-8", "efeitos.js": "text/javascript; charset=utf-8",
@@ -2153,6 +2154,49 @@ def validar_expediente(valor):
     return {"abre": horas[0], "fecha": horas[1]}
 
 
+RADIO_MAX = 300
+RADIO_HOST = re.compile(r"(?=.{4,253}\Z)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+")
+MSG_RADIO = "rádio: cole um endereço https de stream de áudio (até 300 caracteres, sem usuário e senha)"
+
+
+def validar_radio(valor):
+    """A rádio da internet do andar (Personalizar): "" desliga; senão, um endereço https de um host só, normalizado. O
+    host vai para o CSP da página (media-src), por isso só letras, números, ponto e hífen (nome internacional, em
+    punycode); sem usuário e senha, sem fragmento, sem espaço nem caractere de controle."""
+    if valor is None or valor == "":
+        return ""
+    if not isinstance(valor, str) or len(valor) > RADIO_MAX or not valor.isascii() \
+            or any(c.isspace() or not c.isprintable() for c in valor):
+        raise ValueError(MSG_RADIO)
+    try:
+        u = urllib.parse.urlsplit(valor)
+        porta = u.port
+    except ValueError:   # porta fora de 0-65535, colchetes quebrados
+        raise ValueError(MSG_RADIO) from None
+    host = u.hostname or ""
+    if u.scheme.lower() != "https" or "@" in u.netloc or u.fragment or not RADIO_HOST.fullmatch(host) or porta == 0:
+        raise ValueError(MSG_RADIO)
+    return urllib.parse.urlunsplit(("https", host + (f":{porta}" if porta else ""), u.path or "/", u.query, ""))
+
+
+def origem_radio(valor):
+    """A origem (https://host[:porta]) de uma rádio salva, para o media-src; valor que não passa na validação dá ""."""
+    try:
+        url = validar_radio(valor)
+    except ValueError:
+        return ""
+    return "https://" + urllib.parse.urlsplit(url).netloc if url else ""
+
+
+def politica_seguranca(moldura=False, midia=()):
+    """O CSP de toda resposta. midia: as origens extras de áudio (as rádios da internet que a sessão pode ouvir); sem
+    elas, o media-src fica no default-src 'self'."""
+    extra = "; media-src 'self' " + " ".join(sorted(set(midia))) if midia else ""
+    return ("default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; "
+            "connect-src 'self' ws://127.0.0.1:47820" + extra + "; frame-ancestors " + ("'self'" if moldura else "'none'") +
+            "; base-uri 'none'; form-action 'self'")
+
+
 def carregar_times(caminho=None, org=None):
     """Lê times.json e devolve só o que passa na validação (o resto é ignorado). Arquivo fora do formato
     ("times" que não é lista, "parede": "x"...) vale como vazio, com um evento no log: a página nunca cai por ele."""
@@ -2360,6 +2404,7 @@ def config_publica(andar=None):
             cfg["expediente"] = validar_expediente(m["expediente"])
         except ValueError:
             log(evento="marca", resultado="expediente_invalido")
+    cfg["radio"] = validar_radio(m["radio"]) if origem_radio(m.get("radio")) else ""   # a rádio da internet do andar
     # hash do conteúdo: muda a cada logo novo, até dois no mesmo segundo (o mtime não garante isso). Sem logo enviado,
     # vale o do logo padrão (static/logo.png, com cache público de 1 h): trocar a arte também fura o cache
     versao = _versao_logo(andar.arq_logo if extra else ARQ_LOGO) or _versao_logo(os.path.join(ESTATICO, "logo.png")) or 0
@@ -2762,8 +2807,8 @@ def salvar_festas(dados, usuario):
     return 200, {"rev": nova["rev"], "festas": {"proprias": nova["proprias"], "desligadas": nova["desligadas"]}}
 
 
-def salvar_marca(empresa, cor, expediente=None, serio=None, caminho=None):
-    """expediente e serio None mantêm o que já estava salvo (a tela antiga e as boas-vindas não mandam os campos).
+def salvar_marca(empresa, cor, expediente=None, serio=None, caminho=None, radio=None):
+    """expediente, serio e radio None mantêm o que já estava salvo (a tela antiga e as boas-vindas não mandam os campos).
     caminho: o marca.json do andar (None: o do prédio)."""
     if not ROTULO_OK.fullmatch(empresa or ""):
         raise ValueError("nome da empresa: até 40 letras, números e . ' & -")
@@ -2780,6 +2825,11 @@ def salvar_marca(empresa, cor, expediente=None, serio=None, caminho=None):
         novo["serio"] = serio
     elif isinstance(anterior.get("serio"), bool):
         novo["serio"] = anterior["serio"]
+    if radio is not None:
+        if validar_radio(radio):   # "" tira a rádio
+            novo["radio"] = validar_radio(radio)
+    elif origem_radio(anterior.get("radio")):
+        novo["radio"] = anterior["radio"]
     gravar(caminho or ARQ_MARCA, json.dumps(novo).encode("utf-8"))
 
 
@@ -3128,24 +3178,23 @@ class Pagina(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
-    def _cabecalhos_seguranca(self, moldura=False):
-        """moldura: a página pode abrir dentro de outra do próprio escritório (o mundo no Modo TV); de fora, nunca."""
+    def _cabecalhos_seguranca(self, moldura=False, midia=()):
+        """moldura: a página pode abrir dentro de outra do próprio escritório (o mundo no Modo TV); de fora, nunca.
+        midia: as origens das rádios da internet (só na página do app)."""
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "SAMEORIGIN" if moldura else "DENY")
         self.send_header("Referrer-Policy", "same-origin")  # com no-referrer o POST de formulário sai com Origin: null
         if BASE.startswith("https://"):
             self.send_header("Strict-Transport-Security", "max-age=31536000")
-        self.send_header("Content-Security-Policy",
-                         "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; "
-                         "connect-src 'self' ws://127.0.0.1:47820; frame-ancestors " + ("'self'" if moldura else "'none'") +
-                         "; base-uri 'none'; form-action 'self'")
+        self.send_header("Content-Security-Policy", politica_seguranca(moldura, midia))
 
-    def _envia(self, status, corpo=b"", tipo="text/plain; charset=utf-8", extra=None, cache="no-store", moldura=False):
+    def _envia(self, status, corpo=b"", tipo="text/plain; charset=utf-8", extra=None, cache="no-store", moldura=False,
+               midia=()):
         self.send_response(status)
         self.send_header("Content-Type", tipo)
         self.send_header("Content-Length", str(len(corpo)))
         self.send_header("Cache-Control", cache)
-        self._cabecalhos_seguranca(moldura)
+        self._cabecalhos_seguranca(moldura, midia)
         for k, v in (extra or {}).items():
             if isinstance(v, list):
                 for item in v:
@@ -3841,7 +3890,19 @@ class Pagina(BaseHTTPRequestHandler):
             return self._envia(404, b"")
         cache = ("no-store" if nome in ("visita.html", "visitas-admin.html", "recepcionista.html", "mundo.html") else
                  "public, max-age=3600" if nome.endswith((".png", ".ttf", ".woff2")) else "no-cache")
-        return self._envia(200, corpo, ARQUIVOS[nome], cache=cache, moldura=nome == "mundo.html")
+        midia = self._radios() if nome == "index.html" else ()
+        return self._envia(200, corpo, ARQUIVOS[nome], cache=cache, moldura=nome == "mundo.html", midia=midia)
+
+    def _radios(self):
+        """As origens das rádios da internet dos andares que esta sessão vê: a página é uma só e troca de andar sem
+        recarregar. Cada origem passou pela validar_radio (só host e porta); nenhuma rádio, nenhum media-src extra."""
+        if not self._usuario():
+            return ()
+        origens = set()
+        for id_andar, andar in ((ANDAR_PRINCIPAL, None), *getattr(self.server, "andares", {}).items()):
+            if self._pode_andar(id_andar):
+                origens.add(origem_radio(_ler_marca(andar.arq_marca if andar else None).get("radio")))
+        return tuple(o for o in origens if o)
 
     def _post_resposta(self, rota):
         """Fase R (R2 e R2a): Origin obrigatório e igual à BASE (sem a volta para o Referer), sessão e JSON exato."""
@@ -4311,7 +4372,7 @@ class Pagina(BaseHTTPRequestHandler):
             try:
                 dados = json.loads(self._corpo(2048))
                 salvar_marca(str(dados.get("empresa", "")), str(dados.get("cor", "")), dados.get("expediente"),
-                             dados.get("serio"), andar.arq_marca)
+                             dados.get("serio"), andar.arq_marca, dados.get("radio"))
             except (ValueError, AttributeError) as e:
                 return self._json(400, {"erro": str(e)[:120]})
             cfg = config_publica(andar)

@@ -170,6 +170,19 @@ function pintarQuadroPlacar(c, x, y, w, h) {
   pintaPx(c, x + 2, y + 2, w - 4, 9, "#222736"); pintaPx(c, x + 2, y + 11, w - 4, 1, "#2e3446");   // faixa do título
   pintaPx(c, x + 2, y + 2, w - 4, 1, "#2a3042");
 }
+// o rádio da firma (22×17): antena, caixa de madeira com o alto-falante, o mostrador e dois botões, numa prateleirinha
+function pintarRadio(c, x, y) {
+  for (let k = 0; k < 3; k++) pintaPx(c, x + 15 + k * 2, y + 2 - k, 2, 1, "#9aa3b5");                    // antena
+  pintaPx(c, x + 1, y + 3, 20, 11, "#5a3a22"); pintaPx(c, x + 2, y + 4, 18, 9, "#a8703f");                 // caixa
+  pintaPx(c, x + 2, y + 4, 18, 1, "#c58a52");                                                               // brilho em cima
+  pintaPx(c, x + 3, y + 5, 8, 7, "#3b2a1e");                                                                // alto-falante
+  for (let k = 0; k < 3; k++) pintaPx(c, x + 4, y + 6 + k * 2, 6, 1, "#6b4a2e");
+  pintaPx(c, x + 12, y + 5, 7, 3, "#f2d48a"); pintaPx(c, x + 15, y + 5, 1, 3, "#c8102e");                  // mostrador e ponteiro
+  pintaPx(c, x + 12, y + 10, 2, 2, "#2a1a0c"); pintaPx(c, x + 17, y + 10, 2, 2, "#2a1a0c");                // botões
+  pintaPx(c, x, y + 14, 22, 2, "#6b4a2e"); pintaPx(c, x, y + 14, 22, 1, "#8a6240");                        // prateleira
+  pintaPx(c, x + 2, y + 16, 2, 1, "#4a3220"); pintaPx(c, x + 18, y + 16, 2, 1, "#4a3220");                 // mãos-francesas
+  pintaPx(c, x + 1, y + 17, 20, 1, "rgba(0,0,0,.25)");                                                      // sombra na parede
+}
 
 function pintarSala(c, atlas, sala) {
   const { tx, ty, tw, th, parede, piso } = sala;
@@ -919,6 +932,17 @@ function montar(atlas, config, grupos, planta) {
       const [larg, montar] = cantos[i];
       if (zx + larg * T > limite || montar(zx) === false) continue;
       zx += larg * T;
+    }
+    { // o rádio da firma (radio.js, aberto pelo brincar.js): numa prateleira da parede, no primeiro trecho livre perto do meio
+      const W = 22, H = 17, meio = s.px + s.pw / 2;
+      for (const d of [0, 3, -3, 6, -6, 9, -9, 12, -12, 15, -15]) {
+        const x = Math.round(meio + d * T);
+        if (x - W < s.px + T || x + W > s.px + s.pw - T || !paredeLivreEm(x - W / 2 - 4, x + W / 2 + 4, chao)) continue;
+        const l = lugarNaParede(W, H, x, chao - 3);
+        if (!l) continue;
+        pintarRadio(c, l.px, l.py); quadros.push({ nome: "radio", x: l.px, y: l.py, w: W, h: H });
+        break;
+      }
     }
     { // canto da cozinha: filtro de água, recicláveis e máquinas de venda (sem copa na sala comunal, a geladeira de bebidas fica aqui)
       const L = cozinha.px, R = L + cozinha.pw;

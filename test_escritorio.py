@@ -790,6 +790,37 @@ class Http(unittest.TestCase):
         cfg = json.loads(self.req("/api/config", self.entrar())[1])
         self.assertEqual(cfg["expediente"], {"abre": "22:00", "fecha": "06:00"})
 
+    def test_radio_da_internet_pelo_personalizar(self):
+        """A rádio do andar: só https de um host, normalizada; a página do app libera no CSP (media-src) só essa origem."""
+        cab = {**self.entrar(), "Origin": self.base, "Content-Type": "application/json"}
+        salvar = lambda **campos: self.req("/api/marca", cab, json.dumps({"empresa": "Acme", "cor": "#112233", **campos}).encode())
+        csp = lambda: self.req("/", self.entrar())[2]["Content-Security-Policy"]
+        self.assertNotIn("media-src", csp())   # sem rádio, o media-src fica no default-src 'self'
+        st, corpo, _ = salvar(radio="HTTPS://Radio.Exemplo.com:8443/ao-vivo?q=1")
+        self.assertEqual((st, json.loads(corpo)["radio"]), (200, "https://radio.exemplo.com:8443/ao-vivo?q=1"))
+        self.assertIn("; media-src 'self' https://radio.exemplo.com:8443;", csp())
+        self.assertNotIn("media-src", self.req("/api/config", self.entrar())[2]["Content-Security-Policy"])   # só a página
+        for ruim in ("http://radio.exemplo.com/a", "https://u:s@radio.exemplo.com/", "https://localhost/a", "https://a.com;x/",
+                     "https://a.com/a b", "https://a.com/#x", "https://[::1]/", "https://a.com:99999/", "javascript:alert(1)",
+                     "https://a.com/" + "x" * 300, 5, ["https://a.com/"]):
+            with self.subTest(ruim=ruim):
+                st, corpo, _ = salvar(radio=ruim)
+                self.assertEqual((st, json.loads(corpo)), (400, {"erro": e.MSG_RADIO}))
+        self.assertIn("https://radio.exemplo.com:8443;", csp())   # recusado não grava nada
+        st, corpo, _ = salvar(cor="#445566")   # sem o campo, mantém
+        self.assertEqual(json.loads(corpo)["radio"], "https://radio.exemplo.com:8443/ao-vivo?q=1")
+        st, corpo, _ = salvar(radio="")   # vazio tira
+        self.assertEqual((st, json.loads(corpo)["radio"]), (200, ""))
+        self.assertNotIn("media-src", csp())
+
+    def test_politica_de_seguranca_com_midia(self):
+        self.assertNotIn("media-src", e.politica_seguranca())
+        self.assertIn("; media-src 'self' https://a.com https://b.com:8443;",
+                      e.politica_seguranca(False, ("https://b.com:8443", "https://a.com", "https://a.com")))
+        self.assertEqual(e.origem_radio("https://R.exemplo.com/x?y"), "https://r.exemplo.com")
+        self.assertEqual(e.origem_radio("http://r.exemplo.com/"), "")   # salvo à mão fora do formato: nada no CSP
+        self.assertEqual(e.validar_radio(None), "")
+
     def test_versao_do_logo_muda_a_cada_troca(self):
         cab = {**self.entrar(), "Origin": self.base, "Content-Type": "image/png"}
         logo = lambda dados: json.loads(self.req("/api/logo", cab, b"\x89PNG\r\n\x1a\n" + dados)[1])["logo"]
