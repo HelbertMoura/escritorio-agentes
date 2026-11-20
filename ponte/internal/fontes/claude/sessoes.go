@@ -106,6 +106,9 @@ func Reconciliar(antes, agora map[string]Sessao, vivo Vivo) []mundo.Sinal {
 			s.Fim, s.TS = true, time.Time{}
 		} else {
 			s.Estado, s.ExcetoOcioso = estadoDoArquivo(x.Status, x.WaitingFor)
+			if s.Estado == mundo.EsperandoResposta {
+				s.Espera, s.AceitaTexto = esperaDoArquivo(x.WaitingFor)
+			}
 		}
 		sinais = append(sinais, s)
 	}
@@ -128,6 +131,15 @@ func ordenadas(sess map[string]Sessao) []string {
 	}
 	sort.Strings(ids)
 	return ids
+}
+
+// esperaDoArquivo é o tipo da espera ("arquivo:<waitingFor>") e se ela aceita texto digitado:
+// só "input needed" (o Claude espera uma resposta escrita). "dialog open", "sandbox request",
+// "goal proposal" e qualquer outro valor são diálogos de opções, em que texto e Enter
+// confirmariam a opção padrão: falso.
+func esperaDoArquivo(waitingFor string) (string, bool) {
+	w := strings.ToLower(strings.TrimSpace(waitingFor))
+	return "arquivo:" + w, w == "input needed"
 }
 
 // estadoDoArquivo traduz status e waitingFor. Espera que fala de permissão é esperando

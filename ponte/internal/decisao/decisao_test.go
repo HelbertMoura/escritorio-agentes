@@ -221,6 +221,8 @@ func TestValidarTextoRecusaCadaClasseProibida(t *testing.T) {
 		"tag":                "a\U000E0041b",
 		"UTF-8 inválido":     "a\xffb",
 		"1001 runas":         strings.Repeat("é", 1001),
+		"começa com -":       "--raw x",
+		"- depois de espaço": "  -1",
 	}
 	for nome, s := range ruins {
 		_, err := ValidarTexto(s)
@@ -249,7 +251,7 @@ func TestValidarTextoRecusaCadaClasseProibida(t *testing.T) {
 
 func TestPerguntaSoAceitaResponderUmaVez(t *testing.T) {
 	r := NovoRegistro(nil)
-	p, fim, err := r.AbrirPergunta("t1", "Qual\u202e banco?", ViaMaestri, time.Minute)
+	p, fim, err := r.AbrirPergunta("t1", "Qual\u202e banco?", ViaMaestri, 0, "", time.Minute)
 	if err != nil || p.Tipo != TipoPergunta || p.Via != ViaMaestri || p.Completo || p.Resumo != "Qual‹U+202E› banco?" {
 		t.Fatalf("abrir: %v %+v", err, p)
 	}
@@ -283,7 +285,7 @@ func TestPerguntaSoAceitaResponderUmaVez(t *testing.T) {
 func TestPerguntaVencidaNaoRecebeResposta(t *testing.T) {
 	agora := time.Unix(1000, 0)
 	r := NovoRegistro(func() time.Time { return agora })
-	p, fim, _ := r.AbrirPergunta("t1", "", ViaMaestri, time.Second)
+	p, fim, _ := r.AbrirPergunta("t1", "", ViaMaestri, 0, "", time.Second)
 	agora = agora.Add(2 * time.Second)
 	r.Responder(p.ID, "tarde", PorLocal)
 	if res := <-fim; res.Acao != "" || res.Por != PorExpirou {

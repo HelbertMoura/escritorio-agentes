@@ -29,6 +29,9 @@ type falsoMaestri struct {
 	chamadas   [][]string // MAESTRI_TERMINAL_ID seguido dos argumentos
 	conectados string
 	falhar     bool
+	falharAsk  bool   // o ask falha (como um timeout depois de digitar)
+	aoListar   func() // chamado no 2º list (o da hora de digitar), sem o lock
+	listas     int
 }
 
 func (f *falsoMaestri) cli() (maestri.CLI, bool) {
@@ -37,6 +40,14 @@ func (f *falsoMaestri) cli() (maestri.CLI, bool) {
 
 func (f *falsoMaestri) rodar(_ context.Context, bin string, env, args []string) ([]byte, error) {
 	f.mu.Lock()
+	if args[0] == "list" {
+		f.listas++
+		if cb := f.aoListar; cb != nil && f.listas == 2 {
+			f.mu.Unlock()
+			cb()
+			f.mu.Lock()
+		}
+	}
 	defer f.mu.Unlock()
 	terminal, sock := "", ""
 	for _, e := range env {
@@ -51,7 +62,7 @@ func (f *falsoMaestri) rodar(_ context.Context, bin string, env, args []string) 
 		return nil, errors.New("binário ou socket errado")
 	}
 	f.chamadas = append(f.chamadas, append([]string{terminal}, args...))
-	if f.falhar {
+	if f.falhar || f.falharAsk && args[0] == "ask" {
 		return nil, errors.New("exit 1")
 	}
 	if args[0] == "list" {
@@ -95,7 +106,7 @@ func perguntando(t *testing.T, f *falsoMaestri, metas []mundo.MetaTerminal) (*am
 	t.Helper()
 	a := subir(t, Opcoes{Maestri: f.cli}, true)
 	a.s.vincular([]maestri.Workspace{{ID: "w1"}, {ID: "w2"}}, metas)
-	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta}})
+	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta, Espera: "arquivo:input needed", AceitaTexto: true}})
 	var p decisao.Pendente
 	esperar(t, func() bool {
 		l := a.s.dec.Lista()
@@ -139,7 +150,7 @@ func TestPerguntaRecusaForaDoEstadoENaAprovacao(t *testing.T) {
 		t.Fatalf("na aprovação: %q", m)
 	}
 	// uma pergunta aberta à mão, com o morador fora da pergunta: 409 (estado), e ela segue aberta
-	q, _, _ := a.s.dec.AbrirPergunta("t1", "", decisao.ViaMaestri, time.Minute)
+	q, _, _ := a.s.dec.AbrirPergunta("t1", "", decisao.ViaMaestri, 0, "", time.Minute)
 	if m := a.s.responder(q.ID, "sim", decisao.PorLocal); m != MotivoEstado {
 		t.Fatalf("fora da pergunta: %q", m)
 	}
@@ -161,13 +172,17 @@ func TestPerguntaSemAlvoNaoAbre(t *testing.T) {
 		"só de outro workspace": {"Connected agents:\n  - name: \"Outro Workspace\"\n", metasTeste},
 		"nome repetido em outro workspace": {listaAlvo, append(append([]mundo.MetaTerminal{}, metasTeste...),
 			mundo.MetaTerminal{ID: "t9", Nome: "Front", WorkspaceID: "w2"})},
+		"nome repetido em outra caixa": {listaAlvo, append(append([]mundo.MetaTerminal{}, metasTeste...),
+			mundo.MetaTerminal{ID: "t9", Nome: "FRONT", WorkspaceID: "w2"})},
+		"nome que começa com -": {strings.ReplaceAll(listaAlvo, `"Front"`, `"-Front"`), []mundo.MetaTerminal{
+			{ID: "t1", Nome: "-Front", WorkspaceID: "w1"}, metasTeste[1], metasTeste[2]}},
 	}
 	for nome, c := range casos {
 		t.Run(nome, func(t *testing.T) {
 			f := &falsoMaestri{conectados: c.conectados}
 			a := subir(t, Opcoes{Maestri: f.cli}, true)
 			a.s.vincular([]maestri.Workspace{{ID: "w1"}, {ID: "w2"}}, c.metas)
-			a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta}})
+			a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta, Espera: "arquivo:input needed", AceitaTexto: true}})
 			time.Sleep(100 * time.Millisecond)
 			if l := a.s.dec.Lista(); len(l) != 0 {
 				t.Fatalf("sem alvo, sem pergunta: %v", l)
@@ -177,7 +192,7 @@ func TestPerguntaSemAlvoNaoAbre(t *testing.T) {
 	// sem o binário ou o socket: nem o list roda
 	a := subir(t, Opcoes{}, true)
 	a.s.vincular([]maestri.Workspace{{ID: "w1"}}, metasTeste)
-	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta}})
+	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta, Espera: "arquivo:input needed", AceitaTexto: true}})
 	time.Sleep(100 * time.Millisecond)
 	if len(a.s.dec.Lista()) != 0 {
 		t.Fatal("sem o maestri, sem pergunta")
@@ -195,9 +210,21 @@ func TestPerguntaRecusaTextoProibidoELimite(t *testing.T) {
 	if _, ok := a.s.dec.Pegar(p.ID); !ok {
 		t.Fatal("texto recusado não gasta a pergunta")
 	}
-	// já foram 12 tentativas; até 20 por minuto, depois "limite"
-	for i := 0; i < 8; i++ {
-		a.s.responder("x", "sim", decisao.PorLocal)
+	for _, ruim := range []string{"--raw x", " -1"} { // começa com "-": vira opção do maestri
+		if m := a.s.responder(p.ID, ruim, decisao.PorLocal); m != MotivoTexto {
+			t.Fatalf("%q: %q", ruim, m)
+		}
+	}
+	// id lixo ou desconhecido não conta no limite
+	for i := 0; i < 50; i++ {
+		if m := a.s.responder("x", "sim", decisao.PorLocal); m != MotivoEncerrado {
+			t.Fatalf("id lixo: %q", m)
+		}
+		a.s.responder("AAAAAAAAAAAAAAAAAAAAAA", "sim", decisao.PorRemoto)
+	}
+	// já foram 14 tentativas; até 20 por minuto, depois "limite"
+	for i := 0; i < 6; i++ {
+		a.s.responder(p.ID, "a\nb", decisao.PorLocal)
 	}
 	if m := a.s.responder(p.ID, "sim", decisao.PorLocal); m != MotivoLimite {
 		t.Fatalf("21ª tentativa: %q", m)
@@ -217,7 +244,7 @@ func TestPerguntaPeloWSRecusaEResponde(t *testing.T) {
 	ler(t, c)
 	ler(t, c)
 	a.s.vincular([]maestri.Workspace{{ID: "w1"}}, metasTeste)
-	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta}})
+	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta, Espera: "arquivo:input needed", AceitaTexto: true}})
 	p := lerTipo(t, c, "pendente")["pendente"].(map[string]any)
 	id := p["id"].(string)
 	if p["tipo"] != "pergunta" || p["via"] != "maestri" {
@@ -242,7 +269,7 @@ func TestPerguntaVenceEReabre(t *testing.T) {
 	f := &falsoMaestri{conectados: listaAlvo}
 	a := subir(t, Opcoes{Maestri: f.cli, EsperaDecisao: 80 * time.Millisecond}, true)
 	a.s.vincular([]maestri.Workspace{{ID: "w1"}}, metasTeste)
-	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta}})
+	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta, Espera: "arquivo:input needed", AceitaTexto: true}})
 	var primeiro string
 	esperar(t, func() bool {
 		l := a.s.dec.Lista()
@@ -283,7 +310,7 @@ const perguntaOpenCode = `{"sessionID":"ses_1","id":"que_1","pergunta":"Qual ban
 
 func TestPerguntaDoOpenCodeVoltaAssinada(t *testing.T) {
 	a := subir(t, Opcoes{}, true) // sem ninguém atendendo: a pergunta espera mesmo assim
-	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorOpenCode, SessaoID: "ses_1", TerminalID: "T1", Estado: mundo.EsperandoResposta}})
+	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorOpenCode, SessaoID: "ses_1", TerminalID: "T1", Estado: mundo.EsperandoResposta, Espera: "arquivo:input needed", AceitaTexto: true}})
 	resp := a.pedirPendente(t, "opencode-pergunta", perguntaOpenCode, context.Background())
 	nonce := fmt.Sprintf("%032x", nonceSeq.Load()) // o assinarPendente roda antes de o pedido sair
 	var p decisao.Pendente
@@ -314,16 +341,108 @@ func TestPerguntaNaoAceitaDecidirNemPermissaoAceitaResponder(t *testing.T) {
 	a, c := atendido(t, Opcoes{})
 	resp := a.pedirPendente(t, "claude", pedidoBash, context.Background())
 	id := lerTipo(t, c, "pendente")["pendente"].(map[string]any)["id"].(string)
-	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta}})
+	a.s.aplicar([]mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: mundo.EsperandoResposta, Espera: "arquivo:input needed", AceitaTexto: true}})
 	if m := a.s.responder(id, "sim", decisao.PorLocal); m != MotivoEncerrado {
 		t.Fatalf("permissão não recebe texto: %q", m)
 	}
-	q, _, _ := a.s.dec.AbrirPergunta("t1", "", decisao.ViaMaestri, time.Minute)
+	q, _, _ := a.s.dec.AbrirPergunta("t1", "", decisao.ViaMaestri, 0, "", time.Minute)
 	if a.s.decidir(q.ID, decisao.Permitir, decisao.PorLocal) {
 		t.Fatal("pergunta não recebe permitir")
 	}
 	escrever(t, c, `{"v":1,"tipo":"decidir","id":"`+id+`","acao":"negar"}`)
 	if r := <-resp; r.status != http.StatusOK {
 		t.Fatalf("a permissão segue valendo: %d", r.status)
+	}
+}
+
+// espera é o sinal do Claude no terminal T1 com o tipo de espera dado.
+func espera(estado mundo.Estado, tipo string, aceita bool) []mundo.Sinal {
+	return []mundo.Sinal{{Fonte: mundo.ProvedorClaude, SessaoID: "s1", TerminalID: "T1", Estado: estado, Espera: tipo, AceitaTexto: aceita}}
+}
+
+// Diálogo de opções (dialog open, sandbox request, goal proposal, link de elicitação): texto e
+// Enter confirmariam a opção padrão. Sem pergunta, e a aberta fecha quando a espera muda para um.
+func TestDialogoDeOpcoesNaoAbrePergunta(t *testing.T) {
+	f := &falsoMaestri{conectados: listaAlvo}
+	a := subir(t, Opcoes{Maestri: f.cli}, true)
+	a.s.vincular([]maestri.Workspace{{ID: "w1"}}, metasTeste)
+	for _, tipo := range []string{"arquivo:dialog open", "arquivo:sandbox request", "arquivo:goal proposal", "notificacao:elicitation_url_dialog"} {
+		a.s.aplicar(espera(mundo.EsperandoResposta, tipo, false))
+	}
+	time.Sleep(100 * time.Millisecond)
+	if l := a.s.dec.Lista(); len(l) != 0 || len(f.chamadas) != 0 {
+		t.Fatalf("diálogo de opções: %v %v", l, f.chamadas)
+	}
+	a.s.aplicar(espera(mundo.EsperandoResposta, "arquivo:input needed", true))
+	var p decisao.Pendente
+	esperar(t, func() bool {
+		l := a.s.dec.Lista()
+		if len(l) == 1 {
+			p = l[0]
+		}
+		return len(l) == 1
+	})
+	// a espera vira um diálogo de opções (o mesmo estado): a pergunta fecha e o texto não vale
+	a.s.aplicar(espera(mundo.EsperandoResposta, "arquivo:sandbox request", false))
+	if m := a.s.responder(p.ID, "sim", decisao.PorLocal); m != MotivoEncerrado {
+		t.Fatalf("depois do diálogo de opções: %q", m)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if len(a.s.dec.Lista()) != 0 || len(f.asks()) != 0 {
+		t.Fatal("nada aberto, nada digitado")
+	}
+}
+
+// A espera muda entre a resposta e a hora de digitar (TOCTOU): nada é digitado, e a pergunta
+// reabre na geração nova.
+func TestEsperaMudaAntesDeDigitar(t *testing.T) {
+	f := &falsoMaestri{conectados: listaAlvo}
+	a, p := perguntando(t, f, metasTeste)
+	f.aoListar = func() {
+		a.s.aplicar(espera(mundo.EsperandoResposta, "notificacao:elicitation_dialog", true))
+	}
+	if m := a.s.responder(p.ID, "sim", decisao.PorLocal); m != "" {
+		t.Fatalf("recusou: %s", m)
+	}
+	esperar(t, func() bool {
+		l := a.s.dec.Lista()
+		return len(l) == 1 && l[0].ID != p.ID
+	})
+	if len(f.asks()) != 0 {
+		t.Fatalf("a geração mudou: nada digitado, %v", f.asks())
+	}
+	// e uma resposta da pergunta velha, com a geração velha, não vale
+	if m := a.s.responder(p.ID, "sim", decisao.PorLocal); m != MotivoEncerrado {
+		t.Fatalf("pergunta velha: %q", m)
+	}
+}
+
+// Na hora de digitar, o alvo é resolvido de novo: com o nome trocado, nada é digitado.
+func TestNomeMudaAntesDeDigitar(t *testing.T) {
+	f := &falsoMaestri{conectados: listaAlvo}
+	a, p := perguntando(t, f, metasTeste)
+	// o nome muda depois de a pergunta abrir (o alvo dela ainda é "Front")
+	outro := append([]mundo.MetaTerminal{{ID: "t1", Nome: "Front 2", WorkspaceID: "w1"}}, metasTeste[1:]...)
+	a.s.vincular([]maestri.Workspace{{ID: "w1"}, {ID: "w2"}}, outro)
+	if m := a.s.responder(p.ID, "sim", decisao.PorLocal); m != "" {
+		t.Fatalf("recusou: %s", m)
+	}
+	time.Sleep(150 * time.Millisecond)
+	if len(f.asks()) != 0 {
+		t.Fatalf("nome trocado: nada digitado, %v", f.asks())
+	}
+}
+
+// Erro do maestri ask (um timeout pode vir depois de digitar): não reabre, para não responder duas vezes.
+func TestErroAoDigitarNaoReabre(t *testing.T) {
+	f := &falsoMaestri{conectados: listaAlvo, falharAsk: true}
+	a, p := perguntando(t, f, metasTeste)
+	if m := a.s.responder(p.ID, "sim", decisao.PorLocal); m != "" {
+		t.Fatalf("recusou: %s", m)
+	}
+	esperar(t, func() bool { return len(f.asks()) == 1 })
+	time.Sleep(150 * time.Millisecond)
+	if l := a.s.dec.Lista(); len(l) != 0 || len(f.asks()) != 1 {
+		t.Fatalf("depois do erro: %v, %d asks", l, len(f.asks()))
 	}
 }

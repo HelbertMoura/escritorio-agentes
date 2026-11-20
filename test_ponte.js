@@ -256,7 +256,7 @@ assert.equal(religar().ms, 6000, "a espera dobra");
   // ---------- perguntas: o texto conferido aqui (recusa, nunca troca), pelo /ws ou pelo servidor ----------
   const tr = q.Ponte.textoResposta;
   for (const ruim of ["", "   ", "a\nb", "a\rb", "a\tb", "\u001b[A", "a\u0000b", "a\u007fb", "a\u0085b", "a\u009bb", "a\\nb",
-    "a\u202eb", "a\u2066b", "a\u200bb", "a\u200db", "\ufeffa", "a\u2028b", "a\u2029b", "a\ue000b", "a\u{E0041}b", "a\ud800b", "é".repeat(1001), null, 5]) {
+    "a\u202eb", "a\u2066b", "a\u200bb", "a\u200db", "\ufeffa", "a\u2028b", "a\u2029b", "a\ue000b", "a\u{E0041}b", "a\ud800b", "é".repeat(1001), null, 5, "-x", "  --raw x"]) {
     assert.equal(tr(ruim), null, JSON.stringify(ruim));
   }
   assert.equal(tr("  sim, pode  "), "sim, pode");

@@ -88,10 +88,10 @@ const Ponte = (() => {
   }
   // a resposta de uma pergunta, como a ponte confere (decisao.ValidarTexto): recusa, nunca troca. Só letras, marcas,
   // números, pontuação, símbolos e espaços (nada de quebra de linha, tab, ESC, bidi, largura zero...), sem a barra
-  // invertida (o maestri lê \n e \e como teclas), até 1000 caracteres; sem os espaços das pontas. null: recusada
+  // invertida (o maestri lê \n e \e como teclas), sem começar com "-", até 1000 caracteres; sem os espaços das pontas. null: recusada
   const MAX_TEXTO = 1000, PROIBIDO = /[^\p{L}\p{M}\p{N}\p{P}\p{S}\p{Zs}]|\\/u;
-  const textoResposta = v => (typeof v !== "string" || [...v].length > MAX_TEXTO || PROIBIDO.test(v) ? null : v.trim() || null);
-  const AVISO_TEXTO = "Uma linha só, até 1000 caracteres, sem barra invertida nem caracteres invisíveis.";
+  const textoResposta = v => { if (typeof v !== "string" || [...v].length > MAX_TEXTO || PROIBIDO.test(v)) return null; const t = v.trim(); return t && !t.startsWith("-") ? t : null; };
+  const AVISO_TEXTO = "Uma linha só, até 1000 caracteres, sem começar com hífen, sem barra invertida nem caracteres invisíveis.";
   const RECUSAS = { texto: AVISO_TEXTO, estado: "O terminal não está mais esperando uma resposta.",
     encerrado: "Essa pergunta já foi respondida ou venceu.", limite: "Respostas demais; espere um pouco." };
   function guardarPedido(p) {

@@ -91,8 +91,11 @@ func NormalizarComo(corpo []byte, terminalID, fonte string) ([]mundo.Sinal, erro
 			s.Estado = mundo.EsperandoPermissao
 		case "idle_prompt":
 			s.Estado = mundo.Ocioso
-		case "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input":
-			s.Estado = mundo.EsperandoResposta
+		case "elicitation_dialog", "agent_needs_input":
+			// pedem uma resposta escrita: as únicas notificações que aceitam texto digitado
+			s.Estado, s.Espera, s.AceitaTexto = mundo.EsperandoResposta, "notificacao:"+e.NotificationType, true
+		case "elicitation_url_dialog":
+			s.Estado, s.Espera = mundo.EsperandoResposta, "notificacao:"+e.NotificationType
 		default:
 			return nil, nil
 		}

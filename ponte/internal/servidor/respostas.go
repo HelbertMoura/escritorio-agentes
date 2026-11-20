@@ -13,8 +13,11 @@ import (
 	"firmopolis/ponte/internal/mundo"
 )
 
-// Responder pelo escritório, fase 2: quando um morador está na pergunta (esperando_resposta),
-// quem decide manda um texto curto e a ponte o leva ao agente.
+// Responder pelo escritório, fase 2: quando a espera de um morador aceita texto digitado
+// (Morador.AceitaTexto: só o "input needed" e as notificações elicitation_dialog e
+// agent_needs_input do Claude, e a pergunta do OpenCode; nunca um diálogo de opções, em que
+// texto e Enter confirmariam a opção padrão), quem decide manda um texto curto e a ponte o
+// leva ao agente.
 //   - Terminal do Maestri (menos o OpenCode): a ponte abre a pergunta sozinha quando o morador
 //     entra na pergunta e, com a resposta, digita o texto e Enter pelo `maestri ask --raw`
 //     (maestri.CLI), chamando como um terminal conectado ao alvo.
@@ -48,8 +51,25 @@ type msgRecusado struct {
 	Motivo string `json:"motivo"`
 }
 
-// responder entrega o texto à pergunta id. "" deu certo; senão, o motivo da recusa.
+// estadoPergunta é o que a ponte guarda de cada morador para as perguntas: se a espera dele
+// aceita texto digitado (Morador.AceitaTexto, que já implica esperando_resposta), a geração e o
+// tipo da espera. Atualizado em publicar, sob s.mu.
+type estadoPergunta struct {
+	aceita  bool
+	geracao uint64
+	espera  string
+}
+
+// responder entrega o texto à pergunta id. "" deu certo; senão, o motivo da recusa. A tentativa
+// só conta no limite depois de achar a pergunta (id lixo não gasta a cota de quem responde).
 func (s *Servidor) responder(id, texto, por string) string {
+	if !decisao.IDValido(id) {
+		return MotivoEncerrado
+	}
+	p, ok := s.dec.Pegar(id)
+	if !ok || p.Tipo != decisao.TipoPergunta {
+		return MotivoEncerrado
+	}
 	if !s.contarResposta() {
 		return MotivoLimite
 	}
@@ -57,11 +77,7 @@ func (s *Servidor) responder(id, texto, por string) string {
 	if err != nil {
 		return MotivoTexto
 	}
-	p, ok := s.dec.Pegar(id)
-	if !decisao.IDValido(id) || !ok || p.Tipo != decisao.TipoPergunta {
-		return MotivoEncerrado
-	}
-	if !s.emPergunta(p.MoradorID) {
+	if !s.mesmaPergunta(p) {
 		return MotivoEstado
 	}
 	if _, ok := s.dec.Responder(id, t, por); !ok {
@@ -88,11 +104,35 @@ func (s *Servidor) contarResposta() bool {
 	return true
 }
 
-// emPergunta: o último estado publicado do morador é a pergunta.
-func (s *Servidor) emPergunta(id string) bool {
+// perguntaAtual é o estado de pergunta do morador, se a espera dele aceita texto agora.
+func (s *Servidor) perguntaAtual(id string) (estadoPergunta, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.estados[id] == mundo.EsperandoResposta
+	e := s.perguntas[id]
+	return e, e.aceita && s.estados[id] == mundo.EsperandoResposta
+}
+
+// mesmaPergunta: o morador da pergunta p ainda aceita texto e, se p guardou a geração (a do
+// Maestri), na mesma geração e no mesmo tipo de espera.
+func (s *Servidor) mesmaPergunta(p decisao.Pendente) bool {
+	e, ok := s.perguntaAtual(p.MoradorID)
+	return ok && (p.Geracao == 0 || e.geracao == p.Geracao && e.espera == p.Espera)
+}
+
+// atualizarPergunta guarda o estado de pergunta do morador publicado e fecha as perguntas que
+// deixaram de valer: todas quando a espera não aceita mais texto, e as do Maestri de outra
+// geração. Devolve se é preciso abrir uma pergunta do Maestri (aceita texto agora, numa
+// geração nova ou antes não aceitava). Chamar com s.mu.
+func (s *Servidor) atualizarPergunta(m *mundo.Morador) bool {
+	antes := s.perguntas[m.ID]
+	agora := estadoPergunta{aceita: m.AceitaTexto && m.Estado == mundo.EsperandoResposta, geracao: m.Geracao, espera: m.Espera}
+	s.perguntas[m.ID] = agora
+	for _, id := range s.dec.DoMorador(m.ID, decisao.TipoPergunta) {
+		if p, ok := s.dec.Pegar(id); ok && (!agora.aceita || p.Geracao != 0 && p.Geracao != agora.geracao) {
+			s.dec.Encerrar(id, decisao.PorTerminal)
+		}
+	}
+	return agora.aceita && (!antes.aceita || antes.geracao != agora.geracao)
 }
 
 func (s *Servidor) esperaPergunta() time.Duration {
@@ -116,8 +156,8 @@ func (s *Servidor) resolvido(id, por string) {
 	s.mu.Unlock()
 }
 
-// abrirPerguntaMaestri começa a pergunta de um terminal do Maestri que acabou de entrar na
-// pergunta. Chamar com s.mu; o resto (o `maestri list`) roda fora dele.
+// abrirPerguntaMaestri começa a pergunta de um terminal do Maestri cuja espera passou a aceitar
+// texto. Chamar com s.mu; o resto (o `maestri list`) roda fora dele.
 func (s *Servidor) abrirPerguntaMaestri(m *mundo.Morador) {
 	if s.demo != nil || m.Solto || m.Provedor == mundo.ProvedorOpenCode || m.Nome == "" {
 		return
@@ -147,13 +187,17 @@ func (s *Servidor) perguntarMaestri(id string, terminais []mundo.MetaTerminal) {
 	if !ok {
 		return // sem o maestri, sem nome único ou sem quem chame: sem botão
 	}
-	for s.emPergunta(id) {
-		p, fim, err := s.dec.AbrirPergunta(id, "", decisao.ViaMaestri, s.esperaPergunta())
+	for {
+		e, ok := s.perguntaAtual(id)
+		if !ok {
+			return // saiu da pergunta, ou a espera não aceita texto
+		}
+		p, fim, err := s.dec.AbrirPergunta(id, "", decisao.ViaMaestri, e.geracao, e.espera, s.esperaPergunta())
 		if err != nil {
 			return
 		}
 		s.anunciar(p)
-		if !s.emPergunta(id) { // saiu da pergunta entre o teste e o abrir: ninguém mais a fecha
+		if !s.mesmaPergunta(p) { // mudou entre o teste e o abrir: ninguém mais a fecha
 			s.dec.Encerrar(p.ID, decisao.PorTerminal)
 		}
 		prazo := time.NewTimer(time.Until(p.ExpiraEm))
@@ -166,38 +210,55 @@ func (s *Servidor) perguntarMaestri(id string, terminais []mundo.MetaTerminal) {
 		}
 		prazo.Stop()
 		s.resolvido(p.ID, res.Por)
-		switch {
-		case res.Acao == decisao.Responder:
-			// confere de novo na hora de digitar: nunca na aprovação nem fora da pergunta
-			resultado := "entregue"
-			if !s.emPergunta(id) {
-				resultado = "não entregue (o terminal saiu da pergunta)"
-			} else if err := alvo.cli.Digitar(context.Background(), alvo.de, alvo.nome, res.Texto); err != nil {
-				resultado = "não entregue (" + err.Error() + ")"
-			}
-			log.Printf("resposta: pedido %s… (maestri) %d caracteres por %s: %s", p.ID[:6], utf8.RuneCountInString(res.Texto), res.Por, resultado)
-			if resultado == "entregue" {
-				return
-			}
-		case res.Por != decisao.PorExpirou:
-			return // respondida no terminal ou o morador saiu
+		if res.Acao != decisao.Responder {
+			continue // vencida ou fechada por mudança: abre outra se a espera ainda aceita texto
+		}
+		resultado, tentou := s.entregar(p, alvo.nome, res.Texto)
+		log.Printf("resposta: pedido %s… (maestri) %d caracteres por %s: %s", p.ID[:6], utf8.RuneCountInString(res.Texto), res.Por, resultado)
+		if tentou {
+			return // entregue, ou falhou depois de chamar o maestri: nunca outra pergunta (resposta em dobro)
 		}
 	}
 }
 
+// entregar confere tudo de novo na hora de digitar: a mesma geração e o mesmo tipo de espera
+// (nunca na aprovação, num diálogo de opções ou numa pergunta nova) e o alvo resolvido de novo,
+// com os terminais de agora e um `maestri list` novo, com o mesmo nome. tentou: chamou o maestri.
+func (s *Servidor) entregar(p decisao.Pendente, nome, texto string) (resultado string, tentou bool) {
+	if !s.mesmaPergunta(p) {
+		return "não entregue (a espera do terminal mudou)", false
+	}
+	s.mu.Lock()
+	terminais := s.terminais
+	s.mu.Unlock()
+	alvo, ok := s.acharAlvo(p.MoradorID, terminais)
+	if !ok || alvo.nome != nome {
+		return "não entregue (o terminal mudou de nome ou não tem mais quem chame)", false
+	}
+	if !s.mesmaPergunta(p) { // o `maestri list` leva uns décimos: confere de novo
+		return "não entregue (a espera do terminal mudou)", false
+	}
+	if err := alvo.cli.Digitar(context.Background(), alvo.de, alvo.nome, texto); err != nil {
+		return "não entregue (" + err.Error() + ")", true
+	}
+	return "entregue", true
+}
+
 // acharAlvo resolve o terminal do morador id: o nome (único entre todos os terminais do
-// Maestri, porque o `maestri ask` acha pelo nome) e um terminal do mesmo workspace conectado a
-// ele (o Maestro primeiro), que é quem chama: um terminal não alcança a si mesmo.
+// Maestri, sem diferença de caixa, porque o `maestri ask` acha pelo nome, e sem começar com
+// "-") e um terminal do mesmo workspace conectado a ele (o Maestro primeiro), que é quem chama:
+// um terminal não alcança a si mesmo.
 func (s *Servidor) acharAlvo(id string, terminais []mundo.MetaTerminal) (alvoMaestri, bool) {
 	var meta mundo.MetaTerminal
 	porNome := map[string][]mundo.MetaTerminal{}
 	for _, t := range terminais {
-		porNome[t.Nome] = append(porNome[t.Nome], t)
+		k := strings.ToLower(t.Nome)
+		porNome[k] = append(porNome[k], t)
 		if strings.ToLower(t.ID) == id {
 			meta = t
 		}
 	}
-	if meta.ID == "" || meta.Nome == "" || len(porNome[meta.Nome]) != 1 {
+	if meta.ID == "" || meta.Nome == "" || strings.HasPrefix(meta.Nome, "-") || len(porNome[strings.ToLower(meta.Nome)]) != 1 {
 		return alvoMaestri{}, false
 	}
 	cli, ok := s.op.Maestri()
@@ -210,7 +271,8 @@ func (s *Servidor) acharAlvo(id string, terminais []mundo.MetaTerminal) (alvoMae
 	}
 	var candidatos []mundo.MetaTerminal
 	for _, n := range nomes {
-		if ms := porNome[n]; n != meta.Nome && len(ms) == 1 && ms[0].WorkspaceID == meta.WorkspaceID {
+		ms := porNome[strings.ToLower(n)]
+		if !strings.EqualFold(n, meta.Nome) && len(ms) == 1 && ms[0].Nome == n && ms[0].WorkspaceID == meta.WorkspaceID {
 			candidatos = append(candidatos, ms[0])
 		}
 	}

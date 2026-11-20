@@ -193,7 +193,7 @@ func (s *Servidor) pendente(w http.ResponseWriter, r *http.Request) {
 	var p decisao.Pendente
 	var fim <-chan decisao.Resultado
 	if ped.pergunta {
-		p, fim, err = s.dec.AbrirPergunta(morador, ped.resumo.Texto, decisao.ViaOpenCode, espera)
+		p, fim, err = s.dec.AbrirPergunta(morador, ped.resumo.Texto, decisao.ViaOpenCode, 0, "", espera)
 	} else {
 		p, fim, err = s.dec.Abrir(morador, ped.ferramenta, ped.resumo, espera)
 	}

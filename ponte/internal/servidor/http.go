@@ -109,9 +109,10 @@ type Servidor struct {
 	atendLocal  atomic.Int64      // UnixNano do último "atender" de um cliente do /ws
 	atendRemoto atomic.Int64      // UnixNano do último long-poll em que o servidor disse "atendendo"
 
-	muResp      sync.Mutex      // respostas.go
-	perguntando map[string]bool // moradores com a pergunta do Maestri aberta
-	respostas   []time.Time     // as tentativas de resposta do último minuto
+	muResp      sync.Mutex                // respostas.go
+	perguntando map[string]bool           // moradores com a pergunta do Maestri aberta
+	perguntas   map[string]estadoPergunta // o estado de pergunta publicado de cada morador (sob s.mu)
+	respostas   []time.Time               // as tentativas de resposta do último minuto
 
 	muPID     sync.Mutex
 	agentes   map[string]agente // fonte:sessão → agente já resolvido
@@ -172,6 +173,7 @@ func Novo(op Opcoes) *Servidor {
 		dec:         decisao.NovoRegistro(nil),
 		estados:     map[string]mundo.Estado{},
 		perguntando: map[string]bool{},
+		perguntas:   map[string]estadoPergunta{},
 		agentes:     map[string]agente{},
 		agenteLog:   map[string]bool{},
 		clientes:    map[*cliente]bool{},
@@ -469,13 +471,13 @@ func (s *Servidor) publicar(m *mundo.Morador, saiu string) {
 	if saiu != "" {
 		s.transmitir(msgSaiu{V: 1, Tipo: "saiu", ID: saiu})
 		s.respondidoNoTerminal(saiu, "")
+		delete(s.perguntas, saiu)
 	}
 	if m == nil {
 		return
 	}
-	antes := s.estados[m.ID]
 	s.respondidoNoTerminal(m.ID, m.Estado)
-	if m.Estado == mundo.EsperandoResposta && antes != mundo.EsperandoResposta {
+	if s.atualizarPergunta(m) {
 		s.abrirPerguntaMaestri(m)
 	}
 	if s.op.Historico != nil {

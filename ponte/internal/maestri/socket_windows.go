@@ -9,3 +9,9 @@ import "os"
 func acharSocket() string {
 	return os.Getenv("MAESTRI_SOCKET")
 }
+
+// binarioSeguro no Windows: só confere que é um arquivo comum (não há dono/permissões POSIX).
+func binarioSeguro(c string) bool {
+	i, err := os.Stat(c)
+	return err == nil && i.Mode().IsRegular()
+}

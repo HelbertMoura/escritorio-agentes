@@ -171,9 +171,15 @@ func (r *Registro) Aplicar(s Sinal) (mudou *Morador, saiu string) {
 	}
 
 	if !atrasado {
-		if s.Estado != "" && s.Estado != novo.Estado && !(s.ExcetoOcioso && novo.Estado == Ocioso) {
-			novo.Estado = s.Estado
-			novo.Desde = s.TS
+		if s.Estado != "" && (s.Estado != novo.Estado || s.Espera != novo.Espera) && !(s.ExcetoOcioso && novo.Estado == Ocioso) {
+			if s.Estado != novo.Estado {
+				novo.Desde = s.TS
+			}
+			novo.Estado, novo.Espera = s.Estado, s.Espera
+			novo.Geracao++
+		}
+		if s.Estado != "" && novo.Estado == s.Estado && novo.Espera == s.Espera {
+			novo.AceitaTexto = s.AceitaTexto && s.Estado == EsperandoResposta
 		}
 		switch {
 		case s.Ferramenta != "":

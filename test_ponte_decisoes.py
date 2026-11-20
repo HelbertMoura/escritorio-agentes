@@ -128,7 +128,7 @@ class Respostas(unittest.TestCase):
     def test_texto_resposta_recusa_cada_classe(self):
         for ruim in ("", "   ", "a\nb", "a\rb", "a\tb", "\x1b[A", "a\x00b", "a\x7fb", "a\u0085b", "a\u009bb", "a\\nb",
                      "a\u202eb", "a\u2066b", "a\u200bb", "a\u200db", "\ufeffa", "a\u2028b", "a\u2029b", "a\ue000b",
-                     "a\U000E0041b", "a\ud800b", "é" * 1001, None, 5):
+                     "a\U000E0041b", "a\ud800b", "é" * 1001, None, 5, "-x", "  --raw x"):
             self.assertIsNone(pe.texto_resposta(ruim), repr(ruim))
         for bom, limpo in (("  sim  ", "sim"), ("é" * 1000, "é" * 1000), ("👍🏽 日本語 ✓", "👍🏽 日本語 ✓"),
                            ('"aspas" $(x) ; | -x', '"aspas" $(x) ; | -x'), ("a\u00a0b", "a\u00a0b")):

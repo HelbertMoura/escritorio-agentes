@@ -32,6 +32,17 @@ func acharSocket() string {
 	return melhor
 }
 
+// binarioSeguro: arquivo comum executável (seguindo o link), do root ou deste usuário e sem
+// escrita para o grupo nem para os outros. Vale para o MAESTRI_CLI, o PATH e os caminhos fixos.
+func binarioSeguro(c string) bool {
+	i, err := os.Stat(c)
+	if err != nil || !i.Mode().IsRegular() || i.Mode().Perm()&0o111 == 0 || i.Mode().Perm()&0o022 != 0 {
+		return false
+	}
+	st, ok := i.Sys().(*syscall.Stat_t)
+	return ok && (st.Uid == 0 || int(st.Uid) == os.Getuid())
+}
+
 func socketMeu(s string) bool {
 	i, err := os.Lstat(s)
 	if err != nil || i.Mode()&os.ModeSocket == 0 {

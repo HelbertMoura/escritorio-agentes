@@ -17,6 +17,41 @@ func novoRegistro() *Registro {
 
 var jarvis = MetaTerminal{ID: "T1", Nome: "Jarvis", Papel: "Scout & Testes", Provedor: ProvedorClaude, WorkspaceID: "ws-a", BandID: "b1"}
 
+// A geração sobe a cada mudança do estado ou do tipo de espera; o AceitaTexto acompanha o sinal
+// que pôs o estado e nunca vale fora do esperando_resposta.
+func TestGeracaoEAceitaTexto(t *testing.T) {
+	r := novoRegistro()
+	r.Vincular(jarvis)
+	passo := 0
+	aplicar := func(e Estado, espera string, aceita bool) Morador {
+		passo++
+		m, _ := r.Aplicar(Sinal{Fonte: ProvedorClaude, SessaoID: "s1", TerminalID: "t1", Estado: e, Espera: espera, AceitaTexto: aceita,
+			TS: t0.Add(time.Duration(passo) * time.Second)})
+		if m == nil {
+			return r.Snapshot()[0]
+		}
+		return *m
+	}
+	m1 := aplicar(EsperandoResposta, "arquivo:input needed", true)
+	if !m1.AceitaTexto || m1.Geracao == 0 {
+		t.Fatalf("input needed: %+v", m1)
+	}
+	if m := aplicar(EsperandoResposta, "arquivo:input needed", true); m.Geracao != m1.Geracao {
+		t.Fatal("o mesmo sinal não muda a geração")
+	}
+	m2 := aplicar(EsperandoResposta, "arquivo:dialog open", false)
+	if m2.AceitaTexto || m2.Geracao != m1.Geracao+1 || !m2.Desde.Equal(m1.Desde) {
+		t.Fatalf("outra espera no mesmo estado: %+v", m2)
+	}
+	m3 := aplicar(EsperandoPermissao, "", true)
+	if m3.AceitaTexto || m3.Geracao != m2.Geracao+1 {
+		t.Fatalf("aprovação nunca aceita texto: %+v", m3)
+	}
+	if b, _ := json.Marshal(m3); strings.Contains(string(b), "input needed") || strings.Contains(string(b), "eracao") {
+		t.Fatalf("a espera não vai no JSON: %s", b)
+	}
+}
+
 func TestSinalComTerminalCriaMoradorVinculado(t *testing.T) {
 	r := novoRegistro()
 	r.Vincular(jarvis)

@@ -4245,7 +4245,7 @@ class Pagina(BaseHTTPRequestHandler):
             return self._json(*erro(400, "pedido", "Pedido inválido."))
         texto_ = ponte_espelho.texto_resposta(dados["texto"]) if responder else None
         if responder and texto_ is None:
-            return self._json(*erro(400, "texto", "A resposta vai numa linha só, até 1000 caracteres, sem barra invertida nem caracteres invisíveis."))
+            return self._json(*erro(400, "texto", "A resposta vai numa linha só, até 1000 caracteres, sem começar com hífen, sem barra invertida nem caracteres invisíveis."))
         extra = {"tamanho": len(texto_)} if responder else {}   # do texto, só o tamanho
         inicio = time.monotonic()
         try:

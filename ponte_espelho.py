@@ -70,14 +70,15 @@ def texto_resposta(v):
     """A resposta de uma pergunta sem os espaços das pontas, ou None. Como o decisao.ValidarTexto da ponte, recusa (não
     troca): mais de MAX_TEXTO caracteres, a barra invertida (o maestri --raw lê \\n, \\e e \\xNN como teclas) e tudo o que
     não é letra, marca, número, pontuação, símbolo ou espaço: controle (quebra de linha, tab, ESC), C1, bidi, largura
-    zero, separador de linha, uso privado, surrogate solto e não atribuído."""
+    zero, separador de linha, uso privado, surrogate solto e não atribuído; e o texto que começa com "-"."""
     if not isinstance(v, str) or len(v) > MAX_TEXTO or "\\" in v:
         return None
     for c in v:
         cat = unicodedata.category(c)
         if cat[0] not in "LMNPS" and cat != "Zs":
             return None
-    return v.strip() or None
+    v = v.strip()
+    return v if v and not v.startswith("-") else None   # começando com "-", viraria opção do maestri
 
 
 def chave_valida(chave):

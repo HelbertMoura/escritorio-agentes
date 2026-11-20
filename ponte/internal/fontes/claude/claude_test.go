@@ -100,6 +100,26 @@ func TestNotificacoes(t *testing.T) {
 	nenhum(t, hook("Notification", `"notification_type":"auth_success","message":"x"`))
 }
 
+// Só a espera que pede uma resposta escrita aceita texto digitado; diálogo de opções nunca.
+func TestAceitaTextoSoNaListaPositiva(t *testing.T) {
+	notif := map[string]bool{"elicitation_dialog": true, "agent_needs_input": true, "elicitation_url_dialog": false, "permission_prompt": false}
+	for tipo, aceita := range notif {
+		s := um(t, hook("Notification", `"notification_type":"`+tipo+`","message":"x"`))
+		if s.AceitaTexto != aceita || aceita && s.Espera != "notificacao:"+tipo {
+			t.Errorf("%s: %+v", tipo, s)
+		}
+	}
+	arquivo := map[string]bool{"input needed": true, "Input Needed": true, "dialog open": false, "sandbox request": false,
+		"goal proposal": false, "permission": false, "algo novo": false, "": false}
+	for w, aceita := range arquivo {
+		sinais := Reconciliar(nil, map[string]Sessao{"s": {SessionID: "s", Status: "waiting", WaitingFor: w, PID: 1}},
+			func(int, uint64) bool { return true })
+		if len(sinais) != 1 || sinais[0].AceitaTexto != aceita {
+			t.Errorf("waitingFor %q: %+v", w, sinais)
+		}
+	}
+}
+
 func TestPermissionRequestEsperandoPermissao(t *testing.T) {
 	s := um(t, hook("PermissionRequest", `"tool_name":"Bash","tool_input":{"command":"rm -rf build"}`))
 	if s.Estado != mundo.EsperandoPermissao {

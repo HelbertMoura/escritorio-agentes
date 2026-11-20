@@ -54,7 +54,7 @@ func AcharCLI() (CLI, bool) {
 		if c == "" {
 			continue
 		}
-		if i, err := os.Stat(c); err == nil && i.Mode().IsRegular() && i.Mode().Perm()&0o111 != 0 {
+		if binarioSeguro(c) {
 			return CLI{Bin: c, Socket: sock}, true
 		}
 	}

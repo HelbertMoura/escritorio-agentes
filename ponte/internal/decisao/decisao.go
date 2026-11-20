@@ -109,6 +109,11 @@ type Pendente struct {
 	Completo   bool      `json:"completo"`
 	Via        string    `json:"via,omitempty"`
 	ExpiraEm   time.Time `json:"expira_em"`
+	// Só na ponte: a geração e o tipo de espera do morador quando a pergunta abriu (Morador.Geracao
+	// e Morador.Espera). A resposta só é digitada se os dois ainda forem os mesmos. Geracao 0:
+	// pergunta que não depende disso (a do OpenCode, respondida pela API dele).
+	Geracao uint64 `json:"-"`
+	Espera  string `json:"-"`
 }
 
 // Resumo é o texto que a tela mostra e se ele conta o pedido inteiro.
@@ -159,12 +164,13 @@ func (r *Registro) Abrir(moradorID, ferramenta string, resumo Resumo, prazo time
 
 // AbrirPergunta registra uma pergunta do morador. pergunta é o texto que o agente mostra, já
 // mascarado ("" quando a ponte não o tem); via, por onde a resposta chega.
-func (r *Registro) AbrirPergunta(moradorID, pergunta, via string, prazo time.Duration) (Pendente, <-chan Resultado, error) {
+func (r *Registro) AbrirPergunta(moradorID, pergunta, via string, geracao uint64, espera string, prazo time.Duration) (Pendente, <-chan Resultado, error) {
 	id, err := novoID()
 	if err != nil {
 		return Pendente{}, nil, err
 	}
-	return r.abrir(Pendente{ID: id, MoradorID: moradorID, Tipo: TipoPergunta, Resumo: Cortar(pergunta), Via: via}, prazo)
+	return r.abrir(Pendente{ID: id, MoradorID: moradorID, Tipo: TipoPergunta, Resumo: Cortar(pergunta), Via: via,
+		Geracao: geracao, Espera: espera}, prazo)
 }
 
 func (r *Registro) abrir(p Pendente, prazo time.Duration) (Pendente, <-chan Resultado, error) {
@@ -385,7 +391,9 @@ var (
 // o que não é visível: controle (inclusive quebra de linha, tab e ESC), C1, bidi e largura
 // zero (Cc e Cf), separador de linha e de parágrafo, uso privado e não atribuído. Só passa o que
 // o unicode.IsGraphic aceita: letras, marcas, números, pontuação, símbolos e espaços. A quebra
-// de linha é recusada porque, no terminal, ela manda a resposta pela metade.
+// de linha é recusada porque, no terminal, ela manda a resposta pela metade. Também recusa o
+// texto que começa com "-" (depois dos espaços): ele vai como argumento do `maestri`, e assim
+// nenhum parser de opções o lê como opção.
 func ValidarTexto(s string) (string, error) {
 	if !utf8.ValidString(s) {
 		return "", ErrTextoProibido
@@ -401,6 +409,9 @@ func ValidarTexto(s string) (string, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return "", ErrTextoVazio
+	}
+	if strings.HasPrefix(s, "-") {
+		return "", ErrTextoProibido
 	}
 	return s, nil
 }
