@@ -1141,7 +1141,7 @@ body.demo [data-rota="personalizar"] { display: none; }
   #atualizado { order: 4; }
   #v-escritorio > .widgets, #v-escritorio > .agora { order: 5; }
   .selo-vivo { left: 10px; top: 10px; max-width: calc(100% - 20px); }
-  .aviso-greve { left: 8px; right: 60px; bottom: 8px; max-width: none; gap: 8px; padding: 6px 6px 6px 10px; }   /* tela cheia: livre dos controles */
+  .aviso-greve { left: 8px; right: 8px; bottom: 62px; max-width: none; gap: 8px; padding: 6px 6px 6px 10px; }   /* tela cheia: acima da barra da câmera (embaixo à esquerda) */
   .greve-linha { font-size: 13px; }
   .dica-mapa { display: none; }
   .ficha { left: 8px; right: 8px; bottom: 8px; width: auto; }

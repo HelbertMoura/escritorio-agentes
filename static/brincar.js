@@ -272,7 +272,7 @@ const Brincar = (() => {
       document.querySelector(".barra-foto")?.remove();
       corpo.classList.remove("modo-foto", "moldura");
       if (foto.ligouCheio) telaCheia(false); else ajustarEscala();
-      foto = null; document.getElementById("modo-foto")?.focus();
+      foto = null; const bt = document.getElementById("modo-foto"); if (window.focarOuMenu) focarOuMenu(bt); else bt?.focus();
     }
   }
   function salvarFoto() {

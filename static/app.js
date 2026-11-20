@@ -392,7 +392,9 @@ function zonaPorta(p) {
 // O agente está na zona ou vai entrar nela nos próximos ~34 px da rota (~0,8 s andando)
 const naZonaDaPorta = (z, x, y) => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h;
 function vaiPassar(z, b) {
+  if (b.x < z.x - 40 || b.x > z.x + z.w + 40 || b.y < z.y - 40 || b.y > z.y + z.h + 40) return false;   // longe: nem olha a rota (34 px à frente cabem na folga)
   if (naZonaDaPorta(z, b.x, b.y)) return true;
+  if (!b.rota) return false;
   let ax = b.x, ay = b.y, resto = 34;
   for (const [bx, by] of b.rota) {
     const d = Math.hypot(bx - ax, by - ay), anda = Math.min(d, resto), n = Math.max(1, Math.ceil(anda / 3));
@@ -403,9 +405,13 @@ function vaiPassar(z, b) {
   return false;
 }
 
-// Portas: abrem antes de o agente chegar, ficam abertas enquanto ele atravessa e fecham logo depois
+// Portas: abrem antes de alguém chegar (agente, terminal, pessoa ou alguém da equipe do prédio), ficam abertas enquanto
+// atravessa e fecham logo depois. Terminal, pessoa e equipe só contam andando: o porteiro no posto e a fila do banheiro
+// não seguram a porta aberta
 function desenharPortas(t) {
-  const bonecos = [...mundo.bonecos.values()].filter(visivel);
+  const andando = b => b.rota && b.rota.length > 0;
+  const bonecos = [...[...mundo.bonecos.values()].filter(visivel), ...Vida.pessoas().filter(andando),
+    ...(window.Sprites ? Vida.terminais().filter(k => !k.dentro && andando(k)) : []), ...(window.Zeladoria && window.Sprites ? Zeladoria.npcs().filter(andando) : [])];
   for (const p of predio.portas) {
     const z = p.zona || (p.zona = zonaPorta(p));
     if (bonecos.some(b => vaiPassar(z, b))) p.ate = t + 250;
@@ -597,32 +603,40 @@ function desenharLuzes(dt, ceu) {
     const escuroSala = (1 - s.luz) * 0.3 * (1 - noite);
     if (escuroSala > 0.01) { ctx.fillStyle = `rgba(6,8,26,${escuroSala})`; ctx.fillRect(s.px, s.py, s.pw, s.ph); }
   }
-  if (noite > 0.05) { // luminárias, monitores e telas brilham
+  if (noite > 0.05) { // luminárias, monitores e telas brilham, cada um na própria peça e só com a sala acesa
     ctx.globalCompositeOperation = "lighter";
     for (const o of predio.objetos) {
-      if (o.nome === "luminaria" || o.nome === "luminaria_chao" || o.nome === "ring_light" || o.nome === "luminaria_arco") { // luminária de chão: acende com a sala (ou no toque, o.aceso)
+      if (LUZ_DA_PECA[o.nome]) { // luminária de chão: acende com a sala (ou no toque, o.aceso)
         const sala = o.sala || (o.sala = salaEm({ x: o.x + o.w / 2, y: o.y + o.h }));
-        const luz = o.aceso ?? (sala ? sala.luz : 1);
-        if (luz > 0.05) brilho(o.nome === "luminaria_arco" ? o.x + 20 : o.x + o.w / 2, o.nome === "luminaria_arco" ? o.y + 12 : o.y + 6, 34, `rgba(255,200,120,${0.35 * noite * luz})`);
+        const luz = o.aceso ?? (sala ? sala.luz : 1), [dx, dy] = LUZ_DA_PECA[o.nome];
+        if (luz > 0.05) brilho(o.espelho ? o.x + o.w - dx : o.x + dx, o.y + dy, 34, `rgba(255,200,120,${0.35 * noite * luz})`);
       } else if (o.tipo === "mesa") {
         const tela = telaDaMesa(o.mesa), cor = { codigo: "110,170,255", descanso: "150,120,255", aprovacao: Mapa.rgb(Mapa.cor("ambar")), pergunta: Mapa.rgb(Mapa.cor("azul")) }[tela];
-        if (cor) brilho(o.mesa.x, o.mesa.topo - 6, 22, `rgba(${cor},${(cor === "150,120,255" ? 0.14 : 0.3) * noite})`);
-        if (o.mesa.abajur && !o.mesa.horaExtra && (o.mesa.abajurAceso ?? tela !== "apagada")) brilho(o.mesa.x + 11, o.mesa.topo + 3, 18, `rgba(255,210,130,${0.4 * noite})`);
+        const luz = o.mesa.sala ? o.mesa.sala.luz : 1;   // o protetor de tela e o abajur não ficam acesos numa sala vazia
+        if (cor) brilho(o.mesa.x, o.mesa.topo - 3, 20, `rgba(${cor},${(cor === "150,120,255" ? 0.14 * luz : 0.3) * noite})`);
+        if (o.mesa.abajur && !o.mesa.horaExtra && luz > 0.05 && (o.mesa.abajurAceso ?? tela !== "apagada")) brilho(Mapa.lampadaX(o.mesa) + 2.5, o.mesa.topo + 1, 16, `rgba(255,210,130,${0.4 * noite * luz})`);
+      } else if (/arcade|rack_tv|estacao_gamer|aquario|neon|tv_parede/.test(o.nome || "")) {
+        const sala = o.sala || (o.sala = salaEm({ x: o.x + o.w / 2, y: o.y + o.h })), luz = sala ? sala.luz : 1;
+        if (luz > 0.05) brilho(o.x + o.w / 2, o.y + o.h / 3, 26, `rgba(140,110,255,${0.22 * noite * luz})`);
       }
-      else if (/arcade|rack_tv|estacao_gamer|aquario|neon|tv_parede/.test(o.nome || "")) brilho(o.x + o.w / 2, o.y + o.h / 3, 26, `rgba(140,110,255,${0.22 * noite})`);
     }
-    for (const l of [...(predio.luzesTeto || []), ...(predio.luzesTeto2 || [])]) { // luminárias de teto dos corredores: lâmpada acesa e a luz no chão
+    for (const l of [...(predio.luzesTeto || []), ...(predio.luzesTeto2 || [])]) { // luminárias de teto dos corredores: a lâmpada, o halo nela e a luz no chão
       if (window.Zeladoria && Zeladoria.lampadaApagada(l, menosMovimento.matches ? 0 : performance.now())) continue;   // a quebrada pisca (zeladoria.js)
-      brilho(l.x, l.y + 22, 34, `rgba(255,214,150,${0.32 * noite})`);
+      brilho(l.x + 0.5, l.y + 4, 9, `rgba(255,230,170,${0.5 * noite})`);
+      brilho(l.x + 0.5, l.y + 16, 30, `rgba(255,214,150,${0.3 * noite})`);
       ctx.fillStyle = `rgba(255,236,180,${0.9 * noite})`; ctx.fillRect(l.x - 2, l.y + 3, 5, 1);
     }
     ctx.globalCompositeOperation = "source-over";
+    // a luminária da mesa de quem trabalha à noite (ou na hora extra, já escuro): luz firme, sem pulsar
+    ctx.globalCompositeOperation = "lighter";
+    for (const o of predio.objetos) if (o.tipo === "mesa" && o.mesa.horaExtra)
+      brilho(Mapa.lampadaX(o.mesa) + 2.5, o.mesa.topo + 1, 20, `rgba(255,200,120,${noite * 0.5})`);
+    ctx.globalCompositeOperation = "source-over";
   }
-  ctx.globalCompositeOperation = "lighter";   // a luminária de quem trabalha à noite (ou na hora extra): luz firme, sem pulsar
-  for (const o of predio.objetos) if (o.tipo === "mesa" && o.mesa.horaExtra)
-    brilho(Mapa.lampadaX(o.mesa) + 2.5, o.mesa.topo + 3, 22, `rgba(255,200,120,${Math.max(0.5, noite) * 0.5})`);
-  ctx.globalCompositeOperation = "source-over";
 }
+
+// onde fica a lâmpada em cada luminária solta (x, y a partir do canto do sprite; espelhada, o x vira)
+const LUZ_DA_PECA = { luminaria: [6, 3], luminaria_chao: [12, 15], ring_light: [8, 7], luminaria_arco: [20, 10] };
 
 function brilho(x, y, r, cor) {
   const g = ctx.createRadialGradient(x, y, 0, x, y, r);
@@ -2321,10 +2335,10 @@ function pessoaEm(p, raio) {
   for (const v of Vida.pessoas()) { const d = Math.hypot(v.x - p.x, v.y - 8 - p.y); if (!v.eu && d < dm) { dm = d; melhor = v; } }
   return melhor;
 }
-// o terminalzinho cujo corpo (uns 12×20 px acima dos pés) está sob o ponto, o mais perto dos pés
+// o terminalzinho cujo corpo (uns 12×20 px acima dos pés, mais a coroa ou o capacete) está sob o ponto, o mais perto dos pés
 function terminalEm(p) {
   let melhor = null, dm = Infinity;
-  for (const k of Vida.terminais().filter(t => !t.dentro)) { const d = Math.hypot(k.x - p.x, k.y - 8 - p.y); if (Math.abs(p.x - k.x) <= 6 && p.y >= k.y - 19 && p.y <= k.y + 1 && d < dm) { dm = d; melhor = k; } }
+  for (const k of Vida.terminais().filter(t => !t.dentro)) { const d = Math.hypot(k.x - p.x, k.y - 8 - p.y); if (Math.abs(p.x - k.x) <= 7 && p.y >= k.y - 23 && p.y <= k.y + 1 && d < dm) { dm = d; melhor = k; } }
   return melhor;
 }
 function seloEm(p) { return [...mundo.bonecos.values()].find(b => b.selo && visivel(b) && Math.hypot(b.selo.x - p.x, b.selo.y - p.y) < b.selo.r) || null; }
@@ -2433,7 +2447,7 @@ function telaCheia(ligar) {
   $("tela-cheia").querySelector(".ic").replaceChildren(iconeSvg(ligar ? "recolher" : "expandir"));
   $("tela-cheia").querySelector(".rotulo-menu").textContent = ligar ? "Sair da tela cheia" : "Tela cheia";
   ajustarEscala();
-  if (!ligar && window.innerWidth <= 760 && $("controles-menu").hidden) $("controles-mais").focus();   // o botão de sair estava no menu, que fechou: o foco não cai no body
+  if (!ligar && (document.activeElement === document.body || document.activeElement === $("tela-cheia"))) $("controles-mais").focus();   // o botão de sair fica no menu, que fecha: o foco vai para o botão do menu, não para o body
 }
 $("tela-cheia").addEventListener("click", () => telaCheia(!$("palco-cartao").classList.contains("cheio")));
 // o menu "⋯" da câmera: tela cheia, foto, TV, rádio, time-lapse (e o modo apresentação, apresentacao.js). Fecha ao escolher,
@@ -2441,13 +2455,23 @@ $("tela-cheia").addEventListener("click", () => telaCheia(!$("palco-cartao").cla
 function menuCamera(abrir, devolverFoco) {
   const m = $("controles-menu"), b = $("controles-mais");
   if (abrir === !m.hidden) return;
+  const dentro = m.contains(document.activeElement);   // o foco estava num item: volta para o botão do menu (o item some com ele)
   m.hidden = !abrir; b.setAttribute("aria-expanded", String(abrir));
-  if (abrir) m.querySelector("button")?.focus(); else if (devolverFoco) b.focus();
+  if (abrir) m.querySelector("button")?.focus(); else if (devolverFoco || dentro) b.focus();
 }
+// o botão que abriu um painel pode estar no menu da câmera, já fechado: o foco volta para ele se estiver à vista, senão para
+// o botão do menu (tv.js, radio.js, timelapse.js e brincar.js)
+window.focarOuMenu = el => {
+  const alvo = el && el.isConnected && el.offsetParent !== null ? el : document.getElementById("controles-mais");
+  if (alvo && alvo.offsetParent !== null) alvo.focus({ preventScroll: true });
+};
 $("controles-mais").addEventListener("click", () => menuCamera($("controles-menu").hidden));
 $("controles-menu").addEventListener("click", ev => { if (ev.target.closest("button")) menuCamera(false); });
 $("controles-menu").addEventListener("keydown", ev => { if (ev.key === "Escape") { ev.stopPropagation(); menuCamera(false, true); } });
 document.addEventListener("pointerdown", ev => { if (!$("controles-menu").hidden && !ev.target.closest(".controles")) menuCamera(false); });
+document.querySelector(".controles").addEventListener("focusout", ev => {   // o foco saiu da barra da câmera (Tab, diálogo aberto): o menu fecha
+  if (!$("controles-menu").hidden && !(ev.relatedTarget && ev.currentTarget.contains(ev.relatedTarget))) menuCamera(false);
+});
 // o selo do mapa: curto (hora, ícone do tempo e temperatura); o clique abre a cidade e o tempo por extenso
 $("selo-vivo").addEventListener("click", () => {
   const aberto = $("selo-vivo").getAttribute("aria-expanded") !== "true";
