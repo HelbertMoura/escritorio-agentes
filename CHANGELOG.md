@@ -4,7 +4,9 @@
 
 All notable changes to this project are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Since 1.1.0, versions follow [SemVer](https://semver.org/); older entries are dated milestones.
 
-## Unreleased · Firmópolis
+## 2.0.0 · 2026-11-20 · Firmópolis
+
+Release [`v2.0.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2.0.0). Commits: [`v1.6.0...v2.0.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.6.0...v2.0.0).
 
 ### Added
 - **New name: Firmópolis.** Escritório de agentes merged with Escritório Vivo. The tab, the installable app, the invitation and construction mode carry the new name and icons, and a short opening plays once per session (skippable, and not in TV mode).
@@ -12,6 +14,12 @@ All notable changes to this project are listed here, newest first. The format fo
 - **Three species on the map:** felt critters are the agentes.chat agents, little terminals are the local terminals, and people are you and your visitors.
 - **Coffee and chats for terminals:** when free, the little terminals go to the coffee machine or chat in the hallway, driven by needs that drop while they work.
 - **People picker:** in the profile and the invitation, you choose the shirt, hair and skin you show on the map with.
+- **Terminal life:** besides coffee and chats, the little terminals play alone or in pairs, eat, nap and go to the bathroom, each driven by whichever need is lowest. They stay in their team's room (by Maestri band), the Maestro goes to the meeting room wearing a crown, and terminals that meet gain affinity.
+- **Bathroom with a queue:** a WC door at the end of the hallway, with a queue that moves. Whoever is really desperate cuts the line and loses affinity with everyone they skipped.
+- **Terminal card:** clicking a little terminal shows its program, state, team, how long it has been open, its needs, its closest affinities and its day.
+- **Terminals in the counters:** the widgets and the panel count the bridge terminals together with the agents: working, waiting for you and free.
+- **The building from the front:** below the map, the facade with a door, windows, wall lamps that light up at night and planters, in new PixelLab art.
+- **The new Neighborhood:** the street view on the World page was redrawn with new PixelLab art (cottages, trees, lamp posts, a bench, cars and people), by day and by night.
 
 ### Changed
 - **Bridge integrations:** the hook marker changed from `escritorio-vivo` to `firmopolis`. `ponte setup --aplicar` migrates Escritório Vivo users, keeping config, token and history, and only removes an old plugin after confirming the bridge installed it.
