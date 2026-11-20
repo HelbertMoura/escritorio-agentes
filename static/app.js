@@ -603,17 +603,22 @@ function desenharEtiqueta(b, t, ocupadas) {
   ctx.font = fonte(700, 4.6);
   const tam = tamMundo(4.6), est0 = b.trabalho && estadoDe(b.trabalho.status);
   const px = b.status && Mapa.iconeStatus(b.status) ? Math.max(1, Math.round(tam / 6)) : 0, iw = px ? px * 9 + tam * 0.35 : 0;   // status da pessoa (1.6): o ícone à esquerda do nome
-  const w = ctx.measureText(b.nome).width + tam + iw, h = tam + 6, folga = est0 && est0.balao ? tam * 2.4 : 0;
+  // tela estreita (celular): o terminal sai sem o programa ("Maestro · Opus High · Claude Code +2" → "Maestro · Opus High +2")
+  const nome = b.terminal && tela.clientWidth < 600 ? b.nome.replace(/ · [^·]+?( \+\d+)?$/, "$1") : b.nome;
+  const w = ctx.measureText(nome).width + tam + iw, h = tam + 6, folga = est0 && est0.balao ? tam * 2.4 : 0;
   const x = Math.max(v.l + 2, Math.min(v.r - w - 2 - folga, b.x * S - w / 2)), cx = x + w / 2;   // nunca cortado na borda da tela
   let y = Math.max(v.t + 2, topo - h);
-  for (let i = 0; i < 6 && ocupadas.some(r => x < r.x + r.w + 3 && x + w + 3 > r.x && y < r.y + r.h + 2 && y + h + 2 > r.y); i++) y -= h + 3;
+  const bate = () => ocupadas.some(r => x < r.x + r.w + 3 && x + w + 3 > r.x && y < r.y + r.h + 2 && y + h + 2 > r.y);
+  for (let i = 0, n = tela.clientWidth < 600 ? 2 : 6; i < n && bate(); i++) y -= h + 3;   // no celular, pilha curta
+  // sem lugar mesmo subindo: o nome some (volta ao aproximar), menos o selecionado e quem espera você (o selo "!" ou "?")
+  if (bate() && selecionado !== b.id && !(est0 && est0.balao)) { b.etq = null; b.selo = null; return; }
   ocupadas.push({ x, y, w, h });
   b.etq = { x, y, w, h };
   ctx.globalAlpha = combina(b) ? 1 : 0.35;
   ctx.fillStyle = selecionado === b.id ? "#f2f2f3" : "rgba(15,15,17,.85)";
   arred(x, y, w, h, h / 2); ctx.fill();
   ctx.fillStyle = selecionado === b.id ? "#111" : "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.fillText(b.nome, cx + iw / 2, y + h / 2 + 1);
+  ctx.fillText(nome, cx + iw / 2, y + h / 2 + 1);
   if (px) Mapa.desenharStatus(ctx, b.status, Math.round(x + tam * 0.4), Math.round(y + (h - 9 * px) / 2), px);
   const est = b.trabalho && estadoDe(b.trabalho.status);
   b.selo = null;
