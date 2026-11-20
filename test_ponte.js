@@ -11,6 +11,7 @@ let respostaSrv = { status: 404, corpo: "" };   // o GET /api/ponte (o espelho n
 class FalsoWS {
   constructor(url, protocolos) { this.url = url; this.protocolos = protocolos; abertos.push(this); }
   close() { this.fechado = true; }
+  send(m) { (this.enviados ||= []).push(m); }
 }
 function criar(tokenSalvo) {
   abertos.length = 0; timers.length = 0; pedidos.length = 0;
@@ -196,6 +197,50 @@ assert.equal(religar().ms, 6000, "a espera dobra");
   assert.deepEqual([...q.Ponte.terminais().map(t => t.id)], ["s1"]);
   abertos.at(-1).onclose(); await solta();
   assert.deepEqual([...q.Ponte.terminais().map(t => t.id)], ["s1"], "tentar a local de novo não apaga o espelho");
+
+  // ---------- responder pelo escritório: os pedidos só para quem decide, conferidos; Permitir/Negar pelo caminho certo ----------
+  const ID = "A".repeat(22);
+  const pedidoSrv = { id: ID, morador_id: "s1", tipo: "permissao", ferramenta: "Bash", resumo: "git push\u0007", resta_s: 60 };
+  respostaSrv = espelho([morador("s1", "esperando_permissao")], { pendentes: [pedidoSrv, { ...pedidoSrv, id: "curto" }] });
+  q = criar(null); await solta();
+  assert.equal(q.Ponte.podeDecidir(), false);
+  assert.equal(q.Ponte.pendentes("s1").length, 0, "sem o decidir do servidor, nenhum pedido");
+  respostaSrv = espelho([morador("s1", "esperando_permissao")], { decidir: true, pendentes: [pedidoSrv, { ...pedidoSrv, id: "curto" }, { ...pedidoSrv, id: "B".repeat(22), resta_s: 9999 }] });
+  lerSrv().fn(); await solta();
+  assert.equal(q.Ponte.podeDecidir(), true);
+  const ps = q.Ponte.pendentes("s1");
+  assert.deepEqual([...ps.map(x => x.id)], [ID, "B".repeat(22)], "id inválido sai");
+  assert.equal(ps[0].resumo, "git push", "controle sai");
+  assert.ok(ps[1].ate - Date.now() <= 600000, "prazo no máximo 10 min");
+  respostaSrv = { status: 410, corpo: "" };
+  await q.Ponte.decidir(ID, "permitir");
+  const ult = pedidos.at(-1);
+  assert.equal(ult.url, "api/ponte/decidir");
+  assert.equal(ult.op.method, "POST");
+  assert.deepEqual(JSON.parse(ult.op.body), { id: ID, acao: "permitir" });
+  assert.equal(q.Ponte.pendentes("s1").length, 1, "410: já respondido ou vencido, sai da tela");
+  await q.Ponte.decidir("B".repeat(22), "talvez");
+  assert.equal(pedidos.at(-1), ult, "ação fora de permitir/negar não sai");
+
+  // ponte local: "atender" só para quem decide, o pedido pelo /ws e a decisão de volta por ele
+  respostaSrv = { status: 200, corpo: JSON.stringify({ ativo: false, decidir: true }) };
+  q = criar(TOKEN); await solta();
+  const lw = abertos[0];
+  lw.readyState = 1; lw.onopen();
+  assert.deepEqual(lw.enviados, ['{"v":1,"tipo":"atender"}']);
+  const expira = new Date(Date.now() + 60000).toISOString();
+  mensagem(lw, { v: 1, tipo: "pendente", pendente: { id: ID, morador_id: "l1", tipo: "permissao", ferramenta: "Bash", resumo: "ls", expira_em: expira } });
+  mensagem(lw, { v: 1, tipo: "pendente", pendente: { id: "C".repeat(22), morador_id: "l1", ferramenta: "Bash", expira_em: new Date(Date.now() - 1).toISOString() } });
+  mensagem(lw, { v: 1, tipo: "pendente", pendente: { id: "<script>", morador_id: "l1", expira_em: expira } });
+  assert.deepEqual([...q.Ponte.pendentes("l1").map(x => x.id)], [ID], "vencido e id estranho ficam de fora");
+  await q.Ponte.decidir(ID, "negar");
+  assert.deepEqual(JSON.parse(lw.enviados.at(-1)), { v: 1, tipo: "decidir", id: ID, acao: "negar" });
+  mensagem(lw, { v: 1, tipo: "resolvido", id: ID, por: "local" });
+  assert.equal(q.Ponte.pendentes("l1").length, 0, "resolvido sai");
+  respostaSrv = { status: 200, corpo: JSON.stringify({ ativo: false }) };
+  q = criar(TOKEN); await solta();
+  abertos[0].readyState = 1; abertos[0].onopen();
+  assert.equal(abertos[0].enviados, undefined, "quem não decide não atende");
 
   console.log("test_ponte.js: ok");
 })().catch(e => { console.error(e); process.exit(1); });

@@ -984,8 +984,39 @@ function linhaTerminal(d, espera) {
   });
   if (!espera) return ir;
   const linha = elem("div", "linha-widget"); linha.append(ir);
-  return linha;
+  const decisao = blocoDecisao(d, true);   // o "!" do terminal: Permitir/Negar ali mesmo, para quem decide
+  if (!decisao) return linha;
+  const caixa = elem("div", "linha-decisao"); caixa.append(linha, decisao);
+  return caixa;
 }
+
+// ---------- responder pelo escritório (ponte.js): Permitir/Negar um pedido de permissão do terminal, com a ferramenta,
+// o resumo mascarado e o tempo que falta. Só aparece para quem o servidor diz que decide. Tudo por textContent
+const PRIVACIDADE_DECISAO = "Pelo celular ou outra máquina, só a ferramenta e um resumo mascarado (até 300 caracteres) passam pelo servidor. Quem responder primeiro, aqui ou no terminal, leva.";
+const restaDecisao = ate => `vence em ${Math.max(0, Math.ceil((ate - Date.now()) / 1000))} s`;
+function blocoDecisao(d, compacto) {
+  const ps = window.Ponte && typeof Ponte.pendentes === "function" ? Ponte.pendentes(d.id) : [];
+  if (!ps.length) return null;
+  const caixa = elem("div", "decisao" + (compacto ? " compacta" : ""));
+  for (const p of ps) {
+    const item = elem("div", "decisao-item"), oque = elem("p", "decisao-oque");
+    oque.append(elem("strong", null, p.ferramenta || "Ferramenta"), p.resumo ? ` · ${p.resumo}` : "");
+    const resta = elem("span", "decisao-resta", restaDecisao(p.ate)); resta.dataset.ate = String(p.ate);
+    const acoes = elem("div", "decisao-acoes");
+    for (const [rot, acao, classe] of [["Permitir", "permitir", "botao decisao-sim"], ["Negar", "negar", "botao fantasma decisao-nao"]]) {
+      const b = elem("button", classe, p.enviando ? "Enviando…" : rot); b.type = "button"; b.disabled = p.enviando;
+      b.setAttribute("aria-label", `${rot} ${p.ferramenta}${p.resumo ? `: ${p.resumo}` : ""}`);
+      b.addEventListener("click", () => Ponte.decidir(p.id, acao));
+      acoes.append(b);
+    }
+    item.append(oque, resta, acoes);
+    if (p.erro) item.append(elem("p", "decisao-erro", p.erro));
+    caixa.append(item);
+  }
+  if (!compacto) caixa.append(elem("p", "decisao-nota", PRIVACIDADE_DECISAO));
+  return caixa;
+}
+setInterval(() => { for (const r of document.querySelectorAll(".decisao-resta[data-ate]")) r.textContent = restaDecisao(Number(r.dataset.ate)); }, 1000);
 addEventListener("ponte", () => { if (estado) desenharPainel(); if (fichaTerm && !$("ficha").hidden) renderFicha(); });   // um terminal entrou, mudou ou saiu
 
 // quem está trabalhando: sala, o que faz e há quanto tempo (a linha leva ao agente no mapa)
@@ -1129,7 +1160,9 @@ function renderFichaTerminal() {
   const f = $("ficha"), d = terminaisDaPonte().find(x => x.id === fichaTerm), sid = "terminal:" + fichaTerm;
   if (!d) { fecharFicha(); return; }   // o terminal fechou ou a ponte caiu
   const k = Vida.terminais().find(t => t.id === sid), nec = Vida.necessidades(k), amz = Vida.afinidades(d.id), dia = Ponte.dia(d.id).slice(-8).reverse();
+  const pend = typeof Ponte.pendentes === "function" ? Ponte.pendentes(d.id) : [];
   const chave = [sid, d.nome, d.provedor, d.papel, d.estado, d.gerente, d.projeto, d.atividade, d.workspace, d.band, d.ajudantes, d.desde, seguir === sid,
+    pend.map(p => p.id + p.enviando + p.erro).join(","),
     nec && NECS_TERM.map(([n]) => nec[n]).join(","), amz.map(a => a.nome + a.valor).join(","), dia.length && dia[0].ts + "/" + dia.length].join("|");
   if (chave === assinaturaFicha) return;
   assinaturaFicha = chave;
@@ -1167,7 +1200,8 @@ function renderFichaTerminal() {
   seg.addEventListener("click", () => { seguir = seguir === sid ? null : sid; renderFicha(); $("ficha").querySelector(".seguir").focus(); });
   const fe = elem("button", "botao fantasma", "Fechar"); fe.type = "button"; fe.addEventListener("click", () => { fecharFicha(); focoNoMapa(); });
   acoes.append(seg, fe);
-  f.replaceChildren(topo, dl, elem("p", "term-ajuda", "Responder é no próprio terminal."), acoes);
+  const decisao = blocoDecisao(d, false);
+  f.replaceChildren(topo, dl, decisao || elem("p", "term-ajuda", "Responder é no próprio terminal."), acoes);
 }
 
 // ---------- vida social na ficha (contrato S, fatia 1): amizades pelo GET /api/social e "Mandar pro ringue" pelo POST

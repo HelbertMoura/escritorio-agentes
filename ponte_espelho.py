@@ -4,14 +4,19 @@
 reduzida que o navegador recebe dela (sem alvo de atividade, workspaces só com nomes, o dia sem alvo), e quem é do andar
 lê por GET /api/ponte, sem precisar do PC onde a ponte roda. Fica só na memória, com a hora em que chegou: passou de
 90 s sem novidade, o espelho conta como desligado. Tudo é conferido e cortado com os mesmos limites do static/ponte.js;
-o que a ponte mandar fora disso não é guardado nem devolvido."""
+o que a ponte mandar fora disso não é guardado nem devolvido.
+
+Responder pelo escritório (v2 do espelho): a ponte manda também os pedidos de permissão que esperam (a ferramenta e um
+resumo já mascarado, até 300 caracteres; nunca a entrada inteira, a pasta nem o histórico). Quem decide (o admin do
+prédio ou um ESCRITORIO_PONTE_DECISORES) responde por POST /api/ponte/decidir; a decisão fica numa fila na memória e a
+ponte a busca por long-poll (GET /api/ponte/decisoes), uma vez só. Cada id vale uma decisão."""
 import hmac
 import os
 import re
 import secrets
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from acesso import gravar
 
@@ -22,11 +27,22 @@ MAX_MORADORES, MAX_WS, MAX_DIA, MAX_EVENTOS = 48, 32, 200, 200   # os do static/
 ESTADOS = frozenset({"ocupado", "ocioso", "esperando_permissao", "esperando_resposta", "erro"})
 PROVEDORES = frozenset({"claude_code", "codex", "open_code", "antigravity_cli", "minimax_code"})
 _CONTROLE = re.compile(r"[\x00-\x1f\x7f]")
+MAX_PENDENTES, MAX_RESUMO = 16, 300          # os da ponte (decisao.Max e decisao.MaxResumo)
+PRAZO_MAX = timedelta(minutes=10)            # um pedido não espera mais que isso (a ponte espera até 2 min)
+ESPERA_MAX_S = 25                            # o long-poll das decisões
+ATENDENDO_S = 10                             # quem decide leu o /api/ponte há menos que isso: alguém atendendo
+DECISOES_POR_MIN = 20                        # por pessoa
+ACOES = frozenset({"permitir", "negar"})
+_ID = re.compile(r"[A-Za-z0-9_-]{22}")
 _HORA = re.compile(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})")
 
 
 class Limite(ValueError):
     """Envio cedo demais depois do último aceito (429)."""
+
+
+class Encerrado(LookupError):
+    """O pedido não existe, já venceu ou já foi decidido (410)."""
 
 
 def chave_valida(chave):
@@ -99,9 +115,28 @@ def _dia(eventos):
     return [e for lista in por_id.values() for e in lista[-MAX_EVENTOS:]]
 
 
-def validar(dados):
-    """O corpo da ponte já conferido e cortado, ou ValueError (400)."""
-    if not isinstance(dados, dict) or type(dados.get("v")) is not int or dados.get("v") != 1 or not isinstance(dados.get("moradores"), list):
+def id_valido(v):
+    return isinstance(v, str) and _ID.fullmatch(v) is not None
+
+
+def _pendentes(lista, agora):
+    """Os pedidos válidos e ainda no prazo: id, morador, ferramenta, resumo e o vencimento (datetime UTC)."""
+    saida, ids = [], set()
+    for p in lista[:MAX_PENDENTES] if isinstance(lista, list) else []:
+        expira = hora(p.get("expira_em")) if isinstance(p, dict) else None
+        if expira is None or not id_valido(p.get("id")) or p["id"] in ids or p.get("tipo") != "permissao" \
+                or not texto(p.get("morador_id"), 200) or not (agora < expira <= agora + PRAZO_MAX):
+            continue
+        ids.add(p["id"])
+        saida.append({"id": p["id"], "morador_id": texto(p["morador_id"], 200), "tipo": "permissao",
+                      "ferramenta": texto(p.get("ferramenta"), 40), "resumo": texto(p.get("resumo"), MAX_RESUMO),
+                      "expira": expira.astimezone(timezone.utc)})
+    return saida
+
+
+def validar(dados, agora=None):
+    """O corpo da ponte já conferido e cortado, ou ValueError (400). v1 sem os pedidos; v2 com eles."""
+    if not isinstance(dados, dict) or type(dados.get("v")) is not int or dados.get("v") not in (1, 2) or not isinstance(dados.get("moradores"), list):
         raise ValueError("formato")
     moradores, ids = [], set()
     for m in dados["moradores"][:MAX_MORADORES]:
@@ -109,7 +144,9 @@ def validar(dados):
         if t and t["id"] not in ids:
             ids.add(t["id"])
             moradores.append(t)
-    return {"moradores": moradores, "workspaces": _workspaces(dados.get("workspaces")), "dia": _dia(dados.get("dia"))}
+    pendentes = _pendentes(dados.get("pendentes"), agora or datetime.now(timezone.utc)) if dados["v"] == 2 else []
+    return {"moradores": moradores, "workspaces": _workspaces(dados.get("workspaces")), "dia": _dia(dados.get("dia")),
+            "pendentes": pendentes}
 
 
 class Espelho:
@@ -117,11 +154,17 @@ class Espelho:
     arquivo em dados/ que a tela gera (Personalizar > Ponte local); sem nenhuma, o espelho está desligado. relogio: o
     monotônico (os testes trocam)."""
 
-    def __init__(self, chave_fixa=None, arquivo=None, relogio=time.monotonic):
+    def __init__(self, chave_fixa=None, arquivo=None, relogio=time.monotonic, utc=None):
         self._fixa, self._arquivo, self._agora = chave_valida(chave_fixa), arquivo, relogio
+        self._utc = utc or (lambda: datetime.now(timezone.utc))
         self._trava = threading.Lock()
+        self._sinal = threading.Condition(self._trava)   # acorda o long-poll: decisão nova ou alguém começou a atender
         self._dados, self._quando = None, None
         self._chave = self._fixa or self._ler_arquivo()
+        self._usados = {}          # id decidido → vencimento (não vale de novo, nem se a ponte mandar outra vez)
+        self._fila = []            # decisões à espera da ponte
+        self._atendido = None      # monotônico da última leitura de quem decide
+        self._por_pessoa = {}      # usuário → monotônicos das últimas decisões (limite por minuto)
 
     def _ler_arquivo(self):
         try:
@@ -147,6 +190,7 @@ class Espelho:
             chave = secrets.token_hex(32)
             gravar(self._arquivo, chave.encode())   # 0600, atômico
             self._chave, self._dados, self._quando = chave, None, None
+            self._fila.clear()
             return chave
 
     def desligar(self):
@@ -159,6 +203,7 @@ class Espelho:
             except (OSError, TypeError):
                 pass
             self._chave, self._dados, self._quando = None, None, None
+            self._fila.clear()
 
     def autorizado(self, cabecalho):
         with self._trava:
@@ -169,7 +214,7 @@ class Espelho:
     def receber(self, dados):
         """Guarda o espelho (validar() antes de tudo). {"teste": true} só confere a chave e o formato (ponte conectar):
         não troca o que está guardado. Limite: cedo demais depois do último aceito."""
-        limpo = validar(dados)
+        limpo = validar(dados, self._utc())
         if dados.get("teste") is True:
             return
         with self._trava:
@@ -178,8 +223,75 @@ class Espelho:
                 raise Limite("cedo")
             self._dados, self._quando = limpo, agora
 
-    def ler(self):
+    def ler(self, decide=False):
+        """O espelho fresco. decide: quem lê pode responder (os pedidos vão junto, e conta como alguém atendendo);
+        sem isso, os pedidos nunca saem daqui."""
         with self._trava:
             if self._dados is None or self._chave is None or self._agora() - self._quando >= FRESCOR_S:
                 return {"ativo": False}
-            return {"ativo": True, "idade_s": int(self._agora() - self._quando), **self._dados}
+            saida = {"ativo": True, "idade_s": int(self._agora() - self._quando),
+                     **{k: v for k, v in self._dados.items() if k != "pendentes"}}
+            if decide:
+                if not self._atendendo():
+                    self._sinal.notify_all()   # a ponte fica sabendo já, não no fim do long-poll
+                self._atendido = self._agora()
+                agora = self._utc()
+                saida["pendentes"] = [{**{k: v for k, v in p.items() if k != "expira"},
+                                       "resta_s": max(0, int((p["expira"] - agora).total_seconds()))}
+                                      for p in self._pendentes_vivos(agora)]
+            return saida
+
+    # ---------- responder pelo escritório (os _ chamam com a trava) ----------
+    def _atendendo(self):
+        return self._atendido is not None and self._agora() - self._atendido < ATENDENDO_S
+
+    def _pendentes_vivos(self, agora):
+        for i, venc in list(self._usados.items()):
+            if venc <= agora:
+                del self._usados[i]
+        if self._dados is None or self._agora() - self._quando >= FRESCOR_S:
+            return []
+        return [p for p in self._dados.get("pendentes", []) if p["expira"] > agora and p["id"] not in self._usados]
+
+    def limite_decisao(self, usuario):
+        """Conta uma tentativa de decisão; False passou de DECISOES_POR_MIN no último minuto (429)."""
+        with self._trava:
+            agora = self._agora()
+            vezes = [t for t in self._por_pessoa.get(usuario, []) if agora - t < 60]
+            if len(vezes) >= DECISOES_POR_MIN:
+                self._por_pessoa[usuario] = vezes
+                return False
+            self._por_pessoa[usuario] = vezes + [agora]
+            for u in [u for u, ts in self._por_pessoa.items() if not ts or agora - ts[-1] >= 60]:
+                del self._por_pessoa[u]
+            return True
+
+    def decidir(self, id_, acao):
+        """Põe a decisão na fila da ponte e devolve o pedido (para o log). Encerrado: o id não existe, venceu ou já foi
+        decidido."""
+        if acao not in ACOES or not id_valido(id_):
+            raise ValueError("pedido")
+        with self._trava:
+            agora = self._utc()
+            p = next((p for p in self._pendentes_vivos(agora) if p["id"] == id_), None)
+            if p is None or self._chave is None:
+                raise Encerrado(id_)
+            self._usados[id_] = p["expira"]
+            self._fila.append({"id": id_, "acao": acao})
+            del self._fila[:-MAX_PENDENTES]
+            self._sinal.notify_all()
+            return {"ferramenta": p["ferramenta"], "morador_id": p["morador_id"]}
+
+    def esperar_decisoes(self, espera_s):
+        """O long-poll da ponte: as decisões novas (cada uma entregue uma vez só) e se alguém está atendendo. Volta na
+        hora com decisão na fila; senão, na primeira decisão, quando alguém começar a atender ou no fim da espera."""
+        with self._trava:
+            fim = self._agora() + espera_s
+            ja_atendia = self._atendendo()
+            while not self._fila and self._chave is not None and self._atendendo() == ja_atendia:
+                resta = fim - self._agora()
+                if resta <= 0:
+                    break
+                self._sinal.wait(min(resta, 1.0))
+            decisoes, self._fila = self._fila, []
+            return decisoes, self._atendendo()

@@ -174,6 +174,15 @@ Só o espelho, sem mexer nos hooks: `setup --aplicar --espelho <endereço> --cha
 - Envia uns 2 s depois de uma mudança (juntando as que vierem nesse meio-tempo) e, sem mudança, a cada 30 s. Na falha, espera de 5 s a 5 min, sem travar a ponte. O log diz só quando para e quando volta, nunca a chave.
 - Corpo de até 200 KiB: passou, o dia perde os eventos mais velhos. Timeout de 10 s. Só https, ou http no próprio PC para desenvolvimento.
 
+## 6. Responder pelo escritório (Permitir/Negar)
+O `setup --aplicar` instala também um hook **síncrono só no `PermissionRequest`** do Claude Code e do Codex: `ponte decidir <claude|codex>`, num grupo próprio, com timeout = espera + 10 s (130 s no Claude, 35 s no Codex). O desfazer reconhece e tira os dois. No Codex, aprove de novo em `/hooks`.
+
+- O `decidir` manda o stdin a `POST 127.0.0.1:47820/pendente/<rota>` (só o token; Origin é recusado) e espera. Com decisão, escreve só `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}` ou o `deny` com `"message":"Negado pelo Firmópolis"`; sem decisão, nada no stdout e exit 0, e o agente mostra o prompt dele. Nunca `updatedInput`, `updatedPermissions`, `interrupt` nem `setMode`.
+- **Só espera com alguém atendendo:** um navegador neste PC mandou `{"v":1,"tipo":"atender"}` no `/ws` no último minuto, ou o servidor disse `X-Ponte-Atendendo: 1` no último long-poll. Senão, responde na hora.
+- O pedido vira `{"v":1,"tipo":"pendente","pendente":{id,morador_id,tipo,ferramenta,resumo,expira_em}}` no `/ws` (e no espelho v2, já mascarado e cortado em 300 caracteres) e termina em `{"v":1,"tipo":"resolvido","id","por":"local|remoto|terminal|expirou"}`. O navegador decide com `{"v":1,"tipo":"decidir","id","acao":"permitir|negar"}`; o servidor, pela fila que a ponte busca em `GET <endereço>/api/ponte/decisoes?espera=25` (Bearer do espelho, sem seguir redirecionamento).
+- Id de 128 bits (crypto/rand), uso único, no máximo 16 esperando; o primeiro a responder leva (o terminal, quando o morador sai da espera de permissão ou o agente desiste). O OpenCode faz o mesmo pelo plugin e responde pelo SDK dele (`postSessionIdPermissionsPermissionId`).
+- No Claude Code 2.1.327, o diálogo do terminal aparece enquanto o hook espera. Cancelar lá (Esc) mata o hook, e a ponte fecha o pedido na hora; escolher uma opção não mata, e a ponte fecha o pedido quando vê o morador sair da espera de permissão. Uma decisão do Firmópolis que chega depois da resposta no terminal é ignorada pelo Claude (conferido: o comando não roda duas vezes).
+
 ## Testes
 ```powershell
 go test ./...

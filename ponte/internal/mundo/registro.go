@@ -260,6 +260,14 @@ func (r *Registro) idDe(terminalID, chave string) string {
 	return chave
 }
 
+// IDDe diz qual morador é (ou vai ser) a sessão da fonte: a regra do idDe, para o pedido
+// de permissão aparecer no morador certo.
+func (r *Registro) IDDe(terminalID, fonte, sessao string) string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.idDe(terminalID, fonte+":"+sessao)
+}
+
 // encerrar marca a sessão e poda as marcas vencidas.
 func (r *Registro) encerrar(chave string, quando time.Time) {
 	for c, t := range r.encerradas {

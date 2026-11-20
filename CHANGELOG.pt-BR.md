@@ -6,6 +6,9 @@ As mudanças que importam neste projeto ficam aqui, da mais nova para a mais ant
 
 ## Não lançado
 
+### Adicionado
+- **Responder pelo escritório:** os pedidos de permissão do Claude Code, do Codex e do OpenCode ganham os botões **Permitir** e **Negar** no cartão do terminal e no aviso "Esperando você", com a ferramenta, um resumo e o tempo que falta, no navegador deste PC e no celular (pelo espelho). Quem decide é o admin do prédio (e quem estiver em `ESCRITORIO_PONTE_DECISORES`); membro só vê. O diálogo do terminal continua: quem responder primeiro leva, e sem ninguém atendendo o terminal não espera nada. Para o celular, só a ferramenta e um resumo mascarado de até 300 caracteres passam pelo servidor, e a ponte nunca abre porta. No Codex, aprove de novo os hooks em `/hooks`. Veja [Responder pelo escritório](./README.pt-BR.md#responder-pelo-escritório-permitir-ou-negar-de-qualquer-lugar).
+
 ### Mudado
 - **Banheiro de verdade:** a porta WC na parede do corredor virou uma sala inteira na fileira de baixo, ao lado da cozinha: piso de pastilhas brancas e azuis, três cabines com porta e o trinco de vago/ocupado (verde ou vermelho, com os pés na fresta quando tem alguém), bancada com duas cubas e espelho, secador de mãos, lixeira e plantas. A fila dos terminais continua no corredor, na frente da porta; o da frente vai a uma cabine vaga e some lá dentro, um por cabine. A sujeira aparece no chão (papel, poças, o papel higiênico saindo da cabine, moscas e fedor), o banheiro interditado ganha o cone de piso molhado e a placa "Interditado" na porta, e a faxineira entra para passar o rodo. Na lateral, o banheiro mostra "livre", quantas cabines estão ocupadas ou "interditado". Ele só existe nesta tela: não é canal de conversa e fica fora do modo construção.
 

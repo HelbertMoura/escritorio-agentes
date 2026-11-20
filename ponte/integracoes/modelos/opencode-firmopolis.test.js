@@ -142,3 +142,66 @@ test("quem ainda tem a pasta antiga (EscritorioVivo) segue mandando", async () =
   assert.equal(chamadas.length, 1)
   assert.equal(chamadas[0].opcoes.headers["X-Ponte-Token"], "tok-antigo")
 })
+
+// ---------- responder pelo escritório ----------
+const pedido = { id: "per1", sessionID: "s1", permission: "bash", patterns: ["git push"], metadata: { segredo: "x" }, always: ["*"] }
+
+function ponteDecide(status, corpo, segurar) {
+  globalThis.fetch = async (url, opcoes) => {
+    chamadas.push({ url, opcoes, corpo: JSON.parse(opcoes.body) })
+    if (url.endsWith("/pendente/opencode")) {
+      if (segurar) {
+        await new Promise((_, rejeitar) => opcoes.signal.addEventListener("abort", () => rejeitar(new Error("abortado"))))
+      }
+      return new Response(corpo, { status })
+    }
+    return new Response(null, { status: 204 })
+  }
+}
+
+function clienteFalso() {
+  const respostas = []
+  return { respostas, postSessionIdPermissionsPermissionId: async (a) => { respostas.push(a); return {} } }
+}
+
+const varias = async () => { for (let i = 0; i < 5; i++) await espera() }
+
+test("permissão: manda só a ferramenta e os padrões e responde com a decisão", async () => {
+  ponteDecide(200, '{"acao":"permitir"}')
+  const client = clienteFalso()
+  const ganchos = await Firmopolis({ directory: "C:\\proj", client })
+  await ganchos.event({ event: { type: "permission.asked", properties: pedido } })
+  await varias()
+  assert.deepEqual(chamadas[0].corpo.properties, { sessionID: "s1" }, "o evento de estado segue sem o conteúdo")
+  const p = chamadas.find((c) => c.url.endsWith("/pendente/opencode"))
+  assert.deepEqual(p.corpo, { sessionID: "s1", id: "per1", permission: "bash", patterns: ["git push"], cwd: "C:\\proj" })
+  assert.equal(p.opcoes.headers["X-Ponte-Token"], "tok-123")
+  assert.deepEqual(client.respostas, [{ path: { id: "s1", permissionID: "per1" }, body: { response: "once" } }])
+})
+
+test("permissão: negar vira reject; sem decisão, nada", async () => {
+  ponteDecide(200, '{"acao":"negar"}')
+  let client = clienteFalso()
+  let ganchos = await Firmopolis({ directory: "C:\\proj", client })
+  await ganchos.event({ event: { type: "permission.v2.asked", properties: { id: "per2", sessionID: "s1", action: "edit", resources: ["a.go"] } } })
+  await varias()
+  assert.deepEqual(client.respostas, [{ path: { id: "s1", permissionID: "per2" }, body: { response: "reject" } }])
+
+  ponteDecide(204, null)
+  client = clienteFalso()
+  ganchos = await Firmopolis({ directory: "C:\\proj", client })
+  await ganchos.event({ event: { type: "permission.asked", properties: pedido } })
+  await varias()
+  assert.deepEqual(client.respostas, [])
+})
+
+test("permissão respondida no terminal: o plugin desiste", async () => {
+  ponteDecide(200, '{"acao":"permitir"}', true)
+  const client = clienteFalso()
+  const ganchos = await Firmopolis({ directory: "C:\\proj", client })
+  await ganchos.event({ event: { type: "permission.asked", properties: pedido } })
+  await espera()
+  await ganchos.event({ event: { type: "permission.replied", properties: { sessionID: "s1", requestID: "per1", reply: "once" } } })
+  await varias()
+  assert.deepEqual(client.respostas, [])
+})
