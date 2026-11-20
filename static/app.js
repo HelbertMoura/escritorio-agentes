@@ -814,6 +814,7 @@ function atualizarEstados() {
   if (!mundo) return;
   const n = { todos: 0, trab: 0, esp: 0, livres: 0, fora: 0 };
   for (const b of mundo.bonecos.values()) { n.todos++; n[situacao(b)]++; }
+  for (const d of terminaisDaPonte()) { n.todos++; n[situacaoTerminal(d)]++; }   // os terminais deste computador também
   for (const b of document.querySelectorAll("#estados [data-filtro]")) {
     const k = b.dataset.filtro, alvo = b.querySelector("[data-n]");
     if (alvo.textContent !== String(n[k])) alvo.textContent = n[k];
@@ -848,15 +849,20 @@ function desenharPainel() {
   // "Esperando você" no escritório: cartões de uma linha (2 no máximo a partir do 3º pedido, para o mapa
   // ficar na primeira dobra); a tela Aprovações mostra todos, completos
   // widgets embaixo do mapa: até 3 pedidos (a tela Aprovações mostra todos) e quem está trabalhando agora
-  $("avisos").replaceChildren(...esperando.slice(0, 3).map(t => cartaoPedido(t, nomeDe(t.agente_id), handleDe(t.agente_id), true)));
-  if (!esperando.length) $("avisos").append(elem("p", "widget-vazio", "Nada esperando você agora."));
+  // os terminais da ponte local entram depois dos agentes (responder é no próprio terminal)
+  const espT = terminaisDaPonte().filter(d => situacaoTerminal(d) === "esp"), trabT = terminaisDaPonte().filter(d => situacaoTerminal(d) === "trab");
+  $("avisos").replaceChildren(...[...esperando.slice(0, 3).map(t => cartaoPedido(t, nomeDe(t.agente_id), handleDe(t.agente_id), true)),
+    ...espT.slice(0, 3).map(d => linhaTerminal(d, true))].slice(0, 3));
+  if (!esperando.length && !espT.length) $("avisos").append(elem("p", "widget-vazio", "Nada esperando você agora."));
   $("ver-pedidos").textContent = esperando.length > 3 ? `Ver todos (${esperando.length})` : "Ver todos";
-  $("esperando-n").textContent = esperando.length || "";
+  $("esperando-n").textContent = esperando.length + espT.length || "";
   const rodando = trs.filter(t => !/^waiting_/.test(t.status)).sort((a, b) => Date.parse(desdeDe(a)) - Date.parse(desdeDe(b)));
-  $("trabalhando-lista").replaceChildren(...rodando.slice(0, 4).map(t => linhaTrabalho(t, nomeDe(t.agente_id), handleDe(t.agente_id))));
-  if (rodando.length > 4) { const mais = elem("button", "widget-mais link-bt", `Mais ${rodando.length - 4} trabalhando: mostrar no mapa`); mais.type = "button"; mais.addEventListener("click", () => filtrar("trab")); $("trabalhando-lista").append(mais); }
-  if (!rodando.length) $("trabalhando-lista").append(elem("p", "widget-vazio", "Ninguém trabalhando agora."));
-  $("trabalhando-n").textContent = rodando.length || "";
+  const nTrab = rodando.length + trabT.length;
+  $("trabalhando-lista").replaceChildren(...[...rodando.slice(0, 4).map(t => linhaTrabalho(t, nomeDe(t.agente_id), handleDe(t.agente_id))),
+    ...trabT.slice(0, 4).map(d => linhaTerminal(d, false))].slice(0, 4));
+  if (nTrab > 4) { const mais = elem("button", "widget-mais link-bt", `Mais ${nTrab - 4} trabalhando: mostrar no mapa`); mais.type = "button"; mais.addEventListener("click", () => filtrar("trab")); $("trabalhando-lista").append(mais); }
+  if (!nTrab) $("trabalhando-lista").append(elem("p", "widget-vazio", "Ninguém trabalhando agora."));
+  $("trabalhando-n").textContent = nTrab || "";
   desenharAprovacoes(esperando, nomeDe, handleDe);
   // agentes na lateral: quem espera primeiro, depois quem trabalha, livres e fora (avatar com a luz do estado)
   const ordem = { esp: 0, trab: 1, livres: 2, fora: 3 };
@@ -915,6 +921,36 @@ function cartaoPedido(t, nome, handle, compacto) {
   metaPedido(meta);
   return c;
 }
+
+// ---------- terminais deste computador (ponte.js): contam nos chips e entram nos widgets, de qualquer programa ----------
+const ESPERA_TERM = { aprovacao: "pede aprovação", pergunta: "tem uma pergunta", erro: "parou com um erro" };
+const terminaisDaPonte = () => (window.Ponte && window.Sprites ? Ponte.terminais() : []);
+const situacaoTerminal = d => (d.estado === "ocupado" ? "trab" : Object.hasOwn(ESPERA_TERM, d.estado) ? "esp" : "livres");
+function miniTerminal(d, espera) {
+  const cv = document.createElement("canvas"); cv.width = cv.height = 44; cv.className = "mini"; cv.setAttribute("aria-hidden", "true");
+  const c = cv.getContext("2d"); c.imageSmoothingEnabled = false; c.scale(2, 2);
+  Sprites.terminal(c, 5, 20, 0, false, Avatar.semente(d.id), 0, espera ? "esperar" : "parar");   // a mesma cor do mapa (vida.js)
+  return cv;
+}
+// uma linha do widget: quem (nome · programa), o que pede ou faz, e o clique leva a câmera até ele no mapa
+function linhaTerminal(d, espera) {
+  const nome = d.nome === d.provedor ? d.nome : `${d.nome} · ${d.provedor}`;
+  const ir = elem("button", "linha-ir" + (espera ? "" : " linha-widget")), txt = elem("span", "txt"), quem = elem("span", "quem"); ir.type = "button";
+  quem.append(elem("strong", null, nome), espera ? ` ${ESPERA_TERM[d.estado]}` : "");
+  const sub = espera ? `Responda no terminal${d.projeto ? ` · ${d.projeto}` : ""}` : [d.projeto, d.atividade].filter(Boolean).join(" · ") || "Trabalhando no terminal";
+  txt.append(quem, elem("span", "sub", sub)); ir.append(miniTerminal(d, espera), txt);
+  ir.setAttribute("aria-label", `${nome} ${espera ? ESPERA_TERM[d.estado] : "trabalhando"}: ${sub}. Ver no mapa`);
+  ir.addEventListener("click", () => {
+    const k = Vida.terminais().find(t => t.id === "terminal:" + d.id);
+    if (!k) return;   // ainda na rua, entrando
+    irParaEscritorio(); moverCamera({ x: k.x, y: k.y - 10, k: Math.max(cam.k, 3.2 * dpr) });
+    if (innerWidth <= 760 && !$("palco-cartao").classList.contains("cheio")) $("palco-cartao").scrollIntoView({ block: "start", behavior: menosMovimento.matches ? "auto" : "smooth" });
+  });
+  if (!espera) return ir;
+  const linha = elem("div", "linha-widget"); linha.append(ir);
+  return linha;
+}
+addEventListener("ponte", () => { if (estado) desenharPainel(); });   // um terminal entrou, mudou ou saiu
 
 // quem está trabalhando: sala, o que faz e há quanto tempo (a linha leva ao agente no mapa)
 function linhaTrabalho(t, nome, handle) {
