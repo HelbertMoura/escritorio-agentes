@@ -1064,6 +1064,7 @@ function montar(atlas, config, grupos, planta) {
   // ---------------- corredor: passadeira, luminárias de teto e, encostados na parede de baixo (longe da linha
   // por onde se anda e fora da frente das portas), banco, quadro de avisos, vasos e bebedouro
   const luzesTeto = [];
+  let banheiro = null;
   {
     const cT = cT0, cB = cB0, x0 = cx0, x1 = cx1, corP = corMarca;
     const ry = Math.round(corredorY) - 8, rx0 = x0 + 10, rw = x1 - 10 - rx0;
@@ -1088,6 +1089,19 @@ function montar(atlas, config, grupos, planta) {
     for (const p of portasBaixo) pintaPx(c, p - 16, cB - 5, 32, 2, "#d6cfbf");
     // luminárias de teto a cada ~6 tiles, fora da frente das portas e das placas de cima (à noite acendem: app.js)
     const placasCima = salas.filter(s => !s.emCima && s.placa).map(s => [s.placa.x - 4, s.placa.x + Math.min(s.placa.total, s.placa.max) + 4]);
+    // a porta do banheiro (Firmópolis): na parede de cima, o trecho livre mais perto da ponta direita, sem porta, placa,
+    // mesa nem móvel, com a plaquinha WC em cima (pintada depois dos contornos). A fila dos terminais fica na frente (vida.js)
+    const wc = sprite(atlas, "banheiro_porta");
+    if (wc) {
+      const w = wc[2], topo = cT + 4 - wc[3] - 9;
+      const cheios = [...objetos, ...animados].filter(o => o.w && o.h).map(o => [o.x, o.x + o.w, o.y, o.y + o.h])
+        .concat(salas.filter(s => !s.emCima && s.placa).map(s => [s.placa.x, s.placa.x + Math.min(s.placa.total, s.placa.max), s.placa.y, s.placa.y + PLACA_H]))
+        .concat(salas.flatMap(s => s.mesas.map(q => [q.x - 18, q.x + 18, q.topo - 26, q.topo + 16])));
+      const cabe = x => portasCima.every(p => x + w < p - 20 || x > p + 20) && cheios.every(([a, b, ya, yb]) => x + w + 3 < a || x - 3 > b || yb < topo || ya > cT + 4);
+      let x = x1 - 10 - w;
+      while (x > x0 + 40 && !cabe(x)) x -= 2;
+      if (x > x0 + 40) { banheiro = { x: x + w / 2, y: corredorY, px: x, sp: wc }; placasCima.push([x - 4, x + w + 4]); }
+    }
     const tetoLivre = x => portasCima.every(p => Math.abs(p - x) > 16) && placasCima.every(([a, b]) => x < a - 4 || x > b + 4);
     for (let x = x0 + 40; x < x1 - 24; x += 6 * T) {
       const lx = [0, 8, -8, 16, -16, 24, -24].map(d => x + d).find(tetoLivre); if (lx === undefined) continue;
@@ -1134,6 +1148,15 @@ function montar(atlas, config, grupos, planta) {
       portas.push({ tipo: s.tipo === "cozinha" ? "vaivem" : "vidro", x: px - T, y: s.py - 3, w: 2 * T, h: PAREDE * T + 3, abre: 0 });
     }
   }
+  if (banheiro) { // a porta do banheiro sobre a parede de cima e a plaquinha azul "WC" em cima dela
+    const { px, sp } = banheiro, y = cT0 + 5 - sp[3], pw = 11, qx = Math.round(px + sp[2] / 2 - pw / 2), qy = y - 9;
+    c.drawImage(atlas.img, sp[0], sp[1], sp[2], sp[3], px, y, sp[2], sp[3]);
+    pintaPx(c, px - 1, cT0 + 5, sp[2] + 2, 1, "rgba(36,20,8,.25)");
+    pintaPx(c, qx, qy, pw, 7, "#2f5fb3"); pintaPx(c, qx, qy + 7, pw, 1, "#1d3c75");
+    pontosPx(c, qx + 1, qy + 1, [[0, 0], [0, 1], [0, 2], [0, 3], [1, 4], [2, 2], [2, 3], [3, 4], [4, 0], [4, 1], [4, 2], [4, 3],   // W
+      [7, 0], [8, 0], [6, 1], [6, 2], [6, 3], [7, 4], [8, 4]], "#ffffff");   // C
+    delete banheiro.px; delete banheiro.sp;
+  }
   // F) mural de cada sala (1.6, só com o store: config.equipe.mural), no trecho de parede que sobrou livre, da direita
   // para a esquerda, sem mexer em mais nada. A recepção mostra o canal "geral" (no saguão, o mural do prédio)
   if (config.equipe && config.equipe.mural) for (const s of [...salas, ...baixo]) {
@@ -1174,7 +1197,7 @@ function montar(atlas, config, grupos, planta) {
     }
     ringue.plateia = pts.filter(([px, py]) => livre(px, py) && !(py > y + h && Math.abs(px - meio) < RINGUE.abertura / 2 + 6));
   }
-  return { livre, W, H, fundo, salas, baixo, lounge, ringue, corredorY, objetos, animados, vagas, janelas, portas, quadros, predioRet, externos, entrada, luzesTeto, corredorTopo: corredor.ty * T, corredorAlt: corredor.h * T, planta: resumoPlanta };
+  return { livre, W, H, fundo, salas, baixo, lounge, ringue, corredorY, objetos, animados, vagas, janelas, portas, quadros, predioRet, externos, entrada, luzesTeto, banheiro, corredorTopo: corredor.ty * T, corredorAlt: corredor.h * T, planta: resumoPlanta };
 }
 
 // Área externa: grama, calçada em volta do prédio e rua embaixo, com os detalhes sorteados por empresa.

@@ -317,7 +317,7 @@ function desenharCena(t) {
   for (const b of mundo.bonecos.values()) if (visivel(b) && !naNuvem(b)) cena.push({ chave: b.chave ?? b.y + 0.5, desenha: () => desenharBoneco(b, t) });
   const visitas = Vida.pessoas();   // as pessoas da equipe neste andar e o meu boneco (vida.js: /api/ao-vivo)
   for (const v of visitas) cena.push({ chave: v.chave ?? v.y + 0.5, desenha: () => (window.Sprites ? desenharGente(v, t) : Avatar.boneco(ctx, v, t, escala)) });
-  const terminais = window.Sprites ? Vida.terminais() : [];   // os terminais deste computador, pela ponte local (ponte.js)
+  const terminais = window.Sprites ? Vida.terminais().filter(k => !k.dentro) : [];   // os terminais deste computador, pela ponte local (ponte.js); no banheiro, some com etiqueta e tudo
   for (const k of terminais) cena.push({ chave: k.chave ?? k.y + 0.5, desenha: () => desenharTerminal(k, ta) });
   cena.sort((a, b) => a.chave - b.chave).forEach(c => c.desenha());
   desenharPortas(t);
@@ -1083,7 +1083,7 @@ function renderFicha() {
 // e o dia. Só leitura: responder é no próprio terminal. Os dados da ponte vão só por textContent
 const CLASSE_TERM = { ocupado: "trabalhando", aprovacao: "aprovacao", erro: "aprovacao", pergunta: "pergunta", livre: "livre" };
 const TEXTO_TERM = { ocupado: "Trabalhando", aprovacao: "Pede aprovação", erro: "Parou com um erro", pergunta: "Tem uma pergunta", livre: "Livre" };
-const NECS_TERM = [["cafe", "Café"], ["social", "Conversa"], ["diversao", "Diversão"], ["fome", "Fome"]];
+const NECS_TERM = [["cafe", "Café"], ["social", "Conversa"], ["diversao", "Diversão"], ["fome", "Fome"], ["bexiga", "Banheiro"]];
 const horaMin = ms => new Date(ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 function abrirFichaTerminal(id) {
   fecharConversa(false);
@@ -2176,7 +2176,7 @@ function pessoaEm(p, raio) {
 // o terminalzinho cujo corpo (uns 12×20 px acima dos pés) está sob o ponto, o mais perto dos pés
 function terminalEm(p) {
   let melhor = null, dm = Infinity;
-  for (const k of Vida.terminais()) { const d = Math.hypot(k.x - p.x, k.y - 8 - p.y); if (Math.abs(p.x - k.x) <= 6 && p.y >= k.y - 19 && p.y <= k.y + 1 && d < dm) { dm = d; melhor = k; } }
+  for (const k of Vida.terminais().filter(t => !t.dentro)) { const d = Math.hypot(k.x - p.x, k.y - 8 - p.y); if (Math.abs(p.x - k.x) <= 6 && p.y >= k.y - 19 && p.y <= k.y + 1 && d < dm) { dm = d; melhor = k; } }
   return melhor;
 }
 function seloEm(p) { return [...mundo.bonecos.values()].find(b => b.selo && visivel(b) && Math.hypot(b.selo.x - p.x, b.selo.y - p.y) < b.selo.r) || null; }

@@ -63,6 +63,8 @@ ESCOLHA = {
     # a fachada de frente, embaixo do prédio (Firmópolis): peças soltas, a parede é desenhada no mapa.js
     "fachada_porta": "fachada/porta", "fachada_janela": "fachada/janela", "fachada_arandela": "fachada/arandela",
     "fachada_floreira": "fachada/floreira",
+    # a porta do banheiro no fim do corredor (Firmópolis): a fila dos terminais
+    "banheiro_porta": "banheiro/porta_1",
 }
 
 T = 16
