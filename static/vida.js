@@ -1591,7 +1591,7 @@ const Vida = (() => {
     const m = vivo.m;
     for (const b of [...(m ? m.lista : []), ...vivo.pessoas.values(), ...(vivo.eu ? [vivo.eu] : []), ...term.lista.values()]) mostrar(b, b.nomeReal ?? b.nome);
   }
-  const semente = txt => { let h = 7; for (const ch of txt) h = (h * 31 + ch.charCodeAt(0)) % 997; return h; };
+  const semente = txt => { let h = 7; for (const ch of txt) h = (h * 31 + ch.charCodeAt(0)) % 997; return h; };   // igual à Avatar.semente (o seletor do perfil)
 
   // de a até b, com o caminho dos agentes: dentro da sala, porta, corredor, porta e dentro da outra sala
   function rotaAte(m, a, b) {

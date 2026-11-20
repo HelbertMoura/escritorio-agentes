@@ -296,24 +296,29 @@ const Avatar = (() => {
     cabelos: [["castanho", "Castanho"], ["preto", "Preto"], ["dourado", "Dourado"], ["ruivo", "Ruivo"], ["platinado", "Platinado"], ["roxo", "Roxo"], ["azul", "Azul"]],
     peles: [["clara", "Clara"], ["media", "Média"], ["morena", "Morena"], ["escura", "Escura"]],
   };
+  // a semente da gente no mapa (a mesma do vida.js): sem escolha no perfil, ela decide cabelo, pele, cabeça e calça
+  const semente = txt => { let h = 7; for (const ch of txt || "") h = (h * 31 + ch.charCodeAt(0)) % 997; return h; };
   // a aparência da conta como a gente do mapa a desenha: a blusa é a cor; cabelo e pele, o índice (sem escolha, -1: a semente decide)
   const indice = (lista, v) => lista.findIndex(([k]) => k === v);
   const visualGente = ap => (ap && typeof ap === "object" ? { blusa: (CORES[ap.color] || {}).base || (/^#[0-9a-f]{6}$/i.test(ap.color) ? ap.color : ""),
     cabelo: indice(OPCOES.cabelos, ap.hair), pele: indice(OPCOES.peles, ap.skin) } : {});
   // Firmópolis, onda 5: a pessoa escolhe a gente do mapa (blusa, cabelo e pele). Olhos e acessório, do bichinho do
   // agentes.chat, seguem como estavam (o servidor ainda pede os dois)
-  function seletor(raiz, inicial, aoMudar, prefixo) {
+  // usuario: quem já tem conta (o perfil). Sem cabelo e pele gravados, o seletor parte do que a semente dele já mostra
+  // no mapa, e salvar sem mexer não muda nada. No convite ainda não há usuário: usuario(u) redesenha quando ele é digitado
+  function seletor(raiz, inicial, aoMudar, prefixo, usuario) {
     const noLista = (lista, v, reserva) => (lista.some(([k]) => k === v) ? v : reserva);
+    let v = semente(usuario);
     const ap = { color: noLista(OPCOES.cores, inicial && inicial.color, "amber"), eyes: noLista(OPCOES.olhos, inicial && inicial.eyes, "happy"),
       accessory: noLista(OPCOES.acessorios, inicial && inicial.accessory, ""),
-      hair: noLista(OPCOES.cabelos, inicial && inicial.hair, "castanho"), skin: noLista(OPCOES.peles, inicial && inicial.skin, "clara") };
+      hair: noLista(OPCOES.cabelos, inicial && inicial.hair, OPCOES.cabelos[v % 7][0]), skin: noLista(OPCOES.peles, inicial && inicial.skin, OPCOES.peles[(v >> 2) % 4][0]) };
     const cv = document.createElement("canvas"), campos = document.createElement("div"), c = cv.getContext("2d");
     cv.width = cv.height = TAM * 4; cv.className = "boneco-previa"; cv.setAttribute("role", "img"); cv.setAttribute("aria-label", "Prévia de como você aparece no mapa");
     campos.className = "boneco-campos";
     const desenhar = () => {
       c.clearRect(0, 0, cv.width, cv.height); c.imageSmoothingEnabled = false;
       if (!window.Sprites) { c.drawImage(desenharAvatar({ ...ap }), 0, 0, cv.width, cv.height); return; }   // cópia nova a cada vez: o cache guarda por objeto
-      c.save(); c.scale(4, 4); Sprites.gente(c, 5, 20, 0, false, 0, "parar", 0, visualGente(ap)); c.restore();
+      c.save(); c.scale(4, 4); Sprites.gente(c, 5, 20, 0, false, v, "parar", 0, visualGente(ap)); c.restore();
     };
     for (const [chave, rotulo, lista] of [["color", "Blusa", OPCOES.cores], ["hair", "Cabelo", OPCOES.cabelos], ["skin", "Pele", OPCOES.peles]]) {
       const campo = document.createElement("div"), l = document.createElement("label"), s = document.createElement("select");
@@ -324,10 +329,10 @@ const Avatar = (() => {
       campo.append(l, s); campos.append(campo);
     }
     raiz.replaceChildren(cv, campos); desenhar();
-    return { valor: () => ({ ...ap }) };
+    return { valor: () => ({ ...ap }), usuario: u => { v = semente(u); desenhar(); } };
   }
 
-  return { desenhar: desenharAvatar, boneco, chapeu, padrao: aparenciaPadrao, OPCOES, seletor, visualGente, TAM, CORES, POSES };
+  return { desenhar: desenharAvatar, boneco, chapeu, padrao: aparenciaPadrao, OPCOES, seletor, visualGente, semente, TAM, CORES, POSES };
 })();
 
 window.Avatar = Avatar;

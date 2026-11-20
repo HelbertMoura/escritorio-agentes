@@ -328,7 +328,7 @@ const Personalizar = (() => {
     if (typeof d.usuario === "string") $("pf-conta").textContent = `Conta: ${d.usuario}${d.papel === "membro" ? " (membro)" : d.papel === "admin" ? " (admin)" : ""}`;
     // "aparencia": o boneco efetivo, decidido pelo servidor (o salvo ou o padrão da conta), o mesmo que os outros veem no mapa
     const ap = d.aparencia && typeof d.aparencia === "object" ? d.aparencia : d.avatar && typeof d.avatar === "object" ? d.avatar : Avatar.padrao(d.usuario || "");
-    perfilBoneco = Avatar.seletor($("pf-boneco"), ap, null, "pf");
+    perfilBoneco = Avatar.seletor($("pf-boneco"), ap, null, "pf", d.usuario || "");
     mostrarAvisos(d.avisos);
     $("a-perfil").hidden = false;
   }
