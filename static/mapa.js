@@ -1,6 +1,6 @@
 // Monta o prédio do escritório a partir dos times.
 // Em cima: recepção (logo) + uma sala por time (cresce com o número de agentes).
-// No meio: corredor. Embaixo: sala de reunião, sala comunal (montada por "cantinhos") , cozinha e banheiro.
+// No meio: corredor. Embaixo: sala de reunião, sala comunal (montada por "cantinhos"), cozinha e banheiro.
 // Todo móvel é ancorado pela base (centro, chão); peça que o tema não tem é simplesmente pulada.
 "use strict";
 
