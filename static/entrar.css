@@ -34,7 +34,7 @@ html, body { margin: 0; background: var(--noite); color: var(--texto); font: 15p
 .etiqueta { align-self: flex-start; padding: 4px 10px; background: var(--destaque); color: var(--destaque-texto); font: 400 13px/1.4 var(--fonte-pixel); letter-spacing: .06em; text-transform: uppercase;
   box-shadow: inset -3px -3px 0 var(--destaque-escuro), inset 3px 3px 0 var(--destaque-claro); }
 h1 { margin: 0; color: var(--creme); font: 400 clamp(30px, 3.6vw, 46px)/1.12 var(--fonte-pixel); text-wrap: balance; }
-h1 em { font-style: normal; color: var(--destaque); text-shadow: 4px 4px 0 #3a2400; }
+h1 em { font-style: normal; color: var(--ambar-texto);   /* fixo: a cor da marca do cliente pode ser escura demais sobre o céu */ text-shadow: 4px 4px 0 #3a2400; }
 .chamada p { margin: 0; max-width: 34em; color: #d9d3e8; font-size: 18px; text-shadow: 0 2px 0 #0f1024; }
 /* a janela: esquadria e peitoril como no site; a cena (entrar.js) é desenhada por cima do fundo aceso */
 .desfile { width: 100%; max-width: 620px; height: 192px; image-rendering: pixelated;

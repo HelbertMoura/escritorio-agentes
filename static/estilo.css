@@ -267,7 +267,7 @@ h2 { font-size: 15px; margin: 0; font-weight: 600; }
 .grade { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 .cartao { background: var(--cartao); border-radius: var(--r-cartao); box-shadow: var(--cartao-sombra); clip-path: var(--degrau); overflow: hidden; }
 .palco { position: relative; background: var(--azul-hero); }
-.palco-cartao { scroll-margin-top: 72px; }
+.palco-cartao { scroll-margin-top: 72px; clip-path: none; }   /* o degrau cortaria a conversa da equipe, que é fixed no celular, e os cantos do mapa em tela cheia */
 #tela { display: block; image-rendering: pixelated; touch-action: none; cursor: grab; }
 #tela:focus-visible { outline-offset: -3px; }
 .palco-cartao { margin-bottom: 16px; }
