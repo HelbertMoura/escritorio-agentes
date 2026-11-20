@@ -861,6 +861,25 @@ body.lateral-recolhida .modo-resposta { top: calc(var(--faixa, 0px) + 60px); }
 .recados li:nth-child(2n) { background: #ffd6e7; }
 .recados .fechar { position: absolute; top: 4px; right: 4px; width: 44px; height: 44px; border: 0; border-radius: 0; background: transparent; color: #2a1a0c; font-size: 22px; }
 .recados .fechar:focus-visible { outline: 2px solid #2a1a0c; }
+/* o controle do rádio da firma (radio.js): abre ao clicar no rádio da sala comunal */
+.radio-painel { position: absolute; z-index: 6; top: 12px; left: 50%; transform: translateX(-50%); width: min(320px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow: auto;
+  padding: 14px 16px 12px; border-radius: 0; background: var(--cartao); color: var(--texto); border: 3px solid #6e4a2c; box-shadow: 6px 6px 0 rgba(0, 0, 0, .45); display: grid; gap: 10px; }
+.radio-painel > strong { font: 12px Pixeloid, monospace; text-transform: uppercase; color: var(--creme); padding-right: 40px; }
+.radio-painel .fechar { position: absolute; top: 2px; right: 2px; width: 44px; height: 44px; border: 0; border-radius: 0; background: transparent; color: var(--texto); font-size: 22px; }
+.radio-painel .radio-liga { min-height: 44px; }
+.radio-estacoes { border: 0; margin: 0; padding: 0; display: grid; gap: 4px; }
+.radio-estacoes legend { font-size: 13px; color: var(--rotulo); margin-bottom: 4px; }
+.radio-estacao { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 8px; background: var(--cartao2); cursor: pointer; }
+.radio-estacao:has(input:checked) { background: var(--cartao3); outline: 1px solid var(--destaque); }
+.radio-estacao input { accent-color: var(--destaque); width: 18px; height: 18px; margin: 0; }
+.radio-estacao span { display: grid; }
+.radio-estacao small { color: var(--suave); font-size: 12.5px; }
+.radio-volume { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 10px; min-height: 44px; }
+.radio-volume input { accent-color: var(--destaque); width: 100%; }
+.radio-painel .ajuda, .radio-status { margin: 0; font-size: 12.5px; color: var(--suave); }
+@media (max-width: 600px) { /* no celular o palco é baixo: o controle vira uma folha presa embaixo da tela */
+  .radio-painel { position: fixed; z-index: 40; top: auto; bottom: max(8px, env(safe-area-inset-bottom)); left: 8px; right: 8px; width: auto; transform: none; max-height: 75dvh; }
+}
 .barra-foto { position: absolute; z-index: 30; bottom: max(16px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; gap: 2px; padding: 3px; border-radius: var(--r-botao);
   background: rgba(15, 15, 14, .86); border: 1px solid rgba(255, 255, 255, .12); }
 .barra-foto button { min-height: 44px; padding: 0 14px; border-radius: 0; border: 0; background: transparent; color: var(--texto); font-weight: 600; font-size: 13.5px; white-space: nowrap; transition: background var(--rapido); }

@@ -6,6 +6,9 @@ As mudanças que importam neste projeto ficam aqui, da mais nova para a mais ant
 
 ## Não lançado
 
+### Adicionado
+- **Rádio da firma:** um rádio na parede da Sala comunal abre o controle (ligar, estação e volume). A Rádio Firmópolis é composta na hora pelo navegador (Web Audio), sem arquivo de áudio e sem direito autoral, em três estações: Lo-fi da firma, Chiptune do fliperama e Jazz da cafeteria. Cada pessoa liga o próprio rádio, só com um clique; o modo TV e o modo apresentação não tocam nada. Com o rádio ligado, quem está livre por perto dança de vez em quando (nada com movimento reduzido). Em **Personalizar**, o admin pode pôr uma rádio da internet (só `https`, um host, liberado só ele no CSP); os direitos de tocar são de quem a configura. Veja [Rádio da firma](./README.pt-BR.md#rádio-da-firma).
+
 ### Mudado
 - **A identidade do site no app inteiro:** a tela de entrar, o primeiro acesso, o convite, a visita, o Mundo e o app por dentro usam a mesma marca de [firmopolis.devmaniacs.com.br](https://firmopolis.devmaniacs.com.br): Figtree no texto, Pixeloid nos títulos, a paleta noite, grafite, creme, âmbar e índigo, cantos retos ou em degrau, botões em bisel e sombra dura. As telas de fora ganharam o céu noturno com a janela acesa do escritório. O mapa e a arte pixel não mudaram.
 - As fontes Source Sans 3 e Doto saíram; a Pixeloid Sans (OFL) entrou em `static/fontes/`.

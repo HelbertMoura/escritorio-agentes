@@ -40,6 +40,7 @@ async function iniciar() {
     : await json("api/config").catch(e => { if (!(e instanceof AndarInvalido)) throw e; sairDoAndarInvalido(); return json("api/config"); });
   if (!Brincar.demo && Andar.seguir(config)) marcarAndarNaUrl();
   Expediente.definir(config.expediente);   // sem a chave (demonstração, servidor antigo): 07:00 às 20:00
+  if (window.Radio) Radio.configurar(config.radio);   // a rádio da internet do andar (Personalizar), ou nenhuma
   const pasta = `tema/`;
   const mapaJson = await json(pasta + "atlas.json");
   const img = await imagem(`${pasta}atlas.png?v=${encodeURIComponent(mapaJson.versao || "")}`);
@@ -485,7 +486,7 @@ function desenharBoneco(b, t) {
 // a tela apagada). O Maestro (gerente) leva uma coroinha âmbar em cima do monitor. t: o relógio dos objetos
 function desenharTerminal(k, t) {
   const d = k.dado, f = Math.floor(k.anda / 4) % 4;
-  const acao = k.rota.length ? "andar" : k.dorme ? "dormir" : k.balao === "oi" || k.feliz ? "acenar" : d.estado === "ocupado" ? "parar" : d.estado === "livre" ? "ficar" : "esperar";
+  const acao = k.rota.length ? "andar" : k.dorme ? "dormir" : k.balao === "oi" || k.feliz || k.danca > performance.now() / 1000 ? "acenar" : d.estado === "ocupado" ? "parar" : d.estado === "livre" ? "ficar" : "esperar";
   ctx.globalAlpha = combina(k) ? 1 : 0.3;
   if (escala !== 1) { ctx.save(); ctx.scale(escala, escala); }
   Sprites.terminal(ctx, Math.round(k.x - 6), Math.round(k.y), f, k.lado < 0, k.cor, t, acao);
@@ -2676,7 +2677,7 @@ async function trocarAndar(id, aviso) {
     const c = await json("api/config");   // com o andar novo; falhando, nada do andar de antes é mexido
     reiniciarAndar();
     Andar.seguir(c);   // pediu o principal sem ter acesso: o servidor respondeu pelo primeiro andar da conta
-    config = c; Expediente.definir(c.expediente); aplicarConfig();
+    config = c; Expediente.definir(c.expediente); if (window.Radio) Radio.configurar(c.radio); aplicarConfig();
     await trocarLogo(config.logo);   // o logo do mapa é o do andar novo (o do topo já trocou no aplicarMarca)
     marcarAndarNaUrl();
     if (!$("v-personalizar").hidden) Ajustes.abrir(config);

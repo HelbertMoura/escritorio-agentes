@@ -1354,6 +1354,22 @@ const Vida = (() => {
     if (frases && perto.length && Math.hypot(perto[0].x - x, perto[0].y - y) < 260) { falar(perto[0], sorteia(frases), 3); m.eventos.push({ nome: "conversa", voz: perto[0].handle }); }
   }
 
+  // rádio ligado (brincar.js, radio.js): quem está livre, de pé e perto dança um pouco (a pose "dancando"); o terminalzinho
+  // livre e parado faz a carinha feliz com a mão (o app.js desenha "acenar", que é a pose de festa que ele tem)
+  function dancarPerto(m, x, y, raio, seg) {
+    if (!m) return;
+    const agora = performance.now() / 1000;
+    for (const b of m.lista) {
+      const v = b.lugar && b.lugar.tipo === "vaga" && b.lugar.vaga;
+      if (!v || v.senta || b.rota.length || b.trabalho || b.reuniao || Math.hypot(b.x - x, b.y - y) > raio || Math.random() < 0.4) continue;
+      b.danca = agora + seg;
+    }
+    for (const t of terminais()) {
+      if (t.dado.estado !== "livre" || t.rota.length || t.dorme || Math.hypot(t.x - x, t.y - y) > raio || Math.random() < 0.4) continue;
+      t.danca = agora + seg;
+    }
+  }
+
   function festaGeral(m, seg) {
     if (!m) return;
     const agora = performance.now() / 1000, dur = Math.min(Math.max(Number(seg) || 8, 1), 30);
@@ -2079,7 +2095,7 @@ const Vida = (() => {
     return n;
   }
 
-  return { criarMundo, sincronizar, passo, renomear, digitando, momento, objetoClicado, festaGeral, social, aoVivo, irAte, irAtePessoa, acenar, mudarStatus, equipe, dmCom, emReuniao, STATUS,
+  return { criarMundo, sincronizar, passo, renomear, digitando, momento, objetoClicado, festaGeral, dancarPerto, social, aoVivo, irAte, irAtePessoa, acenar, mudarStatus, equipe, dmCom, emReuniao, STATUS,
     muralV: canal => (Object.hasOwn(vivo.muralV, canal) ? vivo.muralV[canal] : null), noPredio: () => vivo.noPredio, pessoas, terminais, necessidades, afinidades, olhando, textoGreve, horaExtra, mexendo, intervaloQuadro, FRASES };
 })();
 

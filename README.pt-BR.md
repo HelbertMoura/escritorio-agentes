@@ -345,6 +345,17 @@ Para mostrar a tela numa chamada com cliente ou postar um print sem vazar nada. 
 - **O que muda:** os bonecos ficam, mas os nomes viram "Agente 1", "Pessoa 2" e "Você", numerados na ordem em que aparecem; os balões somem; e a tela esconde o que mostra nome de gente ou de agente, título de tarefa, conversa, chat da sala, mural, recado de status, placar, as páginas Conversas, Aprovações e Jornal, o título e os convidados das reuniões e os links das salas no **Personalizar** (o link do Zoom pode levar a senha em `?pwd=`). O aviso de 5 minutos da reunião diz só "Uma reunião começa em breve".
 - **Só tela, não é controle de acesso:** o modo só esconde o que aparece nesta tela. Quem tem a sessão continua lendo tudo pela API e pelo DevTools do navegador, e o servidor responde igual. Não entregue um navegador logado a quem não deve ver os dados.
 
+## Rádio da firma
+
+Um rádio na parede da Sala comunal. Clique nele (ou chegue nele com `Tab` e aperte `Enter`) para abrir o controle: ligar e desligar, a estação e o volume.
+
+- **Rádio Firmópolis, feita no navegador:** três estações compostas na hora com Web Audio, sem nenhum arquivo de áudio e sem direito autoral: **Lo-fi da firma** (calma, para trabalhar), **Chiptune do fliperama** e **Jazz da cafeteria**. Cada música sorteia tom, andamento, progressão de acordes e forma (introdução, partes A e B, final); a melodia volta com variação e a bateria troca de levada, então não há laço curto. A troca de estação e o volume mudam suavemente.
+- **Cada pessoa liga o seu:** o rádio só toca depois de um clique (os navegadores bloqueiam som sozinho) e só para quem ligou. A estação e o volume ficam lembrados neste navegador; o volume começa baixo. O rádio é independente do painel de som.
+- **No mapa:** com o rádio ligado, saem notinhas dele e, de vez em quando, quem está livre e de pé por perto dança um pouco; os terminaizinhos livres fazem a carinha feliz. Com movimento reduzido no sistema, ninguém dança.
+- **Modo TV e modo apresentação** não tocam nada: ligar um deles desliga o rádio.
+- **Rádio da internet (opcional):** em **Personalizar > Rádio da internet**, quem administra o andar cola o endereço `https://` de um stream de áudio. Ele aparece como uma quarta estação. O servidor aceita só `https`, um host só, sem usuário e senha, até 300 caracteres, e libera no CSP da página (`media-src`) só esse host. **Os direitos de tocar essa rádio são de quem a configura.**
+- Para conferir o som sem tocar, `Radio.renderizar("lofi", 30)` (no console do navegador) devolve um trecho gravado com `OfflineAudioContext`.
+
 ## App instalável (PWA)
 
 O escritório pode ir para a tela de início do celular ou virar um app no computador, com ícone próprio e sem a barra do navegador.

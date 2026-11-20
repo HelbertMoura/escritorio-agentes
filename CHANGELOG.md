@@ -6,6 +6,9 @@ All notable changes to this project are listed here, newest first. The format fo
 
 ## Unreleased
 
+### Added
+- **Office radio:** a radio on the wall of the Sala comunal opens its controls (on/off, station and volume). Rádio Firmópolis is composed on the fly by the browser (Web Audio), with no audio files and no copyright, in three stations: Lo-fi da firma, Chiptune do fliperama and Jazz da cafeteria. Everyone turns on their own radio, only with a click; TV mode and presentation mode play nothing. While it plays, free agents nearby dance now and then (not with reduced motion). In **Personalizar**, the admin can add an internet radio (`https` only, one host, the only one allowed in the CSP); the rights to play it belong to whoever configures it. See [Office radio](./README.md#office-radio).
+
 ### Changed
 - **The site's identity across the whole app:** the sign-in screen, first access, invitation, visit page, World and the app itself use the same brand as [firmopolis.devmaniacs.com.br](https://firmopolis.devmaniacs.com.br): Figtree for text, Pixeloid for headings, the night, graphite, cream, amber and indigo palette, square or stepped corners, bevelled buttons and hard shadows. The outside screens got the night sky with the office's lit window. The map and the pixel art did not change.
 - The Source Sans 3 and Doto fonts are gone; Pixeloid Sans (OFL) is in `static/fontes/`.
