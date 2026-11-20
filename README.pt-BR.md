@@ -50,8 +50,9 @@ Ele **não chama nenhum modelo de IA** e não gasta tokens. Aprovar é sempre no
 
 ## Recursos
 
-- 🏢 **Prédio montado pelos seus times:** recepção com o seu logo, uma sala por time (cresce com o número de agentes), corredor, sala de reunião, sala comunal e cozinha. Agente novo ganha mesa na sala "Novos".
-- 🖥️ **Terminais deste computador:** com a ponte local, cada terminal vira um terminalzinho no mapa. Ocupado, trabalha na sala do time (com o Maestri, cada workspace em uso ganha a sua sala sozinho); quando espera você, vai para a recepção com o "!" ou o "?"; livre, toma café e conversa no corredor com outro terminal livre. Terminais de outra máquina chegam pelo espelho, sem túnel (veja [Ponte local](#ponte-local-os-terminais-deste-computador)).
+- 🏢 **Prédio montado pelos seus times:** recepção com o seu logo, uma sala por time (cresce com o número de agentes), corredor, sala de reunião, sala comunal, cozinha e banheiro. Agente novo ganha mesa na sala "Novos". São no máximo 6 salas por fileira: os times a mais e as salas do Maestri descem para blocos mais abaixo, com as salas de projeto juntas sob a placa "Projetos".
+- 🖥️ **Terminais deste computador:** com a ponte local, cada terminal vira um terminalzinho no mapa. Ocupado, trabalha na sala do time (com o Maestri, cada workspace em uso ganha a sua sala sozinho); quando espera você, vai para a recepção com o "!" ou o "?"; livre, toma café e conversa no corredor com outro terminal livre. A cor diz o programa e o acessório diz o papel (coroa no Maestro, óculos e lupa no Auditor, capacete no Braçal). Terminais de outra máquina chegam pelo espelho, sem túnel (veja [Ponte local](#ponte-local-os-terminais-deste-computador)).
+- ✅ **Responder pelo escritório:** os pedidos de permissão do Claude Code, do Codex e do OpenCode ganham **Permitir** e **Negar** no cartão do terminal, e as perguntas dos terminais do Maestri e do OpenCode ganham um campo **Responder**, também no celular (veja [Responder pelo escritório](#responder-pelo-escritório-permitir-ou-negar-de-qualquer-lugar)).
 - 📻 **Rádio da firma:** três estações compostas na hora pelo navegador, sem arquivo de áudio, e uma rádio da internet opcional (veja [Rádio da firma](#rádio-da-firma)).
 - 🧹 **Zeladoria:** o banheiro suja e é interditado, a faxineira limpa, o zelador conserta o que quebra e o porteiro cuida da entrada (veja [Zeladoria](#zeladoria)).
 - 🧑‍💻 **Mapa vivo:** os agentes vão para a mesa e digitam quando recebem tarefa. Livres, jogam sozinhos fliperama, videogame, sinuca, pebolim, pingue-pongue, xadrez, dardos e basquete, tocam piano ou violão, tomam café ou conversam em dupla. Chegam de manhã e vão embora à noite pela porta da frente.
@@ -76,7 +77,7 @@ Ele **não chama nenhum modelo de IA** e não gasta tokens. Aprovar é sempre no
 - 🎞️ **Time-lapse do dia:** o dia do escritório num vídeo de uns 30 s, gravado só no seu navegador (veja [Time-lapse](#time-lapse)).
 - 📸 **Modo foto:** esconde a interface e salva um PNG do escritório.
 - 🧪 **Modo demonstração:** `?demo=1` mostra agentes fictícios e um dia acelerado, com ringue e greve, sem mandar nem ler nada do servidor. Bom para experimentar e para capturas de tela.
-- 🎥 **Câmera:** zoom com a roda ou a pinça, arrastar, duplo clique para focar uma sala, "Ir para…" um agente (`/` ou `Ctrl+K`) e atalhos (`+`, `-`, `0`).
+- 🎥 **Câmera:** zoom em degraus inteiros (1x, 2x, 3x...) com a roda, a pinça ou os botões, arrastar, duplo clique para focar uma sala, "Ir para…" um agente (`/` ou `Ctrl+K`) e atalhos (`+`, `-`, `0`).
 - 📱 **Funciona no celular**, com objetos clicáveis que também respondem ao teclado e ao toque.
 - 🔒 **Login** com usuário e senha, publicado **só na sua rede Tailscale**.
 
@@ -87,12 +88,12 @@ Todas as capturas saem do **modo demonstração** ou de uma prévia com **dados 
 <table>
   <tr>
     <td width="50%" align="center">
-      <a href="./docs/screenshots/02-esperando-voce.png"><img src="./docs/screenshots/02-esperando-voce.png" alt="Aprovações num relance: um '!' sobre a Hana, que espera aprovação, e um '?' sobre a Cacau, que tem uma pergunta; a lista 'Esperando você' mostra os dois pedidos com os botões Revisar e Responder" width="100%"></a>
+      <a href="./docs/screenshots/02-esperando-voce.png"><img src="./docs/screenshots/02-esperando-voce.png" alt="Aprovações num relance, no modo demonstração: o prédio inteiro de dia, com um '!' sobre a Flora, que espera aprovação, e um '?' sobre o Gael, que tem uma pergunta, na sala Marketing; a lista 'Esperando você' mostra os dois pedidos com os botões Responder e Revisar" width="100%"></a>
       <p><em>Aprovações num relance: "!" e "?" no mapa e a lista "Esperando você".</em></p>
     </td>
     <td width="50%" align="center">
-      <a href="./docs/screenshots/03-noite-chuva.png"><img src="./docs/screenshots/03-noite-chuva.png" alt="O escritório à noite na chuva: salas de time escuras e vazias, postes acesos e quase todo o time conversando e jogando na sala comunal e na sala de reunião" width="100%"></a>
-      <p><em>Noite e chuva: as luzes apagam nas salas vazias e os postes acendem.</em></p>
+      <a href="./docs/screenshots/03-noite-chuva.png"><img src="./docs/screenshots/03-noite-chuva.png" alt="O escritório às 18h48 na chuva: as salas Marketing e Ops acesas, com gente trabalhando, as outras salas de time escuras, postes e arandelas acesos e o resto do time na sala de reunião e na cozinha" width="100%"></a>
+      <p><em>Noite e chuva: só acende a sala com trabalho de verdade, e os postes acendem.</em></p>
     </td>
   </tr>
   <tr>
@@ -156,7 +157,7 @@ Todas as capturas saem do **modo demonstração** ou de uma prévia com **dados 
 </table>
 
 <p align="center">
-  <img src="./docs/screenshots/09-celular.png" alt="O escritório no celular: o mapa no topo, com agentes e balões de fala, e a lista 'Esperando você' com os botões Revisar e Responder embaixo" width="300">
+  <img src="./docs/screenshots/09-celular.png" alt="O escritório no celular: logo abaixo do título, o mapa alto, com a pílula da hora e do tempo em cima e a barra da câmera (−, 1x, +, Ver tudo e o menu ⋯) embaixo à esquerda; os filtros vêm depois do mapa" width="300">
 </p>
 
 ## Instalar
@@ -353,7 +354,7 @@ O prédio também tem quem cuide dele, e o banheiro pode ficar podre. Tudo roda 
 <table>
   <tr>
     <td width="50%" align="center">
-      <a href="./docs/screenshots/26-banheiro-interditado.png"><img src="./docs/screenshots/26-banheiro-interditado.png" alt="O banheiro interditado no fim do corredor: a placa na porta WC, o balão 'Interditado' e dois terminaizinhos, Gil e Ivo, esperando na fila com o alerta" width="100%"></a>
+      <a href="./docs/screenshots/26-banheiro-interditado.png"><img src="./docs/screenshots/26-banheiro-interditado.png" alt="O banheiro, a sala da fileira de baixo ao lado da cozinha: três cabines, a bancada com duas cubas e espelho, papel e poças no chão; no corredor, na frente da porta, o cone, o balão 'Interditado' e dois terminaizinhos, Ivo e Rui, esperando na fila" width="100%"></a>
       <p><em>Interditado: a fila espera e, depois de um tempo, desiste.</em></p>
     </td>
     <td width="50%" align="center">
@@ -364,9 +365,9 @@ O prédio também tem quem cuide dele, e o banheiro pode ficar podre. Tudo roda 
 </table>
 
 <p align="center">
-  <a href="./docs/screenshots/27-faxineira-zelador.png"><img src="./docs/screenshots/27-faxineira-zelador.png" alt="Em cima, a faxineira Dona Rosa limpando a porta do banheiro com balde e rodo; embaixo, a zeladora Dona Neide com a caixa de ferramentas na cozinha, ao lado da cafeteira com o balão 'Quebrada!'" width="900"></a>
+  <a href="./docs/screenshots/27-faxineira-zelador.png"><img src="./docs/screenshots/27-faxineira-zelador.png" alt="A mesma vista do banheiro e da cozinha: o faxineiro Seu Bené passando o rodo dentro do banheiro, entre as poças, e o zelador Seu Tião com a caixa de ferramentas na cozinha, ao lado da cafeteira com o balão 'Quebrada!'" width="900"></a>
 </p>
-<p align="center"><em>A faxineira no banheiro e a zeladora consertando a cafeteira.</em></p>
+<p align="center"><em>A faxina dentro do banheiro e o zelador consertando a cafeteira.</em></p>
 
 - **Sujeira:** cada ida ao banheiro suja um pouco, e o terminal apertado e quem furou a fila sujam mais. A sujeira aparece no chão do banheiro (papel, poças, o papel higiênico saindo da cabine). Acima de 60, aparecem moscas e linhas de fedor nas cabines, e quem sai mostra o balão "eca". Acima de 90, o banheiro fica **interditado**, com o cone de piso molhado e a placa na porta: ninguém entra, a fila espera com o alerta e, depois de um tempo, desiste. Depois do café e do lanche, sobram copos e migalhas no chão.
 - **Faxina:** quando a sujeira passa de 60, ou numa ronda (mais frequente à noite), a faxineira entra pela rua com balde e rodo, limpa o banheiro com brilho, recolhe copos e migalhas e vai embora.
@@ -551,18 +552,18 @@ Os terminais rodam numa VM ou em outra máquina? Pule estes passos e use o [espe
 <table>
   <tr>
     <td width="50%" align="center">
-      <a href="./docs/screenshots/24-terminais-salas-maestri.png"><img src="./docs/screenshots/24-terminais-salas-maestri.png" alt="O prédio com terminaizinhos de vários programas, todos fictícios: Nina · Codex na recepção esperando aprovação, Ada · Claude Code +2 na sala de reunião, Gil · Claude Code na sala comunal e Lin · Codex, Rui · OpenCode, Bea · agy e Zé · MiniMax nas salas Loja e Front, criadas sozinhas para o Maestri" width="100%"></a>
-      <p><em>Terminais de cinco programas e as salas automáticas do Maestri.</em></p>
+      <a href="./docs/screenshots/35-planta-blocos.png"><img src="./docs/screenshots/35-planta-blocos.png" alt="O prédio inteiro em tela cheia, com dados fictícios: em cima, a recepção e as salas Diretoria, Ops, Produto e Vendas; no meio, a sala de reunião, a sala comunal, a cozinha e o banheiro; embaixo, num bloco com corredor próprio, as salas Loja Online, App Mobile e Site Novo, criadas sozinhas para os workspaces do Maestri sob a placa Projetos" width="100%"></a>
+      <p><em>A planta em blocos: as salas do Maestri juntas, sob "Projetos".</em></p>
     </td>
     <td width="50%" align="center">
-      <a href="./docs/screenshots/25-cartao-terminal.png"><img src="./docs/screenshots/25-cartao-terminal.png" alt="O cartão do terminal Ada, o Maestro de coroa, na sala de reunião: Claude Code, Trabalhando, projeto, o que está fazendo, workspace, 2 ajudantes, desde quando, as necessidades em barras e o dia de hoje" width="100%"></a>
-      <p><em>O cartão do terminal: o Maestro, de coroa, com as necessidades e o dia dele.</em></p>
+      <a href="./docs/screenshots/36-terminais-papeis.png"><img src="./docs/screenshots/36-terminais-papeis.png" alt="Seis terminaizinhos fictícios lado a lado na sala Loja Online, no zoom 3x, com o nome curto: Maestro de coroa, Auditor de óculos e lupa, Braçal e Implementador de capacete (este com o '!'), Gemini azul do agy e Docs rosa do MiniMax" width="100%"></a>
+      <p><em>A cor diz o programa; o acessório, o papel.</em></p>
     </td>
   </tr>
 </table>
 
 
-- **No mapa:** cada terminal entra pela rua com o nome e o programa na etiqueta ("Ada · Codex"). Ocupado, trabalha na sala do time dele (com o Maestri, a sala do workspace). Quando espera a sua aprovação ou resposta, ou deu erro, vai para a recepção com o "!" ou o "?". Livre, fica na sala comunal ou na cozinha.
+- **No mapa:** cada terminal entra pela rua. A cor diz o programa (Claude Code laranja, Codex prata, OpenCode verde, agy azul, MiniMax rosa, outros lilás) e o papel, lido do nome do Maestri ("Papel · Modelo"), ganha um acessório: coroa no Maestro, óculos e lupa no Auditor, capacete no Braçal e no Implementador. Na vista geral, só os bonecos e os selos "!"/"?"; de 2x para cima, o nome curto ("Maestro"); o nome completo fica no cartão. Ocupado, trabalha na sala do time dele (com o Maestri, a sala do workspace). Quando espera a sua aprovação ou resposta, ou deu erro, vai para a recepção com o "!" ou o "?". Livre, fica na sala comunal ou na cozinha.
 - **Café e conversa:** cada terminal tem as duas necessidades, que caem mais depressa enquanto ele trabalha. Livre, depois de uma pausa, vai à cafeteira ou chama outro terminal livre para um papo no corredor. É só cosmético, e o estado real manda: se o terminal volta a trabalhar, larga o café na hora.
 - **Segurança:** a ponte só escuta em 127.0.0.1 e só aceita o WebSocket de uma origem da lista com o token certo. O navegador recebe uma versão reduzida: sem o alvo da atividade (arquivo ou comando) e sem o histórico do dia.
 - **Sem a ponte:** o app tenta de novo, com espera crescente até 1 minuto, e não mostra erro na tela. No Chrome, a primeira conexão pode pedir a permissão de acesso à rede local. O Safari pode recusar `ws://` vindo de uma página https.
@@ -583,7 +584,24 @@ Se os terminais rodam numa máquina (uma VM, por exemplo) e você abre o Firmóp
 
 ### Responder pelo escritório: Permitir ou Negar de qualquer lugar
 
-Quando um terminal do Claude Code, do Codex ou do OpenCode pede permissão (o "!" na recepção), quem decide vê no cartão do terminal e no aviso "Esperando você" a ferramenta, um resumo do pedido e quanto tempo falta, com os botões **Permitir** e **Negar**. Vale no navegador deste PC (pela ponte local) e no celular ou em outra máquina (pelo espelho). O diálogo do terminal continua na tela: quem responder primeiro, lá ou no Firmópolis, leva. Quando o terminal faz uma pergunta (o "?"), dá para responder com um texto curto (veja abaixo). O agy fora do Maestri fica de fora.
+Quando um terminal do Claude Code, do Codex ou do OpenCode pede permissão (o "!" na recepção), quem decide vê no cartão do terminal e no aviso "Esperando você" a ferramenta, um resumo do pedido e quanto tempo falta, com os botões **Permitir** e **Negar**. Vale no navegador deste PC (pela ponte local) e no celular ou em outra máquina (pelo espelho). O diálogo do terminal continua na tela: quem responder primeiro, lá ou no Firmópolis, leva. Quando o terminal faz uma pergunta (o "?"), dá para responder com um texto curto (veja abaixo).
+
+- **Quais programas:** Permitir/Negar vale no Claude Code, no Codex e no OpenCode; responder uma pergunta, nos terminais do Maestri e no OpenCode. O agy e o MiniMax soltos só mostram o estado (o "!" ou o "?" no mapa): responda no terminal.
+- **Para ligar, em resumo:** na máquina dos terminais, `ponte setup --aplicar` (ou `ponte conectar <endereço>`) já liga no navegador deste PC. Para decidir pelo celular, acrescente `--decidir-remoto`. No Codex, rode `/hooks` e aprove de novo os hooks do `ponte`. Quem decide é o admin do prédio (e quem estiver em `ESCRITORIO_PONTE_DECISORES`).
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/37-cartao-permitir.png"><img src="./docs/screenshots/37-cartao-permitir.png" alt="O cartão do terminal fictício Implementador · Sonnet, de capacete, que pede aprovação: o pedido 'Bash · npm test -- --watch=false', 'vence em 98 s', os botões Permitir e Negar e a nota do que passa pelo servidor; no mapa, o Implementador com o '!' ao lado do Maestro, do Auditor e do Braçal" width="100%"></a>
+      <p><em>Um pedido de permissão: Permitir ou Negar no cartão.</em></p>
+    </td>
+    <td width="50%" align="center">
+      <a href="./docs/screenshots/38-cartao-responder.png"><img src="./docs/screenshots/38-cartao-responder.png" alt="O cartão do terminal fictício Revisor · Codex, que tem uma pergunta: 'Pergunta · o texto dela está no terminal', o campo com 'Pode usar a branch nova', o botão Responder e a nota 'O texto é digitado no terminal, seguido de Enter'; no mapa, o Revisor com o '?' na recepção" width="100%"></a>
+      <p><em>Uma pergunta: o texto vai para o terminal, com Enter.</em></p>
+    </td>
+  </tr>
+</table>
+
 
 - **Quem decide:** o admin do prédio e, além dele, os logins da variável `ESCRITORIO_PONTE_DECISORES` (separados por vírgula). Membro comum só vê. Só no andar da ponte (o mesmo do espelho), nunca no saguão nem na prévia.
 - **Como liga:** `ponte setup --aplicar` (ou `ponte conectar`) instala, além dos hooks de estado, um hook síncrono só no `PermissionRequest` do Claude Code e do Codex (`ponte decidir`), e o plugin do OpenCode passa a esperar a decisão. No Codex, rode `/hooks` e aprove de novo os hooks do `ponte`. Assim já vale no navegador deste PC.
