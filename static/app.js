@@ -280,7 +280,7 @@ function quadro(t) {
 const bonecoDaMesa = new Map();
 function desenharCena(t) {
   bonecoDaMesa.clear(); for (const b of mundo.bonecos.values()) bonecoDaMesa.set(b.handle, b);
-  const seguido = seguir && boneco(seguir);
+  const seguido = seguir && (boneco(seguir) || Vida.terminais().find(k => k.id === seguir));   // um agente ou um terminalzinho
   if (seguido && visivel(seguido)) { const a = { x: seguido.x, y: seguido.y - 10, k: cam.alvo ? cam.alvo.k : cam.k }; prenderCamera(a); cam.alvo = a; }
   if (cam.alvo) { // anima a câmera até o alvo
     const f = 0.14;
@@ -481,12 +481,19 @@ function desenharBoneco(b, t) {
 }
 
 // terminalzinho da ponte local (sprites.js): andando, dá o passo; parado, a telinha mostra o estado (código subindo
-// quando ocupado, "!" âmbar quando espera você, olhos quando livre; no papo, a carinha feliz e a mão). t: o relógio dos objetos
+// quando ocupado, "!" âmbar quando espera você, olhos quando livre; no papo e no jogo, a carinha feliz e a mão; no cochilo,
+// a tela apagada). O Maestro (gerente) leva uma coroinha âmbar em cima do monitor. t: o relógio dos objetos
 function desenharTerminal(k, t) {
-  const d = k.dado, acao = k.rota.length ? "andar" : k.balao === "oi" ? "acenar" : d.estado === "ocupado" ? "parar" : d.estado === "livre" ? "ficar" : "esperar";
+  const d = k.dado, f = Math.floor(k.anda / 4) % 4;
+  const acao = k.rota.length ? "andar" : k.dorme ? "dormir" : k.balao === "oi" || k.feliz ? "acenar" : d.estado === "ocupado" ? "parar" : d.estado === "livre" ? "ficar" : "esperar";
   ctx.globalAlpha = combina(k) ? 1 : 0.3;
   if (escala !== 1) { ctx.save(); ctx.scale(escala, escala); }
-  Sprites.terminal(ctx, Math.round(k.x - 6), Math.round(k.y), Math.floor(k.anda / 4) % 4, k.lado < 0, k.cor, t, acao);
+  Sprites.terminal(ctx, Math.round(k.x - 6), Math.round(k.y), f, k.lado < 0, k.cor, t, acao);
+  if (d.gerente) { // 17 linhas de sprite (monitor e corpo); andando, sobe 1 px no passo, como o sprite
+    const x = Math.round(k.x) - 3, y = Math.round(k.y) - 17 - (acao === "andar" ? f % 2 : 0) - 3;   // 6×3, as três pontas em cima
+    ctx.fillStyle = "#f5b83d"; ctx.fillRect(x, y, 1, 2); ctx.fillRect(x + 2, y, 2, 2); ctx.fillRect(x + 5, y, 1, 2); ctx.fillRect(x + 1, y + 1, 1, 1); ctx.fillRect(x + 4, y + 1, 1, 1);
+    ctx.fillStyle = "#b9791c"; ctx.fillRect(x, y + 2, 6, 1);
+  }
   // vida.js, onda 4: o café e o papo, no balãozinho do lado de trás (em cima, a etiqueta do nome o cobriria)
   if (k.balao && !k.rota.length) Sprites.balao(ctx, k.balao, Math.round(k.x) + (k.lado < 0 ? 7 : -16), Math.round(k.y) - 19);
   if (escala !== 1) ctx.restore();
@@ -942,15 +949,15 @@ function linhaTerminal(d, espera) {
   ir.setAttribute("aria-label", `${nome} ${espera ? ESPERA_TERM[d.estado] : "trabalhando"}: ${sub}. Ver no mapa`);
   ir.addEventListener("click", () => {
     const k = Vida.terminais().find(t => t.id === "terminal:" + d.id);
-    if (!k) return;   // ainda na rua, entrando
-    irParaEscritorio(); moverCamera({ x: k.x, y: k.y - 10, k: Math.max(cam.k, 3.2 * dpr) });
+    irParaEscritorio(); abrirFichaTerminal(d.id);
+    if (k) moverCamera({ x: k.x, y: k.y - 10, k: Math.max(cam.k, 3.2 * dpr) });   // sem k: ainda na rua, entrando
     if (innerWidth <= 760 && !$("palco-cartao").classList.contains("cheio")) $("palco-cartao").scrollIntoView({ block: "start", behavior: menosMovimento.matches ? "auto" : "smooth" });
   });
   if (!espera) return ir;
   const linha = elem("div", "linha-widget"); linha.append(ir);
   return linha;
 }
-addEventListener("ponte", () => { if (estado) desenharPainel(); });   // um terminal entrou, mudou ou saiu
+addEventListener("ponte", () => { if (estado) desenharPainel(); if (fichaTerm && !$("ficha").hidden) renderFicha(); });   // um terminal entrou, mudou ou saiu
 
 // quem está trabalhando: sala, o que faz e há quanto tempo (a linha leva ao agente no mapa)
 function linhaTrabalho(t, nome, handle) {
@@ -998,7 +1005,7 @@ function atualizarSalas() {
 }
 
 // ---------- ficha do agente (abre pela busca, pela lista ou tocando no mapa) ----------
-let seguir = null, realce = null, assinaturaFicha = "";
+let seguir = null, realce = null, assinaturaFicha = "", fichaTerm = null;   // fichaTerm: o id (da ponte) do terminal no cartão
 function focarAgente(b, { seguir: seg = false, foco = false } = {}) {
   selecionado = b.id;
   seguir = seg ? b.id : null;
@@ -1009,7 +1016,7 @@ function focarAgente(b, { seguir: seg = false, foco = false } = {}) {
 }
 function abrirFicha(b, foco) {
   fecharConversa(false);
-  selecionado = b.id; assinaturaFicha = "";
+  selecionado = b.id; assinaturaFicha = ""; fichaTerm = null;
   if (!amizades || amizades.id !== b.id) amizades = null;
   if (socialLigada() && !Brincar.demo) carregarAmizades(b.id);
   renderFicha();
@@ -1019,10 +1026,11 @@ function abrirFicha(b, foco) {
 function fecharFicha() {
   const estava = !$("ficha").hidden || !$("conversa").hidden;
   fecharConversa(false);
-  $("ficha").hidden = true; selecionado = null; seguir = null;
+  $("ficha").hidden = true; selecionado = null; seguir = null; fichaTerm = null;
   if (estava && estado) desenharPainel();
 }
 function renderFicha() {
+  if (fichaTerm) return renderFichaTerminal();
   const f = $("ficha"), b = boneco(selecionado);
   if (!b) { if (!f.hidden) fecharFicha(); return; }
   const t = b.trabalho, resp = itemParaResponder(b), social = socialLigada(), motivo = social ? motivoRingue(b) : "";
@@ -1069,6 +1077,65 @@ function renderFicha() {
     rg.addEventListener("click", () => abrirRingue(b, rg)); acoes.append(rg);
   }
   f.replaceChildren(topo, dl, acoes, ...fim);
+}
+
+// ---------- cartão do terminal (ponte.js e vida.js): no mesmo #ficha, com o estado, o que faz, as necessidades, as amizades
+// e o dia. Só leitura: responder é no próprio terminal. Os dados da ponte vão só por textContent
+const CLASSE_TERM = { ocupado: "trabalhando", aprovacao: "aprovacao", erro: "aprovacao", pergunta: "pergunta", livre: "livre" };
+const TEXTO_TERM = { ocupado: "Trabalhando", aprovacao: "Pede aprovação", erro: "Parou com um erro", pergunta: "Tem uma pergunta", livre: "Livre" };
+const NECS_TERM = [["cafe", "Café"], ["social", "Conversa"], ["diversao", "Diversão"], ["fome", "Fome"]];
+const horaMin = ms => new Date(ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+function abrirFichaTerminal(id) {
+  fecharConversa(false);
+  selecionado = null; fichaTerm = id; assinaturaFicha = "";
+  renderFicha();
+  if (!fichaTerm) return;   // saiu do mapa entre o clique e agora
+  $("ficha").hidden = false; $("cartao-agente").hidden = true;
+  $("ficha").focus({ preventScroll: true });   // o teclado segue no cartão (Esc fecha)
+}
+function renderFichaTerminal() {
+  const f = $("ficha"), d = terminaisDaPonte().find(x => x.id === fichaTerm), sid = "terminal:" + fichaTerm;
+  if (!d) { fecharFicha(); return; }   // o terminal fechou ou a ponte caiu
+  const k = Vida.terminais().find(t => t.id === sid), nec = Vida.necessidades(k), amz = Vida.afinidades(d.id), dia = Ponte.dia(d.id).slice(-8).reverse();
+  const chave = [sid, d.nome, d.provedor, d.papel, d.estado, d.gerente, d.projeto, d.atividade, d.workspace, d.band, d.ajudantes, d.desde, seguir === sid,
+    nec && NECS_TERM.map(([n]) => nec[n]).join(","), amz.map(a => a.nome + a.valor).join(","), dia.length && dia[0].ts + "/" + dia.length].join("|");
+  if (chave === assinaturaFicha) return;
+  assinaturaFicha = chave;
+  f.tabIndex = -1;
+  const topo = elem("div", "ficha-topo"), nomes = elem("div");
+  const h = elem("h2", null, d.nome); h.id = "ficha-nome";
+  nomes.append(h, elem("p", "funcao", [d.provedor, d.papel].filter(Boolean).join(" · ")));
+  const x = elem("button", "fechar", "×"); x.type = "button"; x.setAttribute("aria-label", "Fechar o cartão"); x.addEventListener("click", fecharFicha);
+  topo.append(miniTerminal(d, situacaoTerminal(d) === "esp"), nomes, x);
+  const dl = elem("dl"), linha = (rot, ...conteudo) => { const dd = elem("dd"); dd.append(...conteudo); dl.append(elem("dt", null, rot), dd); };
+  linha("Estado", elem("span", `chip ${CLASSE_TERM[d.estado] || "livre"}`, TEXTO_TERM[d.estado] || "Livre"), ...(d.gerente ? [document.createTextNode(" "), elem("span", "chip hora-extra", "Maestro")] : []));
+  if (d.projeto) linha("Projeto", document.createTextNode(d.projeto));
+  if (d.atividade) linha("Fazendo", document.createTextNode(d.atividade));
+  const onde = [Ponte.workspace(d.workspace), Ponte.band(d.workspace, d.band)].filter(Boolean).join(" · ");
+  if (onde) linha("Workspace", document.createTextNode(onde));
+  linha("Ajudantes", document.createTextNode(d.ajudantes ? String(d.ajudantes) : "Nenhum"));
+  if (d.desde) linha("Desde", document.createTextNode(horaMin(Date.parse(d.desde))));
+  if (nec) {
+    const barras = elem("div", "term-necs");
+    for (const [n, rot] of NECS_TERM) {
+      const bar = elem("div", "amz-barra" + (nec[n] < 20 ? " baixa" : "")), enc = elem("span"), l = elem("div", "term-nec");
+      bar.setAttribute("role", "meter"); bar.setAttribute("aria-label", rot);
+      bar.setAttribute("aria-valuemin", "0"); bar.setAttribute("aria-valuemax", "100"); bar.setAttribute("aria-valuenow", String(nec[n]));
+      enc.style.width = `${nec[n]}%`; bar.append(enc);
+      l.append(elem("span", null, rot), bar, elem("span", "amz-valor", String(nec[n]))); barras.append(l);
+    }
+    linha("Necessidades", barras);
+  }
+  const lista = (itens, vazio) => { if (!itens.length) return elem("span", "suave", vazio); const ul = elem("ul", "term-lista"); ul.append(...itens.map(t => elem("li", null, t))); return ul; };
+  linha("Amizades", lista(amz.map(a => `${a.nome} · ${a.valor}`), "Nenhuma ainda"));
+  linha("Hoje", lista(dia.map(e => `${horaMin(e.ts)} ${(TEXTO_TERM[e.estado] || "").toLowerCase()}${e.ferramenta ? ` · ${e.ferramenta}` : ""}`), "Nada ainda hoje"));
+  const acoes = elem("div", "acoes");
+  const seg = elem("button", "botao fantasma seguir"); seg.type = "button"; seg.setAttribute("aria-pressed", String(seguir === sid));
+  const ic = elem("span", "ic"); ic.append(iconeSvg("alvo")); seg.append(ic, document.createTextNode(seguir === sid ? "Seguindo" : "Seguir"));
+  seg.addEventListener("click", () => { seguir = seguir === sid ? null : sid; renderFicha(); $("ficha").querySelector(".seguir").focus(); });
+  const fe = elem("button", "botao fantasma", "Fechar"); fe.type = "button"; fe.addEventListener("click", () => { fecharFicha(); focoNoMapa(); });
+  acoes.append(seg, fe);
+  f.replaceChildren(topo, dl, elem("p", "term-ajuda", "Responder é no próprio terminal."), acoes);
 }
 
 // ---------- vida social na ficha (contrato S, fatia 1): amizades pelo GET /api/social e "Mandar pro ringue" pelo POST
@@ -2106,6 +2173,12 @@ function pessoaEm(p, raio) {
   for (const v of Vida.pessoas()) { const d = Math.hypot(v.x - p.x, v.y - 8 - p.y); if (!v.eu && d < dm) { dm = d; melhor = v; } }
   return melhor;
 }
+// o terminalzinho cujo corpo (uns 12×20 px acima dos pés) está sob o ponto, o mais perto dos pés
+function terminalEm(p) {
+  let melhor = null, dm = Infinity;
+  for (const k of Vida.terminais()) { const d = Math.hypot(k.x - p.x, k.y - 8 - p.y); if (Math.abs(p.x - k.x) <= 6 && p.y >= k.y - 19 && p.y <= k.y + 1 && d < dm) { dm = d; melhor = k; } }
+  return melhor;
+}
 function seloEm(p) { return [...mundo.bonecos.values()].find(b => b.selo && visivel(b) && Math.hypot(b.selo.x - p.x, b.selo.y - p.y) < b.selo.r) || null; }
 function esperaVoce(b) { return !!(b.trabalho && b.trabalho.url && /^waiting_/.test(b.trabalho.status)); }
 
@@ -2152,6 +2225,8 @@ tela.addEventListener("pointerup", ev => {
   if (selo && esperaVoce(selo)) { window.open(selo.trabalho.url, "_blank", "noopener"); return; }   // aprovar continua só no agentes.chat
   const perto = agenteEm(p, ev.pointerType === "touch" ? 16 : 12);
   if (perto) { focarAgente(perto); return; }
+  const tm = terminalEm(p);
+  if (tm) { moverCamera({ x: tm.x, y: tm.y - 10, k: Math.max(cam.k, 3.2 * dpr) }); abrirFichaTerminal(tm.dado.id); return; }
   const q = muralEm(p);
   if (q) { abrirMural(q.canal, q.sala); return; }
   const pessoa = pessoaEm(p, ev.pointerType === "touch" ? 16 : 12);
@@ -2167,7 +2242,7 @@ tela.addEventListener("pointermove", ev => {
   const card = $("cartao-agente");
   if (ev.pointerType !== "mouse" || !mundo || (arrasto && arrasto.moveu)) { card.hidden = true; return; }
   const p = paraMundo(ev.clientX, ev.clientY);
-  const perto = seloEm(p) || agenteEm(p, 11), objeto = Brincar.sobre(p) || muralEm(p) || pessoaEm(p, 11);
+  const perto = seloEm(p) || agenteEm(p, 11), objeto = Brincar.sobre(p) || muralEm(p) || pessoaEm(p, 11) || terminalEm(p);
   tela.style.cursor = perto || objeto ? "pointer" : "";
   mostrarCartao(perto, ev.clientX, ev.clientY);
 });

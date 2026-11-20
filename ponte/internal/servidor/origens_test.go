@@ -14,6 +14,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"firmopolis/ponte/internal/historico"
 	"firmopolis/ponte/internal/mundo"
 )
 
@@ -211,20 +212,56 @@ func TestNavegadorRecebeSoOQueATelaUsa(t *testing.T) {
 	if msg.Morador.Atividade.Alvo != "segredo.go" {
 		t.Fatal("o original (o do jogo) não muda")
 	}
-	if paraNavegador(msgDia{V: 1, Tipo: "dia"}) != nil {
-		t.Fatal("o histórico do dia não vai ao navegador")
+	dia := msgDia{V: 1, Tipo: "dia", Eventos: []historico.EventoHist{{MoradorID: "a", Ferramenta: "Edit", Alvo: "segredo.go"}}}
+	rd, ok := paraNavegador(dia).(msgDia)
+	if !ok || len(rd.Eventos) != 1 || rd.Eventos[0].Alvo != "" || rd.Eventos[0].Ferramenta != "Edit" {
+		t.Fatalf("o dia vai sem o alvo: %+v", rd)
+	}
+	if dia.Eventos[0].Alvo != "segredo.go" {
+		t.Fatal("o dia original (o do jogo) não muda")
 	}
 }
 
-func TestNavegadorNaoRecebeODia(t *testing.T) {
-	a := subir(t, Opcoes{Origens: func() []string { return []string{origemApp} }}, true)
+// O navegador recebe o dia depois do snapshot, sem nenhum alvo; o jogo, com o alvo.
+func TestNavegadorRecebeODiaSemAlvo(t *testing.T) {
+	hist, err := historico.Abrir(t.TempDir(), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hist.Fechar()
+	a := subir(t, Opcoes{Historico: hist, Origens: func() []string { return []string{origemApp} }}, true)
+	a.post(t, "claude", promptClaude, map[string]string{"X-Maestri-Terminal-Id": "T1"})
+	a.post(t, "claude", []byte(`{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"file_path":"C:\\proj\\loja\\segredo.go"}}`), map[string]string{"X-Maestri-Terminal-Id": "T1"})
+	esperar(t, func() bool { return len(hist.Hoje()) == 2 })
+
+	jogo, _, err := a.conectar(t, comToken())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ler(t, jogo) // snapshot
+	comAlvo := false
+	for _, e := range ler(t, jogo)["eventos"].([]any) {
+		comAlvo = comAlvo || e.(map[string]any)["alvo"] != ""
+	}
+	if !comAlvo {
+		t.Fatal("o jogo recebe o dia com o alvo")
+	}
+
 	c, _, err := a.conectarNavegador(t, origemApp, Subprotocolo, "token."+tokenTeste)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ler(t, c) // snapshot
-	a.post(t, "claude", promptClaude, nil)
-	if m := ler(t, c); m["tipo"] != "morador" {
-		t.Fatalf("depois do snapshot vem a mudança, sem o dia: veio %v", m["tipo"])
+	if m := ler(t, c); m["tipo"] != "snapshot" {
+		t.Fatalf("1ª mensagem: o snapshot, veio %v", m["tipo"])
+	}
+	dia := ler(t, c)
+	eventos, _ := dia["eventos"].([]any)
+	if dia["tipo"] != "dia" || len(eventos) != 2 {
+		t.Fatalf("2ª mensagem: o dia com os 2 eventos, veio %v", dia)
+	}
+	for _, e := range eventos {
+		if alvo := e.(map[string]any)["alvo"]; alvo != "" {
+			t.Fatalf("o dia do navegador vai sem o alvo, veio %v", alvo)
+		}
 	}
 }

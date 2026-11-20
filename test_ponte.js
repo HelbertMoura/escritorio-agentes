@@ -70,12 +70,65 @@ assert.equal(Ponte.terminais().find(t => t.id === "a").estado, "pergunta");
 mensagem(ws, { v: 1, tipo: "saiu", id: " a " });
 assert.ok(!Ponte.terminais().some(t => t.id === "a"), "o id do saiu passa pela mesma limpeza");
 
+// os campos novos (onda 6): papel, workspace, band, ajudantes, desde e solto, conferidos e cortados
+mensagem(ws, { v: 1, tipo: "snapshot", workspaces: [
+  { id: "w1", nome: "Loja", bands: [{ id: "b1", nome: "Front" }, { id: "", nome: "sem id" }, ...Array.from({ length: 40 }, (_, i) => ({ id: "x" + i, nome: "B" }))] },
+  ...Array.from({ length: 40 }, (_, i) => ({ id: "w" + (i + 2), nome: "W\u0007" + i, bands: null })), null],
+  moradores: [
+    morador("m", "ocupado", { gerente: true, papel: "Maestro", workspace_id: "w1", band_id: "b1", ajudantes: 2, desde: "2026-11-20T10:00:00Z", solto: false }),
+    morador("n", "ocioso", { papel: "p".repeat(80), workspace_id: 5, band_id: null, ajudantes: 500, desde: "ontem", solto: true }),
+    morador("o", "ocioso", { ajudantes: -3 }), morador("q", "ocioso", { ajudantes: 1.5 })] });
+const [tm, tn, to, tq] = Ponte.terminais();
+assert.deepEqual([tm.papel, tm.workspace, tm.band, tm.ajudantes, tm.desde, tm.solto, tm.gerente], ["Maestro", "w1", "b1", 2, "2026-11-20T10:00:00Z", false, true]);
+assert.deepEqual([tn.papel.length, tn.workspace, tn.band, tn.ajudantes, tn.desde, tn.solto], [40, "", "", 99, "", true], "corta, confere e limita");
+assert.equal(to.ajudantes, 0); assert.equal(tq.ajudantes, 0);
+assert.equal(Ponte.workspace("w1"), "Loja");
+assert.equal(Ponte.band("w1", "b1"), "Front");
+assert.equal(Ponte.band("w1", "x29"), "B");
+assert.equal(Ponte.band("w1", "x30"), "", "32 bands por workspace (o sem id conta)");
+assert.equal(Ponte.workspace("w32"), "W30", "controle sai");
+assert.equal(Ponte.workspace("w33"), "", "32 workspaces");
+assert.equal(Ponte.workspace("nada"), ""); assert.equal(Ponte.band("nada", "b1"), "");
+
+// o dia: por morador, com a hora em ms, o estado traduzido (desconhecido sai), a ferramenta cortada e os 200 mais novos
+const evs = [{ ts: "2026-11-20T10:05:00Z", morador_id: "m", estado: "ocioso", ferramenta: "" },
+  { ts: "2026-11-20T10:00:00Z", morador_id: "m", estado: "ocupado", ferramenta: "Edit".repeat(20), alvo: "segredo" },
+  { ts: "2026-11-20T10:06:00Z", morador_id: "m", estado: "dormindo", ferramenta: "x" }, { ts: "quando?", morador_id: "m", estado: "ocupado" },
+  ...Array.from({ length: 250 }, (_, i) => ({ ts: new Date(Date.UTC(2026, 10, 20, 11, 0, i)).toISOString(), morador_id: "n", estado: "ocupado", ferramenta: "Bash" + i }))];
+mensagem(ws, { v: 1, tipo: "dia", eventos: evs });
+const dm = Ponte.dia("m");
+assert.deepEqual([...dm.map(e => e.estado)], ["ocupado", "livre"], "em ordem, sem o desconhecido nem a hora quebrada");
+assert.equal(dm[0].ts, Date.parse("2026-11-20T10:00:00Z"));
+assert.equal(dm[0].ferramenta.length, 40);
+assert.ok(!("alvo" in dm[0]), "o alvo nunca fica");
+const dn = Ponte.dia("n");
+assert.equal(dn.length, 200, "teto de 200");
+assert.equal(dn.at(-1).ferramenta, "Bash249", "ficam os mais novos");
+dm.push({}); assert.equal(Ponte.dia("m").length, 2, "o dia sai em cópia");
+
+// mudou o estado ou a ferramenta: um evento a mais, com a hora de agora; igual, nada
+mensagem(ws, { v: 1, tipo: "morador", morador: morador("m", "ocupado", { atividade: { ferramenta: "Bash" } }) });
+assert.equal(Ponte.dia("m").length, 3);
+assert.equal(Ponte.dia("m").at(-1).ferramenta, "Bash");
+assert.ok(Date.now() - Ponte.dia("m").at(-1).ts < 5000);
+mensagem(ws, { v: 1, tipo: "morador", morador: morador("m", "ocupado", { atividade: { ferramenta: "Bash" }, projeto: "outro" }) });
+assert.equal(Ponte.dia("m").length, 3, "sem duplicar");
+mensagem(ws, { v: 1, tipo: "morador", morador: morador("m", "esperando_permissao", { atividade: { ferramenta: "Bash" } }) });
+assert.equal(Ponte.dia("m").at(-1).estado, "aprovacao");
+
+// um dia novo substitui o inteiro
+mensagem(ws, { v: 1, tipo: "dia", eventos: [] });
+assert.equal(Ponte.dia("m").length, 0); assert.equal(Ponte.dia("n").length, 0);
+mensagem(ws, { v: 1, tipo: "dia", eventos: [{ ts: "2026-11-20T10:00:00Z", morador_id: "m", estado: "ocupado", ferramenta: "Edit" }] });
+
 // JSON quebrado não derruba nada
 ws.onmessage({ data: "{nao" });
 
 // a ponte caiu: os terminais saem do mapa e a reconexão é agendada, com espera crescente
 ws.onclose();
 assert.equal(Ponte.terminais().length, 0);
+assert.equal(Ponte.dia("m").length, 0, "o dia sai junto");
+assert.equal(Ponte.workspace("w1"), "", "e os workspaces");
 assert.equal(Ponte.situacao(), "sem-ponte");
 assert.equal(timers.at(-1).ms, 3000);
 timers.at(-1).fn();

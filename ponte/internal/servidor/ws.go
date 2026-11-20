@@ -109,6 +109,7 @@ func (s *Servidor) ws(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	if cl.navegador {
 		cl.fila <- codificar(paraNavegador(s.snapshot()))
+		cl.fila <- codificar(paraNavegador(s.dia()))
 	} else {
 		cl.fila <- codificar(s.snapshot())
 		cl.fila <- codificar(s.dia())
@@ -201,8 +202,8 @@ func (s *Servidor) transmitir(msg any) {
 }
 
 // paraNavegador é o que o Firmópolis no navegador recebe: só o que a tela usa. Sai o
-// alvo da atividade (mesmo mascarado) e o histórico do dia (nil: não vai). Se a origem
-// liberada for comprometida, vaza o mínimo.
+// alvo da atividade (mesmo mascarado), também do histórico do dia, que vai só com a hora,
+// o estado e a ferramenta. Se a origem liberada for comprometida, vaza o mínimo.
 func paraNavegador(msg any) any {
 	semAlvo := func(m mundo.Morador) mundo.Morador {
 		if m.Atividade != nil {
@@ -214,7 +215,13 @@ func paraNavegador(msg any) any {
 	}
 	switch m := msg.(type) {
 	case msgDia:
-		return nil
+		es := make([]historico.EventoHist, len(m.Eventos)) // cópia: o do jogo segue com o alvo
+		for i, e := range m.Eventos {
+			e.Alvo = ""
+			es[i] = e
+		}
+		m.Eventos = es
+		return m
 	case msgSnapshot:
 		ms := make([]mundo.Morador, len(m.Moradores))
 		for i, x := range m.Moradores {

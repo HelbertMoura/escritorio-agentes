@@ -1762,15 +1762,21 @@ const Vida = (() => {
   }
   // --- terminaizinhos (Firmópolis, onda 2): os terminais deste computador, lidos pela ponte local (ponte.js) -------
   // Figurantes como as pessoas: fora do m.bonecos, das vagas e da vida social, e só nesta tela (nada vai ao servidor).
-  // Entram pela rua e vão para a sala do estado: ocupado trabalha na sala do primeiro time, esperando você (aprovação,
-  // pergunta ou erro) vai para a recepção, livre fica na sala comunal ou na cozinha. Mudou o estado, muda de sala.
+  // Entram pela rua e vão para a sala do estado: ocupado trabalha numa sala de time (a mesma para a band ou o workspace,
+  // e o Maestro na sala de reunião), esperando você (aprovação, pergunta ou erro) vai para a recepção, livre fica na sala
+  // comunal ou na cozinha. Mudou o estado, muda de sala.
   const term = { v: -1, m: null, lista: new Map() };
   const TERM_ESPERA = new Set(["aprovacao", "pergunta", "erro"]);
   // o estado do terminal no vocabulário dos agentes (app.js: ESTADOS): o erro pede você, como uma aprovação ("!")
   const TERM_TRABALHO = { ocupado: "running", aprovacao: "waiting_approval", erro: "waiting_approval", pergunta: "waiting_input" };
   function salaDoTerminal(m, d) {
     const salas = m.predio.salas, recepcao = salas.find(s => s.tipo === "recepcao");
-    if (d.estado === "ocupado") return salas.find(s => typeof s.chave === "string" && s.chave.startsWith("time:")) || recepcao;
+    if (d.estado === "ocupado") {
+      const reuniao = d.gerente && salaDaChave(m, "reuniao");
+      if (reuniao) return reuniao;
+      const times = salas.filter(s => typeof s.chave === "string" && s.chave.startsWith("time:"));   // a mesma band (ou workspace) fica junta
+      return times.length ? times[semente(d.band || d.workspace || d.id) % times.length] : recepcao;
+    }
     if (TERM_ESPERA.has(d.estado)) return recepcao;
     const comuns = (m.predio.baixo || []).filter(s => s.tipo === "lounge" || s.tipo === "cozinha");
     return comuns.length ? comuns[semente(d.id) % comuns.length] : recepcao;
@@ -1792,12 +1798,14 @@ const Vida = (() => {
         let t = term.lista.get(d.id);
         if (!t) {
           t = { ...novaPessoa("terminal:" + d.id, e.x - 22, e.calcadaY), id: "terminal:" + d.id, terminal: true, salaT: null, cor: semente(d.id), lado: 1, anda: 0, direto, mudou: -Infinity,
-            nec: { cafe: 50 + semente(d.id + "c") % 50, social: 50 + semente(d.id + "s") % 50 }, ativ: null, balao: null, proxAtiv: agora + entre(3, 20) };
+            nec: { cafe: 50 + semente(d.id + "c") % 50, social: 50 + semente(d.id + "s") % 50, diversao: 50 + semente(d.id + "d") % 50, fome: 50 + semente(d.id + "f") % 50 },
+            ativ: null, balao: null, feliz: false, dorme: false, proxAtiv: agora + entre(3, 20) };
           if (!direto) t.pausa = agora + 0.9 * fila++;
           term.lista.set(d.id, t);
         }
         if (!t.dado || t.dado.estado !== d.estado) t.mudou = t.salaT ? agora : -Infinity;   // o primeiro destino sai já
-        t.dado = d; mostrar(t, d.nome === d.provedor ? d.nome : `${d.nome} · ${d.provedor}`);   // o programa no nome: não confunde com um agente
+        t.dado = d;   // o programa no nome (não confunde com um agente) e quantos ajudantes ele tem
+        mostrar(t, (d.nome === d.provedor ? d.nome : `${d.nome} · ${d.provedor}`) + (d.ajudantes > 0 ? ` +${d.ajudantes}` : ""));
         t.trabalho = Object.hasOwn(TERM_TRABALHO, d.estado) ? { status: TERM_TRABALHO[d.estado] } : null;   // filtros, busca e o selo "!" ou "?" da etiqueta
       }
       for (const id of [...term.lista.keys()]) if (!vistos.has(id)) term.lista.delete(id);   // fechou o terminal ou a ponte caiu
@@ -1826,56 +1834,79 @@ const Vida = (() => {
   const terminais = () => [...term.lista.values()].filter(t => t.x > -20);
 
   // --- a vida dos terminaizinhos (Firmópolis, onda 4): as necessidades e as rotinas do Escritório Vivo (sim.gd) ---------
-  // Café e conversa caem com o tempo, bem mais depressa enquanto o terminal trabalha de verdade (ocupado). Livre e parado
-  // na sala dele, depois de uma pausa, cuida da que estiver mais baixa: vai à cafeteira, ou chama outro terminal livre
-  // para um papo no corredor. Só cosmético, e o gatilho é sempre o estado real: deixou de estar livre, larga o que fazia
-  // (e o parceiro do papo volta à sala) e a sala do estado manda (irSalaTerminal).
+  // Café (a energia), conversa, diversão e fome caem com o tempo, bem mais depressa enquanto o terminal trabalha de verdade
+  // (ocupado). Livre e parado na sala dele, depois de uma pausa, cuida da que estiver mais baixa: a cafeteira, um papo no
+  // corredor, um jogo (com outro terminal livre por perto, os dois juntos) ou um lanche; sem energia, cochila numa poltrona.
+  // Só cosmético, e o gatilho é sempre o estado real: deixou de estar livre, larga o que fazia (e o parceiro volta à sala)
+  // e a sala do estado manda (irSalaTerminal).
   const NEC_CAI = { ocupado: 100 / 1200, parado: 100 / 3600 };   // por segundo: 20 min de trabalho esvaziam o café; parado, 1 h
-  const NEC_PEDE = 60, PAUSA_T = [5, 20], USO_T = [8, 14];
+  const NEC_PEDE = 60, NEC_ALERTA = 20, SONO = 15, PAUSA_T = [5, 20], USO_T = [8, 14];
+  const NEC_FATOR = { cafe: 1, social: 0.7, diversao: 0.8, fome: 0.5 };   // o ritmo de cada uma, no do café
+  const ENCHE = { cafe: "cafe", cochilo: "cafe", papo: "social", jogo: "diversao", diversao: "diversao", fome: "fome" };   // atividade → necessidade
+  const VAGAS_DE = { cafe: ["cafe"], diversao: ["arcade", "videogame", "pc", "sinuca", "pebolim", "pingpong"], fome: ["lanche", "cozinha"], cochilo: ["poltrona", "pufe", "tv"] };
+  const BALAO_DE = { cafe: "cafe", diversao: "nota", fome: "comida" };
   function viverTerminal(m, t, dt, agora) {
     const cai = (t.dado.estado === "ocupado" ? NEC_CAI.ocupado : NEC_CAI.parado) * dt;
-    t.nec.cafe = Math.max(0, t.nec.cafe - cai); t.nec.social = Math.max(0, t.nec.social - cai * 0.7);
+    for (const n in NEC_FATOR) t.nec[n] = Math.max(0, t.nec[n] - cai * NEC_FATOR[n]);
     const a = t.ativ;
+    // parado, sem atividade e com alguma necessidade lá embaixo: o "!" de vez em quando
+    if (!a && !t.rota.length) t.balao = Math.min(...Object.values(t.nec)) < NEC_ALERTA && Math.floor(agora / 2.5) % 4 === 0 ? "alerta" : null;
     if (t.dado.estado !== "livre" || t.mudou !== null) { if (a) largar(m, t, agora); return; }
     if (!a) { if (!t.rota.length && agora >= t.proxAtiv) escolherAtiv(m, t, agora); return; }
     if (t.rota.length) return;
     const par = a.par && term.lista.get(a.par);
     if (a.par && (!par || !par.ativ || par.ativ.par !== t.dado.id)) return largar(m, t, agora);   // o outro foi embora
     if (a.fase === "indo") {
-      if (par && par.rota.length) return;   // papo: espera o outro chegar
-      a.fase = "usando"; a.ate = agora + entre(...USO_T);
+      if (par && par.rota.length) return;   // papo ou jogo: espera o outro chegar
+      a.fase = "usando"; a.ate = agora + entre(...USO_T) * (a.tipo === "cochilo" ? 2 : 1);
       t.parado = a.olha; t.lado = a.olha === "esq" ? -1 : 1;
       if (par) { par.ativ.fase = "usando"; par.ativ.ate = a.ate; par.parado = par.ativ.olha; par.lado = par.ativ.olha === "esq" ? -1 : 1; }
     }
     if (a.fase !== "usando") return;
-    // o balãozinho: a xícara no café; no papo, um de cada vez diz "oi", alternando
-    t.balao = a.tipo === "cafe" ? (Math.floor(agora / 2.5) % 3 ? "cafe" : null) : (Math.floor(agora / 1.6) + a.vez) % 2 ? "oi" : null;
+    // o balãozinho: o ícone da atividade de vez em quando; no papo, um de cada vez diz "oi"; no jogo, a nota e a carinha
+    // feliz se alternam; no cochilo, a tela apaga e sai o "zz"
+    const vez = (Math.floor(agora / 1.6) + a.vez) % 2;
+    t.balao = a.tipo === "papo" ? (vez ? "oi" : null) : a.tipo === "jogo" ? (vez ? "nota" : null)
+      : a.tipo === "cochilo" ? (Math.floor(agora / 1.2) % 3 ? "zz" : null) : Math.floor(agora / 2.5) % 3 ? BALAO_DE[a.tipo] : null;
+    t.feliz = a.tipo === "jogo" && !vez; t.dorme = a.tipo === "cochilo";
     if (agora < a.ate) return;
-    t.nec[a.tipo === "cafe" ? "cafe" : "social"] = 100;
-    if (par) { par.nec.social = 100; terminarAtiv(m, par, agora); }
+    t.nec[ENCHE[a.tipo]] = 100;
+    if (par) { par.nec[ENCHE[a.tipo]] = 100; somarAfinidade(t.dado.id, par.dado.id); terminarAtiv(m, par, agora); }
     terminarAtiv(m, t, agora);
   }
   function escolherAtiv(m, t, agora) {
     t.proxAtiv = agora + entre(...PAUSA_T);
-    const pede = ["cafe", "social"].filter(n => t.nec[n] < NEC_PEDE).sort((x, y) => t.nec[x] - t.nec[y]);
-    for (const n of pede) if (n === "cafe" ? irAoCafe(m, t) : chamarPapo(m, t)) return;
+    if (t.nec.cafe < SONO && irAVaga(m, t, "cochilo")) return;   // sem energia: cochila numa poltrona, num pufe ou na frente da TV
+    const pede = Object.keys(NEC_FATOR).filter(n => t.nec[n] < NEC_PEDE).sort((x, y) => t.nec[x] - t.nec[y]);
+    for (const n of pede) {
+      if (n === "cafe" ? irAVaga(m, t, "cafe") : n === "social" ? chamarPapo(m, t) : n === "diversao" ? chamarJogo(m, t) || irAVaga(m, t, "diversao")
+        : irAVaga(m, t, "fome") || irAVaga(m, t, "fome", VAGAS_DE.cafe)) return;   // fome sem lanche nem cozinha: a cafeteira
+    }
   }
-  function irAoCafe(m, t) {
-    const ocupados = [...term.lista.values()].filter(u => u.ativ && u.ativ.p).map(u => u.ativ.p);
-    const cafes = m.vagas.filter(v => v.tipo === "cafe" && !v.fechada);
-    for (const v of cafes.sort(() => Math.random() - 0.5)) {
-      const p = pontoPerto(m, v.sala, v.x, v.y, 22, ocupados), rota = p && rotaAte(m, [t.x, t.y], p);
+  const pontosEmUso = () => [...term.lista.values()].filter(u => u.ativ && u.ativ.p).map(u => u.ativ.p);
+  // vai sozinho a um ponto de chão perto de uma vaga dos tipos da atividade (sem ocupar a vaga, que é dos agentes)
+  function irAVaga(m, t, tipo, tipos = VAGAS_DE[tipo]) {
+    const evitar = pontosEmUso();
+    for (const v of m.vagas.filter(q => tipos.includes(q.tipo) && !q.fechada).sort(() => Math.random() - 0.5)) {
+      const p = pontoPerto(m, v.sala, v.x, v.y, 22, evitar), rota = p && rotaAte(m, [t.x, t.y], p);
       if (!rota) continue;
-      t.ativ = { tipo: "cafe", fase: "indo", p, olha: rumo(v.x - p[0], v.y - p[1]), vez: 0 };
+      t.ativ = { tipo, fase: "indo", p, olha: rumo(v.x - p[0], v.y - p[1]), vez: 0 };
       t.rota = rota;
       return true;
     }
     return false;
   }
+  // o parceiro do papo ou do jogo: entre os 3 livres mais perto (até "raio"), o de maior afinidade
+  function parceiro(t, raio) {
+    const dist = u => Math.hypot(u.x - t.x, u.y - t.y);
+    const perto = [...term.lista.values()].filter(u => u !== t && u.dado.estado === "livre" && u.mudou === null && !u.ativ && !u.rota.length && u.x > -20 && dist(u) < raio)
+      .sort((a, b) => dist(a) - dist(b)).slice(0, 3);
+    return perto.reduce((a, b) => (afinidade(t.dado.id, b.dado.id) > afinidade(t.dado.id, a.dado.id) ? b : a), perto[0]) || null;
+  }
   function chamarPapo(m, t) {
-    const livres = [...term.lista.values()].filter(u => u !== t && u.dado.estado === "livre" && u.mudou === null && !u.ativ && !u.rota.length && u.x > -20);
-    if (!livres.length) return false;
-    const u = livres.reduce((a, b) => (Math.abs(b.x - t.x) < Math.abs(a.x - t.x) ? b : a)), r = m.predio.predioRet, cy = m.predio.corredorY;
+    const u = parceiro(t, Infinity);
+    if (!u) return false;
+    const r = m.predio.predioRet, cy = m.predio.corredorY;
     const x = Math.max(r.x + 30, Math.min(r.x + r.w - 30, (t.x + u.x) / 2)), esq = t.x <= u.x;
     const pt = [x + (esq ? -7 : 7), cy], pu = [x + (esq ? 7 : -7), cy];
     const rt = rotaAte(m, [t.x, t.y], pt), ru = rotaAte(m, [u.x, u.y], pu);
@@ -1884,9 +1915,24 @@ const Vida = (() => {
     u.ativ = { tipo: "papo", fase: "indo", p: pu, olha: esq ? "esq" : "dir", par: t.dado.id, vez: 1 }; u.rota = ru;
     return true;
   }
+  // diversão com outro terminal livre por perto: os dois vão juntos a uma vaga de jogo, um de cada lado
+  function chamarJogo(m, t) {
+    const u = parceiro(t, 160);
+    if (!u) return false;
+    const evitar = pontosEmUso();
+    for (const v of m.vagas.filter(q => VAGAS_DE.diversao.includes(q.tipo) && !q.fechada).sort(() => Math.random() - 0.5)) {
+      const pt = pontoPerto(m, v.sala, v.x, v.y, 22, evitar), pu = pt && pontoPerto(m, v.sala, v.x, v.y, 22, [...evitar, pt]);
+      const rt = pu && rotaAte(m, [t.x, t.y], pt), ru = rt && rotaAte(m, [u.x, u.y], pu);
+      if (!ru) continue;
+      t.ativ = { tipo: "jogo", fase: "indo", p: pt, olha: rumo(v.x - pt[0], v.y - pt[1]), par: u.dado.id, vez: 0 }; t.rota = rt;
+      u.ativ = { tipo: "jogo", fase: "indo", p: pu, olha: rumo(v.x - pu[0], v.y - pu[1]), par: t.dado.id, vez: 1 }; u.rota = ru;
+      return true;
+    }
+    return false;
+  }
   // acabou (ou largou): volta para um ponto da sala do estado dele, pelo irSalaTerminal, e descansa antes da próxima
   function terminarAtiv(m, t, agora) {
-    t.ativ = null; t.balao = null; t.parado = "baixo"; t.proxAtiv = agora + entre(...PAUSA_T);
+    t.ativ = null; t.balao = null; t.feliz = false; t.dorme = false; t.parado = "baixo"; t.proxAtiv = agora + entre(...PAUSA_T);
     t.salaT = null; t.mudou = agora - TERM_FIRME;
   }
   function largar(m, t, agora) {
@@ -1895,6 +1941,34 @@ const Vida = (() => {
     const mudou = t.mudou;   // mudou de estado: o prazo de firmeza segue o mesmo
     terminarAtiv(m, t, agora);
     if (mudou !== null) t.mudou = mudou;
+  }
+  // afinidade entre terminais (deste navegador, no localStorage): o par ordenado "idA|idB" → 0 a 100, começa em 50. O papo
+  // e o jogo somam 5. Teto de 500 pares: saem os que não se encontram há mais tempo
+  const AFINIDADE = "firmopolis.afinidade", MAX_PARES = 500;
+  let afin = null;
+  function tabelaAfinidade() {
+    if (afin) return afin;
+    afin = new Map();
+    try {
+      const d = JSON.parse(localStorage.getItem(AFINIDADE) || "{}");
+      if (d && typeof d === "object" && !Array.isArray(d)) for (const [k, v] of Object.entries(d).slice(-MAX_PARES)) if (k.length <= 401 && Number.isFinite(v)) afin.set(k, Math.max(0, Math.min(100, v)));
+    } catch (e) { /* armazenamento bloqueado ou corrompido: começa do zero */ }
+    return afin;
+  }
+  const parDe = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+  const afinidade = (a, b) => tabelaAfinidade().get(parDe(a, b)) ?? 50;
+  function somarAfinidade(a, b) {
+    const tab = tabelaAfinidade(), k = parDe(a, b), v = Math.min(100, afinidade(a, b) + 5);
+    tab.delete(k); tab.set(k, v);   // o mais recente vai para o fim
+    for (const x of tab.keys()) { if (tab.size <= MAX_PARES) break; tab.delete(x); }
+    try { localStorage.setItem(AFINIDADE, JSON.stringify(Object.fromEntries(tab))); } catch (e) { /* aba anônima: vale só nesta visita */ }
+  }
+  // o cartão do terminal (app.js): as necessidades arredondadas e as 3 maiores afinidades com quem está no mapa agora
+  const necessidades = t => (t && t.nec ? Object.fromEntries(Object.keys(NEC_FATOR).map(n => [n, Math.round(t.nec[n])])) : null);
+  function afinidades(id) {
+    const tab = tabelaAfinidade(), r = [];
+    for (const u of term.lista.values()) { const v = u.dado.id !== id && tab.get(parDe(id, u.dado.id)); if (v !== false && v !== undefined) r.push({ id: u.dado.id, nome: u.nome, valor: Math.round(v) }); }
+    return r.sort((x, y) => y.valor - x.valor).slice(0, 3);
   }
   // um ponto de chão livre a até "raio" px de (x, y) na sala, longe das vagas dos agentes e dos outros terminais
   function pontoPerto(m, s, x, y, raio, evitar) {
@@ -1950,7 +2024,7 @@ const Vida = (() => {
   }
 
   return { criarMundo, sincronizar, passo, renomear, digitando, momento, objetoClicado, festaGeral, social, aoVivo, irAte, irAtePessoa, acenar, mudarStatus, equipe, dmCom, emReuniao, STATUS,
-    muralV: canal => (Object.hasOwn(vivo.muralV, canal) ? vivo.muralV[canal] : null), noPredio: () => vivo.noPredio, pessoas, terminais, olhando, textoGreve, horaExtra, mexendo, intervaloQuadro, FRASES };
+    muralV: canal => (Object.hasOwn(vivo.muralV, canal) ? vivo.muralV[canal] : null), noPredio: () => vivo.noPredio, pessoas, terminais, necessidades, afinidades, olhando, textoGreve, horaExtra, mexendo, intervaloQuadro, FRASES };
 })();
 
 window.Vida = Vida;

@@ -156,7 +156,8 @@
     olhos:  ['rS######', '#EE##EE#', '#ee##ee#', 'xxxxxxxx', '###uu###', '########'],
     feliz:  ['rS######', '##e##e##', '#e#ee#e#', 'xxxxxxxx', '#e####e#', '##eeee##'],
     espera: ['rS##w###', '####w###', '####w###', 'xxxxxxxx', '########', '####w###'],
-    olhaLado: ['rS######', '#EE##EE#', '##ee##ee', 'xxxxxxxx', '####uu##', '########']};
+    olhaLado: ['rS######', '#EE##EE#', '##ee##ee', 'xxxxxxxx', '####uu##', '########'],
+    apagada: ['########', '########', '########', 'xxxxxxxx', '########', '########']};   // cochilando: a tela apaga
   var CORPO_T = {
     contato1: ['abBbbbbyyb..', 'k.bbbbbbbb..', '..bbbbbbbbak', '..ppPP..PP..', '.pp.....PP..', 'zzz......zzz'],
     passa1:   ['.abbbbbyyb..', '.kbbbbbbbba.', '..bbbbbbbbk.', '...ppPPPP...', '...pp..PP...', '..zzz..zzz..'],
@@ -175,7 +176,7 @@
     }
     return r;
   }
-  // acao: 'andar' | 'parar' (digitando) | 'acenar' (carinha feliz) | 'esperar' (! âmbar)
+  // acao: 'andar' | 'parar' (digitando) | 'acenar' (carinha feliz) | 'esperar' (! âmbar) | 'dormir' (tela apagada, parado)
   function terminal(c, x, pes, f, esquerda, v, agora, acao) {
     acao = acao || 'andar'; agora = agora || 0;
     var g = MOLDURAS[v % 5], t = agora + v * 997;
@@ -184,7 +185,7 @@
     var cores = paleta('t' + (v % 5) + piscando + cursor, function () { return { G: clarear(g), g: g, d: escurecer(g), '#': tela, x: '#10261a', r: '#c8ffd9', S: '#5f8f70',
       E: piscando ? tela : verde, e: verde, u: cursor ? verde : tela, w: '#f5b83d', k: '#7a8196', K: '#b5bccc',
       b: escurecer(g), B: g, y: '#fff4dc', a: escurecer(escurecer(g)), P: '#3b3b47', p: '#2b2b35', z: '#14131f' }; });
-    var cara = acao === 'acenar' ? TELAS.feliz : acao === 'esperar' ? TELAS.espera : acao === 'parar' ? telaDigitando(t)
+    var cara = acao === 'acenar' ? TELAS.feliz : acao === 'esperar' ? TELAS.espera : acao === 'dormir' ? TELAS.apagada : acao === 'parar' ? telaDigitando(t)
       : (t % 6000) > 5200 ? TELAS.olhaLado : TELAS.olhos;
     var monitor = MONITOR.map(function (l, i) { return i >= 1 && i <= 6 ? l.slice(0, 2) + cara[i - 1] + l.slice(10) : l; });
     var corpo, sobe = 0;
@@ -231,8 +232,11 @@
     oi:     ['wwwwwwwww', 'wnwnwwnww', 'wnnnwwnww', 'wnwnwwwww', 'wnwnwwnww', 'wwwwwwwww', '.ww......', '.w.......'],
     coracao:['wwwwwwwww', 'wwrrwrrww', 'wwrrrrrww', 'wwwrrrwww', 'wwwwrwwww', 'wwwwwwwww', '.ww......', '.w.......'],
     nota:   ['wwwwwwwww', 'wwwwwnnww', 'wwwwwnwnw', 'wwnnnwwww', 'wwnnnwwww', 'wwwwwwwww', '.ww......', '.w.......'],
-    cafe:   ['wwwwwwwww', 'wwwswswww', 'wwmmmmmww', 'wwmmmmwmw', 'wwwmmmwww', 'wwwwwwwww', '.ww......', '.w.......']};
-  var CORES_BALAO = { w: '#fff4dc', r: '#e8574a', n: '#3d4f9e', m: '#8a5a3a', s: '#b5bccc' };
+    cafe:   ['wwwwwwwww', 'wwwswswww', 'wwmmmmmww', 'wwmmmmwmw', 'wwwmmmwww', 'wwwwwwwww', '.ww......', '.w.......'],
+    comida: ['wwwwwwwww', 'wwwwgmwww', 'wwrrgrrww', 'wwrrrrrww', 'wwwrrrwww', 'wwwwwwwww', '.ww......', '.w.......'],   // a maçã
+    zz:     ['wwwwwwwww', 'wnnnnwwww', 'wwwnwwwww', 'wwnwwnnnw', 'wnnnnwnww', 'wwwwwnnnw', '.ww......', '.w.......'],   // um Z grande e um z
+    alerta: ['wwwwwwwww', 'wwwwrwwww', 'wwwwrwwww', 'wwwwrwwww', 'wwwwwwwww', 'wwwwrwwww', '.ww......', '.w.......']};
+  var CORES_BALAO = { w: '#fff4dc', r: '#e8574a', n: '#3d4f9e', m: '#8a5a3a', s: '#b5bccc', g: '#4f9a4a' };
   function balao(c, tipo, x, y) {
     var g = ICONES[tipo]; if (!g) return;
     sprite(c, g, CORES_BALAO, x, y, false);

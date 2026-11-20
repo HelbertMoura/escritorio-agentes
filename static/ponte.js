@@ -7,10 +7,10 @@
 "use strict";
 const Ponte = (() => {
   const URL_PONTE = "ws://127.0.0.1:47820/ws", PROTOCOLO = "firmopolis.v1", CHAVE = "firmopolis.ponte";
-  const MAX = 48, ESPERA_MIN = 3000, ESPERA_MAX = 60000;
+  const MAX = 48, ESPERA_MIN = 3000, ESPERA_MAX = 60000, MAX_WS = 32, MAX_DIA = 200;
   const ESTADOS = { ocupado: "ocupado", ocioso: "livre", esperando_permissao: "aprovacao", esperando_resposta: "pergunta", erro: "erro" };
   const PROVEDORES = { claude_code: "Claude Code", codex: "Codex", open_code: "OpenCode", antigravity_cli: "agy", minimax_code: "MiniMax" };
-  const st = { ws: null, token: "", situacao: "desligada", falhas: 0, timer: 0, moradores: new Map(), v: 0 };
+  const st = { ws: null, token: "", situacao: "desligada", falhas: 0, timer: 0, moradores: new Map(), workspaces: new Map(), dia: new Map(), v: 0 };
 
   const tokenOk = t => typeof t === "string" && /^[0-9a-f]{64}$/.test(t);
   function lerToken() { try { const t = localStorage.getItem(CHAVE); return tokenOk(t) ? t : ""; } catch (e) { return ""; } }
@@ -23,18 +23,50 @@ const Ponte = (() => {
     const provedor = Object.hasOwn(PROVEDORES, m.provedor) ? PROVEDORES[m.provedor] : "Terminal";
     const at = m.atividade && typeof m.atividade === "object" ? texto(m.atividade.ferramenta, 40) : "";
     return { id: texto(m.id, 200), nome: texto(m.nome, 40) || provedor, provedor, estado: ESTADOS[m.estado],
-      projeto: texto(m.projeto, 60), atividade: at, gerente: m.gerente === true };
+      projeto: texto(m.projeto, 60), atividade: at, gerente: m.gerente === true, papel: texto(m.papel, 40),
+      workspace: texto(m.workspace_id, 200), band: texto(m.band_id, 200), solto: m.solto === true,
+      ajudantes: Number.isInteger(m.ajudantes) ? Math.max(0, Math.min(99, m.ajudantes)) : 0,
+      desde: typeof m.desde === "string" && m.desde.length < 64 && Number.isFinite(Date.parse(m.desde)) ? m.desde : "" };
   }
+  // os workspaces do Maestri (o cartão mostra os nomes): id → { nome, bands: Map(id → nome) }, com teto
+  function guardarWorkspaces(lista) {
+    st.workspaces.clear();
+    for (const w of Array.isArray(lista) ? lista.slice(0, MAX_WS) : []) {
+      if (!w || typeof w !== "object" || !texto(w.id, 200)) continue;
+      const bands = new Map();
+      for (const b of Array.isArray(w.bands) ? w.bands.slice(0, MAX_WS) : []) if (b && typeof b === "object" && texto(b.id, 200)) bands.set(texto(b.id, 200), texto(b.nome, 60));
+      st.workspaces.set(texto(w.id, 200), { nome: texto(w.nome, 60), bands });
+    }
+  }
+  // a linha do dia de cada terminal (o histórico de hoje, sem o alvo): só hora, estado e ferramenta, os 200 mais novos
+  function anotar(id, ts, estado, ferramenta) {
+    let l = st.dia.get(id);
+    if (!l) { if (st.dia.size >= MAX_DIA) return; st.dia.set(id, l = []); }
+    l.push({ ts, estado, ferramenta });
+    if (l.length > MAX_DIA) l.splice(0, l.length - MAX_DIA);
+  }
+  function guardarDia(eventos) {
+    st.dia.clear();
+    const ok = (Array.isArray(eventos) ? eventos : []).filter(e => e && typeof e === "object" && texto(e.morador_id, 200) && Object.hasOwn(ESTADOS, e.estado)
+      && typeof e.ts === "string" && Number.isFinite(Date.parse(e.ts)));
+    const ord = ok.map(e => ({ id: texto(e.morador_id, 200), ts: Date.parse(e.ts), estado: ESTADOS[e.estado], ferramenta: texto(e.ferramenta, 40) })).sort((a, b) => a.ts - b.ts);
+    for (const e of ord) anotar(e.id, e.ts, e.estado, e.ferramenta);
+  }
+  function esquecer() { const tinha = st.moradores.size; st.moradores.clear(); st.workspaces.clear(); st.dia.clear(); return tinha; }
   function mudou() { st.v++; window.dispatchEvent(new CustomEvent("ponte")); }
   function receber(d) {
     if (!d || typeof d !== "object" || d.v !== 1) return;
     if (d.tipo === "snapshot" && Array.isArray(d.moradores)) {
-      st.moradores.clear();
+      st.moradores.clear(); guardarWorkspaces(d.workspaces);
       for (const m of d.moradores.slice(0, MAX)) { const t = terminal(m); if (t) st.moradores.set(t.id, t); }
       mudou();
-    } else if (d.tipo === "morador") {
-      const t = terminal(d.morador);
-      if (t && (st.moradores.has(t.id) || st.moradores.size < MAX)) { st.moradores.set(t.id, t); mudou(); }
+    } else if (d.tipo === "dia") { guardarDia(d.eventos); mudou(); }
+    else if (d.tipo === "morador") {
+      const t = terminal(d.morador), antes = t && st.moradores.get(t.id);
+      if (t && (antes || st.moradores.size < MAX)) {
+        if (!antes || antes.estado !== t.estado || antes.atividade !== t.atividade) anotar(t.id, Date.now(), t.estado, t.atividade);   // a linha do dia segue viva
+        st.moradores.set(t.id, t); mudou();
+      }
     } else if (d.tipo === "saiu" && st.moradores.delete(texto(d.id, 200))) mudou();
   }
 
@@ -50,7 +82,7 @@ const Ponte = (() => {
     ws.onclose = () => {
       if (st.ws !== ws) return;
       st.ws = null;
-      if (st.moradores.size) { st.moradores.clear(); mudou(); }   // ponte caiu: os terminais saem do mapa
+      if (esquecer()) mudou();   // ponte caiu: os terminais saem do mapa
       religar();
     };
   }
@@ -63,7 +95,7 @@ const Ponte = (() => {
   function desligar() {
     clearTimeout(st.timer); st.timer = 0; st.falhas = 0;
     const ws = st.ws; st.ws = null; if (ws) ws.close();
-    if (st.moradores.size) { st.moradores.clear(); mudou(); }
+    if (esquecer()) mudou();
     situar("desligada");
   }
   function ligar(token) { desligar(); st.token = token; gravarToken(token); conectar(); }
@@ -106,6 +138,9 @@ const Ponte = (() => {
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", iniciar); else iniciar();
 
-  return { terminais: () => [...st.moradores.values()], versao: () => st.v, situacao: () => st.situacao };
+  const ws = id => st.workspaces.get(id);
+  return { terminais: () => [...st.moradores.values()], versao: () => st.v, situacao: () => st.situacao,
+    dia: id => (st.dia.get(id) || []).map(e => ({ ...e })),
+    workspace: id => (ws(id) ? ws(id).nome : ""), band: (wsId, bandId) => (ws(wsId) && ws(wsId).bands.get(bandId)) || "" };
 })();
 window.Ponte = Ponte;
