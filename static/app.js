@@ -2470,7 +2470,9 @@ $("controles-menu").addEventListener("click", ev => { if (ev.target.closest("but
 $("controles-menu").addEventListener("keydown", ev => { if (ev.key === "Escape") { ev.stopPropagation(); menuCamera(false, true); } });
 document.addEventListener("pointerdown", ev => { if (!$("controles-menu").hidden && !ev.target.closest(".controles")) menuCamera(false); });
 document.querySelector(".controles").addEventListener("focusout", ev => {   // o foco saiu da barra da câmera (Tab, diálogo aberto): o menu fecha
-  if (!$("controles-menu").hidden && !(ev.relatedTarget && ev.currentTarget.contains(ev.relatedTarget))) menuCamera(false);
+  // só com destino conhecido fora da barra: no Safari/Firefox do Mac o clique não dá foco ao botão (relatedTarget nulo) e o
+  // menu fecharia antes do click chegar ao item; o clique fora já fecha pelo pointerdown acima
+  if (!$("controles-menu").hidden && ev.relatedTarget && !ev.currentTarget.contains(ev.relatedTarget)) menuCamera(false);
 });
 // o selo do mapa: curto (hora, ícone do tempo e temperatura); o clique abre a cidade e o tempo por extenso
 $("selo-vivo").addEventListener("click", () => {
