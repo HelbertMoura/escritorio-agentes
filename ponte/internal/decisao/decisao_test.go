@@ -10,7 +10,7 @@ import (
 
 func TestDecisaoValeUmaVez(t *testing.T) {
 	r := NovoRegistro(nil)
-	p, fim, err := r.Abrir("s1", "t1", "Bash", "ls", []byte(`{"command":"ls"}`), time.Minute)
+	p, fim, err := r.Abrir("t1", "Bash", Resumo{"ls", true}, time.Minute)
 	if err != nil || !IDValido(p.ID) || p.Tipo != "permissao" || p.MoradorID != "t1" {
 		t.Fatalf("abrir: %v %+v", err, p)
 	}
@@ -37,7 +37,7 @@ func TestDecisaoValeUmaVez(t *testing.T) {
 func TestDecisaoDepoisDoPrazoNaoVale(t *testing.T) {
 	agora := time.Now()
 	r := NovoRegistro(func() time.Time { return agora })
-	p, fim, _ := r.Abrir("s1", "t1", "Bash", "ls", nil, time.Second)
+	p, fim, _ := r.Abrir("t1", "Bash", Resumo{"ls", true}, time.Second)
 	agora = agora.Add(time.Second)
 	if _, _, ok := r.Decidir(p.ID, Permitir, PorRemoto); ok {
 		t.Fatal("decisão vencida não vale")
@@ -50,11 +50,11 @@ func TestDecisaoDepoisDoPrazoNaoVale(t *testing.T) {
 func TestTetoDePedidos(t *testing.T) {
 	r := NovoRegistro(nil)
 	for i := 0; i < Max; i++ {
-		if _, _, err := r.Abrir("s", "t", "Bash", "", nil, time.Minute); err != nil {
+		if _, _, err := r.Abrir("t", "Bash", Resumo{}, time.Minute); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, _, err := r.Abrir("s", "t", "Bash", "", nil, time.Minute); err != ErrCheio {
+	if _, _, err := r.Abrir("t", "Bash", Resumo{}, time.Minute); err != ErrCheio {
 		t.Fatalf("o 17º não espera: %v", err)
 	}
 }
@@ -63,7 +63,7 @@ func TestTetoDePedidos(t *testing.T) {
 func TestCorridaTerminalENavegador(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		r := NovoRegistro(nil)
-		p, fim, _ := r.Abrir("s1", "t1", "Bash", "", nil, time.Minute)
+		p, fim, _ := r.Abrir("t1", "Bash", Resumo{"x", true}, time.Minute)
 		var ganhou atomic.Int32
 		var wg sync.WaitGroup
 		wg.Add(3)
@@ -93,7 +93,7 @@ func TestIDsDiferentesECom128Bits(t *testing.T) {
 	r := NovoRegistro(nil)
 	vistos := map[string]bool{}
 	for i := 0; i < Max; i++ {
-		p, _, _ := r.Abrir("s", "t", "Bash", "", nil, time.Minute)
+		p, _, _ := r.Abrir("t", "Bash", Resumo{}, time.Minute)
 		if vistos[p.ID] || len(p.ID) != 22 {
 			t.Fatalf("id: %q", p.ID)
 		}
@@ -108,25 +108,81 @@ func TestIDsDiferentesECom128Bits(t *testing.T) {
 
 func TestResumoMascaraCortaENaoLevaAPasta(t *testing.T) {
 	cmd := Resumir(map[string]any{"command": "curl -H 'Authorization: Bearer abcdefghijklmnop' x\nrm -rf /tmp/x"}, "/home/ana/loja")
-	if strings.Contains(cmd, "abcdefghijklmnop") || !strings.Contains(cmd, "rm -rf /tmp/x") || !strings.Contains(cmd, "↵") {
-		t.Errorf("comando: %q", cmd)
+	if strings.Contains(cmd.Texto, "abcdefghijklmnop") || !strings.Contains(cmd.Texto, "rm -rf /tmp/x") || !strings.Contains(cmd.Texto, "↵") || !cmd.Completo {
+		t.Errorf("comando: %+v", cmd)
 	}
-	if got := Resumir(map[string]any{"command": "echo " + strings.Repeat("a ", 400)}, ""); len([]rune(got)) != MaxResumo || !strings.HasSuffix(got, "…") {
-		t.Errorf("corte: %d %q", len([]rune(got)), got[len(got)-10:])
+	if got := Resumir(map[string]any{"command": "echo " + strings.Repeat("a ", 400)}, ""); len([]rune(got.Texto)) != MaxResumo || !strings.HasSuffix(got.Texto, "…") || got.Completo {
+		t.Errorf("corte: %d %v", len([]rune(got.Texto)), got.Completo)
 	}
-	if got := Resumir(map[string]any{"file_path": "/home/ana/loja/src/app.go"}, "/home/ana/loja"); got != "src/app.go" {
-		t.Errorf("arquivo dentro da pasta: %q", got)
+	casos := []struct {
+		entrada  map[string]any
+		cwd      string
+		texto    string
+		completo bool
+	}{
+		{map[string]any{"file_path": "/home/ana/loja/src/app.go"}, "/home/ana/loja", "src/app.go", true},
+		{map[string]any{"file_path": "/home/ana/.ssh/authorized_keys"}, "/home/ana/loja", "fora do projeto: …/.ssh/authorized_keys", false},
+		{map[string]any{"file_path": "/home/ana/loja/../.bashrc"}, "/home/ana/loja", "fora do projeto: …/ana/.bashrc", false},
+		{map[string]any{"file_path": "/etc"}, "/home/ana/loja", "fora do projeto: /etc", false},
+		{map[string]any{"file_path": `C:\Users\ana\loja\a.txt`}, `C:\Users\ana\loja`, "a.txt", true},
+		{map[string]any{"url": "https://u:senha@x.com/a?token=1"}, "", "https://x.com/a", false},
+		{map[string]any{"url": "https://x.com/a"}, "", "https://x.com/a", true},
+		{map[string]any{"prompt": "segredo do usuário"}, "", "", false},
 	}
-	if got := Resumir(map[string]any{"file_path": "/etc/passwd"}, "/home/ana/loja"); got != "passwd" {
-		t.Errorf("arquivo fora da pasta: %q", got)
+	for _, c := range casos {
+		if got := Resumir(c.entrada, c.cwd); got.Texto != c.texto || got.Completo != c.completo {
+			t.Errorf("%v: %+v", c.entrada, got)
+		}
 	}
-	if got := Resumir(map[string]any{"file_path": `C:\Users\ana\loja\a.txt`}, `C:\Users\ana\loja`); got != "a.txt" {
-		t.Errorf("Windows: %q", got)
+}
+
+// Bidi, largura zero e controle (C0 e C1) viram uma marca visível: nada se esconde nem inverte.
+func TestCaracteresEnganososFicamVisiveis(t *testing.T) {
+	got := Resumir(map[string]any{"command": "echo ok \u202e;tsil-tes \u200b\u2066x \x1b[2J"}, "")
+	if c := Cortar("a\u0085b\u00adc"); c != "a‹U+0085›b‹U+00AD›c" {
+		t.Errorf("C1 e Cf: %q", c)
 	}
-	if got := Resumir(map[string]any{"url": "https://u:senha@x.com/a?token=1"}, ""); got != "https://x.com/a" {
-		t.Errorf("url: %q", got)
+	for _, marca := range []string{"‹U+202E›", "‹U+200B›", "‹U+2066›", "‹U+001B›"} {
+		if !strings.Contains(got.Texto, marca) {
+			t.Errorf("faltou %s em %q", marca, got.Texto)
+		}
 	}
-	if got := Resumir(map[string]any{"prompt": "segredo do usuário"}, ""); got != "" {
-		t.Errorf("outros campos não entram: %q", got)
+	if strings.ContainsAny(got.Texto, "\u202e\u200b\u2066\x1b") {
+		t.Errorf("sobrou caractere invisível: %q", got.Texto)
+	}
+}
+
+// Pedido incompleto: do servidor, só Negar vale; Permitir local segue valendo.
+func TestIncompletoSoNegaDeLonge(t *testing.T) {
+	r := NovoRegistro(nil)
+	p, fim, _ := r.Abrir("t1", "Bash", Resumo{"x…", false}, time.Minute)
+	if p.Completo {
+		t.Fatal("incompleto")
+	}
+	if _, _, ok := r.Decidir(p.ID, Permitir, PorRemoto); ok {
+		t.Fatal("permitir remoto num pedido incompleto não vale")
+	}
+	if _, _, ok := r.Decidir(p.ID, Negar, PorRemoto); !ok {
+		t.Fatal("negar remoto vale")
+	}
+	<-fim
+	p, _, _ = r.Abrir("t1", strings.Repeat("F", MaxFerramenta+1), Resumo{"ls", true}, time.Minute)
+	if p.Completo || len([]rune(p.Ferramenta)) != MaxFerramenta {
+		t.Fatalf("ferramenta cortada deixa incompleto: %+v", p)
+	}
+	if _, _, ok := r.Decidir(p.ID, Permitir, PorLocal); !ok {
+		t.Fatal("permitir local vale (a tela local mostra o pedido inteiro do terminal ao lado)")
+	}
+}
+
+func TestAssinatura(t *testing.T) {
+	a := Assinar("tok", []byte("n1"), Soma([]byte("corpo")))
+	if !ConfereAssinatura("tok", a, []byte("n1"), Soma([]byte("corpo"))) || ConfereAssinatura("outro", a, []byte("n1"), Soma([]byte("corpo"))) ||
+		ConfereAssinatura("tok", a, []byte("n2"), Soma([]byte("corpo"))) || ConfereAssinatura("tok", a, []byte("n1"), Soma([]byte("outro"))) {
+		t.Fatal("assinatura")
+	}
+	// o mesmo valor que o plugin do OpenCode calcula com node:crypto
+	if got := Assinar("tok-123", []byte("0123456789abcdef0123456789abcdef"), Soma([]byte(`{"a":1}`))); got != "ccd03744866d3da4dcd53ed2417b7aae96d4d42c0dfaff454f8d407901aa324a" {
+		t.Fatalf("HMAC diferente do plugin: %s", got)
 	}
 }

@@ -47,12 +47,15 @@ type msgResolvido struct {
 	Por  string `json:"por"`
 }
 
-// pedido é o que a ponte tira do corpo: a sessão, a ferramenta, o resumo e a entrada (só para o
-// hash que amarra o id).
+// pedido é o que a ponte tira do corpo: a sessão, a ferramenta e o resumo.
 type pedido struct {
-	fonte, sessao, ferramenta, resumo string
-	entrada                           []byte
+	fonte, sessao, ferramenta string
+	resumo                    decisao.Resumo
 }
+
+// semDecisao são as ferramentas cujo "pedido" é uma pergunta ou um plano, não um comando: o
+// Firmópolis não responde por elas (204, o agente mostra o diálogo dele).
+var semDecisao = map[string]bool{"AskUserQuestion": true, "ExitPlanMode": true}
 
 // lerPedido entende o stdin do PermissionRequest (Claude Code e Codex) e o corpo do plugin do
 // OpenCode. ok falso: não é um pedido de permissão (a ponte responde 204).
@@ -66,7 +69,7 @@ func lerPedido(rota string, corpo []byte) (pedido, bool) {
 			ToolInput json.RawMessage `json:"tool_input"`
 			Cwd       string          `json:"cwd"`
 		}
-		if json.Unmarshal(corpo, &e) != nil || e.Nome != "PermissionRequest" || e.SessionID == "" || e.ToolName == "" {
+		if json.Unmarshal(corpo, &e) != nil || e.Nome != "PermissionRequest" || e.SessionID == "" || e.ToolName == "" || semDecisao[e.ToolName] {
 			return pedido{}, false
 		}
 		var entrada map[string]any
@@ -75,8 +78,7 @@ func lerPedido(rota string, corpo []byte) (pedido, bool) {
 		if rota == "codex" {
 			fonte = mundo.ProvedorCodex
 		}
-		return pedido{fonte: fonte, sessao: e.SessionID, ferramenta: e.ToolName,
-			resumo: decisao.Resumir(entrada, e.Cwd), entrada: e.ToolInput}, true
+		return pedido{fonte: fonte, sessao: e.SessionID, ferramenta: e.ToolName, resumo: decisao.Resumir(entrada, e.Cwd)}, true
 	case "opencode":
 		var e struct {
 			SessionID  string   `json:"sessionID"`
@@ -93,16 +95,19 @@ func lerPedido(rota string, corpo []byte) (pedido, bool) {
 		if e.Pai != "" {
 			sessao = e.Pai // o pedido do subagente aparece no pai, como no normalizador
 		}
-		partes := make([]string, 0, len(e.Patterns))
+		partes, dentro := make([]string, 0, len(e.Patterns)), true
 		for _, p := range e.Patterns {
 			if pareceCaminho(p) {
-				p = decisao.Relativo(p, e.Cwd)
+				var ok bool
+				p, ok = decisao.Relativo(p, e.Cwd)
+				dentro = dentro && ok
 			}
 			partes = append(partes, p)
 		}
-		resumo := decisao.Cortar(mascara.Mascarar(strings.Join(strings.Fields(strings.Join(partes, " ")), " ")))
-		return pedido{fonte: mundo.ProvedorOpenCode, sessao: sessao, ferramenta: e.Permission, resumo: resumo,
-			entrada: []byte(e.ID + "\x00" + strings.Join(e.Patterns, "\x00"))}, true
+		texto := mascara.Mascarar(strings.Join(strings.Fields(strings.Join(partes, " ")), " "))
+		resumo := decisao.Resumo{Texto: decisao.Cortar(texto)}
+		resumo.Completo = dentro && resumo.Texto != "" && len([]rune(resumo.Texto)) < decisao.MaxResumo
+		return pedido{fonte: mundo.ProvedorOpenCode, sessao: sessao, ferramenta: e.Permission, resumo: resumo}, true
 	}
 	return pedido{}, false
 }
@@ -115,8 +120,12 @@ func pareceCaminho(s string) bool {
 // o servidor (o último long-poll).
 func (s *Servidor) atendendo() bool {
 	agora := time.Now().UnixNano()
-	return agora-s.atendLocal.Load() < int64(validadeAtender) ||
-		agora-s.atendRemoto.Load() < int64(s.esperaRemota()+15*time.Second)
+	return agora-s.atendLocal.Load() < int64(validadeAtender) || s.atendidoRemoto()
+}
+
+// atendidoRemoto: o servidor disse "atendendo" no último long-poll (só com o --decidir-remoto).
+func (s *Servidor) atendidoRemoto() bool {
+	return time.Now().UnixNano()-s.atendRemoto.Load() < int64(s.esperaRemota()+15*time.Second)
 }
 
 // pendente é o POST /pendente/{rota}: fora da fila única, com o teto do decisao.Registro. Só o
@@ -128,7 +137,8 @@ func (s *Servidor) pendente(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	if !iguais(r.Header.Get("X-Ponte-Token"), s.op.Token) {
+	nonce := r.Header.Get("X-Ponte-Nonce")
+	if len(nonce) != 32 || !ehHex(nonce) {
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
@@ -136,6 +146,11 @@ func (s *Servidor) pendente(w http.ResponseWriter, r *http.Request) {
 	var grande *http.MaxBytesError
 	if errors.As(err, &grande) {
 		w.WriteHeader(http.StatusRequestEntityTooLarge)
+		return
+	}
+	// O token nunca vai no pedido: só o HMAC dele sobre o nonce e o corpo.
+	if err == nil && !decisao.ConfereAssinatura(s.op.Token, r.Header.Get("X-Ponte-Assinatura"), []byte(nonce), decisao.Soma(corpo)) {
+		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 	if err != nil || s.demo != nil || !s.atendendo() {
@@ -151,7 +166,7 @@ func (s *Servidor) pendente(w http.ResponseWriter, r *http.Request) {
 		espera = s.op.EsperaDecisao
 	}
 	morador := s.reg.IDDe(r.Header.Get("X-Maestri-Terminal-Id"), ped.fonte, ped.sessao)
-	p, fim, err := s.dec.Abrir(ped.sessao, morador, ped.ferramenta, ped.resumo, ped.entrada, espera)
+	p, fim, err := s.dec.Abrir(morador, ped.ferramenta, ped.resumo, espera)
 	if err != nil {
 		w.WriteHeader(http.StatusNoContent) // cheio: este não espera
 		return
@@ -187,9 +202,15 @@ func (s *Servidor) pendente(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	// a resposta vai assinada: o `ponte decidir` só escreve a decisão se ela vier desta ponte
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"acao": res.Acao})
+	json.NewEncoder(w).Encode(map[string]string{"acao": res.Acao,
+		"assinatura": decisao.Assinar(s.op.Token, []byte(nonce), []byte(res.Acao))})
+}
+
+func ehHex(s string) bool {
+	return strings.Trim(strings.ToLower(s), "0123456789abcdef") == ""
 }
 
 // decidir entrega uma decisão (do /ws ou do servidor). Só um id que esta ponte criou.

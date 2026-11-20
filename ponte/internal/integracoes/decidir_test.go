@@ -35,8 +35,12 @@ func TestDecidirSoNoPermissionRequestESincrono(t *testing.T) {
 	cpr := codex["PermissionRequest"].([]any)
 	cdec := cpr[len(cpr)-1].(map[string]any)["hooks"].([]any)[0].(map[string]any)
 	if _, async := cdec["async"]; async || cdec["timeout"] != float64(35) ||
-		cdec["command"] != `'`+a.op.Exe+`' decidir codex` || cdec["commandWindows"] != `& '`+a.op.Exe+`' decidir codex` {
+		cdec["command"] != `'`+a.op.Exe+`' decidir --porta 47820 codex` || cdec["commandWindows"] != `& '`+a.op.Exe+`' decidir --porta 47820 codex` {
 		t.Errorf("Codex decidir: %v", cdec)
+	}
+	// a versão anterior (sem --porta) também é nossa: o setup troca no lugar, sem duplicar
+	if !grupoCodexDecidirNosso(map[string]any{"hooks": []any{map[string]any{"type": "command", "command": `'/x/ponte' decidir codex`}}}) {
+		t.Error("decidir sem --porta não reconhecido")
 	}
 	if !grupoCodexNosso(cpr[len(cpr)-2]) {
 		t.Error("Codex: o hook do estado segue no PermissionRequest")

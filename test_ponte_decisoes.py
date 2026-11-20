@@ -24,7 +24,7 @@ def iso(segundos):
 
 def pendente(id_=ID1, segundos=60, **extra):
     return {"id": id_, "morador_id": "m1", "tipo": "permissao", "ferramenta": "Bash", "resumo": "git push",
-            "expira_em": iso(segundos), **extra}
+            "completo": True, "expira_em": iso(segundos), **extra}
 
 
 def v2(*pendentes):
@@ -43,7 +43,7 @@ class Espelho(unittest.TestCase):
         d = self.esp.ler(decide=True)
         self.assertEqual(len(d["pendentes"]), 1, "inválidos, repetidos e vencidos saem")
         p = d["pendentes"][0]
-        self.assertEqual((len(p["resumo"]), len(p["ferramenta"])), (300, 40))
+        self.assertEqual((len(p["resumo"]), len(p["ferramenta"]), p["completo"]), (300, 80, False), "cortado aqui: incompleto")
         self.assertNotIn("tool_input", p)
         self.assertTrue(55 <= p["resta_s"] <= 60)
         self.assertNotIn("pendentes", self.esp.ler(), "quem não decide não vê os pedidos")
@@ -94,6 +94,16 @@ class Espelho(unittest.TestCase):
         inicio = time.monotonic()
         self.assertEqual(esp.esperar_decisoes(5), ([], True), "quem decide abriu o mapa: a ponte fica sabendo já")
         self.assertLess(time.monotonic() - inicio, 2)
+
+    def test_caracteres_enganosos_e_incompleto(self):
+        self.esp.receber(v2(pendente(resumo="rm -rf \u202e/ \u200bx\u0085y\x1b"), pendente(ID2, completo=False)))
+        ps = {p["id"]: p for p in self.esp.ler(decide=True)["pendentes"]}
+        self.assertEqual(ps[ID1]["resumo"], "rm -rf ‹U+202E›/ ‹U+200B›x‹U+0085›y‹U+001B›")
+        self.assertFalse(ps[ID1]["completo"], "o texto mudou aqui: incompleto")
+        self.assertFalse(ps[ID2]["completo"])
+        with self.assertRaises(pe.Incompleto):
+            self.esp.decidir(ID2, "permitir")
+        self.assertEqual(self.esp.decidir(ID2, "negar")["ferramenta"], "Bash", "negar vale")
 
     def test_limite_por_pessoa(self):
         for _ in range(pe.DECISOES_POR_MIN):
@@ -172,6 +182,15 @@ class Http(unittest.TestCase):
         self.assertEqual(self.decidir(self.dono)[0], 429)
         self.agora[0] += 61
         self.assertEqual(self.decidir(self.dono)[0], 200)
+
+    def test_incompleto_so_nega_de_longe(self):
+        self.agora[0] += 2
+        st, _, _ = self.req("/api/ponte/espelho", {"Content-Type": "application/json", "Authorization": "Bearer " + CHAVE},
+                            json.dumps(v2(pendente(completo=False))).encode(), "POST")
+        self.assertEqual(st, 204)
+        st, d, _ = self.decidir(self.dono)
+        self.assertEqual((st, d["erro"]), (409, "incompleto"))
+        self.assertEqual(self.decidir(self.dono, acao="negar")[0], 200)
 
     def test_long_poll_so_com_a_chave(self):
         self.assertEqual(self.buscar(chave="c1" * 32)[0], 401)

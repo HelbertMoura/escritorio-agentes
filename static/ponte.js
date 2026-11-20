@@ -69,9 +69,16 @@ const Ponte = (() => {
   }
   // ---------- pedidos de permissão: id → { id, morador, ferramenta, resumo, ate (ms), local } ----------------------
   const ID_PEDIDO = /^[A-Za-z0-9_-]{22}$/;
+  // o texto do pedido: controle, C1, bidi e largura zero (\p{Cc} e \p{Cf}) viram uma marca visível, como ‹U+202E›
+  const ENGANOSO = /[\p{Cc}\p{Cf}]/gu;
+  const visivel = (v, max) => (typeof v === "string"
+    ? v.replace(/\t/g, " ").replace(ENGANOSO, c => `‹U+${c.codePointAt(0).toString(16).toUpperCase().padStart(4, "0")}›`).trim().slice(0, max) : "");
+  // completo: a ponte disse que o resumo conta o pedido inteiro e nada mudou aqui; senão, a tela só oferece Negar
   function pedido(p, ate, local) {
     if (!p || typeof p !== "object" || typeof p.id !== "string" || !ID_PEDIDO.test(p.id) || !texto(p.morador_id, 200) || !Number.isFinite(ate)) return null;
-    return { id: p.id, morador: texto(p.morador_id, 200), ferramenta: texto(p.ferramenta, 40), resumo: texto(p.resumo, 300),
+    const ferramenta = visivel(p.ferramenta, 80), resumo = visivel(p.resumo, 300);
+    return { id: p.id, morador: texto(p.morador_id, 200), ferramenta, resumo,
+      completo: p.completo === true && !!ferramenta && !!resumo && ferramenta === p.ferramenta && resumo === p.resumo,
       ate: Math.min(ate, Date.now() + PRAZO_MAX), local, enviando: false, erro: "" };
   }
   function guardarPedido(p) {
@@ -91,7 +98,7 @@ const Ponte = (() => {
   }
   async function decidir(id, acao) {
     const p = st.pendentes.get(id);
-    if (!p || p.enviando || (acao !== "permitir" && acao !== "negar")) return;
+    if (!p || p.enviando || (acao !== "permitir" && acao !== "negar") || (acao === "permitir" && !p.completo)) return;
     p.enviando = true; p.erro = ""; mudou();
     if (p.local) {
       if (st.ws && st.ws.readyState === 1) { try { st.ws.send(JSON.stringify({ v: 1, tipo: "decidir", id, acao })); return; } catch (e) { /* cai abaixo */ } }
@@ -102,7 +109,7 @@ const Ponte = (() => {
       const r = await fetch(url, { method: "POST", credentials: "same-origin", cache: "no-store",
         headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, acao }) });
       if (r.ok || r.status === 410) st.pendentes.delete(id);   // 410: já respondido (no terminal, por outra pessoa) ou venceu
-      else { p.enviando = false; p.erro = r.status === 429 ? "Respostas demais; espere um pouco." : "Não deu certo agora. Responda no terminal."; }
+      else { p.enviando = false; p.erro = r.status === 429 ? "Respostas demais; espere um pouco." : r.status === 409 ? "Só dá para negar daqui; para permitir, responda no terminal." : "Não deu certo agora. Responda no terminal."; }
     } catch (e) { p.enviando = false; p.erro = "Sem conexão com o servidor."; }
     mudou();
   }

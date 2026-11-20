@@ -8,6 +8,7 @@
 // que o diálogo mostra (o comando ou o arquivo) e espera a decisão do Firmópolis; com ela,
 // responde pelo próprio OpenCode. O diálogo segue na tela e quem responder primeiro leva: se o
 // terminal responder antes, o plugin desiste. A ponte só segura o pedido com alguém atendendo.
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
@@ -77,6 +78,18 @@ function pedidoDe(p) {
   }
 }
 
+// o HMAC do token sobre as partes, como o decisao.Assinar da ponte (cada parte seguida de um 0)
+function assinar(token, ...partes) {
+  const h = createHmac("sha256", token)
+  for (const p of partes) h.update(p).update(Buffer.from([0]))
+  return h.digest("hex")
+}
+
+function confere(token, assinatura, ...partes) {
+  const a = Buffer.from(assinar(token, ...partes)), b = Buffer.from(typeof assinatura === "string" ? assinatura : "")
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
 function resumir(p) {
   p = p || {}
   return {
@@ -118,19 +131,24 @@ export const Firmopolis = async ({ directory, client }) => {
     esperando.set(p.id, ctl)
     try {
       const pai = pais.get(p.sessionID)
+      // o token não vai no pedido: vai um nonce e o HMAC dele; a resposta só vale assinada pela ponte
+      const corpo = JSON.stringify({ ...pedidoDe(p), cwd: directory, ...(pai && { pai }) })
+      const nonce = randomBytes(16).toString("hex")
       const r = await fetch(URL_PENDENTE, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Ponte-Token": token,
+          "X-Ponte-Nonce": nonce,
+          "X-Ponte-Assinatura": assinar(token, nonce, createHash("sha256").update(corpo).digest()),
           "X-Maestri-Terminal-Id": process.env.MAESTRI_TERMINAL_ID || "",
         },
-        body: JSON.stringify({ ...pedidoDe(p), cwd: directory, ...(pai && { pai }) }),
+        body: corpo,
         signal: AbortSignal.any([ctl.signal, AbortSignal.timeout(ESPERA_MS)]),
       })
       if (r.status !== 200) return
       const d = await r.json()
       if (!esperando.has(p.id) || (d?.acao !== "permitir" && d?.acao !== "negar")) return
+      if (!confere(token, d.assinatura, nonce, d.acao)) return // outro processo na porta
       await responder(p, d.acao === "permitir" ? "once" : "reject")
     } catch {
       // ponte desligada, terminal respondeu antes ou o pedido já não existe: o diálogo resolve

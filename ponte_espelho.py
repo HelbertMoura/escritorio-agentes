@@ -16,6 +16,7 @@ import re
 import secrets
 import threading
 import time
+import unicodedata
 from datetime import datetime, timedelta, timezone
 
 from acesso import gravar
@@ -27,7 +28,7 @@ MAX_MORADORES, MAX_WS, MAX_DIA, MAX_EVENTOS = 48, 32, 200, 200   # os do static/
 ESTADOS = frozenset({"ocupado", "ocioso", "esperando_permissao", "esperando_resposta", "erro"})
 PROVEDORES = frozenset({"claude_code", "codex", "open_code", "antigravity_cli", "minimax_code"})
 _CONTROLE = re.compile(r"[\x00-\x1f\x7f]")
-MAX_PENDENTES, MAX_RESUMO = 16, 300          # os da ponte (decisao.Max e decisao.MaxResumo)
+MAX_PENDENTES, MAX_RESUMO, MAX_FERRAMENTA = 16, 300, 80   # os da ponte (decisao.Max, MaxResumo e MaxFerramenta)
 PRAZO_MAX = timedelta(minutes=10)            # um pedido não espera mais que isso (a ponte espera até 2 min)
 ESPERA_MAX_S = 25                            # o long-poll das decisões
 ATENDENDO_S = 10                             # quem decide leu o /api/ponte há menos que isso: alguém atendendo
@@ -43,6 +44,10 @@ class Limite(ValueError):
 
 class Encerrado(LookupError):
     """O pedido não existe, já venceu ou já foi decidido (410)."""
+
+
+class Incompleto(ValueError):
+    """Permitir um pedido cujo resumo não conta tudo (cortado, arquivo fora do projeto): só de perto (409)."""
 
 
 def chave_valida(chave):
@@ -65,6 +70,16 @@ def hora(v):
                                       ("+00:00" if m[3] == "Z" else m[3]))
     except ValueError:
         return None
+
+
+def visivel(v, maximo):
+    """O texto de um pedido de permissão: os caracteres invisíveis ou enganosos (controle, C1, bidi, largura zero: as
+    categorias Cc e Cf) viram uma marca visível, como ‹U+202E›, e corta em maximo. Nada se esconde nem inverte."""
+    if not isinstance(v, str):
+        return ""
+    s = "".join(f"‹U+{ord(c):04X}›" if unicodedata.category(c) in ("Cc", "Cf") and c != "\t" else c
+                for c in v.replace("\t", " "))
+    return s.strip()[:maximo]
 
 
 def _morador(m):
@@ -128,8 +143,12 @@ def _pendentes(lista, agora):
                 or not texto(p.get("morador_id"), 200) or not (agora < expira <= agora + PRAZO_MAX):
             continue
         ids.add(p["id"])
+        ferramenta, resumo = visivel(p.get("ferramenta"), MAX_FERRAMENTA), visivel(p.get("resumo"), MAX_RESUMO)
+        # completo só se a ponte disse e nada foi cortado aqui: senão, de longe, só Negar
+        completo = p.get("completo") is True and bool(ferramenta) and bool(resumo) \
+            and ferramenta == p.get("ferramenta") and resumo == p.get("resumo")
         saida.append({"id": p["id"], "morador_id": texto(p["morador_id"], 200), "tipo": "permissao",
-                      "ferramenta": texto(p.get("ferramenta"), 40), "resumo": texto(p.get("resumo"), MAX_RESUMO),
+                      "ferramenta": ferramenta, "resumo": resumo, "completo": completo,
                       "expira": expira.astimezone(timezone.utc)})
     return saida
 
@@ -276,6 +295,8 @@ class Espelho:
             p = next((p for p in self._pendentes_vivos(agora) if p["id"] == id_), None)
             if p is None or self._chave is None:
                 raise Encerrado(id_)
+            if acao == "permitir" and not p["completo"]:
+                raise Incompleto(id_)
             self._usados[id_] = p["expira"]
             self._fila.append({"id": id_, "acao": acao})
             del self._fila[:-MAX_PENDENTES]

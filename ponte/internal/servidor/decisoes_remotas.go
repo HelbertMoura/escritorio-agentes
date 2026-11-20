@@ -83,7 +83,7 @@ func (s *Servidor) decisoesRemotas(ctx context.Context) {
 	for {
 		var espera time.Duration
 		c, ok := s.op.Espelho()
-		if !ok {
+		if !ok || !c.DecidirRemoto { // sem o opt-in, nem pergunta ao servidor
 			s.atendRemoto.Store(0)
 			espera = 30 * time.Second
 		} else {

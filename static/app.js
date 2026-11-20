@@ -992,7 +992,7 @@ function linhaTerminal(d, espera) {
 
 // ---------- responder pelo escritório (ponte.js): Permitir/Negar um pedido de permissão do terminal, com a ferramenta,
 // o resumo mascarado e o tempo que falta. Só aparece para quem o servidor diz que decide. Tudo por textContent
-const PRIVACIDADE_DECISAO = "Pelo celular ou outra máquina, só a ferramenta e um resumo mascarado (até 300 caracteres) passam pelo servidor. Quem responder primeiro, aqui ou no terminal, leva.";
+const PRIVACIDADE_DECISAO = "Pelo celular (se ligado com --decidir-remoto na máquina dos terminais), só a ferramenta e um resumo mascarado (até 300 caracteres) passam pelo servidor. Quem responder primeiro, aqui ou no terminal, leva.";
 const restaDecisao = ate => `vence em ${Math.max(0, Math.ceil((ate - Date.now()) / 1000))} s`;
 function blocoDecisao(d, compacto) {
   const ps = window.Ponte && typeof Ponte.pendentes === "function" ? Ponte.pendentes(d.id) : [];
@@ -1003,13 +1003,16 @@ function blocoDecisao(d, compacto) {
     oque.append(elem("strong", null, p.ferramenta || "Ferramenta"), p.resumo ? ` · ${p.resumo}` : "");
     const resta = elem("span", "decisao-resta", restaDecisao(p.ate)); resta.dataset.ate = String(p.ate);
     const acoes = elem("div", "decisao-acoes");
-    for (const [rot, acao, classe] of [["Permitir", "permitir", "botao decisao-sim"], ["Negar", "negar", "botao fantasma decisao-nao"]]) {
+    // resumo incompleto (cortado, vazio ou arquivo fora do projeto): daqui, só Negar; permitir é no terminal
+    const opcoes = [["Permitir", "permitir", "botao decisao-sim"], ["Negar", "negar", "botao fantasma decisao-nao"]].filter(([, a]) => p.completo || a === "negar");
+    for (const [rot, acao, classe] of opcoes) {
       const b = elem("button", classe, p.enviando ? "Enviando…" : rot); b.type = "button"; b.disabled = p.enviando;
       b.setAttribute("aria-label", `${rot} ${p.ferramenta}${p.resumo ? `: ${p.resumo}` : ""}`);
       b.addEventListener("click", () => Ponte.decidir(p.id, acao));
       acoes.append(b);
     }
     item.append(oque, resta, acoes);
+    if (!p.completo) item.append(elem("p", "decisao-erro", "O resumo não mostra o pedido inteiro: para permitir, responda no terminal."));
     if (p.erro) item.append(elem("p", "decisao-erro", p.erro));
     caixa.append(item);
   }
@@ -1162,7 +1165,7 @@ function renderFichaTerminal() {
   const k = Vida.terminais().find(t => t.id === sid), nec = Vida.necessidades(k), amz = Vida.afinidades(d.id), dia = Ponte.dia(d.id).slice(-8).reverse();
   const pend = typeof Ponte.pendentes === "function" ? Ponte.pendentes(d.id) : [];
   const chave = [sid, d.nome, d.provedor, d.papel, d.estado, d.gerente, d.projeto, d.atividade, d.workspace, d.band, d.ajudantes, d.desde, seguir === sid,
-    pend.map(p => p.id + p.enviando + p.erro).join(","),
+    pend.map(p => p.id + p.enviando + p.erro + p.completo).join(","),
     nec && NECS_TERM.map(([n]) => nec[n]).join(","), amz.map(a => a.nome + a.valor).join(","), dia.length && dia[0].ts + "/" + dia.length].join("|");
   if (chave === assinaturaFicha) return;
   assinaturaFicha = chave;

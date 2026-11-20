@@ -545,7 +545,7 @@
             <div id="pt-espelho" hidden>
               <h3 class="ajuste-sub">Espelho: ver de qualquer navegador</h3>
               <p class="ajuda">Para ver os terminais de outra máquina (uma VM, por exemplo) sem túnel: a ponte de lá manda ao servidor os nomes dos terminais e dos projetos, os estados e as ferramentas, nunca arquivo, comando ou alvo. Quem é deste andar vê os terminais no mapa.</p>
-              <p class="ajuda">Responder pelo escritório: quando um terminal pede permissão e alguém que decide está com o mapa aberto, a ponte manda também a ferramenta e um resumo mascarado do pedido (até 300 caracteres; nunca a entrada inteira, a pasta ou a conversa), para Permitir ou Negar pelo celular. Quem decide é o admin do prédio; membro só vê.</p>
+              <p class="ajuda">Responder pelo escritório: no navegador deste PC, os botões Permitir e Negar já valem (nada passa pelo servidor). Pelo celular é opcional e fica desligado até alguém ligar na máquina dos terminais, com <code>ponte conectar &lt;endereço&gt; --decidir-remoto</code> (ou <code>ponte setup --aplicar --decidir-remoto</code>). Ligado, quando alguém que decide está com o mapa aberto, a ponte manda também a ferramenta e um resumo mascarado do pedido (até 300 caracteres; nunca a entrada inteira, a pasta ou a conversa). Resumo cortado ou arquivo fora do projeto: de longe, só Negar. Quem decide é o admin do prédio; membro só vê.</p>
               <p id="pt-esp-estado" class="aviso-form" role="status"></p>
               <code id="pt-esp-comando" class="ponte-comando" hidden></code>
               <p id="pt-esp-chave-rot" class="ajuda" hidden>Quando ele pedir, cole esta chave:</p>

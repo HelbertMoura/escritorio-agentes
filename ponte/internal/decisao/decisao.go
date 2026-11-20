@@ -6,16 +6,19 @@
 package decisao
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"path"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"firmopolis/ponte/internal/fontes/alvo"
 	"firmopolis/ponte/internal/mascara"
@@ -40,6 +43,8 @@ const (
 	Max = 16
 	// MaxResumo é o teto do resumo que vai à tela (e, com o espelho, ao servidor).
 	MaxResumo = 300
+	// MaxFerramenta é o teto do nome da ferramenta, o mesmo na ponte, no servidor e na tela.
+	MaxFerramenta = 80
 	// EsperaClaude é quanto o pedido do Claude Code espera: o diálogo do terminal aparece junto
 	// (testado no 2.1.327), então esperar não atrasa quem responde por lá.
 	EsperaClaude = 120 * time.Second
@@ -69,13 +74,22 @@ func Espera(rota string) time.Duration {
 var ErrCheio = errors.New("decisao: pedidos demais esperando")
 
 // Pendente é o pedido como a tela o vê: a ferramenta e um resumo já mascarado e cortado.
+// Completo falso (resumo cortado, vazio, arquivo fora do projeto ou ferramenta cortada): a
+// ponte não aceita "permitir" vindo do servidor, e a tela só oferece Negar.
 type Pendente struct {
 	ID         string    `json:"id"`
 	MoradorID  string    `json:"morador_id"`
 	Tipo       string    `json:"tipo"` // sempre "permissao" nesta versão
 	Ferramenta string    `json:"ferramenta"`
 	Resumo     string    `json:"resumo"`
+	Completo   bool      `json:"completo"`
 	ExpiraEm   time.Time `json:"expira_em"`
+}
+
+// Resumo é o texto que a tela mostra e se ele conta o pedido inteiro.
+type Resumo struct {
+	Texto    string
+	Completo bool
 }
 
 // Resultado é como o pedido acabou: Acao vazia é "sem decisão" (o agente mostra o prompt dele).
@@ -86,9 +100,8 @@ type Resultado struct {
 
 type item struct {
 	Pendente
-	vinculo string // sessão + ferramenta + hash da entrada: a que pedido o id pertence
-	criado  time.Time
-	fim     chan Resultado
+	criado time.Time
+	fim    chan Resultado
 }
 
 // Registro guarda os pedidos esperando. relogio: os testes trocam.
@@ -106,14 +119,13 @@ func NovoRegistro(relogio func() time.Time) *Registro {
 }
 
 // Abrir registra um pedido e devolve o canal por onde chega o resultado (um só). Com Max
-// pedidos já esperando, ErrCheio. sessao, ferramenta e entrada (o tool_input bruto) amarram
-// o id ao pedido; a entrada nunca é guardada, só o hash.
-func (r *Registro) Abrir(sessao, moradorID, ferramenta, resumo string, entrada []byte, prazo time.Duration) (Pendente, <-chan Resultado, error) {
+// pedidos já esperando, ErrCheio.
+func (r *Registro) Abrir(moradorID, ferramenta string, resumo Resumo, prazo time.Duration) (Pendente, <-chan Resultado, error) {
 	id, err := novoID()
 	if err != nil {
 		return Pendente{}, nil, err
 	}
-	soma := sha256.Sum256(entrada)
+	nome, inteiro := cortar(ferramenta, MaxFerramenta)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if len(r.itens) >= Max {
@@ -121,11 +133,10 @@ func (r *Registro) Abrir(sessao, moradorID, ferramenta, resumo string, entrada [
 	}
 	agora := r.relogio()
 	it := &item{
-		Pendente: Pendente{ID: id, MoradorID: moradorID, Tipo: "permissao", Ferramenta: alvo.Curto(ferramenta),
-			Resumo: resumo, ExpiraEm: agora.Add(prazo)},
-		vinculo: sessao + "\x00" + ferramenta + "\x00" + hex.EncodeToString(soma[:]),
-		criado:  agora,
-		fim:     make(chan Resultado, 1),
+		Pendente: Pendente{ID: id, MoradorID: moradorID, Tipo: "permissao", Ferramenta: nome,
+			Resumo: resumo.Texto, Completo: resumo.Completo && inteiro && nome != "", ExpiraEm: agora.Add(prazo)},
+		criado: agora,
+		fim:    make(chan Resultado, 1),
 	}
 	r.itens[id] = it
 	return it.Pendente, it.fim, nil
@@ -137,6 +148,16 @@ func (r *Registro) Abrir(sessao, moradorID, ferramenta, resumo string, entrada [
 func (r *Registro) Decidir(id, acao, por string) (Pendente, time.Duration, bool) {
 	if acao != Permitir && acao != Negar {
 		return Pendente{}, 0, false
+	}
+	if acao == Permitir && por == PorRemoto {
+		// sem o pedido inteiro na tela de quem está longe, só Negar vale de lá
+		r.mu.Lock()
+		it, ok := r.itens[id]
+		incompleto := ok && !it.Completo
+		r.mu.Unlock()
+		if incompleto {
+			return Pendente{}, 0, false
+		}
 	}
 	p, espera, res, ok := r.fechar(id, Resultado{Acao: acao, Por: por})
 	return p, espera, ok && res.Acao != ""
@@ -213,48 +234,98 @@ func novoID() (string, error) {
 }
 
 // Resumir monta o resumo do pedido: o comando inteiro (com as quebras de linha à vista, para
-// nada se esconder nas linhas de baixo), o arquivo relativo à pasta da sessão (nunca a pasta
-// inteira) ou a URL sem credenciais. Mascara antes de cortar em MaxResumo.
-func Resumir(entrada map[string]any, cwd string) string {
+// nada se esconder nas linhas de baixo), o arquivo relativo à pasta da sessão (fora dela,
+// "fora do projeto: …/pasta/arquivo", nunca a pasta inteira) ou a URL sem credenciais.
+// Mascara antes de cortar em MaxResumo. Completo só quando nada foi cortado nem escondido
+// (URL sem query, arquivo dentro do projeto, texto não vazio).
+func Resumir(entrada map[string]any, cwd string) Resumo {
 	texto := func(chave string) string {
 		v, _ := entrada[chave].(string)
 		return strings.TrimSpace(v)
 	}
 	if v := texto("command"); v != "" {
-		return Cortar(mascara.Mascarar(strings.Join(strings.Fields(strings.ReplaceAll(v, "\n", " ↵ ")), " ")))
+		t, inteiro := cortar(mascara.Mascarar(strings.Join(strings.Fields(strings.ReplaceAll(v, "\n", " ↵ ")), " ")), MaxResumo)
+		return Resumo{t, inteiro}
 	}
 	for _, chave := range []string{"file_path", "filePath", "notebook_path", "path"} {
 		if v := texto(chave); v != "" {
-			return Cortar(mascara.Mascarar(Relativo(v, cwd)))
+			rel, dentro := Relativo(v, cwd)
+			t, inteiro := cortar(mascara.Mascarar(rel), MaxResumo)
+			return Resumo{t, inteiro && dentro}
 		}
 	}
-	return Cortar(alvo.Resumir(entrada)) // a URL sem credenciais (ou nada)
+	if v := texto("url"); v != "" {
+		t, inteiro := cortar(alvo.Resumir(map[string]any{"url": v}), MaxResumo)
+		return Resumo{t, inteiro && t != "" && !strings.HasSuffix(t, "…") && !strings.ContainsAny(v, "?#@")}
+	}
+	return Resumo{}
 }
 
-// Relativo é o caminho dentro da pasta da sessão; fora dela, só o nome do arquivo.
-func Relativo(caminho, cwd string) string {
+// Relativo é o caminho dentro da pasta da sessão (dentro=true); fora dela, "fora do projeto:"
+// com as duas últimas partes do caminho.
+func Relativo(caminho, cwd string) (string, bool) {
 	c := path.Clean(strings.ReplaceAll(caminho, `\`, "/"))
 	base := path.Clean(strings.ReplaceAll(cwd, `\`, "/"))
 	if cwd != "" && base != "/" && base != "." {
-		if rel, ok := strings.CutPrefix(c, base+"/"); ok && rel != "" {
-			return rel
+		if rel, ok := strings.CutPrefix(c, base+"/"); ok && rel != "" && !strings.HasPrefix(rel, "../") {
+			return rel, true
 		}
 	}
-	return path.Base(c)
+	partes := strings.Split(strings.Trim(c, "/"), "/")
+	if len(partes) > 2 {
+		partes = partes[len(partes)-2:]
+		return "fora do projeto: …/" + strings.Join(partes, "/"), false
+	}
+	return "fora do projeto: " + c, false
 }
 
-// Cortar limpa caracteres de controle e corta em MaxResumo, terminando em "…" quando corta.
+// Cortar é o cortar em MaxResumo, só o texto.
 func Cortar(s string) string {
-	s = strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f {
-			return ' '
+	t, _ := cortar(s, MaxResumo)
+	return t
+}
+
+// cortar troca os caracteres invisíveis ou enganosos (controle, C1, bidi, largura zero:
+// unicode.IsControl e a categoria Cf) por uma marca visível, como ‹U+202E›, e corta em max
+// runas, terminando em "…". inteiro diz se nada foi cortado.
+func cortar(s string, max int) (string, bool) {
+	var b strings.Builder
+	for _, r := range strings.TrimSpace(s) {
+		switch {
+		case r == '\t':
+			b.WriteRune(' ')
+		case unicode.IsControl(r) || unicode.Is(unicode.Cf, r):
+			fmt.Fprintf(&b, "‹U+%04X›", r)
+		default:
+			b.WriteRune(r)
 		}
-		return r
-	}, s)
-	s = strings.TrimSpace(s)
-	r := []rune(s)
-	if len(r) <= MaxResumo {
-		return s
 	}
-	return string(r[:MaxResumo-1]) + "…"
+	runas := []rune(b.String())
+	if len(runas) <= max {
+		return string(runas), true
+	}
+	return string(runas[:max-1]) + "…", false
+}
+
+// Assinar é o HMAC-SHA256 (hex) do token sobre as partes: o `ponte decidir` assina o pedido
+// (nonce e o sha256 do corpo) e a ponte assina a resposta (nonce e a ação), para nenhum dos
+// dois confiar em quem estiver na porta só por estar lá.
+func Assinar(token string, partes ...[]byte) string {
+	m := hmac.New(sha256.New, []byte(token))
+	for _, p := range partes {
+		m.Write(p)
+		m.Write([]byte{0})
+	}
+	return hex.EncodeToString(m.Sum(nil))
+}
+
+// ConfereAssinatura compara em tempo constante.
+func ConfereAssinatura(token, assinatura string, partes ...[]byte) bool {
+	return hmac.Equal([]byte(Assinar(token, partes...)), []byte(assinatura))
+}
+
+// Soma é o sha256 do corpo, como vai na assinatura.
+func Soma(corpo []byte) []byte {
+	s := sha256.Sum256(corpo)
+	return s[:]
 }

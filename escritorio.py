@@ -45,7 +45,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import andares as mod_andares  # noqa: E402
 from andares import PRINCIPAL as ANDAR_PRINCIPAL, Andares, AndaresIlegiveis  # noqa: E402
 from acesso import (ARQ_CODIGO, ARQ_USUARIOS, Acesso, ContaExiste, ConviteInvalido, ConvitesDemais, NaoGravou,  # noqa: E402
-                    TentativasDemais, UltimoAdmin, UsuariosIlegiveis, gravar, ler_codigo, ler_usuarios)
+                    TentativasDemais, UltimoAdmin, UsuariosIlegiveis, _normalizar_usuario, gravar, ler_codigo,
+                    ler_usuarios)
 import ajustes  # noqa: E402
 import vapid  # noqa: E402
 from ajustes import (ACESSORIOS, CLIMA_BYTES, CORES, EQUIPE_BYTES, FESTAS_BYTES, HANDLE_OK, ICONES_OK, OLHOS,  # noqa: E402
@@ -104,7 +105,7 @@ PONTE_CHAVE_BRUTA = os.environ.get("ESCRITORIO_PONTE_CHAVE", "").strip()
 PONTE_ANDAR = os.environ.get("ESCRITORIO_PONTE_ANDAR", "").strip()
 # responder pelo escritório (Permitir/Negar dos pedidos de permissão da ponte): o admin do prédio e, além dele, os logins
 # desta lista (separados por vírgula). Só no andar da ponte, nunca no saguão nem na prévia
-PONTE_DECISORES = frozenset(u.strip() for u in os.environ.get("ESCRITORIO_PONTE_DECISORES", "").split(",") if u.strip())
+PONTE_DECISORES = frozenset(_normalizar_usuario(u) for u in os.environ.get("ESCRITORIO_PONTE_DECISORES", "").split(",") if u.strip())
 ROTAS_ADMIN_VISITAS = ("/api/visitas/criar", "/api/visitas/revogar", "/api/visitas/anfitrioes",
                        "/api/visitas/recepcionista")
 ORG = os.environ.get("AGENTES_ORG", "").strip().lower()  # id da organização no agentes.chat; obrigatório no main()
@@ -4202,8 +4203,10 @@ class Pagina(BaseHTTPRequestHandler):
         if self._previa() or andar is None or not self._andar_da_ponte(andar):
             return False
         papel = getattr(self.server.acesso, "papel", None)
-        admin = papel is None or papel(self._usuario(), ANDAR_PRINCIPAL) == "admin"
-        return admin or self._usuario() in PONTE_DECISORES
+        if papel is None:   # sem papéis no acesso, ninguém decide pela ponte (falha fechada)
+            return False
+        usuario = self._usuario()
+        return papel(usuario, ANDAR_PRINCIPAL) == "admin" or _normalizar_usuario(usuario) in PONTE_DECISORES
 
     def _post_decidir_ponte(self, rota):
         """Permitir ou Negar um pedido de permissão da ponte pelo servidor (o celular, outra máquina): {"id", "acao"},
@@ -4243,6 +4246,9 @@ class Pagina(BaseHTTPRequestHandler):
         except ponte_espelho.Encerrado:
             log(evento="ponte_decisao", resultado="encerrado", usuario=usuario, id=dados["id"][:8], acao=dados["acao"])
             return self._json(*erro(410, "encerrado", "Esse pedido já foi respondido ou venceu."))
+        except ponte_espelho.Incompleto:
+            log(evento="ponte_decisao", resultado="incompleto", usuario=usuario, id=dados["id"][:8], acao=dados["acao"])
+            return self._json(*erro(409, "incompleto", "O resumo não mostra o pedido inteiro: só dá para negar daqui; para permitir, responda no terminal."))
         log(evento="ponte_decisao", resultado="aceita", usuario=usuario, id=dados["id"][:8], acao=dados["acao"],
             ferramenta=p["ferramenta"], origem="remoto", latencia_ms=int((time.monotonic() - inicio) * 1000))
         return self._json(200, {"ok": True})

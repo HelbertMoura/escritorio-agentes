@@ -53,6 +53,9 @@ const (
 type ConfigEspelho struct {
 	URL   string `json:"url"`
 	Chave string `json:"chave"`
+	// DecidirRemoto (opt-in, `ponte setup|conectar --decidir-remoto`): os pedidos de permissão vão
+	// ao servidor e a ponte aceita Permitir/Negar de lá (o celular). Desligado, só a decisão local.
+	DecidirRemoto bool `json:"decidir_remoto,omitempty"`
 }
 
 // NormalizarEspelho devolve o endereço do Firmópolis sem a barra do fim, ou erro. Vale
@@ -201,18 +204,22 @@ func (s *Servidor) avisarEspelho() {
 	}
 }
 
-// corpoDoEspelho é o estado de agora, já reduzido como o do navegador. v1: sem os pedidos (o
+// corpoDoEspelho é o estado de agora, já reduzido como o do navegador. Os pedidos de permissão só
+// vão com o --decidir-remoto ligado e alguém que decide atendendo pelo servidor. v1: nunca (o
 // servidor anterior à v2).
-func (s *Servidor) corpoDoEspelho(v1 bool) ([]byte, error) {
+func (s *Servidor) corpoDoEspelho(c ConfigEspelho, v1 bool) ([]byte, error) {
 	s.mu.Lock()
 	snap := paraNavegador(s.snapshot()).(msgSnapshot)
 	dia := paraNavegador(s.dia()).(msgDia)
 	s.mu.Unlock()
-	c := corpoEspelho{V: 2, Moradores: snap.Moradores, Workspaces: snap.Workspaces, Dia: dia.Eventos, Pendentes: s.dec.Lista()}
-	if v1 {
-		c.V, c.Pendentes = 1, nil
+	corpo := corpoEspelho{V: 2, Moradores: snap.Moradores, Workspaces: snap.Workspaces, Dia: dia.Eventos}
+	if c.DecidirRemoto && s.atendidoRemoto() {
+		corpo.Pendentes = s.dec.Lista()
 	}
-	return codificarEspelho(c)
+	if v1 {
+		corpo.V, corpo.Pendentes = 1, nil
+	}
+	return codificarEspelho(corpo)
 }
 
 // espelhar é o laço do espelho: manda EsperaEspelho depois de uma mudança e, sem mudança,
@@ -266,7 +273,7 @@ func (s *Servidor) espelhar(ctx context.Context) {
 			falhas = 0
 			continue
 		}
-		corpo, err := s.corpoDoEspelho(v1)
+		corpo, err := s.corpoDoEspelho(c, v1)
 		if err == nil {
 			err = EnviarEspelho(ctx, cliente, c, corpo)
 			ultimo = time.Now()
@@ -274,7 +281,7 @@ func (s *Servidor) espelhar(ctx context.Context) {
 		if errors.Is(err, ErrFormato) && !v1 {
 			v1 = true // servidor anterior à v2: segue o espelho, sem os pedidos de permissão
 			log.Print("espelho: o servidor não aceita os pedidos de permissão (versão anterior); mandando sem eles")
-			if corpo, err = s.corpoDoEspelho(v1); err == nil && urgente() {
+			if corpo, err = s.corpoDoEspelho(c, v1); err == nil && urgente() {
 				err = EnviarEspelho(ctx, cliente, c, corpo)
 				ultimo = time.Now()
 			}

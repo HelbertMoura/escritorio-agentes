@@ -3,11 +3,13 @@ package servidor
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,7 +33,7 @@ func (a *ambiente) pedirPendente(t *testing.T, rota, corpo string, ctx context.C
 	t.Helper()
 	ch := make(chan respostaPendente, 1)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, a.url+"/pendente/"+rota, strings.NewReader(corpo))
-	req.Header.Set("X-Ponte-Token", tokenTeste)
+	assinarPendente(req, tokenTeste, corpo)
 	req.Header.Set("X-Maestri-Terminal-Id", "T1")
 	go func() {
 		ini := time.Now()
@@ -45,6 +47,16 @@ func (a *ambiente) pedirPendente(t *testing.T, rota, corpo string, ctx context.C
 		ch <- respostaPendente{resp.StatusCode, string(b), time.Since(ini)}
 	}()
 	return ch
+}
+
+var nonceSeq atomic.Int64
+
+// assinarPendente põe o nonce e o HMAC do token, como o `ponte decidir`.
+func assinarPendente(req *http.Request, token, corpo string) string {
+	nonce := fmt.Sprintf("%032x", nonceSeq.Add(1))
+	req.Header.Set("X-Ponte-Nonce", nonce)
+	req.Header.Set("X-Ponte-Assinatura", decisao.Assinar(token, []byte(nonce), decisao.Soma([]byte(corpo))))
+	return nonce
 }
 
 func escrever(t *testing.T, c *websocket.Conn, msg string) {
@@ -113,8 +125,9 @@ func TestPermitirPeloNavegadorLocal(t *testing.T) {
 	escrever(t, c, `{"v":1,"tipo":"decidir","id":"`+id+`","acao":"sim"}`)
 	escrever(t, c, `{"v":1,"tipo":"decidir","id":"`+id+`","acao":"permitir"}`)
 	r := <-resp
-	if r.status != http.StatusOK || strings.TrimSpace(r.corpo) != `{"acao":"permitir"}` {
-		t.Fatalf("resposta: %+v", r)
+	var d map[string]string
+	if r.status != http.StatusOK || json.Unmarshal([]byte(r.corpo), &d) != nil || d["acao"] != "permitir" || len(d["assinatura"]) != 64 {
+		t.Fatalf("resposta assinada: %+v", r)
 	}
 	if res := lerTipo(t, c, "resolvido"); res["id"] != id || res["por"] != "local" {
 		t.Fatalf("resolvido: %v", res)
@@ -185,11 +198,16 @@ func TestAgenteDesistiu(t *testing.T) {
 
 func TestPendenteTokenOrigemETeto(t *testing.T) {
 	a, c := atendido(t, Opcoes{})
-	for _, h := range []map[string]string{{"X-Ponte-Token": "errado"}, {"Origin": "https://escritorio.exemplo.com"}} {
+	for _, h := range []map[string]string{{"X-Ponte-Assinatura": strings.Repeat("0", 64)}, {"X-Ponte-Nonce": "curto"},
+		{"Origin": "https://escritorio.exemplo.com"}, {"X-Ponte-Token": tokenTeste, "X-Ponte-Nonce": "", "X-Ponte-Assinatura": ""}} {
 		req, _ := http.NewRequest(http.MethodPost, a.url+"/pendente/claude", strings.NewReader(pedidoBash))
-		req.Header.Set("X-Ponte-Token", tokenTeste)
+		assinarPendente(req, tokenTeste, pedidoBash)
 		for k, v := range h {
-			req.Header.Set(k, v)
+			if v == "" {
+				req.Header.Del(k)
+			} else {
+				req.Header.Set(k, v)
+			}
 		}
 		resp, err := clienteHTTP.Do(req)
 		if err != nil {
@@ -205,6 +223,11 @@ func TestPendenteTokenOrigemETeto(t *testing.T) {
 	}
 	if r := <-a.pedirPendente(t, "claude", `{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"Bash"}`, context.Background()); r.status != http.StatusNoContent {
 		t.Errorf("só o PermissionRequest espera: %d", r.status)
+	}
+	for _, f := range []string{"AskUserQuestion", "ExitPlanMode"} {
+		if r := <-a.pedirPendente(t, "claude", `{"session_id":"s1","hook_event_name":"PermissionRequest","tool_name":"`+f+`","tool_input":{}}`, context.Background()); r.status != http.StatusNoContent || r.dur > time.Second {
+			t.Errorf("%s não é decidido pelo Firmópolis: %+v", f, r)
+		}
 	}
 	ctx, cancelar := context.WithCancel(context.Background())
 	defer cancelar()
@@ -265,7 +288,7 @@ func TestDecisaoRemotaPeloLongPoll(t *testing.T) {
 	falso := &decisoesFalsas{atendendo: true}
 	ts := httptest.NewServer(falso)
 	t.Cleanup(ts.Close)
-	cfg := ConfigEspelho{URL: ts.URL, Chave: chaveTeste}
+	cfg := ConfigEspelho{URL: ts.URL, Chave: chaveTeste, DecidirRemoto: true}
 	a := subir(t, Opcoes{Espelho: func() (ConfigEspelho, bool) { return cfg, true }, EsperaRemota: time.Second}, true)
 	ctx, cancelar := context.WithCancel(context.Background())
 	t.Cleanup(cancelar)
@@ -361,5 +384,77 @@ func TestEspelhoVoltaParaV1(t *testing.T) {
 	defer mu.Unlock()
 	if versoes[0] != 2 || versoes[1] != 1 {
 		t.Fatalf("versões: %v", versoes)
+	}
+}
+
+// Sem o --decidir-remoto: nada de pedido no espelho e nada de long-poll.
+func TestSemDecidirRemotoNaoVaiAoServidor(t *testing.T) {
+	falso := &decisoesFalsas{atendendo: true}
+	ts := httptest.NewServer(falso)
+	t.Cleanup(ts.Close)
+	cfg := ConfigEspelho{URL: ts.URL, Chave: chaveTeste}
+	a, c := atendido(t, Opcoes{Espelho: func() (ConfigEspelho, bool) { return cfg, true }, EsperaRemota: time.Second,
+		EsperaEspelho: time.Millisecond})
+	ctx, cancelar := context.WithCancel(context.Background())
+	t.Cleanup(cancelar)
+	go a.s.decisoesRemotas(ctx)
+	go a.s.espelhar(ctx)
+	ctxP, cancelarP := context.WithCancel(context.Background())
+	defer cancelarP()
+	a.pedirPendente(t, "claude", pedidoBash, ctxP)
+	lerTipo(t, c, "pendente")
+	time.Sleep(1500 * time.Millisecond)
+	falso.mu.Lock()
+	defer falso.mu.Unlock()
+	if len(falso.espelhos) == 0 {
+		t.Fatal("o espelho segue mandando")
+	}
+	for _, e := range falso.espelhos {
+		if strings.Contains(e, "pendentes") || strings.Contains(e, "deploy") {
+			t.Fatalf("sem o opt-in, nenhum pedido vai ao servidor: %s", e)
+		}
+	}
+	if len(falso.auth) != len(falso.espelhos) {
+		t.Fatal("sem o opt-in, nada de long-poll")
+	}
+}
+
+// Com o opt-in mas ninguém atendendo pelo servidor, os pedidos também não vão.
+func TestPendentesSoComAtendimentoRemoto(t *testing.T) {
+	s := Novo(Opcoes{})
+	s.dec.Abrir("t1", "Bash", decisao.Resumo{Texto: "ls", Completo: true}, time.Minute)
+	cfg := ConfigEspelho{DecidirRemoto: true}
+	corpo, _ := s.corpoDoEspelho(cfg, false)
+	if strings.Contains(string(corpo), "pendentes") {
+		t.Fatalf("sem atendimento remoto: %s", corpo)
+	}
+	s.atendRemoto.Store(time.Now().UnixNano())
+	if corpo, _ = s.corpoDoEspelho(cfg, false); !strings.Contains(string(corpo), `"pendentes"`) {
+		t.Fatalf("com atendimento remoto: %s", corpo)
+	}
+	if corpo, _ = s.corpoDoEspelho(ConfigEspelho{}, false); strings.Contains(string(corpo), "pendentes") {
+		t.Fatalf("sem o opt-in: %s", corpo)
+	}
+}
+
+// Pedido incompleto (arquivo fora do projeto): "permitir" do servidor não vale; "negar" vale.
+func TestIncompletoRecusaPermitirRemoto(t *testing.T) {
+	a, c := atendido(t, Opcoes{})
+	corpo := `{"session_id":"s1","hook_event_name":"PermissionRequest","tool_name":"Write","cwd":"/home/ana/loja",` +
+		`"tool_input":{"file_path":"/home/ana/.ssh/authorized_keys","content":"ssh-rsa x"}}`
+	resp := a.pedirPendente(t, "claude", corpo, context.Background())
+	p := lerTipo(t, c, "pendente")["pendente"].(map[string]any)
+	if p["completo"] != false || p["resumo"] != "fora do projeto: …/.ssh/authorized_keys" {
+		t.Fatalf("pendente: %v", p)
+	}
+	id := p["id"].(string)
+	if a.s.decidir(id, "permitir", decisao.PorRemoto) {
+		t.Fatal("permitir remoto num pedido incompleto")
+	}
+	if !a.s.decidir(id, "negar", decisao.PorRemoto) {
+		t.Fatal("negar remoto vale")
+	}
+	if r := <-resp; !strings.Contains(r.corpo, "negar") {
+		t.Fatalf("resposta: %+v", r)
 	}
 }

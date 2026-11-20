@@ -363,7 +363,7 @@ body.travado { overflow: hidden; }
 .decisao { display: grid; gap: 10px; padding: 10px 12px; border-radius: var(--r-botao); background: var(--ambar-fundo); }
 .decisao.compacta { margin: 0 8px 6px; padding: 8px 10px; }
 .decisao-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; align-items: center; }
-.decisao-oque { margin: 0; font-size: 13.5px; overflow-wrap: anywhere; }
+.decisao-oque { margin: 0; font-size: 13.5px; overflow-wrap: anywhere; unicode-bidi: isolate; direction: ltr; }
 .decisao-oque strong { color: var(--ambar-texto); }
 .decisao-resta { font-size: 12.5px; color: var(--suave); font-variant-numeric: tabular-nums; }
 .decisao-acoes { grid-column: 1 / -1; display: flex; gap: 8px; }

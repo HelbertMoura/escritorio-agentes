@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -76,7 +77,7 @@ var codex = integracao{
 		resumo := fmt.Sprintf("hook command `%s` em %d eventos (%s), em segundo plano menos no %s; no %s, também o `%s`, "+
 			"síncrono, que espera até %d s a resposta pelo Firmópolis (só com alguém atendendo)",
 			comandoBash(op.Exe, "codex"), len(eventosCodex), strings.Join(eventosCodex, ", "), eventoCodexSincrono,
-			eventoDecidir, comandoDecidirBash(op.Exe), int(decisao.EsperaCodex/time.Second))
+			eventoDecidir, comandoDecidirBash(op.Exe, op.Porta), int(decisao.EsperaCodex/time.Second))
 		return novo, resumo, avisos, nil
 	},
 	tirar: func(op Opcoes, doc []byte, _ *registro) ([]byte, []string, error) {
@@ -122,14 +123,14 @@ func grupoCodex(op Opcoes, ev string) objeto {
 }
 
 // O `ponte decidir codex`: síncrono, só no PermissionRequest, num grupo só dele.
-var reDecidirCodex = regexp.MustCompile(`(?:^|[\\/"'\s&])ponte(?:\.exe)?["']?\s+decidir\s+codex\s*$`)
+var reDecidirCodex = regexp.MustCompile(`(?:^|[\\/"'\s&])ponte(?:\.exe)?["']?\s+decidir\s+(?:--porta\s+\d+\s+)?codex\s*$`)
 
-func comandoDecidirBash(exe string) string {
-	return "'" + strings.ReplaceAll(exe, "'", `'\''`) + "' decidir codex"
+func comandoDecidirBash(exe string, porta int) string {
+	return "'" + strings.ReplaceAll(exe, "'", `'\''`) + "' decidir --porta " + strconv.Itoa(porta) + " codex"
 }
 
-func comandoDecidirPowerShell(exe string) string {
-	return "& '" + strings.ReplaceAll(exe, "'", "''") + "' decidir codex"
+func comandoDecidirPowerShell(exe string, porta int) string {
+	return "& '" + strings.ReplaceAll(exe, "'", "''") + "' decidir --porta " + strconv.Itoa(porta) + " codex"
 }
 
 func grupoCodexDecidir(op Opcoes) objeto {
@@ -137,8 +138,8 @@ func grupoCodexDecidir(op Opcoes) objeto {
 		{"matcher", ""},
 		{"hooks", []any{objeto{
 			{"type", "command"},
-			{"command", comandoDecidirBash(op.Exe)},
-			{"commandWindows", comandoDecidirPowerShell(op.Exe)},
+			{"command", comandoDecidirBash(op.Exe, op.Porta)},
+			{"commandWindows", comandoDecidirPowerShell(op.Exe, op.Porta)},
 			{"timeout", timeoutDecidir("codex")},
 		}}},
 	}

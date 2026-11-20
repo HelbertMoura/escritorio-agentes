@@ -3,6 +3,7 @@ import { test, beforeEach, afterEach } from "node:test"
 import assert from "node:assert/strict"
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
+import { createHash, createHmac } from "node:crypto"
 import { join } from "node:path"
 
 import { Firmopolis } from "./opencode-firmopolis.js"
@@ -146,13 +147,23 @@ test("quem ainda tem a pasta antiga (EscritorioVivo) segue mandando", async () =
 // ---------- responder pelo escritório ----------
 const pedido = { id: "per1", sessionID: "s1", permission: "bash", patterns: ["git push"], metadata: { segredo: "x" }, always: ["*"] }
 
-function ponteDecide(status, corpo, segurar) {
+function assinarTeste(token, ...partes) {
+  const h = createHmac("sha256", token)
+  for (const p of partes) h.update(p).update(Buffer.from([0]))
+  return h.digest("hex")
+}
+
+// a ponte de mentira: confere o HMAC do pedido e assina a resposta (com tokenResposta, a de outro processo)
+function ponteDecide(status, acao, segurar, tokenResposta = "tok-123") {
   globalThis.fetch = async (url, opcoes) => {
     chamadas.push({ url, opcoes, corpo: JSON.parse(opcoes.body) })
     if (url.endsWith("/pendente/opencode")) {
+      const nonce = opcoes.headers["X-Ponte-Nonce"]
+      chamadas.at(-1).assinado = opcoes.headers["X-Ponte-Assinatura"] === assinarTeste("tok-123", nonce, createHash("sha256").update(opcoes.body).digest())
       if (segurar) {
         await new Promise((_, rejeitar) => opcoes.signal.addEventListener("abort", () => rejeitar(new Error("abortado"))))
       }
+      const corpo = acao ? JSON.stringify({ acao, assinatura: assinarTeste(tokenResposta, nonce, acao) }) : null
       return new Response(corpo, { status })
     }
     return new Response(null, { status: 204 })
@@ -167,7 +178,7 @@ function clienteFalso() {
 const varias = async () => { for (let i = 0; i < 5; i++) await espera() }
 
 test("permissão: manda só a ferramenta e os padrões e responde com a decisão", async () => {
-  ponteDecide(200, '{"acao":"permitir"}')
+  ponteDecide(200, "permitir")
   const client = clienteFalso()
   const ganchos = await Firmopolis({ directory: "C:\\proj", client })
   await ganchos.event({ event: { type: "permission.asked", properties: pedido } })
@@ -175,17 +186,25 @@ test("permissão: manda só a ferramenta e os padrões e responde com a decisão
   assert.deepEqual(chamadas[0].corpo.properties, { sessionID: "s1" }, "o evento de estado segue sem o conteúdo")
   const p = chamadas.find((c) => c.url.endsWith("/pendente/opencode"))
   assert.deepEqual(p.corpo, { sessionID: "s1", id: "per1", permission: "bash", patterns: ["git push"], cwd: "C:\\proj" })
-  assert.equal(p.opcoes.headers["X-Ponte-Token"], "tok-123")
+  assert.equal(p.opcoes.headers["X-Ponte-Token"], undefined, "o token não vai no pedido")
+  assert.ok(p.assinado, "vai o HMAC do token")
   assert.deepEqual(client.respostas, [{ path: { id: "s1", permissionID: "per1" }, body: { response: "once" } }])
 })
 
 test("permissão: negar vira reject; sem decisão, nada", async () => {
-  ponteDecide(200, '{"acao":"negar"}')
+  ponteDecide(200, "negar")
   let client = clienteFalso()
   let ganchos = await Firmopolis({ directory: "C:\\proj", client })
   await ganchos.event({ event: { type: "permission.v2.asked", properties: { id: "per2", sessionID: "s1", action: "edit", resources: ["a.go"] } } })
   await varias()
   assert.deepEqual(client.respostas, [{ path: { id: "s1", permissionID: "per2" }, body: { response: "reject" } }])
+
+  ponteDecide(200, "permitir", false, "outro-token")
+  client = clienteFalso()
+  ganchos = await Firmopolis({ directory: "C:\\proj", client })
+  await ganchos.event({ event: { type: "permission.asked", properties: pedido } })
+  await varias()
+  assert.deepEqual(client.respostas, [], "resposta sem a assinatura da ponte não vale")
 
   ponteDecide(204, null)
   client = clienteFalso()
@@ -196,7 +215,7 @@ test("permissão: negar vira reject; sem decisão, nada", async () => {
 })
 
 test("permissão respondida no terminal: o plugin desiste", async () => {
-  ponteDecide(200, '{"acao":"permitir"}', true)
+  ponteDecide(200, "permitir", true)
   const client = clienteFalso()
   const ganchos = await Firmopolis({ directory: "C:\\proj", client })
   await ganchos.event({ event: { type: "permission.asked", properties: pedido } })

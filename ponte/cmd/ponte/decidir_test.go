@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net"
 	"net/http"
@@ -12,17 +13,28 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"firmopolis/ponte/internal/decisao"
 )
 
-// ponteQueDecide responde ao POST /pendente/<rota> com status e corpo fixos.
-func ponteQueDecide(t *testing.T, status int, corpo string) (int, *[]string) {
+// ponteQueDecide responde ao POST /pendente/<rota> com status e a ação; assinar diz se a
+// resposta vem com o HMAC certo (a ponte de verdade) ou não (outro processo na porta).
+func ponteQueDecide(t *testing.T, status int, acao string, assinar bool) (int, *[]string) {
 	t.Helper()
 	var rotas []string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.ReadAll(r.Body)
-		rotas = append(rotas, r.URL.Path+" "+r.Header.Get("X-Ponte-Token"))
+		corpo, _ := io.ReadAll(r.Body)
+		nonce := r.Header.Get("X-Ponte-Nonce")
+		ok := len(nonce) == 32 && decisao.ConfereAssinatura(tokenTeste, r.Header.Get("X-Ponte-Assinatura"), []byte(nonce), decisao.Soma(corpo))
+		rotas = append(rotas, r.URL.Path+" "+strconv.FormatBool(ok)+" "+r.Header.Get("X-Ponte-Token"))
 		w.WriteHeader(status)
-		io.WriteString(w, corpo)
+		if acao != "" {
+			chave := tokenTeste
+			if !assinar {
+				chave = strings.Repeat("0", 64)
+			}
+			json.NewEncoder(w).Encode(map[string]string{"acao": acao, "assinatura": decisao.Assinar(chave, []byte(nonce), []byte(acao))})
+		}
 	}))
 	t.Cleanup(ts.Close)
 	return ts.Listener.Addr().(*net.TCPAddr).Port, &rotas
@@ -51,25 +63,27 @@ func rodarDecidir(t *testing.T, env []string, porta int, rota string) resultado 
 // A saída é exatamente a que o Claude Code e o Codex leem; sem decisão, nada.
 func TestDecidirEscreveSoADecisao(t *testing.T) {
 	casos := []struct {
-		status int
-		corpo  string
-		quero  string
+		status  int
+		acao    string
+		assinar bool
+		quero   string
 	}{
-		{200, `{"acao":"permitir"}`, saidaPermitir + "\n"},
-		{200, `{"acao":"negar"}`, saidaNegar + "\n"},
-		{200, `{"acao":"talvez"}`, ""},
-		{204, ``, ""},
-		{403, ``, ""},
-		{302, ``, ""},
+		{200, "permitir", true, saidaPermitir + "\n"},
+		{200, "negar", true, saidaNegar + "\n"},
+		{200, "permitir", false, ""}, // outro processo na porta: a resposta sem o HMAC do token não vale
+		{200, "talvez", true, ""},
+		{204, "", true, ""},
+		{403, "", true, ""},
+		{302, "", true, ""},
 	}
 	for _, c := range casos {
-		porta, rotas := ponteQueDecide(t, c.status, c.corpo)
+		porta, rotas := ponteQueDecide(t, c.status, c.acao, c.assinar)
 		r := rodarDecidir(t, envConfig(t, true), porta, "claude")
 		if r.codigo != 0 || r.stderr != "" || r.stdout != c.quero {
-			t.Errorf("%d %s: código %d, stdout %q, stderr %q", c.status, c.corpo, r.codigo, r.stdout, r.stderr)
+			t.Errorf("%+v: código %d, stdout %q, stderr %q", c, r.codigo, r.stdout, r.stderr)
 		}
-		if len(*rotas) != 1 || (*rotas)[0] != "/pendente/claude "+tokenTeste {
-			t.Errorf("pedido: %v", *rotas)
+		if len(*rotas) != 1 || (*rotas)[0] != "/pendente/claude true " {
+			t.Errorf("pedido assinado e sem o token: %v", *rotas)
 		}
 	}
 	if saidaPermitir != `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}` ||
@@ -85,7 +99,7 @@ func TestDecidirSemPonteSemTokenOuRotaRuim(t *testing.T) {
 	if r := rodarDecidir(t, envConfig(t, true), livre, "codex"); r.codigo != 0 || r.stdout != "" || r.stderr != "" || r.duracao > time.Second {
 		t.Errorf("sem ponte: %+v", r)
 	}
-	porta, rotas := ponteQueDecide(t, 200, `{"acao":"permitir"}`)
+	porta, rotas := ponteQueDecide(t, 200, "permitir", true)
 	for _, c := range []struct {
 		token bool
 		rota  string

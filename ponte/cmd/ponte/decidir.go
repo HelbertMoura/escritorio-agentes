@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -66,14 +68,22 @@ func decidir(args []string, saida io.Writer) {
 	}
 }
 
-// pedirDecisao devolve "permitir", "negar" ou "" (sem decisão).
+// pedirDecisao devolve "permitir", "negar" ou "" (sem decisão). O token nunca vai no pedido: vai
+// um nonce e o HMAC do token sobre ele e o corpo. A resposta só vale com o HMAC do token sobre
+// o nonce e a ação, então outro processo na porta não decide nem aprende o token.
 func pedirDecisao(ctx context.Context, url, token string, corpo []byte) string {
+	bruto := make([]byte, 16)
+	if _, err := rand.Read(bruto); err != nil {
+		return ""
+	}
+	nonce := hex.EncodeToString(bruto)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(corpo))
 	if err != nil {
 		return ""
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Ponte-Token", token)
+	req.Header.Set("X-Ponte-Nonce", nonce)
+	req.Header.Set("X-Ponte-Assinatura", decisao.Assinar(token, []byte(nonce), decisao.Soma(corpo)))
 	req.Header.Set("X-Maestri-Terminal-Id", os.Getenv("MAESTRI_TERMINAL_ID"))
 	cliente := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err := cliente.Do(req)
@@ -85,9 +95,11 @@ func pedirDecisao(ctx context.Context, url, token string, corpo []byte) string {
 		return ""
 	}
 	var d struct {
-		Acao string `json:"acao"`
+		Acao       string `json:"acao"`
+		Assinatura string `json:"assinatura"`
 	}
-	if json.NewDecoder(io.LimitReader(resp.Body, 1<<10)).Decode(&d) != nil {
+	if json.NewDecoder(io.LimitReader(resp.Body, 1<<10)).Decode(&d) != nil ||
+		!decisao.ConfereAssinatura(token, d.Assinatura, []byte(nonce), []byte(d.Acao)) {
 		return ""
 	}
 	return d.Acao

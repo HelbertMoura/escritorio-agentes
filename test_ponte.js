@@ -200,7 +200,7 @@ assert.equal(religar().ms, 6000, "a espera dobra");
 
   // ---------- responder pelo escritório: os pedidos só para quem decide, conferidos; Permitir/Negar pelo caminho certo ----------
   const ID = "A".repeat(22);
-  const pedidoSrv = { id: ID, morador_id: "s1", tipo: "permissao", ferramenta: "Bash", resumo: "git push\u0007", resta_s: 60 };
+  const pedidoSrv = { id: ID, morador_id: "s1", tipo: "permissao", ferramenta: "Bash", resumo: "git push", completo: true, resta_s: 60 };
   respostaSrv = espelho([morador("s1", "esperando_permissao")], { pendentes: [pedidoSrv, { ...pedidoSrv, id: "curto" }] });
   q = criar(null); await solta();
   assert.equal(q.Ponte.podeDecidir(), false);
@@ -210,7 +210,8 @@ assert.equal(religar().ms, 6000, "a espera dobra");
   assert.equal(q.Ponte.podeDecidir(), true);
   const ps = q.Ponte.pendentes("s1");
   assert.deepEqual([...ps.map(x => x.id)], [ID, "B".repeat(22)], "id inválido sai");
-  assert.equal(ps[0].resumo, "git push", "controle sai");
+  assert.equal(ps[0].resumo, "git push");
+  assert.equal(ps[0].completo, true);
   assert.ok(ps[1].ate - Date.now() <= 600000, "prazo no máximo 10 min");
   respostaSrv = { status: 410, corpo: "" };
   await q.Ponte.decidir(ID, "permitir");
@@ -221,6 +222,16 @@ assert.equal(religar().ms, 6000, "a espera dobra");
   assert.equal(q.Ponte.pendentes("s1").length, 1, "410: já respondido ou vencido, sai da tela");
   await q.Ponte.decidir("B".repeat(22), "talvez");
   assert.equal(pedidos.at(-1), ult, "ação fora de permitir/negar não sai");
+  // caracteres enganosos ficam visíveis e o pedido vira incompleto: permitir não sai daqui
+  respostaSrv = espelho([morador("s1", "esperando_permissao")], { decidir: true, pendentes: [
+    { ...pedidoSrv, id: "D".repeat(22), resumo: "ls \u202egpj.exe\u200b\u0085" }, { ...pedidoSrv, id: "E".repeat(22), completo: false }] });
+  lerSrv().fn(); await solta();
+  const enganoso = q.Ponte.pendentes("s1").find(x => x.id === "D".repeat(22));
+  assert.equal(enganoso.resumo, "ls ‹U+202E›gpj.exe‹U+200B›‹U+0085›");
+  assert.equal(enganoso.completo, false, "o texto mudou aqui: incompleto");
+  assert.equal(q.Ponte.pendentes("s1").find(x => x.id === "E".repeat(22)).completo, false);
+  await q.Ponte.decidir("E".repeat(22), "permitir");
+  assert.ok(!pedidos.some(x => x.url === "api/ponte/decidir" && x.op.body.includes("E".repeat(22))), "incompleto: permitir não sai daqui");
 
   // ponte local: "atender" só para quem decide, o pedido pelo /ws e a decisão de volta por ele
   respostaSrv = { status: 200, corpo: JSON.stringify({ ativo: false, decidir: true }) };
