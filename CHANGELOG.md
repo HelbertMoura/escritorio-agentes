@@ -6,6 +6,9 @@ All notable changes to this project are listed here, newest first. The format fo
 
 ## Unreleased
 
+### Added
+- **Weather and city per floor:** each extra floor can sit in its own city, with that city's weather and local time on the map (sky, day and night, rain and office hours by time zone). Whoever runs the floor picks it in Personalizar › Clima deste andar; without its own city, the building's applies. The elevator and the floor list show each floor's city, only to people with access to that floor; the lobby, visitors and World still only show the building's city. The weather is fetched once per city, even with several floors in it. See [Floors](./README.md#floors-several-workspaces-in-one-building).
+
 ### Changed
 - **The site's identity across the whole app:** the sign-in screen, first access, invitation, visit page, World and the app itself use the same brand as [firmopolis.devmaniacs.com.br](https://firmopolis.devmaniacs.com.br): Figtree for text, Pixeloid for headings, the night, graphite, cream, amber and indigo palette, square or stepped corners, bevelled buttons and hard shadows. The outside screens got the night sky with the office's lit window. The map and the pixel art did not change.
 - The Source Sans 3 and Doto fonts are gone; Pixeloid Sans (OFL) is in `static/fontes/`.
