@@ -4,6 +4,19 @@
 
 All notable changes to this project are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Since 1.1.0, versions follow [SemVer](https://semver.org/); older entries are dated milestones.
 
+## Unreleased · Firmópolis
+
+### Added
+- **New name: Firmópolis.** Escritório de agentes merged with Escritório Vivo. The tab, the installable app, the invitation and construction mode carry the new name and icons, and a short opening plays once per session (skippable, and not in TV mode).
+- **Local bridge:** the Go bridge from Escritório Vivo now lives in `ponte/`. The browser reads it directly on `127.0.0.1`, and the terminals on this computer (Claude Code, Codex, agy, OpenCode, MiniMax and Maestri) show up on the map as little terminals without going through the server. See [Local bridge](./README.md#local-bridge-the-terminals-on-this-computer).
+- **Three species on the map:** felt critters are the agentes.chat agents, little terminals are the local terminals, and people are you and your visitors.
+- **Coffee and chats for terminals:** when free, the little terminals go to the coffee machine or chat in the hallway, driven by needs that drop while they work.
+- **People picker:** in the profile and the invitation, you choose the shirt, hair and skin you show on the map with.
+
+### Changed
+- **Bridge integrations:** the hook marker changed from `escritorio-vivo` to `firmopolis`. `ponte setup --aplicar` migrates Escritório Vivo users, keeping config, token and history, and only removes an old plugin after confirming the bridge installed it.
+- **Account avatar:** accepts optional `hair` and `skin`. Saved avatars keep working.
+
 ## 1.6.0 · 2026-11-16 · The team's office
 
 Release [`v1.6.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.6.0). Commits: [`v1.5.2...v1.6.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v1.5.2...v1.6.0).
