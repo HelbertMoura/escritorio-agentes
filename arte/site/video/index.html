@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1280, height=720" />
+    <title>Tour da Firmópolis</title>
+    <script src="assets/vendor/gsap.min.js"></script>
+    <style>
+      /* Paleta e tipografia da marca Firmópolis (site/estilo.css). */
+      :root {
+        --noite: #14141a;
+        --grafite: #1c1c22;
+        --grafite-2: #26262e;
+        --linha: #3a3a46;
+        --creme: #fff4dc;
+        --texto: #e9e3d4;
+        --texto-2: #b5ae9e;
+        --ambar: #f5b83d;
+        --ambar-claro: #ffd77a;
+        --indigo: #3d4f9e;
+        --indigo-claro: #5468bf;
+        --tinta: #1b1a2b;
+        --vermelho: #e8574a;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        width: 1280px;
+        height: 720px;
+        overflow: hidden;
+        background: #0d0d12;
+      }
+      #root {
+        position: relative;
+        width: 1280px;
+        height: 720px;
+        overflow: hidden;
+        background: #0d0d12;
+        font-family: "Figtree", system-ui, sans-serif;
+        color: var(--texto);
+      }
+      @font-face {
+        font-family: "Pixeloid";
+        src: url("assets/fonts/PixeloidSans.woff2") format("woff2");
+        font-display: block;
+      }
+      @font-face {
+        font-family: "Figtree";
+        src: url("assets/fonts/figtree.woff2") format("woff2");
+        font-weight: 300 900;
+        font-display: block;
+      }
+      /* Varredura de TV bem sutil: liga o filme à moldura retro do site. */
+      #scanlines {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1280px;
+        height: 720px;
+        z-index: 60;
+        pointer-events: none;
+        background: repeating-linear-gradient(
+          to bottom,
+          rgba(0, 0, 0, 0.2) 0 1px,
+          rgba(0, 0, 0, 0) 1px 3px
+        );
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="40"
+      data-width="1280"
+      data-height="720"
+    >
+      <!-- Cenas: uma por sub-composição, todas em 16:9. -->
+      <div id="abertura" data-composition-id="abertura" data-composition-src="compositions/abertura.html"
+        data-start="0" data-duration="5.4" data-track-index="1" data-track-kind="graphics"></div>
+      <div id="escritorio" data-composition-id="escritorio" data-composition-src="compositions/escritorio.html"
+        data-start="5.4" data-duration="8.4" data-track-index="1" data-track-kind="graphics"></div>
+      <div id="terminais" data-composition-id="terminais" data-composition-src="compositions/terminais.html"
+        data-start="13.8" data-duration="10.8" data-track-index="1" data-track-kind="graphics"></div>
+      <div id="vida" data-composition-id="vida" data-composition-src="compositions/vida.html"
+        data-start="24.6" data-duration="8.4" data-track-index="1" data-track-kind="graphics"></div>
+      <div id="fechamento" data-composition-id="fechamento" data-composition-src="compositions/fechamento.html"
+        data-start="33" data-duration="7" data-track-index="1" data-track-kind="graphics"></div>
+
+      <div id="scanlines" aria-hidden="true"></div>
+
+      <!-- Áudio: trilha lo-fi + efeitos + narração, mixados e medidos em -16 LUFS. -->
+      <audio id="trilha" class="clip" data-start="0" data-duration="40" data-track-index="0"
+        src="assets/audio/mestre.mp3" data-volume="1"></audio>
+    </div>
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

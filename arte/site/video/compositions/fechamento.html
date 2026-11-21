@@ -1,0 +1,131 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; background: #0d0d12; }
+    @font-face {
+      font-family: "Pixeloid";
+      src: url("assets/fonts/PixeloidSans.woff2") format("woff2");
+      font-display: block;
+    }
+    @font-face {
+      font-family: "Figtree";
+      src: url("assets/fonts/figtree.woff2") format("woff2");
+      font-weight: 300 900;
+      font-display: block;
+    }
+    .malha {
+      position: absolute; left: 0; top: 0; width: 1280px; height: 720px;
+      background-color: #0d0d12;
+      background-image:
+        linear-gradient(rgba(61, 79, 158, 0.14) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(61, 79, 158, 0.14) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+    .vinheta {
+      position: absolute; left: 0; top: 0; width: 1280px; height: 720px;
+      background: radial-gradient(circle at 50% 45%, rgba(13, 13, 18, 0) 30%, rgba(13, 13, 18, 0.94) 100%);
+    }
+    .marca { position: absolute; left: 48px; top: 74px; width: 1184px; }
+    .marca img { width: 100%; height: auto; display: block; image-rendering: pixelated; }
+    /* As três promessas, uma por vez. */
+    .selos {
+      position: absolute; left: 0; top: 386px; width: 1280px;
+      display: flex; justify-content: center; gap: 14px;
+    }
+    .selos b {
+      padding: 12px 18px;
+      font-family: "Pixeloid", monospace;
+      font-weight: normal;
+      font-size: 24px;
+      line-height: 1;
+      color: #e9e3d4;
+      background: #191921;
+      box-shadow: 0 0 0 3px #3a3a46, 6px 6px 0 rgba(0, 0, 0, 0.45);
+    }
+    .selos b em { font-style: normal; color: #f5b83d; }
+    .endereco {
+      position: absolute; left: 0; top: 504px; width: 1280px;
+      text-align: center;
+      font-family: "Pixeloid", monospace;
+      font-size: 40px;
+      color: #fff4dc;
+      text-shadow: 4px 4px 0 #1b1a2b;
+    }
+    .endereco span { display: inline-block; }
+    .fecho {
+      position: absolute; left: 0; top: 590px; width: 1280px;
+      text-align: center;
+      font-family: "Figtree", system-ui, sans-serif;
+      font-size: 24px;
+      font-weight: 300;
+      color: #b5ae9e;
+    }
+  </style>
+  <div id="root" data-composition-id="fechamento" data-width="1280" data-height="720">
+    <div class="malha" aria-hidden="true"></div>
+    <div class="vinheta" aria-hidden="true"></div>
+
+    <div class="marca">
+      <img id="fec-assinatura" src="assets/img/assinatura.png"
+        alt="Firmópolis: o prédio-mascote ao lado do nome" />
+    </div>
+
+    <p class="selos">
+      <b id="fec-selo1">Zero <em>token</em></b>
+      <b id="fec-selo2">Só leitura <em>por padrão</em></b>
+      <b id="fec-selo3">Código aberto <em>(AGPL-3.0)</em></b>
+    </p>
+
+    <p class="endereco" id="fec-endereco">
+      <span>firmopolis</span><span>.</span><span>devmaniacs</span><span>.</span><span>com</span><span>.</span><span>br</span>
+    </p>
+
+    <p class="fecho" id="fec-fecho">Roda no seu servidor, na sua rede. Sem caixa-preta.</p>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+
+    // A marca assina o fim: entra performing, não com fade.
+    tl.fromTo(
+      "#fec-assinatura",
+      { opacity: 0, scale: 0.9, filter: "blur(10px)" },
+      { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.5, ease: "power4.out" },
+      0.55
+    );
+
+    // As três promessas caem uma de cada vez, na palavra da narração.
+    tl.fromTo(
+      "#fec-selo1",
+      { opacity: 0, y: 18, scale: 0.94 },
+      { opacity: 1, y: 0, scale: 1, duration: 0.3, ease: "power4.out", transformOrigin: "center center" },
+      1.35
+    );
+    tl.fromTo(
+      "#fec-selo2",
+      { opacity: 0, y: 18, scale: 0.94 },
+      { opacity: 1, y: 0, scale: 1, duration: 0.3, ease: "power4.out", transformOrigin: "center center" },
+      2.55
+    );
+    tl.fromTo(
+      "#fec-selo3",
+      { opacity: 0, y: 18, scale: 0.94 },
+      { opacity: 1, y: 0, scale: 1, duration: 0.3, ease: "power4.out", transformOrigin: "center center" },
+      4.45
+    );
+
+    // O endereço entra por partes, como se fosse digitado.
+    tl.fromTo(
+      "#fec-endereco span",
+      { opacity: 0, y: 10, filter: "blur(4px)" },
+      { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.2, ease: "power3.out", stagger: 0.05 },
+      4.9
+    );
+    tl.fromTo(
+      "#fec-fecho",
+      { opacity: 0 },
+      { opacity: 1, duration: 0.5, ease: "none" },
+      3.95
+    );
+
+    window.__timelines["fechamento"] = tl;
+  </script>
+</template>

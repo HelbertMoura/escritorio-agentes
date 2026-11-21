@@ -21,3 +21,7 @@ node_modules/
 .idea/
 .DS_Store
 Thumbs.db
+# Artefatos do tour em vídeo (HyperFrames): builds, estados e renders
+arte/site/video/.build/
+arte/site/video/.hyperframes/
+.preview/

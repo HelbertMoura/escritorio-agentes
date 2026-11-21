@@ -1,0 +1,148 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; background: #0d0d12; }
+    @font-face {
+      font-family: "Pixeloid";
+      src: url("assets/fonts/PixeloidSans.woff2") format("woff2");
+      font-display: block;
+    }
+    .clip { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; }
+    /* Quadro de tela cheia: sempre nasce escondido, quem o revela e o GSAP. */
+    .quadro {
+      position: absolute; inset: 0; overflow: hidden;
+      background: #0d0d12;
+      opacity: 0;
+    }
+    .quadro.aberto { opacity: 1; }
+    .quadro img {
+      width: 100%; height: 100%; display: block;
+      object-fit: cover;
+      image-rendering: pixelated;
+    }
+    .placa {
+      position: absolute; left: 44px; top: 40px;
+      display: flex; align-items: stretch;
+      background: #0d0d12;
+      box-shadow: 0 0 0 3px #26262e, 6px 6px 0 rgba(0, 0, 0, 0.45);
+    }
+    .placa::before { content: ""; width: 8px; background: #f5b83d; }
+    .placa span {
+      padding: 12px 20px;
+      font-family: "Pixeloid", monospace;
+      font-size: 32px;
+      line-height: 1;
+      color: #fff4dc;
+      letter-spacing: 0.03em;
+    }
+    .placa em { font-style: normal; color: #f5b83d; }
+    .legenda {
+      position: absolute; left: 44px; bottom: 38px;
+      padding: 9px 14px;
+      font-family: "Pixeloid", monospace;
+      font-size: 22px;
+      color: #e9e3d4;
+      background: #0d0d12;
+      box-shadow: 0 0 0 3px #26262e, 6px 6px 0 rgba(0, 0, 0, 0.45);
+    }
+  </style>
+  <div id="root" data-composition-id="escritorio" data-width="1280" data-height="720">
+    <!-- 5,4s - 10,4s: a planta inteira empurrando devagar e o dia do time nas salas -->
+    <div id="esc-clip-dia" class="clip" data-start="0" data-duration="5" data-track-index="1">
+      <div class="quadro aberto" id="esc-planta">
+        <img data-layout-allow-overflow src="assets/img/planta-blocos.png" alt="Planta do Escritório Vivo em blocos, com as salas de cada setor" />
+      </div>
+      <div class="quadro" id="esc-dia">
+        <img data-layout-allow-overflow src="assets/img/dia.png" alt="Salas do escritório durante o dia, com os agentes trabalhando" />
+      </div>
+    </div>
+
+    <!-- 10,4s - 12,2s: a mesma casa de noite, com chuva -->
+    <div id="esc-clip-noite" class="clip" data-start="5" data-duration="1.8" data-track-index="2">
+      <div class="quadro" id="esc-noite">
+        <img src="assets/img/noite-chuva.png" alt="O mesmo escritório à noite, com chuva do lado de fora" />
+      </div>
+    </div>
+
+    <!-- 12,2s - 13,8s: a fachada acesa da Firmópolis -->
+    <div id="esc-clip-fachada" class="clip" data-start="6.8" data-duration="1.6" data-track-index="3">
+      <div class="quadro" id="esc-fachada">
+        <img data-layout-allow-overflow src="assets/img/fachada.png" alt="Fachada do prédio iluminada à noite, com a entrada e os vasos de flor" />
+      </div>
+    </div>
+
+    <div id="esc-titulo">
+      <p class="placa"><span>O Escritório <em>Vivo</em></span></p>
+    </div>
+
+    <div id="esc-legenda">
+      <p class="legenda">firmopolis.devmaniacs.com.br</p>
+    </div>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+
+    // Abertura: a planta é o plano geral e respira com um empurrão lento.
+    tl.fromTo(
+      "#esc-planta img",
+      { scale: 1 },
+      { scale: 1.085, duration: 2.8, ease: "none", transformOrigin: "center center" },
+      0
+    );
+
+    // Corte com troca em desfoque: a sala em dia entra por cima da planta.
+    tl.to("#esc-planta", { opacity: 0, filter: "blur(8px)", duration: 0.2, ease: "power2.in" }, 2.72);
+    tl.fromTo(
+      "#esc-dia",
+      { opacity: 0, filter: "blur(8px)" },
+      { opacity: 1, filter: "blur(0px)", duration: 0.28, ease: "power2.out" },
+      2.8
+    );
+    tl.fromTo(
+      "#esc-dia img",
+      { scale: 1.04 },
+      { scale: 1.1, duration: 2.2, ease: "none", transformOrigin: "center center" },
+      2.8
+    );
+
+    // Virada do mundo: o dia escurece e a noite vem por baixo.
+    tl.to("#esc-dia", { opacity: 0, duration: 0.16, ease: "power2.in" }, 4.9);
+    tl.fromTo(
+      "#esc-noite",
+      { opacity: 0 },
+      { opacity: 1, duration: 0.42, ease: "power2.out" },
+      5
+    );
+
+    // A fachada fecha o capítulo.
+    tl.fromTo(
+      "#esc-fachada",
+      { opacity: 0, filter: "blur(8px)" },
+      { opacity: 1, filter: "blur(0px)", duration: 0.3, ease: "power2.out" },
+      6.8
+    );
+    tl.fromTo(
+      "#esc-fachada img",
+      { scale: 1.05 },
+      { scale: 1.11, duration: 1.6, ease: "none", transformOrigin: "center center" },
+      6.8
+    );
+
+    // Título do capítulo.
+    tl.fromTo(
+      "#esc-titulo .placa",
+      { opacity: 0, x: -26 },
+      { opacity: 1, x: 0, duration: 0.34, ease: "power4.out" },
+      0.2
+    );
+    tl.fromTo(
+      "#esc-legenda .legenda",
+      { opacity: 0, y: 10 },
+      { opacity: 1, y: 0, duration: 0.34, ease: "power3.out" },
+      0.5
+    );
+    tl.to("#esc-titulo .placa", { opacity: 0, x: -18, duration: 0.3, ease: "power2.in" }, 7.9);
+    tl.to("#esc-legenda .legenda", { opacity: 0, duration: 0.3, ease: "power2.in" }, 7.9);
+
+    window.__timelines["escritorio"] = tl;
+  </script>
+</template>

@@ -1,0 +1,218 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; background: #0d0d12; }
+    @font-face {
+      font-family: "Pixeloid";
+      src: url("assets/fonts/PixeloidSans.woff2") format("woff2");
+      font-display: block;
+    }
+    .clip { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; }
+    .quadro {
+      position: absolute; inset: 0; overflow: hidden;
+      background: #0d0d12;
+      opacity: 0;
+    }
+    .quadro.aberto { opacity: 1; }
+    .quadro img {
+      width: 100%; height: 100%; display: block;
+      object-fit: cover;
+      image-rendering: pixelated;
+    }
+    .placa {
+      position: absolute; left: 44px; top: 40px;
+      display: flex; align-items: stretch;
+      background: #0d0d12;
+      box-shadow: 0 0 0 3px #26262e, 6px 6px 0 rgba(0, 0, 0, 0.45);
+    }
+    .placa::before { content: ""; width: 8px; background: #f5b83d; }
+    .placa span {
+      padding: 12px 20px;
+      font-family: "Pixeloid", monospace;
+      font-size: 32px;
+      line-height: 1;
+      color: #fff4dc;
+      letter-spacing: 0.03em;
+    }
+    .placa em { font-style: normal; color: #f5b83d; }
+    /* Fita de terminais que a ponte conversa */
+    .fita {
+      position: absolute; left: 44px; top: 126px;
+      display: flex; gap: 8px;
+    }
+    .fita b {
+      padding: 7px 12px;
+      font-family: "Pixeloid", monospace;
+      font-weight: normal;
+      font-size: 19px;
+      line-height: 1;
+      color: #e9e3d4;
+      background: #191921;
+      box-shadow: 0 0 0 2px #3d4f9e;
+    }
+    /* Etiqueta do que esta acontecendo na tela */
+    .etiqueta {
+      position: absolute; left: 44px; bottom: 38px;
+      display: flex; align-items: center; gap: 10px;
+      font-family: "Pixeloid", monospace;
+      font-size: 22px;
+      color: #fff4dc;
+      background: #0d0d12;
+      box-shadow: 0 0 0 3px #26262e, 6px 6px 0 rgba(0, 0, 0, 0.45);
+      padding: 10px 16px;
+    }
+    .etiqueta i { width: 10px; height: 10px; background: #f5b83d; }
+    /* Plano do celular */
+    .celular {
+      position: absolute; left: 866px; top: 78px;
+      width: 326px; height: 568px;
+      background: #191921;
+      box-shadow: 0 0 0 4px #3a3a46, 10px 10px 0 rgba(0, 0, 0, 0.45);
+      overflow: hidden;
+    }
+    .celular img {
+      width: 100%; height: 100%; display: block;
+      object-fit: cover;
+      image-rendering: pixelated;
+    }
+    .fala {
+      position: absolute; left: 66px; top: 216px; width: 700px;
+      font-family: "Pixeloid", monospace;
+      font-size: 38px;
+      line-height: 1.45;
+      color: #fff4dc;
+      text-shadow: 4px 4px 0 #1b1a2b;
+    }
+    .fala .p { display: inline-block; }
+    .fala b { color: #f5b83d; font-weight: normal; }
+  </style>
+  <div id="root" data-composition-id="terminais" data-width="1280" data-height="720">
+    <!-- 13,8s - 18,8s: os terminais com nome e o pedido de aprovação -->
+    <div id="ter-clip-1" class="clip" data-start="0" data-duration="5" data-track-index="1">
+      <div class="quadro aberto" id="ter-terminais">
+        <img data-layout-allow-overflow src="assets/img/terminais.png" alt="Terminais locais com os nomes dos agentes em cima de cada um" />
+      </div>
+      <div class="quadro" id="ter-permitir">
+        <img src="assets/img/permitir.png" alt="Cartão de pedido de permissão, com os botões Permitir e Negar" />
+      </div>
+    </div>
+
+    <!-- 18,8s - 21,4s: a resposta vai direto para o mapa -->
+    <div id="ter-clip-2" class="clip" data-start="5" data-duration="2.6" data-track-index="2">
+      <div class="quadro" id="ter-responder">
+        <img src="assets/img/responder.png" alt="Cartão de resposta com o campo de texto e o botão Responder" />
+      </div>
+    </div>
+
+    <!-- 21,4s - 24,6s: o mesmo mapa, no celular -->
+    <div id="ter-clip-3" class="clip" data-start="7.6" data-duration="3.2" data-track-index="3">
+      <div class="celular" id="ter-celular">
+        <img src="assets/img/celular.png" alt="O escritório aberto no celular" />
+      </div>
+    </div>
+
+    <div id="ter-titulo">
+      <p class="placa"><span>Do terminal ao <em>mapa</em></span></p>
+    </div>
+
+    <div id="ter-fita">
+      <p class="fita">
+        <b>Claude Code</b><b>Codex</b><b>OpenCode</b><b>agy</b><b>MiniMax</b><b>Maestri</b>
+      </p>
+    </div>
+
+    <div id="ter-etiqueta-1">
+      <p class="etiqueta"><i aria-hidden="true"></i><span>Um agente pede permissão. Você aprova no mapa.</span></p>
+    </div>
+
+    <div id="ter-etiqueta-2">
+      <p class="etiqueta"><i aria-hidden="true"></i><span>Você responde a pergunta direto no mapa.</span></p>
+    </div>
+
+    <div id="ter-fala">
+      <p class="fala">
+        <span class="p">Aprove</span> <span class="p">permissões</span> <span class="p">e</span>
+        <span class="p">responda</span> <span class="p">perguntas</span> <span class="p">direto</span>
+        <span class="p">do</span> <b class="p">mapa</b> —<br />
+        <span class="p">até</span> <span class="p">pelo</span> <b class="p">celular.</b>
+      </p>
+    </div>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+
+    // Os terminais: entrada em zoom curto e depois um empurrão lento.
+    tl.fromTo(
+      "#ter-terminais img",
+      { scale: 1.05 },
+      { scale: 1.12, duration: 2.4, ease: "none", transformOrigin: "center center" },
+      0
+    );
+
+    // Trocas entre os cartões.
+    tl.to("#ter-terminais", { opacity: 0, filter: "blur(8px)", duration: 0.16, ease: "power2.in" }, 2.36);
+    tl.fromTo(
+      "#ter-permitir",
+      { opacity: 0, filter: "blur(8px)" },
+      { opacity: 1, filter: "blur(0px)", duration: 0.24, ease: "power2.out" },
+      2.4
+    );
+    tl.to("#ter-permitir", { opacity: 0, filter: "blur(8px)", duration: 0.16, ease: "power2.in" }, 4.94);
+    tl.fromTo(
+      "#ter-responder",
+      { opacity: 0, filter: "blur(8px)" },
+      { opacity: 1, filter: "blur(0px)", duration: 0.24, ease: "power2.out" },
+      5
+    );
+
+    // O celular entra como objeto, não como mais uma tela.
+    tl.to("#ter-responder", { opacity: 0, filter: "blur(8px)", duration: 0.16, ease: "power2.in" }, 7.54);
+    tl.fromTo(
+      "#ter-celular",
+      { opacity: 0, y: 40, scale: 0.96 },
+      { opacity: 1, y: 0, scale: 1, duration: 0.42, ease: "power4.out", transformOrigin: "center center" },
+      7.6
+    );
+
+    // Título e fita de terminais.
+    tl.fromTo(
+      "#ter-titulo .placa",
+      { opacity: 0, x: -26 },
+      { opacity: 1, x: 0, duration: 0.34, ease: "power4.out" },
+      0.2
+    );
+    tl.fromTo(
+      "#ter-fita b",
+      { opacity: 0, y: 12 },
+      { opacity: 1, y: 0, duration: 0.26, ease: "power3.out", stagger: 0.08 },
+      0.6
+    );
+
+    // Etiqueta: o que está acontecendo na tela agora.
+    tl.fromTo(
+      "#ter-etiqueta-1 .etiqueta",
+      { opacity: 0, x: -18 },
+      { opacity: 1, x: 0, duration: 0.28, ease: "power3.out" },
+      2.55
+    );
+    tl.to("#ter-etiqueta-1 .etiqueta", { opacity: 0, x: -14, duration: 0.22, ease: "power2.in" }, 4.7);
+    tl.fromTo(
+      "#ter-etiqueta-2 .etiqueta",
+      { opacity: 0, x: -18 },
+      { opacity: 1, x: 0, duration: 0.28, ease: "power3.out" },
+      5.15
+    );
+    tl.to("#ter-etiqueta-2 .etiqueta", { opacity: 0, x: -14, duration: 0.22, ease: "power2.in" }, 7.3);
+    tl.to("#ter-titulo .placa", { opacity: 0, x: -18, duration: 0.26, ease: "power2.in" }, 7.3);
+    tl.to("#ter-fita .fita", { opacity: 0, y: -10, duration: 0.26, ease: "power2.in" }, 2.25);
+
+    // A frase do celular, palavra a palavra.
+    tl.fromTo(
+      "#ter-fala .p",
+      { opacity: 0, y: 14, filter: "blur(5px)" },
+      { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.24, ease: "power3.out", stagger: 0.055 },
+      7.75
+    );
+
+    window.__timelines["terminais"] = tl;
+  </script>
+</template>
