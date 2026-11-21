@@ -24,7 +24,9 @@ jobs:
       - name: Python
         # test_montar_mundo fica de fora no CI: compara PNGs byte a byte e o zlib do runner gera bytes diferentes
         # (falha também fora da máquina que montou os mapas); rode local ao mexer no mundo.
-        run: python3 -B -I -m unittest $(ls test_*.py | grep -v '^test_montar_mundo' | sed 's/\.py$//')
+        run: |
+          python3 -B -I -m unittest discover -p "test_[!m]*.py"
+          python3 -B -I -m unittest discover -p "test_m[!o]*.py"
       - name: JS
         run: |
           for t in test_*.js; do node "$t"; done
