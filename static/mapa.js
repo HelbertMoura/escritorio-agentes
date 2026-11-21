@@ -16,6 +16,7 @@ const CORREDOR_H = 3;
 const MX = 3, MY = 2;          // área externa: laterais e topo (em tiles); embaixo, fachada, calçada e rua (em px, abaixo)
 const FACHADA = 32;  // px: a frente do prédio vista de frente, embaixo da planta (Firmópolis); empurra a rua para baixo
 const CALCADA = 24, RUA_ALT = 30;   // px: a calçada da rua e a faixa de asfalto, enxutas (o prédio é o assunto)
+const FOLGA_CARRO = 120;   // px: distância livre entre dois veículos da mesma faixa (nunca se cobrem)
 const ruaY = p => p.y + p.h + FACHADA + CALCADA + 3;   // topo do asfalto (p: o retângulo do prédio)
 const MAX_FILEIRA = 6;         // salas por fileira, no máximo; passou, abre outra fileira (e outro corredor)
 const CON_W = 3;               // tiles: o corredor de ligação, à esquerda, que desce do corredor principal até os outros
@@ -1482,7 +1483,7 @@ function pintarFachada(c, atlas, p, r) {
 const arandelas = p => { const porta = Math.round(p.x + p.w / 2); return [porta - 18, porta + 18].map(x => ({ x, y: p.y + p.h + 8 })); };
 
 function montarExterior(atlas, obj0, W, H, p, marca, portaY) {
-  const r = rng(marca ^ 11), ext = { carros: [], postes: [], ruaY: ruaY(p), ruaAlt: RUA_ALT };
+  const r = rng(marca ^ 11), ext = { carros: [], postes: [], ruaY: ruaY(p), ruaAlt: RUA_ALT, folga: FOLGA_CARRO };
   const tem = n => !!sprite(atlas, n);
   // planta sai espelhada metade das vezes; fora: balança com o vento do clima (efeitos.js). Sem árvore enfeitando o
   // topo nem a rua: a cor do mapa vem dos times
@@ -1506,9 +1507,27 @@ function montarExterior(atlas, obj0, W, H, p, marca, portaY) {
     const x = p.x + 180 + (i + 0.2 + r() * 0.6) * ((W - p.x - 200) / vagasRua);
     obj(n, x, n === "banco" ? meioFio - 2 : meioFio, true);
   }
-  // carros passando
+  // carros passando: os mais baixos na faixa de cima (a do prédio, que vai para a esquerda) e os mais altos na de baixo
+  // (a mais próxima, que vai para a direita). A lista sai na ordem de desenho, então a faixa de baixo passa na frente.
   const carros = ["carro1", "carro2", "carro3", "carro4"].filter(tem);
-  for (let i = 0; i < carros.length; i++) ext.carros.push({ nome: carros[i], x: (W / carros.length) * i + r() * 60, faixa: i % 2, vel: 18 + r() * 22 });
+  const medida = n => { const s = sprite(atlas, n); return s ? [s[2], s[3]] : [40, 14]; };
+  const metade = Math.ceil(carros.length / 2);
+  const porAltura = [...carros].sort((a, b) => medida(a)[1] - medida(b)[1]);
+  for (const [faixa, lista] of [[1, porAltura.slice(0, metade)], [0, porAltura.slice(metade)]]) {
+    const passo = W / lista.length;
+    // o sorteio de cada carro cabe na folga: entre dois da mesma faixa ficam 120 px livres de caixa a caixa
+    const folgas = lista.map((n, i) => {
+      const w = medida(n)[0];
+      let f = Infinity;
+      if (i > 0) f = Math.min(f, passo - medida(lista[i - 1])[0] / 2 - w / 2 - FOLGA_CARRO);
+      if (i + 1 < lista.length) f = Math.min(f, passo - w / 2 - medida(lista[i + 1])[0] / 2 - FOLGA_CARRO);
+      return Math.max(0, Math.min(30, f / 2));
+    });
+    for (let i = 0; i < lista.length; i++) {
+      const w = medida(lista[i])[0];
+      ext.carros.push({ nome: lista[i], x: Math.round(passo * (i + 0.5) - w / 2 + (r() * 2 - 1) * folgas[i]), faixa, vel: 18 + r() * 22 });
+    }
+  }
   return ext;
 }
 

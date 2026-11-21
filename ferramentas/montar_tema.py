@@ -47,7 +47,6 @@ ESCOLHA = {
     "arvore_natal": "arvore_natal_1", "presentes": "presentes_1", "abobora": "abobora_1", "abobora2": "abobora_2",
     "ovos": "ovos_1", "coelho": "coelho_1", "lanterna": "lanterna_china_1", "fogueira": "fogueira_1",
     "champanhe": "champanhe_1", "mascara": "mascara_1", "diwali": "diwali_1", "arvore3": "pinheiro_1",
-    "carro1": "carro_4", "carro2": "carro_5", "carro3": "carro_3", "carro4": "carro_6",
     # salas por tipo de time: Ops, Gabinete e times comuns
     "extintor": "extintor_1", "cabideiro": "cabideiro_1", "sofa_cinza": "sofa_cinza_2", "aparador": "aparador_2",
     "cafeteira": "cafeteira_2", "rack_rede": "rack_rede_2", "nobreak": "nobreak_1", "carrinho_ferramentas": "carrinho_ferramentas_1",
@@ -65,6 +64,16 @@ ESCOLHA = {
     "fachada_floreira": "fachada/floreira",
     # a porta do banheiro no fim do corredor (Firmópolis): a fila dos terminais
     "banheiro_porta": "banheiro/porta_1",
+}
+
+# Os veículos da rua, com a escala uns dos outros e com a fachada: o hatch e o táxi (os mais baixos) na faixa de
+# cima, a van e a moto (as mais altas) na de baixo. O rodapé da sombra que os arquivos trouxeram é cortado para as
+# rodas ficarem na base do desenho (a sombra a rua desenha por baixo).
+VEICULOS = {  # nome no mapa -> (arquivo, largura, altura, linhas de sombra no rodapé)
+    "carro1": ("bairro/carro", 32, 14, 2),   # hatch vermelho: vista lateral limpa, o melhor dos quatro
+    "carro2": ("carro_5", 38, 14, 1),        # táxi amarelo
+    "carro3": ("carro_3", 40, 19, 0),        # van branca: a mais comprida e a mais alta, como van de verdade
+    "carro4": ("carro_6", 18, 18, 0),        # moto com o piloto: menor que qualquer carro
 }
 
 T = 16
@@ -345,6 +354,15 @@ def main():
             print("faltando:", arq)
     if "pufe_azul" in pecas:
         pecas["pufe_branco"] = recolorir(pecas["pufe_azul"])
+    # os veículos da rua: a escala de cada um, sem a sombra do rodapé e sem suavizar (pixel art nítida)
+    for nome, (arq, w, h, rodape) in VEICULOS.items():
+        if not os.path.exists(os.path.join(ORIGEM, arq + ".png")):
+            print("faltando:", arq)
+            continue
+        im = recorte(arq)
+        if rodape:
+            im = im.crop((0, 0, im.width, im.height - rodape))
+        pecas[nome] = im.resize((w, h), Image.NEAREST)
     # hatch, táxi e van foram gerados virados para a esquerda (lanterna traseira à direita):
     # todos os veículos ficam virados para a direita; a moto já nasceu assim
     for n in ("carro1", "carro2", "carro3"):
