@@ -1,0 +1,56 @@
+# Testes em todo PR e push; em push na main, publica a imagem no GHCR (:main e :<sha>).
+# A VPS da DM confere o :main a cada 2 min e se atualiza sozinha (com healthcheck e rollback); nada de SSH vindo do GitHub.
+name: testes e imagem
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Python
+        # test_montar_mundo fica de fora no CI: compara PNGs byte a byte e o zlib do runner gera bytes diferentes
+        # (falha também fora da máquina que montou os mapas); rode local ao mexer no mundo.
+        run: |
+          python3 -B -I -m unittest discover -p "test_[!m]*.py"
+          python3 -B -I -m unittest discover -p "test_m[!o]*.py"
+      - name: JS
+        run: |
+          for t in test_*.js; do node "$t"; done
+          node --check static/*.js site/site.js
+
+  imagem:
+    if: github.event_name == 'push'
+    needs: testes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/helbertmoura/escritorio-agentes:main
+            ghcr.io/helbertmoura/escritorio-agentes:${{ github.sha }}
+          labels: org.opencontainers.image.revision=${{ github.sha }}
