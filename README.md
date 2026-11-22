@@ -157,8 +157,17 @@ All screenshots come from **demo mode** or from a preview with **fictional data*
 </table>
 
 <p align="center">
+  <a href="./docs/screenshots/39-segredos-mascarados.png"><img src="./docs/screenshots/39-segredos-mascarados.png" alt="The agent card with the secrets masked: the role reads 'Desenvolvimento · token: •••' and the task 'Revisando o deploy com o token •••'; in the lists below, the approval says 'Aplicando &quot;token&quot;: &quot;•••&quot; no servidor' and the question says 'Qual horário oferecer ao cliente? A chave é •••'" width="900"></a>
+</p>
+<p align="center"><em>Secrets on screen: a token becomes "•••" before it reaches the map.</em></p>
+
+<p align="center">
   <img src="./docs/screenshots/09-celular.png" alt="The office on a phone: right below the title, the tall map, with the time and weather pill on top and the camera bar (−, 1x, +, Ver tudo and the ⋯ menu) at the bottom left; the filters come after the map" width="300">
 </p>
+<p align="center">
+  <a href="./docs/screenshots/40-celular-ux.png"><img src="./docs/screenshots/40-celular-ux.png" alt="The office on a phone: the map right below the title, and below it the state filters in a 2×2 grid — Todos 7, Trabalhando 5, Esperando você 2, Livres 0 — with Fora (outside) on its own row" width="300"></a>
+</p>
+<p align="center"><em>On a phone, the filters line up in a clean grid.</em></p>
 
 ## Install
 
@@ -669,6 +678,7 @@ An alert on your phone, or computer, when an agent asks for your approval or ask
 
 In short: with the installer, the office is reachable **only on your tailnet** (on Docker with a public address, read [Public address](#public-address)); it **fails closed** when its user file cannot be read, and **no secret ever reaches the browser**: the agentes.chat token stays on the server, and the browser only holds an HttpOnly session cookie.
 
+- **Secrets masked on screen:** tokens, passwords and keys that come from a conversation, a task label or an agent's name and role become "•••" before they reach the map, the TV, the phone and the visitors' room. It covers the known tokens (OpenAI, GitHub, GitLab, Google, Slack), JWTs, private keys, `Bearer`, `password: ...` and `"token": "..."`, and long random base64 text; file paths and names still show. The masking happens before the text is cut, so no piece of a token is left.
 - **Read-only on agentes.chat:** OAuth scope `read`. A token with more permissions is refused. The exception is the `"responder"` mode (below), which asks for `read write`; `manage` is always refused.
 - **World (`/mundo.html`):** the page and its files are served without login, by exact name. It only calls `POST /api/mundo/clima`, rate-limited per origin, which returns, per city, the weather type, the wind (0 to 1) and whether it is night; the `id` of the office's city (`casa`); the map version; and the keys of the calendar holidays you turned off (`festas_desligadas`). It never sends temperature, coordinates, IP, the company name or your own dates, and nothing from agentes.chat. Open-Meteo is queried by the server, once every 15 minutes for the 28 cities; the browser never talks to it. See [World](#world).
 - **Passwords and sessions:**

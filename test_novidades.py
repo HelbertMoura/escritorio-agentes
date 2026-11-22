@@ -47,23 +47,24 @@ class ChangelogReal(unittest.TestCase):
     def test_entradas_titulos_e_secoes(self):
         primeira = self.entradas[0]
         self.assertEqual((primeira["titulo"], primeira["versao"], primeira["data"]),
-                         ("Responder do escritório", e.VERSAO, "2026-11-20"))   # o changelog do repositório é o desta versão
+                         ("O escritório mais leve e seguro", e.VERSAO, "2026-11-22"))   # o changelog do repositório é o desta versão
         self.assertEqual([s["nome"] for s in primeira["secoes"]], ["Adicionado", "Mudado", "Corrigido", "Segurança"])
         self.assertEqual([s["nome"] for s in self.entradas[1]["secoes"]], ["Adicionado", "Mudado", "Corrigido", "Segurança"])
-        self.assertEqual([s["nome"] for s in self.entradas[2]["secoes"]], ["Adicionado", "Mudado"])
-        self.assertEqual([s["nome"] for s in self.entradas[3]["secoes"]], ["Adicionado", "Mudado", "Segurança"])
-        self.assertEqual([s["nome"] for s in self.entradas[4]["secoes"]], ["Adicionado", "Mudado", "Corrigido"])
-        self.assertEqual([s["nome"] for s in self.entradas[5]["secoes"]], ["Mudado", "Corrigido"])
-        self.assertEqual([s["nome"] for s in self.entradas[6]["secoes"]], ["Adicionado", "Mudado", "Corrigido", "Segurança"])
+        self.assertEqual([s["nome"] for s in self.entradas[2]["secoes"]], ["Adicionado", "Mudado", "Corrigido", "Segurança"])
+        self.assertEqual([s["nome"] for s in self.entradas[3]["secoes"]], ["Adicionado", "Mudado"])
+        self.assertEqual([s["nome"] for s in self.entradas[4]["secoes"]], ["Adicionado", "Mudado", "Segurança"])
+        self.assertEqual([s["nome"] for s in self.entradas[5]["secoes"]], ["Adicionado", "Mudado", "Corrigido"])
+        self.assertEqual([s["nome"] for s in self.entradas[6]["secoes"]], ["Mudado", "Corrigido"])
+        self.assertEqual([s["nome"] for s in self.entradas[7]["secoes"]], ["Adicionado", "Mudado", "Corrigido", "Segurança"])
         self.assertEqual([(x["titulo"], x["versao"], x["data"]) for x in self.entradas[1:10]],
-                         [("A firma ganha vida", "2.1.0", "2026-11-20"), ("Firmópolis", "2.0.0", "2026-11-20"),
-                          ("Escritório da equipe", "1.6.0", "2026-11-16"), ("Jornal por andar e hora extra", "1.5.2", "2026-11-15"),
-                          ("Chat à direita e ajustes", "1.5.1", "2026-11-14"), ("Andares e equipe", "1.5.0", "2026-11-14"),
-                          ("Self-host e mundo maior", "1.4.0", "2026-11-12"),
-                          ("Mundo e visitas por convite", "1.3.0", "2026-11-10"), ("Novidades", "1.2.0", "2026-11-08")])
-        self.assertEqual([s["nome"] for s in self.entradas[9]["secoes"]], ["Adicionado", "Mudado", "Segurança"])
+                         [("Responder do escritório", "2.2.0", "2026-11-20"), ("A firma ganha vida", "2.1.0", "2026-11-20"),
+                          ("Firmópolis", "2.0.0", "2026-11-20"), ("Escritório da equipe", "1.6.0", "2026-11-16"),
+                          ("Jornal por andar e hora extra", "1.5.2", "2026-11-15"), ("Chat à direita e ajustes", "1.5.1", "2026-11-14"),
+                          ("Andares e equipe", "1.5.0", "2026-11-14"), ("Self-host e mundo maior", "1.4.0", "2026-11-12"),
+                          ("Mundo e visitas por convite", "1.3.0", "2026-11-10")])
+        self.assertEqual([s["nome"] for s in self.entradas[9]["secoes"]], ["Adicionado", "Mudado"])
         # o teto de 10 deixa de fora as entradas mais antigas
-        self.assertEqual(self.entradas[-1]["versao"], "1.2.0")
+        self.assertEqual(self.entradas[-1]["versao"], "1.3.0")
         self.assertEqual(len(self.entradas), novidades.ENTRADAS_MAX)
         datas = [ent["data"] for ent in self.entradas]
         self.assertEqual(datas, sorted(datas, reverse=True))
@@ -75,7 +76,7 @@ class ChangelogReal(unittest.TestCase):
 
     def test_itens_em_markdown_cru_e_links_so_do_repositorio(self):
         itens = [i for ent in self.entradas for sec in ent["secoes"] for i in sec["itens"]]
-        self.assertTrue(itens[0].startswith("**Permitir ou Negar pelo escritório:** os pedidos de permissão"))
+        self.assertTrue(itens[0].startswith("**O tour da nova Firmópolis na TV do site:** a recepção de"))
         self.assertFalse(any("] (" in i for i in itens))   # nenhum "](" do changelog real foi desarmado
         todos = [u for i in itens for u in links(i)]
         self.assertTrue(todos)
