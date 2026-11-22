@@ -157,8 +157,17 @@ Todas as capturas saem do **modo demonstração** ou de uma prévia com **dados 
 </table>
 
 <p align="center">
+  <a href="./docs/screenshots/39-segredos-mascarados.png"><img src="./docs/screenshots/39-segredos-mascarados.png" alt="O cartão do agente com os segredos mascarados: a função diz 'Desenvolvimento · token ·••' e a tarefa 'Revisando o deploy com o token •••'; nas listas de baixo, o pedido diz 'Aplicando token: •••• no servidor' e a pergunta diz 'A chave é •••'" width="900"></a>
+</p>
+<p align="center"><em>Segredos na tela: um token vira "•••" antes de chegar ao mapa.</em></p>
+
+<p align="center">
   <img src="./docs/screenshots/09-celular.png" alt="O escritório no celular: logo abaixo do título, o mapa alto, com a pílula da hora e do tempo em cima e a barra da câmera (−, 1x, +, Ver tudo e o menu ⋯) embaixo à esquerda; os filtros vêm depois do mapa" width="300">
 </p>
+<p align="center">
+  <a href="./docs/screenshots/40-celular-ux.png"><img src="./docs/screenshots/40-celular-ux.png" alt="O escritório no celular: o mapa logo abaixo do título e, embaixo dele, os filtros de estado numa grade 2×2 — Todos 7, Trabalhando 5, Esperando você 2, Livres 0 — com Fora em linha própria" width="300"></a>
+</p>
+<p align="center"><em>No celular, os filtros ficam em grade, sem corte.</em></p>
 
 ## Instalar
 
@@ -669,6 +678,7 @@ Um aviso no celular, ou no computador, quando um agente pede a sua aprovação o
 
 Em resumo: com o instalador, o escritório só é alcançável **na sua tailnet** (no Docker com endereço público, leia [Endereço público](#endereço-público)); ele **falha fechado** quando o arquivo de usuários não pode ser lido, e **nenhum segredo chega ao navegador**: o token do agentes.chat fica no servidor, e o navegador só guarda um cookie de sessão HttpOnly.
 
+- **Segredos mascarados na tela:** tokens, senhas e chaves que vêm de uma conversa, do rótulo de uma tarefa ou do nome e da função de um agente viram "•••" antes de chegar ao mapa, à TV, ao celular e à sala de visitas. Entram os tokens conhecidos (OpenAI, GitHub, GitLab, Google, Slack), o JWT, a chave privada, `Bearer`, `senha: ...` e `"token": "..."`, e textos longos e aleatórios em base64; caminhos e nomes de arquivo continuam aparecendo. A troca acontece antes do corte do texto, então nenhum pedaço de token sobra.
 - **Só leitura no agentes.chat:** escopo OAuth `read`. Um token com mais permissões é recusado. A exceção é o modo `"responder"` (abaixo), que pede `read write`; `manage` é recusado sempre.
 - **Mundo (`/mundo.html`):** a página e os arquivos dela são servidos sem login, por nome exato. Ela chama só o `POST /api/mundo/clima`, com limite de pedidos por origem, que devolve por cidade o tipo de tempo, o vento (de 0 a 1) e se é noite; o `id` da cidade do escritório (`casa`); a versão do mapa; e as chaves das datas do calendário que você desligou (`festas_desligadas`). Nunca vão temperatura, coordenadas, IP, nome da empresa nem datas próprias, e nada do agentes.chat. O Open-Meteo é consultado pelo servidor, uma vez a cada 15 minutos para as 28 cidades; o navegador não fala com ele. Veja [Mundo](#mundo).
 - **Senhas e sessões:**

@@ -4,12 +4,20 @@
 
 As mudanças que importam neste projeto ficam aqui, da mais nova para a mais antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Desde a 1.1.0, as versões seguem o [SemVer](https://semver.org/lang/pt-BR/); as entradas mais antigas são marcos com data.
 
-## Não lançado
+## 2.3.0 · 2026-11-22 · O escritório mais leve e seguro
+
+Release [`v2.3.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2.3.0). Commits: [`v2.2.0...v2.3.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v2.2.0...v2.3.0).
+
+### Adicionado
+- **O tour da nova Firmópolis na TV do site:** a recepção de [firmopolis.devmaniacs.com.br](https://firmopolis.devmaniacs.com.br) deixou o chiado e passou a mostrar o tour narrado de quarenta segundos, com pôster, legendas em português e os controles de vídeo do navegador. O arquivo não baixa antes de apertar o play, e quem não reproduz vídeo tem o link para baixar o MP4.
 
 ### Mudado
 - **App mais leve e legível no celular:** as fontes Figtree e Silkscreen passam a ser servidas em `woff2` (-58 KB no primeiro carregamento, mantendo `.ttf` como reserva). A ficha de agente e terminal ficou opaca com indicação real de rolagem que some no fim, o enquadramento inicial do mapa aguarda a tela visível e se ajusta ao trocar de andar, e os filtros de estado no celular ocupam a grade de forma equilibrada.
 - **Estados reais de conexão no app:** falhas de leitura, reconexão (`conferindo`), troca de organização e pausa sem leitura anterior mostram mensagens reais em vez de manter "Conectando…" preso ou simular organização vazia.
-- **Site responsivo e acessível:** menu mobile em gaveta acessível (teclado, Escape, trava de foco e `inert` no fundo) com scroll-spy sincronizado, imagens responsivas com variantes `-m.webp`, troca suave sem salto de layout nas prévias de clima/festas/mundo (respeitando movimento reduzido) e legendas em português (`tour-firmopolis.vtt`) no vídeo da recepção.
+- **Site responsivo e acessível:** menu mobile em gaveta acessível (teclado, Escape, trava de foco e `inert` no fundo) com scroll-spy sincronizado, imagens responsivas com variantes `-m.webp`, troca suave sem salto de layout nas prévias de clima/festas/mundo (respeitando movimento reduzido).
+
+### Corrigido
+- **Carros na rua:** os carros que passam na frente do prédio agora saem na escala do desenho e ficam assentados no asfalto, sem cobrir o passeio. As duas faixas se organizam por altura (os mais baixos na de cima, a do prédio; os mais altos na de baixo, que passa na frente) e nunca há dois carros se cobrindo: entre dois da mesma faixa ficam 120 px livres de caixa a caixa.
 
 ### Segurança
 - **Segredos escondidos na tela:** tokens, senhas e chaves que aparecem numa conversa, no rótulo de uma tarefa ou no nome e na função de um agente do agentes.chat viram "•••" antes de chegar ao mapa, à TV, ao celular e à sala de visitas. Entram os tokens conhecidos (OpenAI, GitHub, GitLab, Google, Slack), JWT, chave privada, `Bearer`, `senha: ...` e `"token": "..."`, e textos longos e aleatórios em base64. Caminhos e nomes de arquivo continuam aparecendo. A troca acontece antes do corte do texto, então nenhum pedaço de token sobra. Cada texto é lido até 64 KB, então uma mensagem enorme não segura o escritório.

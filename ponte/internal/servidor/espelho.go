@@ -31,7 +31,7 @@ import (
 const ArquivoEspelho = "espelho.json"
 
 // Versao vai no User-Agent (a Cloudflare barra o do Go).
-const Versao = "2.2.0"
+const Versao = "2.3.0"
 
 const (
 	// MaxEspelho é o teto do corpo; o servidor aceita até 256 KiB. Acima, o dia vai

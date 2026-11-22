@@ -4,12 +4,20 @@
 
 All notable changes to this project are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Since 1.1.0, versions follow [SemVer](https://semver.org/); older entries are dated milestones.
 
-## Unreleased
+## 2.3.0 · 2026-11-22 · A lighter, safer office
+
+Release [`v2.3.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2.3.0). Commits: [`v2.2.0...v2.3.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v2.2.0...v2.3.0).
+
+### Added
+- **The new Firmópolis tour on the site's TV:** the reception at [firmopolis.devmaniacs.com.br](https://firmopolis.devmaniacs.com.br) now plays the forty-second narrated tour instead of the static noise, with a poster, Portuguese captions and the browser's video controls. The file does not download before you press play, and browsers that cannot play video get a link to the MP4.
 
 ### Changed
 - **Lighter app and clearer mobile layout:** Figtree and Silkscreen are now served in `woff2` (-58 KB on first load, keeping `.ttf` as fallback). Agent and terminal cards are opaque with a scroll hint that clears at the bottom, initial map framing waits for a visible viewport and resets on floor changes, and mobile status filters align cleanly.
 - **Real connection states in the app:** read failures, reconnections (`conferindo`), organization mismatches and pauses without a prior reading show accurate states instead of getting stuck on "Conectando…" or showing a false empty organization.
-- **Responsive and accessible site:** accessible mobile drawer menu (keyboard, Escape, focus trap and `inert` background) with synced scroll-spy, responsive `-m.webp` image variants, fade transitions without layout shift on weather/holiday/world previews (respecting reduced motion), and Portuguese captions (`tour-firmopolis.vtt`) on the reception tour video.
+- **Responsive and accessible site:** accessible mobile drawer menu (keyboard, Escape, focus trap and `inert` background) with synced scroll-spy, responsive `-m.webp` image variants, fade transitions without layout shift on weather/holiday/world previews (respecting reduced motion).
+
+### Fixed
+- **Cars on the street:** the cars that pass in front of the building now come out at the scale of the drawing and sit on the asphalt, without covering the sidewalk. The two lanes are sorted by height (the shorter ones on the upper lane, by the building; the taller ones on the lower one, which passes in front) and no two cars ever overlap: 120 px of free space sits between the boxes of two cars in the same lane.
 
 ### Security
 - **Secrets hidden on screen:** tokens, passwords and keys in a conversation, a task label or an agent's name and role from agentes.chat become "•••" before they reach the map, the TV, the phone and the visitors' room. It covers known tokens (OpenAI, GitHub, GitLab, Google, Slack), JWTs, private keys, `Bearer`, `password: ...` and `"token": "..."`, and long random base64 text. File paths and names still show. The masking happens before the text is cut, so no piece of a token is left. Each text is read up to 64 KB, so a huge message cannot hold the office busy.
