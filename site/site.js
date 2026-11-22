@@ -324,6 +324,7 @@
     cena(cv, 30, loop);
   });
 
+  var digitado = '';   // as ultimas letras digitadas, para o easter egg da pizza
   addEventListener('keydown', function (e) {
     if (!e.key || e.key.length !== 1 || /input|textarea/i.test(e.target.tagName)) return;
     digitado = (digitado + e.key.toLowerCase()).slice(-5);
@@ -374,36 +375,85 @@
     b.addEventListener('click', function () { b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'); });
   });
 
+  /* ---------- Trocar de imagem sem salto: a figura fica do tamanho e a foto entra com fade ---------- */
+  function trocarImagem(img, src, srcset, alt) {
+    if (!img) return;
+    var figura = img.closest('figure, .janela, .janela-festa');
+    if (figura) figura.setAttribute('aria-busy', 'true');
+    img.classList.add('troca');
+    // contador por imagem: em clique rapido, so a ultima troca vale
+    var seq = (parseInt(img.dataset.trocaSeq, 10) || 0) + 1;
+    img.dataset.trocaSeq = String(seq);
+    var aplicar = function () {
+      if (img.dataset.trocaSeq !== String(seq)) return;   // callback obsoleto
+      if (srcset) img.setAttribute('srcset', srcset); else img.removeAttribute('srcset');
+      img.src = src;
+      if (alt) img.alt = alt;
+      img.classList.remove('troca');
+      if (figura) figura.removeAttribute('aria-busy');
+    };
+    // a imagem nova ja esta no cache do navegador: a troca e quase imediata
+    var pre = new Image();
+    pre.onload = aplicar;
+    pre.onerror = aplicar;
+    // sizes e srcset antes do src: senao o preload baixa a versao desktop no celular
+    var sizes = img.getAttribute('sizes');
+    if (sizes) pre.sizes = sizes;
+    if (srcset) pre.srcset = srcset;
+    pre.src = src;
+  }
+
   /* ---------- Clima e folhinha: gravações do modo demonstração (paradas com movimento reduzido) ---------- */
-  var gravacao = function (nome) { return 'img/tempo/' + nome + (parado ? '-parado' : '') + '.webp?v=2'; };   // ?v=2: as gravações do prédio inteiro, sem o recorte antigo do cache
+  // ?v=3: as gravações do prédio inteiro, sem o recorte antigo do cache
+  var gravacao = function (nome) { return 'img/tempo/' + nome + (parado ? '-parado' : '') + '.webp?v=3'; };
+  // a variante mobile (590 px) entra no srcset; a de tela cheia fica para o desktop
+  var gravacaoSrcset = function (nome) {
+    var base = 'img/tempo/' + nome + (parado ? '-parado' : '');
+    return base + '-m.webp?v=3 590w, ' + base + '.webp?v=3 944w';
+  };
   var climaImg = document.querySelector('.clima-img'), climaLegenda = document.querySelector('.clima-legenda');
   var climaBotoes = document.querySelectorAll('[data-clima]');
   climaBotoes.forEach(function (b) {
     b.addEventListener('click', function () {
       climaBotoes.forEach(function (o) { o.setAttribute('aria-pressed', String(o === b)); });
-      climaImg.src = gravacao('clima-' + b.dataset.clima);
-      climaImg.alt = 'O escritório com ' + b.textContent.toLowerCase() + ', gravado do modo demonstração.';
+      trocarImagem(climaImg, gravacao('clima-' + b.dataset.clima), gravacaoSrcset('clima-' + b.dataset.clima),
+        'O escritório com ' + b.textContent.toLowerCase() + ', gravado do modo demonstração.');
       climaLegenda.textContent = b.dataset.legenda;
     });
   });
-  if (climaImg && parado) climaImg.src = gravacao('clima-chuva');
+  // com movimento reduzido, o srcset tambem troca: srcset tem precedencia sobre src
+  // e manteria os WebPs animados rodando
+  if (climaImg && parado) {
+    climaImg.setAttribute('srcset', gravacaoSrcset('clima-chuva'));
+    climaImg.src = gravacao('clima-chuva');
+  }
 
   // o mundo: a gravação de cada lugar da página Mundo (o Brasil é uma foto)
   var mundoImg = document.querySelector('.mundo-img'), mundoLegenda = document.querySelector('.mundo-legenda');
   var lugares = document.querySelectorAll('[data-cidade]');
   var gravacaoMundo = function (id) {
-    if (id === 'brasil') return 'img/19-mundo-brasil.webp';
-    return 'img/mundo/' + (id === 'globo' ? 'mundo-globo' : 'cidade-' + id) + (parado ? '-parado' : '') + '.webp?v=2';
+    if (id === 'brasil') return 'img/19-mundo-brasil.webp?v=3';
+    return 'img/mundo/' + (id === 'globo' ? 'mundo-globo' : 'cidade-' + id) + (parado ? '-parado' : '') + '.webp?v=3';
+  };
+  var gravacaoMundoSrcset = function (id) {
+    if (id === 'brasil') return 'img/19-mundo-brasil-m.webp?v=3 640w, img/19-mundo-brasil.webp?v=3 760w';
+    var base = 'img/mundo/' + (id === 'globo' ? 'mundo-globo' : 'cidade-' + id) + (parado ? '-parado' : '');
+    // o globo ja tem 600 px: nao ha variante mobile que valha a pena
+    if (id === 'globo') return base + '.webp?v=3 600w';
+    return base + '-m.webp?v=3 640w, ' + base + '.webp?v=3 720w';
   };
   lugares.forEach(function (b) {
     b.addEventListener('click', function () {
       lugares.forEach(function (o) { o.setAttribute('aria-pressed', String(o === b)); });
-      mundoImg.src = gravacaoMundo(b.dataset.cidade);
-      mundoImg.alt = b.textContent + ', gravado da página Mundo.';
+      trocarImagem(mundoImg, gravacaoMundo(b.dataset.cidade), gravacaoMundoSrcset(b.dataset.cidade),
+        b.textContent + ', gravado da página Mundo.');
       mundoLegenda.textContent = b.dataset.legenda;
     });
   });
-  if (mundoImg && parado) mundoImg.src = gravacaoMundo('rio-de-janeiro');
+  if (mundoImg && parado) {
+    mundoImg.setAttribute('srcset', gravacaoMundoSrcset('rio-de-janeiro'));
+    mundoImg.src = gravacaoMundo('rio-de-janeiro');
+  }
 
   var festaImg = document.querySelector('.festa-img'), festaFala = document.querySelector('.festa-fala'), festaLegenda = document.querySelector('.festa-legenda');
   var folhas = document.querySelectorAll('[data-festa]'), falas = [], falaN = 0;
@@ -415,8 +465,8 @@
   folhas.forEach(function (b) {
     b.addEventListener('click', function () {
       folhas.forEach(function (o) { o.setAttribute('aria-pressed', String(o === b)); });
-      festaImg.src = gravacao('festa-' + b.dataset.festa);
-      festaImg.alt = 'O escritório enfeitado para ' + b.dataset.nome + ', gravado do modo demonstração.';
+      trocarImagem(festaImg, gravacao('festa-' + b.dataset.festa), gravacaoSrcset('festa-' + b.dataset.festa),
+        'O escritório enfeitado para ' + b.dataset.nome + ', gravado do modo demonstração.');
       festaLegenda.innerHTML = '';
       var forte = document.createElement('strong'); forte.textContent = b.dataset.nome + '. ';
       festaLegenda.append(forte, b.dataset.enfeites);
@@ -424,7 +474,13 @@
     });
   });
   var natal = document.querySelector('[data-festa="natal"]');
-  if (natal) { falas = natal.dataset.falas.split('|'); falaN = 1; if (parado) festaImg.src = gravacao('festa-natal'); }
+  if (natal) {
+    falas = natal.dataset.falas.split('|'); falaN = 1;
+    if (parado) {
+      festaImg.setAttribute('srcset', gravacaoSrcset('festa-natal'));
+      festaImg.src = gravacao('festa-natal');
+    }
+  }
   if (festaFala && !parado) {   // as falas só trocam com a folhinha na tela
     var falaNaTela = !('IntersectionObserver' in window);
     if (!falaNaTela) new IntersectionObserver(function (es) { falaNaTela = es[es.length - 1].isIntersecting; }).observe(festaFala);
