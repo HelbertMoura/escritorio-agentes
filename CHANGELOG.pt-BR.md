@@ -6,6 +6,11 @@ As mudanças que importam neste projeto ficam aqui, da mais nova para a mais ant
 
 ## Não lançado
 
+### Mudado
+- **App mais leve e legível no celular:** as fontes Figtree e Silkscreen passam a ser servidas em `woff2` (-58 KB no primeiro carregamento, mantendo `.ttf` como reserva). A ficha de agente e terminal ficou opaca com indicação real de rolagem que some no fim, o enquadramento inicial do mapa aguarda a tela visível e se ajusta ao trocar de andar, e os filtros de estado no celular ocupam a grade de forma equilibrada.
+- **Estados reais de conexão no app:** falhas de leitura, reconexão (`conferindo`), troca de organização e pausa sem leitura anterior mostram mensagens reais em vez de manter "Conectando…" preso ou simular organização vazia.
+- **Site responsivo e acessível:** menu mobile em gaveta acessível (teclado, Escape, trava de foco e `inert` no fundo) com scroll-spy sincronizado, imagens responsivas com variantes `-m.webp`, troca suave sem salto de layout nas prévias de clima/festas/mundo (respeitando movimento reduzido) e legendas em português (`tour-firmopolis.vtt`) no vídeo da recepção.
+
 ### Segurança
 - **Segredos escondidos na tela:** tokens, senhas e chaves que aparecem numa conversa, no rótulo de uma tarefa ou no nome e na função de um agente do agentes.chat viram "•••" antes de chegar ao mapa, à TV, ao celular e à sala de visitas. Entram os tokens conhecidos (OpenAI, GitHub, GitLab, Google, Slack), JWT, chave privada, `Bearer`, `senha: ...` e `"token": "..."`, e textos longos e aleatórios em base64. Caminhos e nomes de arquivo continuam aparecendo. A troca acontece antes do corte do texto, então nenhum pedaço de token sobra. Cada texto é lido até 64 KB, então uma mensagem enorme não segura o escritório.
 

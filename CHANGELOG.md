@@ -6,6 +6,11 @@ All notable changes to this project are listed here, newest first. The format fo
 
 ## Unreleased
 
+### Changed
+- **Lighter app and clearer mobile layout:** Figtree and Silkscreen are now served in `woff2` (-58 KB on first load, keeping `.ttf` as fallback). Agent and terminal cards are opaque with a scroll hint that clears at the bottom, initial map framing waits for a visible viewport and resets on floor changes, and mobile status filters align cleanly.
+- **Real connection states in the app:** read failures, reconnections (`conferindo`), organization mismatches and pauses without a prior reading show accurate states instead of getting stuck on "Conectando…" or showing a false empty organization.
+- **Responsive and accessible site:** accessible mobile drawer menu (keyboard, Escape, focus trap and `inert` background) with synced scroll-spy, responsive `-m.webp` image variants, fade transitions without layout shift on weather/holiday/world previews (respecting reduced motion), and Portuguese captions (`tour-firmopolis.vtt`) on the reception tour video.
+
 ### Security
 - **Secrets hidden on screen:** tokens, passwords and keys in a conversation, a task label or an agent's name and role from agentes.chat become "•••" before they reach the map, the TV, the phone and the visitors' room. It covers known tokens (OpenAI, GitHub, GitLab, Google, Slack), JWTs, private keys, `Bearer`, `password: ...` and `"token": "..."`, and long random base64 text. File paths and names still show. The masking happens before the text is cut, so no piece of a token is left. Each text is read up to 64 KB, so a huge message cannot hold the office busy.
 
