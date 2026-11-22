@@ -208,7 +208,9 @@ async function buscar() {
   } catch (e) {
     if (e instanceof AndarInvalido && andar === Andar.atual) { voltarAoPrincipal(); return; }
     if (andar !== Andar.atual) return;
-    falhou = true; mostrarConexao(); atualizarEstados();   // o texto do escritório muda na hora: sem leitura, não é "nenhum agente"
+    falhou = true; mostrarConexao();   // o texto do escritório muda na hora: sem leitura, não é "nenhum agente"
+    if (mundo && estado) desenharPainel();   // e os widgets vazios deixam de piscar "Conectando…"
+    else atualizarEstados();
   }
 }
 
@@ -252,7 +254,7 @@ function verTudo(ja) { moverCamera({ x: predio.W / 2, y: predio.H / 2, k: kMinim
 // para quem está trabalhando; o "Ver tudo" volta ao prédio inteiro a um toque. O zoom continua inteiro (a pixel
 // art fica nítida) e a câmera não se mexe se a pessoa já mexeu nela.
 function enquadrarInicial() {
-  if (enquadradoInicial || cam.mexeu || !mundo || !predio) return;
+  if (enquadradoInicial || cam.mexeu || !mundo || !predio || !vw || !vh) return;
   const todos = [...mundo.bonecos.values()].filter(b => b.x != null && b.y != null && situacao(b) !== "fora");
   if (!todos.length) return;   // ninguém no prédio: fica a vista geral
   const esperando = todos.filter(b => situacao(b) === "esp");
@@ -715,7 +717,7 @@ function desenharEtiqueta(b, t, ocupadas) {
     ctx.strokeStyle = "rgba(8,8,12,.55)"; ctx.lineWidth = Math.max(1.6, (3.4 * dpr) / cam.k); ctx.stroke();
     ctx.strokeStyle = "rgb(" + cor + ")"; ctx.lineWidth = Math.max(0.8, (2 * dpr) / cam.k); ctx.stroke();
     // selo "!" (aprovação) ou "?" (pergunta): sempre aparece; pulsa até a pessoa resolver no agentes.chat
-    const r = tam * (est.classe === "aprovacao" ? 1.1 : 0.9) * (pilula ? 1 : 1);   // sozinho (vista geral), do mesmo tamanho
+    const r = tam * (est.classe === "aprovacao" ? 1.1 : 0.9);   // sozinho (vista geral), do mesmo tamanho
     const bx = pilula ? pilula.x + w + r * 0.8 : bx0, by = pilula ? pilula.y + h / 2 : topo - r - 1;
     desenharSelo(b, est, bx, by, r, t);
     ocupadas.push({ x: bx - r * 1.3, y: by - r * 1.3, w: r * 2.6, h: r * 2.6 });   // balões não cobrem o selo
@@ -976,6 +978,9 @@ const TEXTO_LEITURA = {
   carregando: { titulo: "Conectando ao escritório…", vazio: "Conectando ao escritório…" },
   sem_conexao: { titulo: "O escritório ainda não está conectado ao agentes.chat.", vazio: "Sem leitura do agentes.chat enquanto a conexão não volta." },
   recusada: { titulo: "O agentes.chat recusou a leitura.", vazio: "Sem leitura do agentes.chat enquanto a conexão não volta." },
+  conferindo: { titulo: "Conferindo o workspace do agentes.chat…", vazio: "Os agentes aparecem quando a conferência do workspace terminar." },
+  outra_org: { titulo: "Este andar está ligado a outro workspace do agentes.chat.", vazio: "Reconecte a conta deste andar para ver os agentes." },
+  pausa: { titulo: "O agentes.chat pediu uma pausa. Tentando de novo em instantes.", vazio: "Sem leitura nova do agentes.chat enquanto a pausa durar." },
   falha: { titulo: "O escritório não respondeu agora. Tentando de novo a cada 10 s.", vazio: "Sem leitura nova do escritório por enquanto." },
 };
 function estadoDaLeitura() {
@@ -983,8 +988,9 @@ function estadoDaLeitura() {
   if (!estado) return "carregando";
   const c = typeof estado.conexao === "string" ? estado.conexao : "";
   if (c === "carregando") return "carregando";
-  if (c === "sem_conexao" || c === "recusada") return c;
-  return "pronto";   // "pausa" e "falha" do servidor guardam a última leitura: o escritório continua de pé
+  if (c === "sem_conexao" || c === "recusada" || c === "conferindo" || c === "outra_org") return c;
+  if ((c === "pausa" || c === "falha") && !estado.atualizado) return c;   // sem leitura anterior, não há "nenhum agente"
+  return "pronto";   // "pausa" e "falha" com a última leitura: o escritório continua de pé
 }
 
 // ---------- chips de estado (contam e filtram) ----------------------------------------
@@ -1275,7 +1281,7 @@ function abrirFicha(b, foco) {
 function fecharFicha() {
   const estava = !$("ficha").hidden || !$("conversa").hidden;
   fecharConversa(false);
-  $("ficha").hidden = true; selecionado = null; seguir = null; fichaTerm = null;
+  $("ficha").hidden = true; $("ficha").classList.remove("rolavel"); selecionado = null; seguir = null; fichaTerm = null;
   if (estava && estado) desenharPainel();
 }
 function renderFicha() {
@@ -1333,8 +1339,10 @@ function renderFicha() {
 function marcarRolavel() {
   const f = $("ficha");
   if (!f || f.hidden) return;
-  f.classList.toggle("rolavel", f.scrollHeight > f.clientHeight + 4);
+  const mais = f.scrollHeight > f.clientHeight + 4 && f.scrollTop + f.clientHeight < f.scrollHeight - 4;
+  f.classList.toggle("rolavel", mais);   // no fim do conteúdo o fade some
 }
+$("ficha").addEventListener("scroll", marcarRolavel, { passive: true });
 
 // ---------- cartão do terminal (ponte.js e vida.js): no mesmo #ficha, com o estado, o que faz, as necessidades, as amizades
 // e o dia. Só leitura: responder é no próprio terminal. Os dados da ponte vão só por textContent
@@ -1396,6 +1404,7 @@ function renderFichaTerminal() {
   acoes.append(seg, fe);
   const decisao = blocoDecisao(d, false);
   f.replaceChildren(topo, dl, decisao || elem("p", "term-ajuda", "Responder é no próprio terminal."), acoes);
+  requestAnimationFrame(marcarRolavel);
 }
 
 // ---------- vida social na ficha (contrato S, fatia 1): amizades pelo GET /api/social e "Mandar pro ringue" pelo POST
@@ -2994,6 +3003,7 @@ async function trocarAndar(id, aviso) {
   try {
     const c = await json("api/config");   // com o andar novo; falhando, nada do andar de antes é mexido
     reiniciarAndar();
+    enquadradoInicial = false; cam.mexeu = false;   // o novo andar enquadra de novo, mesmo se a câmera foi mexida no anterior
     Andar.seguir(c);   // pediu o principal sem ter acesso: o servidor respondeu pelo primeiro andar da conta
     config = c; Expediente.definir(c.expediente); if (window.Radio) Radio.configurar(c.radio); aplicarConfig();
     await trocarLogo(config.logo);   // o logo do mapa é o do andar novo (o do topo já trocou no aplicarMarca)
@@ -3005,7 +3015,7 @@ async function trocarAndar(id, aviso) {
     anunciarAndar(aviso || `Você está no andar ${nomeDoAndar(Andar.atual)}.`);
   } catch (e) {
     trocando = false;
-    if (id === Andar.PRINCIPAL) { falhou = true; mostrarConexao(); setTimeout(() => location.reload(), 10000); return; }   // como a carga inicial
+    if (id === Andar.PRINCIPAL) { falhou = true; mostrarConexao(); atualizarEstados(); setTimeout(() => location.reload(), 10000); return; }   // como a carga inicial
     Andar.definir(anterior); mostrarElevador();
     anunciarAndar(e instanceof AndarInvalido ? "Esse andar não está mais disponível." : "Não deu para ir para esse andar agora. Tente de novo.");
     if (e instanceof AndarInvalido) recarregarAndares();
@@ -3033,7 +3043,7 @@ function rota() {
   if (valida === "novidades") Novidades.abrir(); else Novidades.fechar();
   document.querySelectorAll("[data-rota]").forEach(a => { if (a.dataset.rota === valida) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
   if (valida !== "escritorio") { TV.desligar(); telaCheia(false); }
-  else ajustarEscala();
+  else { ajustarEscala(); enquadrarInicial(); }
 }
 
 // ajuda: procurar nas perguntas, com o termo destacado, a contagem e "Copiar" nos comandos de terminal
@@ -3134,7 +3144,7 @@ window.addEventListener("resize", () => { medirFaixa(); ajustarEscala(); marcarR
 rota();
 // a abertura do Firmópolis (abertura.js): uma vez por sessão, por cima do carregamento; a TV liga direto
 if (window.Abertura && new URLSearchParams(location.search).get("tv") !== "1") Abertura.tocar();
-iniciar().catch(() => { falhou = true; mostrarConexao(); setTimeout(() => location.reload(), 10000); });
+iniciar().catch(() => { falhou = true; mostrarConexao(); atualizarEstados(); setTimeout(() => location.reload(), 10000); });
 async function abrirAviso(a) {
   if (!a) return;
   if (a.andar !== Andar.atual) await trocarAndar(a.andar);

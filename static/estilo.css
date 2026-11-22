@@ -1178,6 +1178,7 @@ body.demo [data-rota="personalizar"] { display: none; }
   /* os filtros viram uma grade 2x2: a barra que corria de lado cortava "Esperando v..." no meio da palavra */
   #estados { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: auto; margin: 0 0 4px; padding: 0; overflow: visible; border: 0; border-radius: 0; background: none; }
   #estados button { min-height: 44px; justify-content: flex-start; padding: 0 12px; }
+  #estados [data-filtro="fora"] { grid-column: 1 / -1; }   /* 5º filtro ocupa a linha inteira em vez de sobrar sozinho */
 }
 /* modo foto: a faixa "Simulação" (simular.js) sairia em cima da barra do modo foto; some enquanto ele está aberto */
 body.modo-foto .sim-aviso { display: none; }
