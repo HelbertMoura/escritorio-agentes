@@ -342,9 +342,12 @@ body.travado { overflow: hidden; }
 .cartao-agente p.dica { margin-top: 4px; color: var(--texto2); font-weight: 600; font-size: 12px; }
 
 /* ficha do agente: fica aberta, com ações (busca, lista e toque no mapa) */
-.ficha { position: absolute; left: 12px; bottom: 44px; z-index: 7; width: min(340px, calc(100% - 24px)); padding: 14px; border-radius: 0; background: rgba(28, 28, 27, .97);
-  border: 1px solid var(--borda-forte); box-shadow: 6px 6px 0 rgba(0, 0, 0, .45); display: flex; flex-direction: column; gap: 10px; animation: subir var(--medio); outline: none;
-  max-height: calc(100% - 56px); overflow-y: auto; overscroll-behavior: contain; }   /* com as amizades, a ficha não passa do topo do mapa */
+.ficha { position: absolute; left: 12px; bottom: 12px; z-index: 7; width: min(340px, calc(100% - 24px)); padding: 14px 14px 20px; border-radius: 0; background: var(--cartao);
+  border: 1px solid var(--borda-forte); box-shadow: 6px 6px 0 rgba(0, 0, 0, .5); display: flex; flex-direction: column; gap: 10px; animation: subir var(--medio); outline: none;
+  max-height: calc(100% - 24px); overflow-y: auto; overscroll-behavior: contain; }   /* com as amizades, a ficha não passa do topo do mapa */
+/* fundo opaco: o mapa não vaza por trás do cartão (o relógio e as placas apareciam por cima do título) */
+.ficha::after { content: ""; display: block; height: 24px; margin: -24px -14px -20px; flex: none; pointer-events: none; }   /* respiro da base: o último botão não encosta na borda */
+.ficha.rolavel::after { position: sticky; bottom: -20px; background: linear-gradient(to top, var(--cartao) 55%, transparent); }   /* aviso de que ainda há conteúdo embaixo */
 .ficha-topo { display: grid; grid-template-columns: 48px 1fr 44px; gap: 10px; align-items: center; }
 .ficha-topo .mini { width: 48px; height: 48px; }
 .ficha h2 { font-size: 17px; }
@@ -526,6 +529,13 @@ button.linha-resolvido:hover { background: rgba(255, 255, 255, .04); }
 .chip.hora-extra { background: var(--cartao2); color: var(--texto); }
 .chip.hora-extra::before { background: #ffd36b; box-shadow: 0 0 4px #ffd36b; }   /* a luminária acesa da mesa */
 .vazio { color: var(--suave); padding: 16px 8px; font-size: 14px; }
+/* carregando: o quadradinho âmbar que pisca na frente do texto (o que está acontecendo, não "ninguém aqui") */
+.resumo[data-estado="carregando"]::before, .widget-vazio.carregando::before, .vazio.carregando::before {
+  content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 8px; background: var(--destaque); vertical-align: -1px; animation: piscar 1.2s steps(2, end) infinite; }
+@keyframes piscar { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .resumo[data-estado="carregando"]::before, .widget-vazio.carregando::before, .vazio.carregando::before { animation: none; opacity: .8; }
+}
 .vazio-grande { max-width: 560px; padding: 32px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin-top: 8px; }
 .vazio-grande h2 { font-size: 20px; }
 .vazio-grande p { margin: 0 0 6px; color: var(--suave); }
@@ -1163,6 +1173,11 @@ body.demo [data-rota="personalizar"] { display: none; }
   .lista-agrupada .linha-ir .quem { white-space: normal; }
   .so-celular { display: inline; }
   .so-largo { display: none; }
+}
+@media (max-width: 520px) {
+  /* os filtros viram uma grade 2x2: a barra que corria de lado cortava "Esperando v..." no meio da palavra */
+  #estados { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: auto; margin: 0 0 4px; padding: 0; overflow: visible; border: 0; border-radius: 0; background: none; }
+  #estados button { min-height: 44px; justify-content: flex-start; padding: 0 12px; }
 }
 /* modo foto: a faixa "Simulação" (simular.js) sairia em cima da barra do modo foto; some enquanto ele está aberto */
 body.modo-foto .sim-aviso { display: none; }

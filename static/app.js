@@ -15,7 +15,8 @@ let config = null, atlas = null, predio = null, mundo = null, estado = null, ass
 let escala = 1, filtro = "todos", selecionado = null;
 const menosMovimento = matchMedia("(prefers-reduced-motion: reduce)");
 // câmera: centro (x,y) no mundo e k = pixels de tela por pixel do mundo; "alvo" anima até lá
-const cam = { x: 0, y: 0, k: 1, alvo: null, ajustada: false };
+const cam = { x: 0, y: 0, k: 1, alvo: null, ajustada: false, mexeu: false };   // mexeu: a pessoa já moveu a câmera (o primeiro enquadramento não atrapalha)
+let enquadradoInicial = false;   // o primeiro enquadramento do escritório (vai para quem espera você)
 let dpr = 1, vw = 0, vh = 0;
 const $ = id => document.getElementById(id);
 
@@ -162,6 +163,7 @@ function montar(agentes) {
   mundo = Vida.criarMundo(predio);
   Efeitos.iniciar(predio, atlas, config, logoImg);
   cam.ajustada = false;
+  enquadradoInicial = false;
   fecharFicha();
   ajustarEscala();
   montarSalas();
@@ -193,6 +195,7 @@ async function buscar() {
     mostrarOlhando();
     falhou = false;
     desenharPainel(); desenharEventos(); mostrarConexao(); paginaConversas();
+    enquadrarInicial();   // o escritório abre já em cima de quem espera você (não no desenho do prédio inteiro)
     TV.atualizar(estado);
     if (!$("v-jornal").hidden) Jornal.abrir();   // os nomes vêm desta leitura; o jornal em si é relido a cada minuto
     if (!$("ficha").hidden) renderFicha();
@@ -205,7 +208,7 @@ async function buscar() {
   } catch (e) {
     if (e instanceof AndarInvalido && andar === Andar.atual) { voltarAoPrincipal(); return; }
     if (andar !== Andar.atual) return;
-    falhou = true; mostrarConexao();
+    falhou = true; mostrarConexao(); atualizarEstados();   // o texto do escritório muda na hora: sem leitura, não é "nenhum agente"
   }
 }
 
@@ -243,6 +246,30 @@ function prenderCamera(c) {
   c.y = predio.H <= meiaH * 2 ? predio.H / 2 : Math.max(meiaH, Math.min(predio.H - meiaH, c.y));
 }
 function verTudo(ja) { moverCamera({ x: predio.W / 2, y: predio.H / 2, k: kMinimo() }, ja); }
+// ---------- o primeiro enquadramento ----------
+// Mostrar o prédio inteiro deixa cada morador do tamanho de um pixel: quem abre o escritório quer ver gente,
+// não a planta. O primeiro enquadramento vai para quem espera você (o que pede ação) e, sem ninguém esperando,
+// para quem está trabalhando; o "Ver tudo" volta ao prédio inteiro a um toque. O zoom continua inteiro (a pixel
+// art fica nítida) e a câmera não se mexe se a pessoa já mexeu nela.
+function enquadrarInicial() {
+  if (enquadradoInicial || cam.mexeu || !mundo || !predio) return;
+  const todos = [...mundo.bonecos.values()].filter(b => b.x != null && b.y != null && situacao(b) !== "fora");
+  if (!todos.length) return;   // ninguém no prédio: fica a vista geral
+  const esperando = todos.filter(b => situacao(b) === "esp");
+  const grupo = esperando.length ? esperando : todos.filter(b => situacao(b) === "trab");
+  const alvo = grupo.length ? grupo : todos;
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, cx = 0, cy = 0;
+  for (const b of alvo) { const bx = b.x * escala, by = b.y * escala; x0 = Math.min(x0, bx); x1 = Math.max(x1, bx); y0 = Math.min(y0, by); y1 = Math.max(y1, by); cx += bx; cy += by; }
+  cx /= alvo.length; cy /= alvo.length;
+  const w = Math.max(40, x1 - x0 + 48), h = Math.max(40, y1 - y0 + 64);   // folga ao redor do grupo
+  const cabe = Math.min((vw * dpr) / w, (vh * dpr) / h);   // quanto de zoom cabe o grupo
+  const k = cabe >= 2 * dpr ? 2 * dpr : dpr;   // 2x quando o grupo cabe (aí o nome se lê), senão 1x
+  const cabeNaTela = w <= (vw * dpr) / k && h <= (vh * dpr) / k;
+  const centro = cabeNaTela ? { x: (x0 + x1) / 2, y: (y0 + y1) / 2 } : { x: cx, y: cy };
+  seguir = null;
+  moverCamera({ x: centro.x, y: centro.y - 6, k });
+  enquadradoInicial = true;
+}
 function moverCamera(alvo, ja) { alvo.k = limitarK(alvo.k); prenderCamera(alvo); if (ja) Object.assign(cam, alvo, { alvo: null }); else cam.alvo = alvo; }
 function enquadrar(s, ja) {
   const k = Math.min((vw * dpr) / (s.pw + 40), (vh * dpr) / (s.ph + 60)), kInteiro = k >= 1 ? Math.floor(k) : k;   // a sala inteira, em zoom nítido
@@ -681,8 +708,14 @@ function desenharEtiqueta(b, t, ocupadas) {
     ctx.fillText(nome, x + w / 2 + iw / 2, y + h / 2 + 1);
     if (px) Mapa.desenharStatus(ctx, b.status, Math.round(x + tam * 0.4), Math.round(y + (h - 9 * px) / 2), px);
   }
-  if (espera) { // selo "!" (aprovação) ou "?" (pergunta): sempre aparece; pulsa até a pessoa resolver no agentes.chat
-    const r = tam * (est.classe === "aprovacao" ? 1.1 : 0.9) * (pilula ? 1 : 0.8);   // sozinho (vista geral), um pouco menor
+  if (espera) { // o anel no chão de quem espera você: na vista geral o selo fica pequeno, o anel diz na hora quem precisa de você
+    const cor = Mapa.rgb(Mapa.cor(est.classe === "aprovacao" ? "ambar" : "azul"));
+    const rx = Avatar.TAM * S * 0.45, ry = Avatar.TAM * S * 0.16;
+    ctx.beginPath(); ctx.ellipse(bx0, b.y * S, rx, ry, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(8,8,12,.55)"; ctx.lineWidth = Math.max(1.6, (3.4 * dpr) / cam.k); ctx.stroke();
+    ctx.strokeStyle = "rgb(" + cor + ")"; ctx.lineWidth = Math.max(0.8, (2 * dpr) / cam.k); ctx.stroke();
+    // selo "!" (aprovação) ou "?" (pergunta): sempre aparece; pulsa até a pessoa resolver no agentes.chat
+    const r = tam * (est.classe === "aprovacao" ? 1.1 : 0.9) * (pilula ? 1 : 1);   // sozinho (vista geral), do mesmo tamanho
     const bx = pilula ? pilula.x + w + r * 0.8 : bx0, by = pilula ? pilula.y + h / 2 : topo - r - 1;
     desenharSelo(b, est, bx, by, r, t);
     ocupadas.push({ x: bx - r * 1.3, y: by - r * 1.3, w: r * 2.6, h: r * 2.6 });   // balões não cobrem o selo
@@ -699,6 +732,7 @@ function desenharSelo(b, est, bx, by, r, t) {
     ctx.beginPath(); ctx.arc(bx, by, r * (1 + f * 1.1), 0, Math.PI * 2); ctx.stroke();
   }
   ctx.fillStyle = "#1b1a26"; ctx.beginPath(); ctx.arc(bx, by, r + Math.max(0.5, dpr / cam.k), 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "rgba(255,244,220,.8)"; ctx.lineWidth = Math.max(0.5, (1 * dpr) / cam.k); ctx.stroke();   // fio claro: o "!"/"?" se destaca do chão
   ctx.fillStyle = `rgb(${cor})`; ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = "#111"; ctx.font = fonte(800, aprov ? 5.6 : 4.6); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(est.balao, bx, by + 1);
   if (b.trabalho.url) b.selo = { x: bx, y: by, r: r * 1.6 };
@@ -935,12 +969,31 @@ const boneco = id => (mundo ? mundo.bonecos.get(id) : null);
 const porHandle = h => (mundo ? [...mundo.bonecos.values()].find(b => b.handle === h) : null);
 function salaDoAgente(handle) { const s = predio && predio.salas.find(q => (q.handles || []).includes(handle)); return s ? s.nome : ""; }
 
+// ---------- o que o escritório está fazendo: carregando, sem leitura ou de pé ----------
+// "Nenhum agente nesta organização ainda" é só quando a leitura chegou e o time está vazio: enquanto a leitura não
+// vem (carregando) ou quando ela falhou, o texto diz o que está acontecendo — um escritório vazio é outra coisa.
+const TEXTO_LEITURA = {
+  carregando: { titulo: "Conectando ao escritório…", vazio: "Conectando ao escritório…" },
+  sem_conexao: { titulo: "O escritório ainda não está conectado ao agentes.chat.", vazio: "Sem leitura do agentes.chat enquanto a conexão não volta." },
+  recusada: { titulo: "O agentes.chat recusou a leitura.", vazio: "Sem leitura do agentes.chat enquanto a conexão não volta." },
+  falha: { titulo: "O escritório não respondeu agora. Tentando de novo a cada 10 s.", vazio: "Sem leitura nova do escritório por enquanto." },
+};
+function estadoDaLeitura() {
+  if (falhou) return "falha";
+  if (!estado) return "carregando";
+  const c = typeof estado.conexao === "string" ? estado.conexao : "";
+  if (c === "carregando") return "carregando";
+  if (c === "sem_conexao" || c === "recusada") return c;
+  return "pronto";   // "pausa" e "falha" do servidor guardam a última leitura: o escritório continua de pé
+}
+
 // ---------- chips de estado (contam e filtram) ----------------------------------------
 function atualizarEstados() {
-  if (!mundo) return;
   const n = { todos: 0, trab: 0, esp: 0, livres: 0, fora: 0 };
-  for (const b of mundo.bonecos.values()) { n.todos++; n[situacao(b)]++; }
-  for (const d of terminaisDaPonte()) { n.todos++; n[situacaoTerminal(d)]++; }   // os terminais deste computador também
+  if (mundo) {
+    for (const b of mundo.bonecos.values()) { n.todos++; n[situacao(b)]++; }
+    for (const d of terminaisDaPonte()) { n.todos++; n[situacaoTerminal(d)]++; }   // os terminais deste computador também
+  }
   for (const b of document.querySelectorAll("#estados [data-filtro]")) {
     const k = b.dataset.filtro, alvo = b.querySelector("[data-n]");
     if (alvo.textContent !== String(n[k])) alvo.textContent = n[k];
@@ -948,8 +1001,11 @@ function atualizarEstados() {
   }
   const partes = [[n.esp, "esperando você", "esperando você"], [n.trab, "trabalhando", "trabalhando"], [n.livres, "livre", "livres"], [n.fora, "fora", "fora"]]
     .filter(([q], i) => q || i < 3).map(([q, um, varios]) => `${q} ${q === 1 ? um : varios}`);
-  const resumo = Andar.perfil(config).noSaguao ? "Saguão do prédio" : n.todos ? partes.join(" · ") : "Nenhum agente nesta organização ainda";
-  if ($("resumo-esc").textContent !== resumo) $("resumo-esc").textContent = resumo;
+  const sit = estadoDaLeitura(), txt = TEXTO_LEITURA[sit];
+  const resumo = config && Andar.perfil(config).noSaguao ? "Saguão do prédio" : n.todos ? partes.join(" · ") : txt ? txt.titulo : "Nenhum agente nesta organização ainda";
+  const r = $("resumo-esc");
+  if (r.textContent !== resumo) r.textContent = resumo;
+  if (r.dataset.estado !== sit) r.dataset.estado = sit;
 }
 function filtrar(qual) {
   filtro = qual;
@@ -961,6 +1017,7 @@ for (const b of document.querySelectorAll("[data-filtro]")) b.addEventListener("
 // ---------- painel: esperando você, agentes e pedidos ---------------------------------
 function desenharPainel() {
   if (!mundo) return;
+  const sit = estadoDaLeitura(), txt = TEXTO_LEITURA[sit], carregando = sit === "carregando" ? " carregando" : "";
   const ags = estado.agentes || [], trs = estado.trabalhos || [];
   const nomeDe = id => (ags.find(a => a.id === id) || {}).nome || "Agente";
   const handleDe = id => (ags.find(a => a.id === id) || {}).handle;
@@ -979,7 +1036,7 @@ function desenharPainel() {
   const espT = terminaisDaPonte().filter(d => situacaoTerminal(d) === "esp"), trabT = terminaisDaPonte().filter(d => situacaoTerminal(d) === "trab");
   $("avisos").replaceChildren(...[...esperando.slice(0, 3).map(t => cartaoPedido(t, nomeDe(t.agente_id), handleDe(t.agente_id), true)),
     ...espT.slice(0, 3).map(d => linhaTerminal(d, true))].slice(0, 3));
-  if (!esperando.length && !espT.length) $("avisos").append(elem("p", "widget-vazio", "Nada esperando você agora."));
+  if (!esperando.length && !espT.length) $("avisos").append(elem("p", "widget-vazio" + carregando, txt ? txt.vazio : "Nada esperando você agora."));
   $("ver-pedidos").textContent = esperando.length > 3 ? `Ver todos (${esperando.length})` : "Ver todos";
   $("esperando-n").textContent = esperando.length + espT.length || "";
   const rodando = trs.filter(t => !/^waiting_/.test(t.status)).sort((a, b) => Date.parse(desdeDe(a)) - Date.parse(desdeDe(b)));
@@ -987,7 +1044,7 @@ function desenharPainel() {
   $("trabalhando-lista").replaceChildren(...[...rodando.slice(0, 4).map(t => linhaTrabalho(t, nomeDe(t.agente_id), handleDe(t.agente_id))),
     ...trabT.slice(0, 4).map(d => linhaTerminal(d, false))].slice(0, 4));
   if (nTrab > 4) { const mais = elem("button", "widget-mais link-bt", `Mais ${nTrab - 4} trabalhando: mostrar no mapa`); mais.type = "button"; mais.addEventListener("click", () => filtrar("trab")); $("trabalhando-lista").append(mais); }
-  if (!nTrab) $("trabalhando-lista").append(elem("p", "widget-vazio", "Ninguém trabalhando agora."));
+  if (!nTrab) $("trabalhando-lista").append(elem("p", "widget-vazio" + carregando, txt ? txt.vazio : "Ninguém trabalhando agora."));
   $("trabalhando-n").textContent = nTrab || "";
   desenharAprovacoes(esperando, nomeDe, handleDe);
   // agentes na lateral: quem espera primeiro, depois quem trabalha, livres e fora (avatar com a luz do estado)
@@ -1008,7 +1065,7 @@ function desenharPainel() {
     item.append(foto, txt);
     return item;
   }));
-  if (!bs.length) $("lista").append(elem("p", "vazio", "Nenhum agente nesta organização ainda."));
+  if (!bs.length) $("lista").append(elem("p", "vazio" + carregando, txt ? txt.vazio : "Nenhum agente nesta organização ainda."));
   $("contagem").textContent = filtro === "todos" ? `${bs.length}` : `${visiveis} de ${bs.length}`;
   const nSalas = predio.salas.length + predio.baixo.length;
   const salasTxt = `${nSalas} ${nSalas === 1 ? "sala" : "salas"}`;   // o saguão não tem agentes: só as salas
@@ -1269,6 +1326,14 @@ function renderFicha() {
     rg.addEventListener("click", () => abrirRingue(b, rg)); acoes.append(rg);
   }
   f.replaceChildren(topo, dl, acoes, ...fim);
+  requestAnimationFrame(marcarRolavel);
+}
+// o fade da base (o "tem mais embaixo") só quando o conteúdo passa da altura do cartão: sem ele, o último botão
+// aparece cortado no meio e parece quebrado
+function marcarRolavel() {
+  const f = $("ficha");
+  if (!f || f.hidden) return;
+  f.classList.toggle("rolavel", f.scrollHeight > f.clientHeight + 4);
 }
 
 // ---------- cartão do terminal (ponte.js e vida.js): no mesmo #ficha, com o estado, o que faz, as necessidades, as amizades
@@ -2349,6 +2414,7 @@ tela.addEventListener("wheel", ev => {
   if (!predio) return; ev.preventDefault(); TV.tocou();
   const antes = paraMundo(ev.clientX, ev.clientY), agora = performance.now();
   // a roda acumula num zoom livre e a tela mostra o inteiro mais perto (o touchpad dá passos pequenos)
+  cam.mexeu = true;
   roda = { k: prenderK((roda && agora - roda.t < 500 ? roda.k : cam.k) * Math.exp(-ev.deltaY * 0.0015)), t: agora };
   cam.alvo = null; seguir = null; cam.k = limitarK(roda.k);
   const depois = paraMundo(ev.clientX, ev.clientY);
@@ -2397,6 +2463,7 @@ tela.addEventListener("pointermove", ev => {
   if (pinca && dedos.size >= 2) {
     const [a, b] = [...dedos.values()], mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
     cam.alvo = null; seguir = null;
+    cam.mexeu = true;
     cam.k = limitarK(pinca.k * Math.hypot(a.x - b.x, a.y - b.y) / Math.max(1, pinca.d));
     const agora = paraMundo(mx, my); cam.x += pinca.meio.x - agora.x; cam.y += pinca.meio.y - agora.y;
     return;
@@ -2404,7 +2471,7 @@ tela.addEventListener("pointermove", ev => {
   if (!arrasto) return;
   const dx = ev.clientX - arrasto.x, dy = ev.clientY - arrasto.y;
   if (Math.hypot(dx, dy) > (arrasto.tipo === "touch" ? 8 : 4)) arrasto.moveu = true;
-  if (arrasto.moveu) { cam.alvo = null; seguir = null; cam.x = arrasto.cx - (dx * dpr) / cam.k; cam.y = arrasto.cy - (dy * dpr) / cam.k; tela.style.cursor = "grabbing"; }
+  if (arrasto.moveu) { cam.mexeu = true; cam.alvo = null; seguir = null; cam.x = arrasto.cx - (dx * dpr) / cam.k; cam.y = arrasto.cy - (dy * dpr) / cam.k; tela.style.cursor = "grabbing"; }
 });
 function soltarDedo(ev) {
   dedos.delete(ev.pointerId);
@@ -3063,7 +3130,7 @@ Novidades.iniciar();
 pintarIcones(document);
 window.addEventListener("hashchange", () => { const id = Andar.doHash(location.hash); if (id && id !== Andar.atual) trocarAndar(id); });
 window.addEventListener("hashchange", rota);
-window.addEventListener("resize", () => { medirFaixa(); ajustarEscala(); });
+window.addEventListener("resize", () => { medirFaixa(); ajustarEscala(); marcarRolavel(); });
 rota();
 // a abertura do Firmópolis (abertura.js): uma vez por sessão, por cima do carregamento; a TV liga direto
 if (window.Abertura && new URLSearchParams(location.search).get("tv") !== "1") Abertura.tocar();

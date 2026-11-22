@@ -1,6 +1,6 @@
-// Assistente de instalação, no lugar das boas-vindas. Abre uma vez por sessão enquanto o nome é o de exemplo
-// (marca_exemplo) ou o escritório não está conectado (conexao "sem_conexao"); reabre pelo Personalizar; não abre na
-// demonstração. Passos: conectar, cidade, nome/cor/logo, times (só com conexão) e pronto. Cada passo salva na hora,
+// Assistente de instalação, no lugar das boas-vindas. Abre uma vez por sessão só quando o escritório ainda não está
+// conectado (conexao "sem_conexao" ou "recusada"); com o escritório já ligado, o nome de exemplo não abre o modal
+// (o mapa ficava tapado à toa a cada sessão); reabre pelo Personalizar; não abre na demonstração. Passos: conectar, cidade, nome/cor/logo, times (só com conexão) e pronto. Cada passo salva na hora,
 // pela própria rota (/oauth/conectar, /api/clima, /api/logo e /api/marca), e todos têm "Pular". O "Conectar" sai da
 // página: grava escritorio:assistente=cidade no sessionStorage e, na volta do agentes.chat, o assistente reabre ali.
 "use strict";
@@ -146,7 +146,9 @@ const Assistente = (() => {
       return;
     }
     if (ler(VISTO)) return;
-    if (c.marca_exemplo === true || conexao() === "sem_conexao") { guardar(VISTO, "1"); abrir("conectar"); }
+    // só abre sozinho quando falta mesmo a conexão: com o escritório já conectado, o modal cobria o mapa inteiro à
+    // toa a cada sessão (só porque a empresa ainda se chama "Minha empresa"). O nome troca no Personalizar.
+    if (["sem_conexao", "recusada"].includes(conexao())) { guardar(VISTO, "1"); abrir("conectar"); }
   }
   return { talvez, abrir };
 })();
