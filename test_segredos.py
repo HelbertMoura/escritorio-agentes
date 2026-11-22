@@ -1,13 +1,37 @@
 """Máscara de segredos (#19): todo texto que vem do agentes.chat passa por ajustes.mascarar_segredos antes de ir à tela.
 Os segredos aqui são de mentira, montados em pedaços para nenhum varredor de segredo do GitHub apitar no repositório."""
+import atexit
+import os
+import shutil
+import tempfile
 import time
 import types
 import unittest
 from unittest.mock import patch
 
-import ajustes
-import escritorio
-from ajustes import mascarar_segredos as mascarar, texto_do_chat
+PASTA = tempfile.mkdtemp(prefix="escritorio-teste-segredos-")
+
+
+@atexit.register
+def _apagar_pasta():
+    """No fim do processo, e não do módulo: rodando a suíte inteira, ela é o ESCRITORIO_DADOS dos módulos seguintes. No
+    Windows, uma thread de fundo lendo o marca.json ou o times.json nessa hora segura o arquivo: tenta de novo."""
+    for _ in range(10):
+        shutil.rmtree(PASTA, ignore_errors=True)
+        if not os.path.exists(PASTA):
+            return
+        time.sleep(0.2)
+
+
+os.environ.setdefault("ESCRITORIO_DADOS", PASTA)   # rodando junto com o test_escritorio, vale a pasta dele
+if "ESCRITORIO_TIMES" not in os.environ:
+    os.environ["ESCRITORIO_TIMES"] = os.path.join(PASTA, "times.json")
+    with open(os.environ["ESCRITORIO_TIMES"], "w", encoding="utf-8") as _f:
+        _f.write("{}")
+os.environ.setdefault("AGENTES_ORG", "00000000-0000-4000-8000-000000000000")  # org fictícia
+import ajustes  # noqa: E402
+import escritorio  # noqa: E402
+from ajustes import mascarar_segredos as mascarar, texto_do_chat  # noqa: E402
 
 M = ajustes.MASCARA
 B64 = "Zk9xT2c3bVJ1dkw4cFQ5d0EyZHNIeTZiTjFjWDBlVQ"   # 42 caracteres, letras e dígitos misturados

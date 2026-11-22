@@ -369,6 +369,7 @@ class Http(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.srv.shutdown()
+        cls.srv.server_close()
         e.BASE, e.TIMES, e.ARQ_PLANTA, e.ARQ_EQUIPE = cls.antes
         shutil.rmtree(cls.dados, ignore_errors=True)
 
@@ -680,6 +681,7 @@ class JornalPorAndar(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.srv.shutdown()
+        cls.srv.server_close()
         cls.extra.parar()
         e.BASE, e.TIMES = cls.antes
         shutil.rmtree(cls.dados, ignore_errors=True)
