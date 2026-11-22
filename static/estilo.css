@@ -2,8 +2,8 @@
    noite, grafite, creme, âmbar e índigo; cantos retos ou em degrau e sombra dura, sem desfoque.
    O mapa continua com Figtree e Silkscreen (desenhados no canvas) */
 @font-face { font-family: Pixeloid; src: url("fontes/PixeloidSans.woff2") format("woff2"); font-display: swap; }
-@font-face { font-family: Figtree; src: url("fontes/figtree.ttf") format("truetype"); font-weight: 300 900; font-display: swap; }
-@font-face { font-family: Silkscreen; src: url("fontes/silkscreen.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: Figtree; src: url("fontes/figtree.woff2") format("woff2"), url("fontes/figtree.ttf") format("truetype"); font-weight: 300 900; font-display: swap; }
+@font-face { font-family: Silkscreen; src: url("fontes/silkscreen.woff2") format("woff2"), url("fontes/silkscreen.ttf") format("truetype"); font-display: swap; }
 
 :root {
   /* paleta Firmópolis (site/estilo.css): noite e grafite no fundo, creme no texto, âmbar e índigo de acento */

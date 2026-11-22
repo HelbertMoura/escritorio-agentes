@@ -835,7 +835,8 @@ class Http(unittest.TestCase):
         self.assertEqual((st, json.loads(corpo)["logo"]), (200, f"/logo?v={padrao}"))
 
     def test_fontes_publicas_com_tipo_e_cache(self):
-        for nome, tipo in (("fontes/PixeloidSans.woff2", "font/woff2"), ("fontes/figtree.ttf", "font/ttf")):
+        for nome, tipo in (("fontes/PixeloidSans.woff2", "font/woff2"), ("fontes/figtree.ttf", "font/ttf"),
+                           ("fontes/figtree.woff2", "font/woff2"), ("fontes/silkscreen.woff2", "font/woff2")):   # as duas em woff2 (o ttf fica de reserva)
             st, corpo, h = self.req("/" + nome)   # sem sessão: a tela de entrar usa
             self.assertEqual((st, h["Content-Type"], h["Cache-Control"]), (200, tipo, "public, max-age=3600"), nome)
             with open(os.path.join(e.ESTATICO, nome), "rb") as f:

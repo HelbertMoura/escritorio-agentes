@@ -1,7 +1,7 @@
 /* Telas de fora (entrar, primeiro acesso, convite e aviso do Conectar), com a identidade Firmópolis do app e do site:
    Figtree no texto, Pixeloid nos títulos; o céu noturno com a janela acesa do escritório à esquerda e o formulário à direita.
    Cantos em degrau e sombra dura, sem desfoque. */
-@font-face { font-family: Figtree; src: url("fontes/figtree.ttf") format("truetype"); font-weight: 300 900; font-display: swap; }
+@font-face { font-family: Figtree; src: url("fontes/figtree.woff2") format("woff2"), url("fontes/figtree.ttf") format("truetype"); font-weight: 300 900; font-display: swap; }
 @font-face { font-family: Pixeloid; src: url("fontes/PixeloidSans.woff2") format("woff2"); font-display: swap; }
 :root { color-scheme: dark;
   --destaque: #f5b83d; --destaque-texto: #1a1408;                           /* cor da marca (o entrar.js aplica a da configuração) */
