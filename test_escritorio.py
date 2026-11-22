@@ -576,7 +576,8 @@ class Http(unittest.TestCase):
         finally:
             self.srv.leitor = antes
         self.assertEqual(st, 200)
-        self.assertEqual(json.loads(corpo)["trabalhos"][0]["rotulo"], "Lendo ?")
+        # desde a máscara de segredos (#19), o rótulo passa pelo limpa_texto, que já tira o surrogate sozinho
+        self.assertEqual(json.loads(corpo)["trabalhos"][0]["rotulo"], "Lendo")
 
     def test_conversa_sem_sessao_desligada_e_ligada(self):
         class Mcp:

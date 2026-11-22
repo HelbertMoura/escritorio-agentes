@@ -60,6 +60,69 @@ def limpa_texto(txt, maximo):
     return txt[:maximo], len(txt) > maximo
 
 
+# ---------------------------------------------------------------- segredos (#19)
+# O escritório mostra conversas, rótulos de tarefa e nomes do agentes.chat no mapa, na TV e no celular: um token colado
+# numa conversa apareceria para quem abrisse a página. Todo texto que vem de lá passa por texto_do_chat (ou, no rótulo,
+# por mascarar_segredos) ANTES do corte, para um token cortado no meio não sobrar pela metade na tela.
+MASCARA = "•••"
+# teto do que a máscara lê: o maior texto que vai à tela tem 1,8 KB, e a janela da chave: valor ("...") é de 512;
+# 64 KB dá para os dois com folga e segura o custo de um texto enorme (o filtro de caractere por caractere é o caro).
+ENTRADA_MAX = 64 * 1024
+_PEM = re.compile(r"-----BEGIN.*?(?:-----END[^\n]*?-----|\Z)", re.S)   # sem o END (texto cortado): some até o fim
+_JWT = re.compile(r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}(?:\.[A-Za-z0-9_-]*){0,2}")
+_PREFIXOS = re.compile(r"(?<![A-Za-z0-9])(?:sk-[A-Za-z0-9_-]{8,}|gh[pousr]_[A-Za-z0-9]{8,}|github_pat_[A-Za-z0-9_]{8,}"
+                       r"|glpat-[A-Za-z0-9_-]{8,}|AIza[A-Za-z0-9_-]{8,}|xox[abposr]-[A-Za-z0-9-]{8,})")
+# "Bearer xyz" e "Basic xyz": só com dígito ou símbolo no valor, para "bearer bonds" e "basic understanding" ficarem
+_AUTORIZACAO = re.compile(r"(?i)\b(bearer|basic)([ \t]+)(?=[A-Za-z0-9._~+/=-]*[0-9._~+/=-])[A-Za-z0-9._~+/=_-]{8,}")
+# chave: valor, chave=valor e "chave": "valor" (JSON, .env, query string). A palavra pode vir com prefixo e sufixo
+# separados por _ ou - (DB_PASSWORD, x-api-key, client_secret), mas não colada (secretaria, tokens). Valor sem aspas
+# precisa de 4+ caracteres; o "•••" de uma máscara anterior não conta, e a máscara não pula de linha.
+_CHAVE_VALOR = re.compile(
+    r"(?<![A-Za-z])((?i:password|passwd|senha|secret|segredo|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key"
+    r"|chave)(?:[_-][A-Za-z0-9]+){0,4}[\"']?[ \t]*[:=][ \t]*)"
+    r"(?:([\"'])([^\"'\n]{1,512}?)\2|([^\s\"'&,;}<>•]{4,}))")
+# base64 e afins: trechos sem / \ nem espaço (nem . ? & : ...) com mais de 40 caracteres e letras e dígitos misturados
+# (ao menos 3 trocas letra<->dígito coladas, e 1 a cada 16 caracteres nos longos): caminho e nome de arquivo ficam
+_TRECHO = re.compile(r"[A-Za-z0-9+=_-]{41,}")
+_TROCA = re.compile(r"(?<=[A-Za-z])[0-9]|(?<=[0-9])[A-Za-z]")
+
+
+def _chave_valor(m):
+    if m.group(3) is not None:
+        return m.group(1) + m.group(2) + MASCARA + m.group(2)
+    return m.group(1) + MASCARA
+
+
+def _trecho(m):
+    t = m.group(0)
+    trocas = len(_TROCA.findall(t))
+    return MASCARA if trocas >= max(3, len(t) // 16) else t
+
+
+def mascarar_segredos(txt):
+    """Troca tokens, senhas e chaves por "•••", na ordem: chave privada, JWT, prefixos conhecidos (sk-, ghp_, gho_,
+    github_pat_, glpat-, AIza, xoxb-...), Bearer/Basic, chave: valor e base64 longo. Mascarar de novo não muda nada."""
+    if not txt:
+        return ""
+    txt = str(txt)[:ENTRADA_MAX]
+    txt = _PEM.sub(MASCARA, txt)
+    txt = _JWT.sub(MASCARA, txt)
+    txt = _PREFIXOS.sub(MASCARA, txt)
+    txt = _AUTORIZACAO.sub(lambda m: m.group(1) + m.group(2) + MASCARA, txt)
+    txt = _CHAVE_VALOR.sub(_chave_valor, txt)
+    return _TRECHO.sub(_trecho, txt)
+
+
+def texto_do_chat(txt, maximo):
+    """limpa_texto para o que vem do agentes.chat: tira os invisíveis, mascara os segredos e só então corta.
+    Devolve (texto, cortado)."""
+    if txt is None:
+        return "", False
+    # o teto ANTES do filtro: o filtro é por caractere, e um texto de megabytes seguraria a thread do escritório
+    limpo = limpa_texto(str(txt)[:ENTRADA_MAX], ENTRADA_MAX)[0]   # sem o zero-width antes: "ghp_..." não escapa da máscara
+    return limpa_texto(mascarar_segredos(limpo), maximo)
+
+
 def _sem_constante(nome):
     raise ValueError("número inválido")   # NaN, Infinity e -Infinity, que o json.loads aceitaria
 

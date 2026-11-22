@@ -1,5 +1,6 @@
 import atexit
 import contextlib
+import datetime
 import io
 import json
 import os
@@ -368,6 +369,7 @@ class Http(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.srv.shutdown()
+        cls.srv.server_close()
         e.BASE, e.TIMES, e.ARQ_PLANTA, e.ARQ_EQUIPE = cls.antes
         shutil.rmtree(cls.dados, ignore_errors=True)
 
@@ -633,6 +635,109 @@ class Http(unittest.TestCase):
             self.assertEqual(self.get(f"/api/estado?andar={novo}")[0], 404)
         finally:
             andar.parar()
+
+
+class JornalPorAndar(unittest.TestCase):
+    """#14: dois andares no mesmo servidor, cada um com o seu Leitor, Social e Jornal de verdade (só a chamada ao MCP é
+    falsa). As tarefas que terminam, as brigas e as greves de cada andar saem na edição dele, e só nela."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dados = tempfile.mkdtemp(prefix="andares-jornal-")
+        cls.antes = e.BASE, e.TIMES
+        e.TIMES = os.path.join(cls.dados, "times.json")
+        with open(e.TIMES, "w", encoding="utf-8") as f:
+            json.dump({"conversas": "ler", "times": []}, f)
+        cls.srv = e.Servidor(("127.0.0.1", 0), e.Pagina)
+        cls.srv.cred, cls.srv.acesso = None, Acesso(os.path.join(cls.dados, "contas"))
+        # o principal, montado como o main() monta (sem gravar o dados/jornal.json de verdade)
+        cls.srv.leitor = e.Leitor(None)
+        cls.srv.jornal = cls.srv.leitor.jornal = e.Jornal(e.log, e.FUSO)
+        cls.srv.social = e.Social(cls.srv.leitor, e.config_publica, e.log, e.FUSO, contar_jornal=cls.srv.jornal.contar)
+        # o extra, montado pelo Andar (sem iniciar as threads: o teste dá cada passo)
+        reg = andares.Andares(cls.dados, e.ORG).criar("Segundo andar", ORG_B)
+        cls.extra = e.Andar(reg, cls.dados)
+        cls.srv.andares = {reg["id"]: cls.extra}
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        cls.base = "http://127.0.0.1:%d" % cls.srv.server_address[1]
+        e.BASE = cls.base
+        with open(os.path.join(cls.dados, "contas", "codigo-primeiro-acesso.txt")) as f:
+            codigo = f.read().strip()
+        cls.srv.acesso.criar_primeiro(codigo, "dono", "senha-bem-grande")
+        corpo = urllib.parse.urlencode({"usuario": "dono", "senha": "senha-bem-grande"}).encode()
+        r = urllib.request.Request(cls.base + "/entrar", corpo,
+                                   {"Origin": cls.base, "Content-Type": "application/x-www-form-urlencoded"})
+
+        class SemRedirecionar(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, *a, **k):
+                return None
+        try:
+            urllib.request.build_opener(SemRedirecionar).open(r)
+            raise AssertionError("o /entrar devia redirecionar")
+        except urllib.error.HTTPError as err:
+            assert err.code == 303, err.code
+            cls.cookie = {"Cookie": err.headers["Set-Cookie"].split(";")[0]}
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+        cls.srv.server_close()
+        cls.extra.parar()
+        e.BASE, e.TIMES = cls.antes
+        shutil.rmtree(cls.dados, ignore_errors=True)
+
+    def jornal(self, andar=None):
+        q = f"?andar={andar}" if andar else ""
+        r = urllib.request.Request(self.base + "/api/jornal" + q, headers=self.cookie)
+        with urllib.request.urlopen(r) as resp:
+            return json.loads(resp.read())["semana"]
+
+    @staticmethod
+    def leituras(leitor, agentes, *leituras):
+        """Passa pelo ciclo() de verdade (Diario, jornal, memória das conversas), com o MCP trocado por listas prontas."""
+        fila = list(leituras)
+
+        def ler(agora=None):
+            tarefas = [{"agent": {"id": ag}, "run_id": rid, "status": st, "label": "x", "started_at": "2026-11-15T10:00:00Z"}
+                       for ag, rid, st in fila.pop(0)]
+            return e.resumir(agentes, tarefas), True, e.normalizar(agentes, tarefas)[1]
+        leitor.ler = ler
+        return ler
+
+    def test_cada_andar_gera_a_propria_edicao(self):
+        hoje = datetime.datetime.now(e.FUSO).replace(hour=12, minute=0, second=0, microsecond=0)
+        t = hoje.timestamp()   # meio-dia de hoje: dentro do expediente padrão e na semana que o GET mostra
+        cfg = {"expediente": {"abre": "07:00", "fecha": "20:00"}, "serio": False}
+        ag_p = [{"id": "a1", "name": "Pixel", "handle": "pixel"}]
+        ag_x = [{"id": "b1", "name": "Bolt", "handle": "bolt"}, {"id": "b2", "name": "Nova", "handle": "nova"}]
+
+        # térreo: duas tarefas do a1 terminam; nenhuma briga
+        self.leituras(self.srv.leitor, ag_p, [("a1", "p1", "running"), ("a1", "p2", "running")],
+                      [("a1", "p2", "running")], [])
+        for i in range(3):
+            self.srv.leitor.ciclo(t + 40 * i)
+
+        # 2º andar: as tarefas do b1 e do b2 terminam (o b2 pediu aprovação antes), uma briga no ringue e uma greve
+        leitor = self.extra.leitor
+        self.assertIs(leitor.jornal, self.extra.jornal)   # o Andar liga o leitor dele ao jornal dele
+        self.leituras(leitor, ag_x, [("b1", "x1", "running"), ("b2", "x2", "running")],
+                      [("b2", "x2", "waiting_approval")], [])
+        for i in range(3):
+            leitor.ciclo(t + 40 * i)
+        social, livres = self.extra.social, t + 300   # a FOLGA_CENA já passou e ninguém trabalha
+        st, corpo = social.ordenar("b1", "b2", livres, leitor.foto(), cfg)
+        self.assertEqual(st, 200, corpo)
+        social.passo(livres + 60, leitor.foto(), cfg)   # a luta acabou: assenta e conta no jornal do andar
+        social.contar_jornal("greve", livres + 120)
+
+        x, p = self.jornal(self.extra.id), self.jornal()
+        por_id = lambda s: {a["id"]: (a["tarefas"], a["aprovacoes"]) for a in s["agentes"]}
+        self.assertEqual(por_id(x), {"b1": (1, 0), "b2": (1, 1)})
+        self.assertEqual([(d["brigas"], d["greves"]) for d in x["dias"]], [(1, 1)])
+        self.assertEqual(por_id(p), {"a1": (2, 0)})
+        self.assertEqual([(d["brigas"], d["greves"]) for d in p["dias"]], [])   # o térreo não herda o agito do andar
+        # e o andar grava o jornal na pasta dele, não no dados/jornal.json do térreo
+        self.assertTrue(os.path.exists(os.path.join(andares.pasta(self.dados, self.extra.id), andares.JORNAL)))
 
 
 if __name__ == "__main__":

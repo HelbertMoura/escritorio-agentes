@@ -4,6 +4,11 @@
 
 All notable changes to this project are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Since 1.1.0, versions follow [SemVer](https://semver.org/); older entries are dated milestones.
 
+## Unreleased
+
+### Security
+- **Secrets hidden on screen:** tokens, passwords and keys in a conversation, a task label or an agent's name and role from agentes.chat become "•••" before they reach the map, the TV, the phone and the visitors' room. It covers known tokens (OpenAI, GitHub, GitLab, Google, Slack), JWTs, private keys, `Bearer`, `password: ...` and `"token": "..."`, and long random base64 text. File paths and names still show. The masking happens before the text is cut, so no piece of a token is left. Each text is read up to 64 KB, so a huge message cannot hold the office busy.
+
 ## 2.2.0 · 2026-11-20 · Answer from the office
 
 Release [`v2.2.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2.2.0). Commits: [`v2.1.0...v2.2.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v2.1.0...v2.2.0).
