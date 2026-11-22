@@ -5,7 +5,9 @@ Este plano junta o Escritório de agentes (este repositório, web e AGPL, com ar
 Branch: `firmopolis`. O deploy em produção (o app e o site firmopolis.devmaniacs.com.br) só sai com o GO do Helbert.
 
 ## O site no ar
-O site (`site/`) está em https://firmopolis.devmaniacs.com.br desde 19/11/2026. A config do nginx fica em `docs/firmopolis/site-nginx.conf` (CSP, gzip e cache): o HTML não fica em cache; CSS e JS ficam em cache longo, renovado pelo `?v=`; imagens e fontes ficam em cache por uma semana. Para atualizar, suba o `?v=` do arquivo que mudou, copie `site/` resolvendo os links simbólicos (`rsync -aL`) e confira com Playwright.
+O site (`site/`) está em https://firmopolis.devmaniacs.com.br desde 19/11/2026. A config do nginx fica em `docs/firmopolis/site-nginx.conf` (CSP, gzip e cache): o HTML não fica em cache; CSS e JS ficam em cache longo, renovado pelo `?v=`; imagens e fontes ficam em cache por uma semana; o vídeo do tour (MP4) também fica em cache por uma semana. Para atualizar, suba o `?v=` do arquivo que mudou, copie `site/` resolvendo os links simbólicos (`rsync -aL`) e confira com Playwright.
+
+A TV da recepção (`#tv`) já passa o tour em vídeo: `site/midia/tour-firmopolis.mp4` (H.264, 1280×720, 40 s) com poster em `tour-firmopolis-poster.webp`, servido pela regra de cache de mídia. A CSP do nginx libera a mídia do próprio domínio com `media-src 'self'`. O vídeo tem `controls`, `preload="metadata"` e `playsinline`, então não baixa 5 MB antes de a pessoa apertar o play.
 
 ## Onda 1: nome, ícones e abertura (feita)
 - A aba, o PWA, o convite, o modo construção e o nome do app OAuth agora dizem "Firmópolis". A aba fica `<empresa> · Firmópolis`. A palavra "Escritório" continua como nome da página do mapa, porque o escritório é um lugar dentro de Firmópolis.

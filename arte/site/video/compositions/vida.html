@@ -1,0 +1,184 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; background: #0d0d12; }
+    @font-face {
+      font-family: "Pixeloid";
+      src: url("assets/fonts/PixeloidSans.woff2") format("woff2");
+      font-display: block;
+    }
+    .clip { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; }
+    .quadro {
+      position: absolute; inset: 0; overflow: hidden;
+      background: #0d0d12;
+      opacity: 0;
+    }
+    .quadro.aberto { opacity: 1; }
+    .quadro img {
+      width: 100%; height: 100%; display: block;
+      object-fit: cover;
+      image-rendering: pixelated;
+    }
+    .placa {
+      position: absolute; left: 44px; top: 40px;
+      display: flex; align-items: stretch;
+      background: #0d0d12;
+      box-shadow: 0 0 0 3px #26262e, 6px 6px 0 rgba(0, 0, 0, 0.45);
+    }
+    .placa::before { content: ""; width: 8px; background: #f5b83d; }
+    .placa span {
+      padding: 12px 20px;
+      font-family: "Pixeloid", monospace;
+      font-size: 32px;
+      line-height: 1;
+      color: #fff4dc;
+      letter-spacing: 0.03em;
+    }
+    .placa em { font-style: normal; color: #f5b83d; }
+    .cidade {
+      position: absolute; right: 44px; bottom: 38px;
+      padding: 10px 16px;
+      font-family: "Pixeloid", monospace;
+      font-size: 22px;
+      color: #fff4dc;
+      background: #0d0d12;
+      box-shadow: 0 0 0 3px #3d4f9e, 6px 6px 0 rgba(0, 0, 0, 0.45);
+    }
+    .legenda {
+      position: absolute; left: 44px; bottom: 38px;
+      padding: 9px 14px;
+      font-family: "Pixeloid", monospace;
+      font-size: 22px;
+      color: #e9e3d4;
+      background: #0d0d12;
+      box-shadow: 0 0 0 3px #26262e, 6px 6px 0 rgba(0, 0, 0, 0.45);
+    }
+  </style>
+  <div id="root" data-composition-id="vida" data-width="1280" data-height="720">
+    <!-- 24,6s - 30,0s: o mundo do dia a dia, o rádio e o andar de São Paulo -->
+    <div id="vid-clip-1" class="clip" data-start="0" data-duration="5.4" data-track-index="1">
+      <div class="quadro aberto" id="vid-vida">
+        <img src="assets/img/vida.png" alt="Agentes trabalhando, um cachorro no escritório e um banheiro interditado" />
+      </div>
+      <div class="quadro" id="vid-radio">
+        <img src="assets/img/radio.png" alt="Rádio da Firmópolis com lo-fi, chiptune e jazz" />
+      </div>
+      <div class="quadro" id="vid-sp">
+        <img data-layout-allow-overflow src="assets/img/andar-sp.png" alt="Andar de São Paulo de manhã, com a portaria, o pombo e a mesa de reunião" />
+      </div>
+    </div>
+
+    <!-- 30,0s - 31,0s: outro andar, outra cidade, outra hora -->
+    <div id="vid-clip-2" class="clip" data-start="5.4" data-duration="1" data-track-index="2">
+      <div class="quadro" id="vid-toquio">
+        <img src="assets/img/andar-toquio.png" alt="Andar de Tóquio à noite, com a cidade em segundo plano" />
+      </div>
+    </div>
+
+    <!-- 31,0s - 33,0s: o mundo, com uma cidade por workspace -->
+    <div id="vid-clip-3" class="clip" data-start="6.4" data-duration="2" data-track-index="3">
+      <div class="quadro" id="vid-mundo">
+        <img data-layout-allow-overflow src="assets/img/mundo.png" alt="Mapa do Brasil com as cidades do escritório marcadas" />
+      </div>
+    </div>
+
+    <div id="vid-titulo">
+      <p class="placa"><span>Vida <em>própria</em></span></p>
+    </div>
+
+    <div id="vid-legenda">
+      <p class="legenda">firmopolis.devmaniacs.com.br</p>
+    </div>
+
+    <div id="vid-cidade-sp">
+      <p class="cidade">SÃO PAULO</p>
+    </div>
+
+    <div id="vid-cidade-toquio">
+      <p class="cidade">TÓQUIO</p>
+    </div>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+
+    // Entrada com um empurrão curto; a cena respira sozinha depois.
+    tl.fromTo(
+      "#vid-vida img",
+      { scale: 1.04 },
+      { scale: 1.1, duration: 2.2, ease: "none", transformOrigin: "center center" },
+      0
+    );
+
+    tl.to("#vid-vida", { opacity: 0, filter: "blur(8px)", duration: 0.15, ease: "power2.in" }, 2.16);
+    tl.fromTo(
+      "#vid-radio",
+      { opacity: 0, filter: "blur(8px)" },
+      { opacity: 1, filter: "blur(0px)", duration: 0.22, ease: "power2.out" },
+      2.2
+    );
+
+    tl.to("#vid-radio", { opacity: 0, filter: "blur(8px)", duration: 0.14, ease: "power2.in" }, 3.94);
+    tl.fromTo(
+      "#vid-sp",
+      { opacity: 0, filter: "blur(8px)" },
+      { opacity: 1, filter: "blur(0px)", duration: 0.2, ease: "power2.out" },
+      4
+    );
+
+    // Corte seco de uma cidade para outra: é a mesma ideia, outro andar.
+    tl.to("#vid-sp", { opacity: 0, duration: 0.1, ease: "none" }, 5.3);
+    tl.fromTo(
+      "#vid-toquio",
+      { opacity: 0 },
+      { opacity: 1, duration: 0.14, ease: "none" },
+      5.34
+    );
+
+    tl.to("#vid-toquio", { opacity: 0, filter: "blur(8px)", duration: 0.14, ease: "power2.in" }, 6.36);
+    tl.fromTo(
+      "#vid-mundo",
+      { opacity: 0, filter: "blur(8px)" },
+      { opacity: 1, filter: "blur(0px)", duration: 0.3, ease: "power2.out" },
+      6.4
+    );
+    tl.fromTo(
+      "#vid-mundo img",
+      { scale: 1.06 },
+      { scale: 1.13, duration: 2, ease: "none", transformOrigin: "center center" },
+      6.4
+    );
+
+    // Título do capítulo.
+    tl.fromTo(
+      "#vid-titulo .placa",
+      { opacity: 0, x: -26 },
+      { opacity: 1, x: 0, duration: 0.34, ease: "power4.out" },
+      0.3
+    );
+    tl.fromTo(
+      "#vid-legenda .legenda",
+      { opacity: 0, y: 10 },
+      { opacity: 1, y: 0, duration: 0.34, ease: "power3.out" },
+      0.6
+    );
+    tl.to("#vid-titulo .placa", { opacity: 0, x: -18, duration: 0.26, ease: "power2.in" }, 6.9);
+    tl.to("#vid-legenda .legenda", { opacity: 0, duration: 0.26, ease: "power2.in" }, 6.9);
+
+    // Etiqueta de cidade: entra junto do quadro correspondente.
+    tl.fromTo(
+      "#vid-cidade-sp .cidade",
+      { opacity: 0, y: 12 },
+      { opacity: 1, y: 0, duration: 0.26, ease: "power3.out" },
+      4.1
+    );
+    tl.to("#vid-cidade-sp .cidade", { opacity: 0, y: -8, duration: 0.16, ease: "power2.in" }, 5.34);
+    tl.fromTo(
+      "#vid-cidade-toquio .cidade",
+      { opacity: 0, y: 12 },
+      { opacity: 1, y: 0, duration: 0.26, ease: "power3.out" },
+      5.42
+    );
+    tl.to("#vid-cidade-toquio .cidade", { opacity: 0, y: -8, duration: 0.16, ease: "power2.in" }, 6.48);
+
+    window.__timelines["vida"] = tl;
+  </script>
+</template>

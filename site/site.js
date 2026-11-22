@@ -1,5 +1,5 @@
 /* Firmópolis — site: céu e rua animados, o prédio-mascote que olha o cursor, o elevador que desce com a rolagem,
- * crachás, TV com chiado e a rua à noite no rodapé. Segredo: digite "pizza" em qualquer lugar da página. */
+ * crachás, TV passando o tour em vídeo e a rua à noite no rodapé. Segredo: digite "pizza" em qualquer lugar da página. */
 (function () {
   'use strict';
   var A = window.Abertura;
@@ -429,17 +429,6 @@
     var falaNaTela = !('IntersectionObserver' in window);
     if (!falaNaTela) new IntersectionObserver(function (es) { falaNaTela = es[es.length - 1].isIntersecting; }).observe(festaFala);
     setInterval(function () { if (falaNaTela && !document.hidden) mostrarFala(); }, 3200);
-  }
-
-  /* ---------- TV com chiado (só enquanto está na tela) ---------- */
-  var chiado = document.querySelector('.tv-chiado');
-  if (chiado) {
-    chiado.width = 160; chiado.height = 90;
-    var tctx = chiado.getContext('2d'), img = tctx.createImageData(160, 90), px32 = new Uint32Array(img.data.buffer);
-    cena(chiado, 14, function () {
-      for (var i = 0; i < px32.length; i++) px32[i] = 0xff000000 | (Math.random() * 255 | 0) * 0x10101;
-      tctx.putImageData(img, 0, 0);
-    });
   }
 
   /* ---------- Copiar comando ---------- */

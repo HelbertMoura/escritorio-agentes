@@ -1,0 +1,112 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; background: #0d0d12; }
+    @font-face {
+      font-family: "Pixeloid";
+      src: url("assets/fonts/PixeloidSans.woff2") format("woff2");
+      font-display: block;
+    }
+    @font-face {
+      font-family: "Figtree";
+      src: url("assets/fonts/figtree.woff2") format("woff2");
+      font-weight: 300 900;
+      font-display: block;
+    }
+    /* Malha de pixels do fundo: dá chão ao quadro em vez de preto vazio. */
+    .malha {
+      position: absolute; left: 0; top: 0; width: 1280px; height: 720px;
+      background-color: #0d0d12;
+      background-image:
+        linear-gradient(rgba(61, 79, 158, 0.14) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(61, 79, 158, 0.14) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+    .vinheta {
+      position: absolute; left: 0; top: 0; width: 1280px; height: 720px;
+      background: radial-gradient(circle at 50% 45%, rgba(13, 13, 18, 0) 35%, rgba(13, 13, 18, 0.92) 100%);
+    }
+    .marca { position: absolute; left: 48px; top: 92px; width: 1184px; }
+    .marca img { width: 100%; height: auto; display: block; image-rendering: pixelated; }
+    .regua {
+      position: absolute; left: 48px; top: 372px; width: 1184px; height: 6px;
+      background: #f5b83d;
+      box-shadow: 0 0 0 3px #1b1a2b;
+    }
+    .gancho {
+      position: absolute; left: 140px; top: 420px; width: 1000px;
+      font-family: "Pixeloid", monospace;
+      font-size: 42px;
+      line-height: 1.4;
+      text-align: center;
+      color: #fff4dc;
+      text-shadow: 4px 4px 0 #1b1a2b;
+    }
+    .gancho .p { display: inline-block; }
+    .gancho b { color: #f5b83d; font-weight: normal; }
+    .rodape {
+      position: absolute; left: 0; top: 632px; width: 1280px;
+      text-align: center;
+      font-family: "Pixeloid", monospace;
+      font-size: 20px;
+      letter-spacing: 0.08em;
+      color: #b5ae9e;
+    }
+  </style>
+  <div id="root" data-composition-id="abertura" data-width="1280" data-height="720">
+    <div class="malha" aria-hidden="true"></div>
+    <div class="vinheta" aria-hidden="true"></div>
+
+    <div class="marca">
+      <img id="abr-assinatura" src="assets/img/assinatura.png"
+        alt="Firmópolis: o prédio-mascote ao lado do nome" />
+    </div>
+
+    <div class="regua" id="abr-regua" aria-hidden="true"></div>
+
+    <p class="gancho" id="abr-gancho">
+      <span class="p">Seu</span> <span class="p">time</span> <span class="p">de</span>
+      <span class="p">agentes</span> <span class="p">de</span> <span class="p">IA,</span><br />
+      <span class="p">trabalhando</span> <span class="p">no</span> <b class="p">mesmo</b>
+      <b class="p">prédio.</b>
+    </p>
+
+    <p class="rodape" id="abr-rodape">FIRMÓPOLIS · ZERO TOKEN · AGPL-3.0</p>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+
+    // A marca entra com um leve zoom de foco, do nada para o lugar.
+    // A marca ja esta na tela no primeiro quadro: so assenta.
+    tl.fromTo(
+      "#abr-assinatura",
+      { opacity: 1, scale: 0.97, filter: "blur(6px)" },
+      { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.5, ease: "power4.out" },
+      0
+    );
+    tl.fromTo(
+      "#abr-regua",
+      { scaleX: 0 },
+      { scaleX: 1, duration: 0.5, ease: "power3.inOut", transformOrigin: "left center" },
+      0.5
+    );
+    // O gancho chega palavra a palavra e para morto.
+    tl.fromTo(
+      "#abr-gancho .p",
+      { opacity: 0, y: 16, filter: "blur(5px)" },
+      { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.26, ease: "power3.out", stagger: 0.07 },
+      1.05
+    );
+    tl.fromTo(
+      "#abr-rodape",
+      { opacity: 0 },
+      { opacity: 1, duration: 0.4, ease: "none" },
+      2.1
+    );
+    // No fim da cena tudo cede o lugar para a próxima.
+    tl.to("#abr-assinatura", { opacity: 0.45, duration: 0.5, ease: "power2.inOut" }, 4.9);
+    tl.to("#abr-gancho", { opacity: 0.25, duration: 0.5, ease: "power2.inOut" }, 4.9);
+    tl.to("#abr-regua", { opacity: 0.25, duration: 0.5, ease: "power2.inOut" }, 4.9);
+
+    window.__timelines["abertura"] = tl;
+  </script>
+</template>

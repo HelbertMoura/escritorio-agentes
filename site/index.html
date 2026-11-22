@@ -23,7 +23,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <link rel="preload" href="fontes/PixeloidSans.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fontes/figtree.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="estilo.css?v=9">
+  <link rel="stylesheet" href="estilo.css?v=10">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -451,20 +451,24 @@
       </div>
     </section>
 
-    <!-- TODO(content): trocar a estática pelo vídeo de lançamento da nova Firmópolis quando ele existir. -->
     <section id="tv" class="tv-sala" aria-labelledby="titulo-tv">
       <div class="faixa tv-grade">
         <div class="tv" data-tv>
           <span class="tv-antena" aria-hidden="true"></span>
           <div class="tv-tela">
-            <canvas class="tv-chiado" aria-hidden="true"></canvas>
-            <p class="tv-texto"><span>Canal 6</span>Em breve</p>
+            <video class="tv-video" controls preload="metadata" playsinline
+                   poster="./midia/tour-firmopolis-poster.webp"
+                   aria-label="Tour completo da nova Firmópolis: quarenta segundos mostrando o prédio inteiro funcionando, com a ponte local e o mascote, narrado em português.">
+              <source src="./midia/tour-firmopolis.mp4" type="video/mp4">
+              Seu navegador não reproduz vídeo. <a href="./midia/tour-firmopolis.mp4">Baixe o tour em MP4</a>.
+            </video>
+            <span class="tv-canal" aria-hidden="true">Canal 6</span>
           </div>
           <span class="tv-botoes" aria-hidden="true"><i></i><i></i></span>
         </div>
         <div class="tv-legenda">
-          <h2 id="titulo-tv" class="titulo-secao">O tour completo vai passar aqui.</h2>
-          <p>Quando a nova Firmópolis estiver montada, com a ponte local e o mascote, esta TV mostra o prédio inteiro funcionando, narrado em português.</p>
+          <h2 id="titulo-tv" class="titulo-secao">O tour completo já passa aqui.</h2>
+          <p>Quarenta segundos do prédio inteiro funcionando, com a ponte local e o mascote, narrado em português. É só apertar o play.</p>
           <a class="botao botao-vazado" href="https://github.com/HelbertMoura/escritorio-agentes/releases" rel="noopener">Acompanhar as versões</a>
         </div>
       </div>
@@ -618,6 +622,6 @@ sudo AGENTES_ORG=<span class="var">&lt;id&gt;</span> bash instalar.sh</code></pr
   <script src="abertura.js?v=3"></script>
   <script src="avatar.js?v=4"></script>
   <script src="sprites.js?v=8"></script>
-  <script src="site.js?v=7"></script>
+  <script src="site.js?v=8"></script>
 </body>
 </html>
