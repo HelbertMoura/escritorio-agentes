@@ -58,9 +58,63 @@ p { text-wrap: pretty; }
 .marca { display: inline-flex; align-items: center; gap: 10px; color: var(--creme); text-decoration: none; font: 1.125rem var(--fonte-pixel); }
 .marca img { image-rendering: pixelated; }
 .menu { display: flex; gap: 22px; margin-left: auto; }
-.menu a { color: var(--texto-2); text-decoration: none; font-weight: 600; font-size: .95rem; padding: 12px 0; }
+.menu a { position: relative; color: var(--texto-2); text-decoration: none; font-weight: 600; font-size: .95rem; padding: 12px 0; }
 .menu a:hover { color: var(--creme); }
-@media (max-width: 760px) { .menu { display: none; } .topo-linha > .botao { margin-left: auto; } }
+/* Scroll-spy: a secao que esta na tela fica marcada no menu. */
+.menu a[aria-current="location"] { color: var(--ambar); }
+/* A marca e posicionada, para o menu nao ganhar 8 px e pular de altura. */
+.menu a[aria-current="location"]::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 4px;
+  height: 4px; background: var(--ambar);
+}
+
+/* Botao do menu no celular: um bloco pixelado, do tamanho do dedo. */
+.menu-botao {
+  display: none; align-items: center; justify-content: center; gap: 10px;
+  min-width: 48px; min-height: 48px; margin-left: auto; padding: 10px 14px;
+  background: var(--grafite-2); color: var(--creme); border: 0; cursor: pointer;
+  font: 700 .95rem var(--fonte); box-shadow: inset -4px -4px 0 #111116, inset 4px 4px 0 var(--linha);
+}
+.menu-botao:hover { background: var(--grafite); }
+.menu-botao:active { box-shadow: inset 4px 4px 0 #111116; }
+/* As tres barrinhas do botao, desenhadas como na arte do predio. */
+.menu-botao-icone { display: grid; gap: 4px; width: 20px; }
+.menu-botao-icone i { display: block; height: 4px; background: var(--ambar); }
+.menu-botao-icone i:nth-child(2) { width: 12px; }
+
+/* O painel do menu no celular: uma gaveta que desce por cima da pagina. */
+.menu-painel {
+  position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column;
+  padding: 16px; background: var(--noite); overflow-y: auto;
+  transform: translateX(100%); transition: transform .22s var(--passo);
+}
+/* O atributo hidden precisa vencer o display:flex da gaveta. */
+.menu-painel[hidden] { display: none; }
+.menu-painel[data-aberto="true"] { transform: none; }
+.menu-painel-topo { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.menu-painel-fechar {
+  margin-left: auto; display: grid; place-items: center; width: 48px; height: 48px;
+  background: var(--grafite-2); color: var(--creme); border: 0; cursor: pointer; font-size: 1.25rem;
+  box-shadow: inset -4px -4px 0 #111116, inset 4px 4px 0 var(--linha);
+}
+.menu-painel-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.menu-painel-lista a {
+  display: flex; align-items: center; min-height: 52px; padding: 12px 14px;
+  color: var(--texto); text-decoration: none; font: 1.05rem var(--fonte-pixel);
+  background: var(--grafite-2); box-shadow: inset 0 -4px 0 #17171d;
+}
+.menu-painel-lista a:hover, .menu-painel-lista a:focus-visible { color: var(--ambar); background: var(--grafite); }
+.menu-painel-lista a[aria-current="location"] { color: var(--ambar); box-shadow: inset 0 -4px 0 #17171d, inset 4px 0 0 var(--ambar); }
+.menu-painel-lista a[aria-current="page"] { color: var(--ambar); }
+.menu-painel-rodape { margin-top: auto; padding-top: 20px; display: grid; gap: 10px; }
+.menu-painel-rodape .botao { width: 100%; }
+
+/* No celular o menu vira gaveta; no desktop continua a linha de links. */
+@media (max-width: 760px) {
+  .menu { display: none; }
+  .menu-botao { display: inline-flex; }
+  .topo-linha > .botao { display: none; }
+}
 
 /* ---------- Botões ---------- */
 .botao {
@@ -100,6 +154,28 @@ h1 em { font-style: normal; color: var(--ambar); text-shadow: 4px 4px 0 #6b3f00;
   .hero-grade { grid-template-columns: 1fr; }
   .hero-texto { padding-bottom: 8px; }
   .balao { right: 0; }
+}
+
+/* Troca de imagem: a figura fica do mesmo tamanho e a foto entra com fade. */
+.janela img, .janela-festa img, .mundo-img, .clima-img, .festa-img { transition: opacity .18s ease, filter .25s var(--passo); }
+img.troca { opacity: .25; }
+[aria-busy="true"] img { opacity: .45; }
+
+/* ---------- Hero no celular: tudo cabe na primeira dobra ---------- */
+@media (max-width: 480px) {
+  .hero { padding-top: 20px; }
+  .hero-grade { gap: 16px; }
+  .hero-texto { padding-bottom: 0; }
+  h1 { font-size: clamp(1.85rem, 8.4vw, 2.4rem); line-height: 1.12; }
+  .hero-sub { margin: 14px 0 18px; font-size: .95rem; line-height: 1.5; }
+  /* os dois botões do hero com a mesma largura, um embaixo do outro */
+  .acoes { flex-direction: column; align-items: stretch; gap: 10px; }
+  .acoes .botao { width: 100%; }
+  /* o mascote encolhe para a rua viva caber junto */
+  .mascote { width: min(200px, 56vw); }
+  .balao { top: -6%; right: 0; max-width: 11em; font-size: .8rem; }
+  .rua { height: 132px; margin-top: -48px; }
+  .topo-linha { min-height: 56px; gap: 12px; }
 }
 
 /* ---------- Quem mora aqui ---------- */
