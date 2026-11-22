@@ -28,6 +28,22 @@ const Efeitos = (() => {
   }
 
   // ---------------- rua
+  // a base de cada faixa (onde as rodas assentam no asfalto): a de cima é a do prédio (vai para a esquerda) e a de
+  // baixo é a mais próxima (vai para a direita). O farol fica na altura do veículo (a moto tem a luz no guidão).
+  const FAROL = { carro1: 0.30, carro2: 0.30, carro3: 0.30, carro4: 0.58 };
+  // o carro que volta para fora da tela entra longe do outro da mesma faixa: nunca em cima dele
+  function entra(car, e, lado) {
+    const s = tam(car.nome) || [0, 0, 40, 14], w = s[2], folga = e.folga || 120;
+    const outro = e.carros.find(o => o !== car && o.faixa === car.faixa);
+    const sorteio = Math.random() * 220;
+    let x = lado < 0 ? -60 - sorteio : P.W + 40 + sorteio;
+    if (outro) {
+      const so = tam(outro.nome) || [0, 0, 40, 14];
+      // o que entra fica atrás do outro, na direção em que anda
+      x = lado < 0 ? Math.min(x, outro.x - folga - w) : Math.max(x, outro.x + so[2] + folga);
+    }
+    return x;
+  }
   function exterior(c, dt, t, ceu) {
     const e = P.externos; if (!e) return;
     for (const car of e.carros) {
@@ -35,12 +51,12 @@ const Efeitos = (() => {
       if (!s) continue;
       car.x += dir * car.vel * dt;
       car.vel = car.faixa ? 26 : 34;   // cada faixa anda num ritmo só: ninguém atravessa o carro da frente
-      if (dir > 0 && car.x > P.W + 40) car.x = -60 - Math.random() * 260;
-      if (dir < 0 && car.x < -60) car.x = P.W + 40 + Math.random() * 260;
-      const y = e.ruaY + (car.faixa ? e.ruaAlt / 2 - 2 : e.ruaAlt - 3) - s[3];   // cada faixa dentro do asfalto
+      if (dir > 0 && car.x > P.W + 40) car.x = entra(car, e, -1);
+      if (dir < 0 && car.x < -60) car.x = entra(car, e, 1);
+      const y = e.ruaY + (car.faixa ? e.ruaAlt / 2 - 1 : e.ruaAlt - 3) - s[3];   // as rodas assentam no asfalto
       c.fillStyle = "rgba(0,0,0,.25)"; c.fillRect(car.x + 2, y + s[3] - 2, s[2] - 4, 3);
       spr(c, tam(nome) ? nome : car.nome, car.x, y);
-      car.farol = { x: dir > 0 ? car.x + s[2] : car.x, y: y + s[3] - 6, dir };
+      car.farol = { x: dir > 0 ? car.x + s[2] : car.x, y: y + s[3] - Math.round(s[3] * (FAROL[car.nome] || 0.3)), dir };
     }
   }
 
