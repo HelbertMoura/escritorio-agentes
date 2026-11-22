@@ -157,7 +157,7 @@ All screenshots come from **demo mode** or from a preview with **fictional data*
 </table>
 
 <p align="center">
-  <a href="./docs/screenshots/39-segredos-mascarados.png"><img src="./docs/screenshots/39-segredos-mascarados.png" alt="The agent card with the secrets masked: the role reads 'Desenvolvimento · token ·••' and the task 'Revisando o deploy com o token •••'; in the lists below, the approval says 'Aplicando token: •••• no servidor' and the question says 'A chave é •••'" width="900"></a>
+  <a href="./docs/screenshots/39-segredos-mascarados.png"><img src="./docs/screenshots/39-segredos-mascarados.png" alt="The agent card with the secrets masked: the role reads 'Desenvolvimento · token: •••' and the task 'Revisando o deploy com o token •••'; in the lists below, the approval says 'Aplicando &quot;token&quot;: &quot;•••&quot; no servidor' and the question says 'Qual horário oferecer ao cliente? A chave é •••'" width="900"></a>
 </p>
 <p align="center"><em>Secrets on screen: a token becomes "•••" before it reaches the map.</em></p>
 

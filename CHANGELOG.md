@@ -9,7 +9,7 @@ All notable changes to this project are listed here, newest first. The format fo
 Release [`v2.3.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2.3.0). Commits: [`v2.2.0...v2.3.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v2.2.0...v2.3.0).
 
 ### Added
-- **The new Firmópolis tour on the site's TV:** the reception at [firmopolis.devmaniacs.com.br](https://firmopolis.devmaniacs.com.br) now plays the forty-second narrated tour instead of the static noise, with a poster, Portuguese captions and the browser's video controls. The file does not download before you press play, and browsers that cannot play video get a link to the MP4.
+- **The new Firmópolis tour on the site's TV:** the reception at [firmopolis.devmaniacs.com.br](https://firmopolis.devmaniacs.com.br) now plays the forty-second narrated tour instead of the static noise, with a poster, Portuguese captions and the browser's video controls. The whole video does not download before you press play (the browser only asks for the metadata), and browsers that cannot play video get a link to the MP4.
 
 ### Changed
 - **Lighter app and clearer mobile layout:** Figtree and Silkscreen are now served in `woff2` (-58 KB on first load, keeping `.ttf` as fallback). Agent and terminal cards are opaque with a scroll hint that clears at the bottom, initial map framing waits for a visible viewport and resets on floor changes, and mobile status filters align cleanly.

@@ -9,7 +9,7 @@ As mudanças que importam neste projeto ficam aqui, da mais nova para a mais ant
 Release [`v2.3.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2.3.0). Commits: [`v2.2.0...v2.3.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v2.2.0...v2.3.0).
 
 ### Adicionado
-- **O tour da nova Firmópolis na TV do site:** a recepção de [firmopolis.devmaniacs.com.br](https://firmopolis.devmaniacs.com.br) deixou o chiado e passou a mostrar o tour narrado de quarenta segundos, com pôster, legendas em português e os controles de vídeo do navegador. O arquivo não baixa antes de apertar o play, e quem não reproduz vídeo tem o link para baixar o MP4.
+- **O tour da nova Firmópolis na TV do site:** a recepção de [firmopolis.devmaniacs.com.br](https://firmopolis.devmaniacs.com.br) deixou o chiado e passou a mostrar o tour narrado de quarenta segundos, com pôster, legendas em português e os controles de vídeo do navegador. O vídeo inteiro não baixa antes de apertar o play (o navegador pede só os metadados), e quem não reproduz vídeo tem o link para baixar o MP4.
 
 ### Mudado
 - **App mais leve e legível no celular:** as fontes Figtree e Silkscreen passam a ser servidas em `woff2` (-58 KB no primeiro carregamento, mantendo `.ttf` como reserva). A ficha de agente e terminal ficou opaca com indicação real de rolagem que some no fim, o enquadramento inicial do mapa aguarda a tela visível e se ajusta ao trocar de andar, e os filtros de estado no celular ocupam a grade de forma equilibrada.

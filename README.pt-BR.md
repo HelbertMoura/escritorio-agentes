@@ -157,7 +157,7 @@ Todas as capturas saem do **modo demonstração** ou de uma prévia com **dados 
 </table>
 
 <p align="center">
-  <a href="./docs/screenshots/39-segredos-mascarados.png"><img src="./docs/screenshots/39-segredos-mascarados.png" alt="O cartão do agente com os segredos mascarados: a função diz 'Desenvolvimento · token ·••' e a tarefa 'Revisando o deploy com o token •••'; nas listas de baixo, o pedido diz 'Aplicando token: •••• no servidor' e a pergunta diz 'A chave é •••'" width="900"></a>
+  <a href="./docs/screenshots/39-segredos-mascarados.png"><img src="./docs/screenshots/39-segredos-mascarados.png" alt="O cartão do agente com os segredos mascarados: a função diz 'Desenvolvimento · token: •••' e a tarefa 'Revisando o deploy com o token •••'; nas listas de baixo, o pedido diz 'Aplicando &quot;token&quot;: &quot;•••&quot; no servidor' e a pergunta diz 'Qual horário oferecer ao cliente? A chave é •••'" width="900"></a>
 </p>
 <p align="center"><em>Segredos na tela: um token vira "•••" antes de chegar ao mapa.</em></p>
 
