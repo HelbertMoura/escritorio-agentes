@@ -23,7 +23,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <link rel="preload" href="fontes/PixeloidSans.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fontes/figtree.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="estilo.css?v=11">
+  <link rel="stylesheet" href="estilo.css?v=13">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -115,6 +115,7 @@
             <a class="botao" href="https://github.com/HelbertMoura/escritorio-agentes" rel="noopener">Ver o código no GitHub</a>
             <a class="botao botao-vazado" href="#instalar">Como instalar</a>
           </div>
+          <p class="hero-maestri"><a href="#terminais">Já usa o Maestri? Veja seus workspaces no Firmópolis</a></p>
         </div>
         <div class="hero-predio">
           <button class="mascote-botao" type="button" aria-label="Cutucar o prédio da Firmópolis">
@@ -199,12 +200,13 @@
           </div>
         </article>
 
-        <article class="andar" data-andar="10">
+        <article class="andar" id="terminais" data-andar="10">
           <p class="placa-andar"><span>10</span>Terminais</p>
           <div class="andar-texto">
             <h3>Os terminais da sua máquina, no mapa.</h3>
             <p>Pela ponte local, cada Claude Code, Codex, agy, OpenCode e MiniMax aberto vira um terminalzinho. A cor diz o programa, e o acessório diz o papel: coroa no Maestro, óculos e lupa no Auditor, capacete no Braçal. Com o Maestri, cada workspace em uso ganha a sua sala sozinho, num bloco de baixo, sob a placa "Projetos".</p>
             <p>Os terminais estão numa VM? O espelho manda para o seu escritório, sem túnel, com um comando só: <code>ponte conectar</code>.</p>
+            <p class="andar-acao"><a class="botao botao-vazado" href="https://github.com/HelbertMoura/escritorio-agentes/blob/main/README.pt-BR.md#ponte-local-os-terminais-deste-computador" rel="noopener">Configurar a ponte local</a></p>
           </div>
           <figure class="janela janela-larga">
             <img src="img/terminais-maestri.webp?v=3" srcset="img/terminais-maestri-m.webp?v=3 640w, img/terminais-maestri.webp?v=3 960w" sizes="(max-width: 860px) calc(100vw - 32px), 620px" alt="O prédio inteiro: a recepção e quatro salas de time em cima, a sala de reunião, a sala comunal, a cozinha e o banheiro no meio, e embaixo as salas Loja Online, App Mobile e Site Novo, criadas sozinhas para o Maestri, sob a placa Projetos." width="960" height="600" loading="lazy" decoding="async">
@@ -495,6 +497,7 @@
           <h2 id="titulo-tv" class="titulo-secao">O tour completo já passa aqui.</h2>
           <p>Quarenta segundos do prédio inteiro funcionando, com a ponte local e o mascote, narrado em português. É só apertar o play.</p>
           <a class="botao botao-vazado" href="https://github.com/HelbertMoura/escritorio-agentes/releases" rel="noopener">Acompanhar as versões</a>
+          <p class="tv-link"><a href="novidades.html#video-novidades">Ver as novidades em vídeo</a></p>
         </div>
       </div>
     </section>
@@ -515,7 +518,8 @@
           <h2 id="titulo-instalar" class="titulo-secao">Dois comandos e a firma abre.</h2>
           <p>Você precisa de um Linux com systemd, Python 3.10 ou mais novo e o Tailscale com HTTPS ligado. No fim, o instalador mostra o código do primeiro acesso.</p>
           <p>Prefere contêiner? Também tem Docker e Coolify.</p>
-          <a class="botao botao-vazado" href="https://github.com/HelbertMoura/escritorio-agentes#instalar" rel="noopener">Guia completo de instalação</a>
+          <a class="botao botao-vazado" href="https://github.com/HelbertMoura/escritorio-agentes/blob/main/README.pt-BR.md#instalar" rel="noopener">Guia completo de instalação</a>
+          <p class="instalar-ponte">Já usa o <a href="https://www.themaestri.app/pt-br" rel="noopener">Maestri</a>? A ponte local mostra seus workspaces e terminais no prédio. A instalação do Firmópolis ainda pede a organização do agentes.chat (<code>AGENTES_ORG</code>). <a href="https://github.com/HelbertMoura/escritorio-agentes/blob/main/README.pt-BR.md#ponte-local-os-terminais-deste-computador" rel="noopener">Configurar a ponte local</a>.</p>
         </div>
         <div class="terminal" role="group" aria-label="Comandos de instalação">
           <div class="terminal-barra" aria-hidden="true"><i></i><i></i><i></i><span>terminal</span></div>

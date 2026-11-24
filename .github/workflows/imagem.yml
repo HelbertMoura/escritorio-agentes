@@ -21,6 +21,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ponte/go.mod
+          cache-dependency-path: ponte/go.sum
+      - name: Go
+        working-directory: ponte
+        run: go test ./...
       - name: Python
         # test_montar_mundo fica de fora no CI: compara PNGs byte a byte e o zlib do runner gera bytes diferentes
         # (falha também fora da máquina que montou os mapas); rode local ao mexer no mundo.

@@ -20,7 +20,7 @@
   <img src="./docs/demo.gif" alt="Animated demo of the office in demo mode, with fictional agents: the pixel-art map by day with agents walking and working, the camera zooming in on an agent with a '?' question bubble, then the pointer moves to a request in the Waiting for you list (one click takes you to that agent). Short captions in Portuguese explain each step." width="900">
 </picture>
 
-[Features](#features) · [Screenshots](#screenshots) · [Install](#install) · [Floors](#floors-several-workspaces-in-one-building) · [Team](#team) · [Customize](#customize-white-label) · [Social life](#social-life) · [Building staff](#building-staff) · [Office radio](#office-radio) · [Construction mode](#construction-mode) · [TV mode](#tv-mode) · [Presentation mode](#presentation-mode) · [Installable app](#installable-app-pwa) · [Visitors](#visitors) · [Visits by invitation](#visits-by-invitation) · [Local bridge](#local-bridge-the-terminals-on-this-computer) · [Newspaper](#newspaper) · [Time-lapse](#time-lapse) · [Phone alerts](#phone-alerts) · [Security](#security) · [Architecture](#architecture) · [Development](#development) · [Changelog](./CHANGELOG.md) · [Contributing](./CONTRIBUTING.md) · [Code of Conduct](./CODE_OF_CONDUCT.md)
+[Already use Maestri?](#already-use-maestri) · [Features](#features) · [Screenshots](#screenshots) · [Install](#install) · [Floors](#floors-several-workspaces-in-one-building) · [Team](#team) · [Customize](#customize-white-label) · [Social life](#social-life) · [Building staff](#building-staff) · [Office radio](#office-radio) · [Construction mode](#construction-mode) · [TV mode](#tv-mode) · [Presentation mode](#presentation-mode) · [Installable app](#installable-app-pwa) · [Visitors](#visitors) · [Visits by invitation](#visits-by-invitation) · [Local bridge](#local-bridge-the-terminals-on-this-computer) · [Newspaper](#newspaper) · [Time-lapse](#time-lapse) · [Phone alerts](#phone-alerts) · [Security](#security) · [Architecture](#architecture) · [Development](#development) · [Changelog](./CHANGELOG.md) · [Contributing](./CONTRIBUTING.md) · [Code of Conduct](./CODE_OF_CONDUCT.md)
 
 🎬 **[Launch video](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2026.11.06)** (narrated in Brazilian Portuguese, with subtitles), attached to the release. 🌎 **[Video of the world and the visits](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.3.0)** (1.3.0), also narrated in Portuguese, with subtitles.
 
@@ -47,6 +47,20 @@ With the optional [local bridge](#local-bridge-the-terminals-on-this-computer), 
 It **does not call any AI model** and does not spend tokens. Approving always happens in agentes.chat; answering too, except in the optional `"responder"` mode. Otherwise, the office only shows what is going on and links you there.
 
 **Who it is for:** teams and companies that run agents on [agentes.chat](https://agentes.chat) and want a glanceable, fun view of the team: on a wall screen, a second monitor or a phone. It is white-label: any company can install its own copy and brand it.
+
+## Already use Maestri?
+
+If your day runs on [Maestri](https://www.themaestri.app/), Firmópolis comes in through the [local bridge](#local-bridge-the-terminals-on-this-computer), and, by default, the terminal data does not go through the server (the mirror is optional).
+
+- **Rooms per workspace:** with the bridge on, each Maestri workspace in use automatically gets a room in the building, under the "Projetos" sign, and its terminals work there. The room is display-only: it does not go to the server or to construction mode.
+- **Observation, not control:** the bridge reads the local state and the building draws it; nothing calls a model or spends tokens. The default is just to look.
+- **Allow or Deny:** on Claude Code, Codex and OpenCode terminals (including those running inside Maestri), permission requests get the buttons on the card. Standalone agy and MiniMax only show their state.
+- **Answer eligible questions:** the **Responder** field does not appear for every wait: only when the wait accepts free text, in Maestri and OpenCode terminals. Option dialogs and approvals do not get the field; answer in the terminal.
+- **Remote is optional:** deciding from a phone or another machine only happens with `--decidir-remoto`; without it, everything happens in this PC's browser.
+
+**Before installing:** Firmópolis still requires `AGENTES_ORG`, the [agentes.chat](https://agentes.chat) organization id, at install time. There is no Maestri-only mode, and such a mode depends on an evaluation; it is not promised. Maestri is another team's tool: Firmópolis is independent, thanks them and points to the official site, with no official partnership.
+
+The step-by-step, with the command for each system, is in [Local bridge](#local-bridge-the-terminals-on-this-computer).
 
 ## Features
 
@@ -811,5 +825,6 @@ Built for [agentes.chat](https://agentes.chat), with permission from its develop
 ## Acknowledgements
 
 - The agentes.chat team, for the read-only MCP connector and for supporting an open-source office.
+- The Maestri team, for the tool we use every day. Firmópolis is independent and has no official partnership with Maestri.
 - [Open-Meteo](https://open-meteo.com), [Tailscale](https://tailscale.com) and [PixelLab](https://pixellab.ai).
 - The designers of Figtree, Silkscreen and Pixeloid Sans, for releasing them under the OFL.
