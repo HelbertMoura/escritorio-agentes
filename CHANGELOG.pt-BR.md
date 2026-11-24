@@ -4,6 +4,12 @@
 
 As mudanças que importam neste projeto ficam aqui, da mais nova para a mais antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Desde a 1.1.0, as versões seguem o [SemVer](https://semver.org/lang/pt-BR/); as entradas mais antigas são marcos com data.
 
+## Não lançado
+
+### Adicionado
+- **Entrada para quem usa o Maestri:** o site ganhou um atalho no hero e na seção dos terminais ("Já usa o Maestri? Veja seus workspaces no Firmópolis") e os READMEs um guia rápido, com o link oficial. Com a ponte local, cada workspace do Maestri em uso ganha uma sala automática e os terminais aparecem no mapa; as salas são só de exibição e a observação é só leitura, sem chamar modelo nem gastar token. **Permitir** e **Negar** valem nos terminais de Claude Code, Codex e OpenCode; o campo **Responder** só aparece quando a espera aceita texto livre (Maestri e OpenCode), e decidir de longe continua opcional (`--decidir-remoto`). A instalação segue pedindo `AGENTES_ORG`: não há modo exclusivamente Maestri, e isso ainda depende de uma avaliação.
+- **Testes Go da ponte no CI:** todo PR roda `go test ./...` em `ponte/`, com a versão do Go lida do `go.mod`, sem os testes que exigem os agentes instalados (`PONTE_TESTE_*`) nem rede. A publicação da imagem continua restrita ao push na `main`.
+
 ## 2.3.0 · 2026-11-22 · O escritório mais leve e seguro
 
 Release [`v2.3.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2.3.0). Commits: [`v2.2.0...v2.3.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v2.2.0...v2.3.0).

@@ -137,6 +137,8 @@ h1 { margin: 0; color: var(--creme); font: clamp(2.4rem, 5.6vw, 4.4rem)/1.08 var
 h1 em { font-style: normal; color: var(--ambar); text-shadow: 4px 4px 0 #6b3f00; }
 .hero-sub { max-width: 32em; margin: 24px 0 32px; color: #d9d3e8; font-size: 1.15rem; text-shadow: 0 2px 0 #0f1024; }
 .acoes { display: flex; flex-wrap: wrap; gap: 14px; }
+.hero-maestri { margin: 20px 0 0; font-size: .95rem; }
+.hero-maestri a { font-weight: 700; }
 .hero-predio { position: relative; justify-self: center; }
 .mascote-botao { display: block; padding: 0; background: none; border: 0; cursor: pointer; }
 .mascote { width: min(380px, 78vw); height: auto; aspect-ratio: 1; image-rendering: pixelated; margin-bottom: -4px; }
@@ -222,6 +224,7 @@ img.troca { opacity: .25; }
 .elevador::before { content: ""; position: absolute; left: 50%; bottom: 100%; width: 2px; height: 4000px; background: #4a4a58; }
 .elevador-mascote { width: 24px; height: 24px; image-rendering: pixelated; }
 .elevador-visor { margin-top: 4px; min-width: 22px; padding: 1px 3px; background: var(--tinta); color: var(--ambar); font: .75rem var(--fonte-pixel); text-align: center; }
+#terminais { scroll-margin-top: 76px; }
 .andar { position: relative; display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 24px 44px; align-items: center; padding: 44px 0;
   border-bottom: 4px solid var(--linha); }
 .andar-invertido { grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); }
@@ -232,6 +235,7 @@ img.troca { opacity: .25; }
 .andar.ativo .placa-andar span { background: var(--ambar); color: var(--noite); box-shadow: inset -4px -4px 0 var(--ambar-escuro), inset 4px 4px 0 var(--ambar-claro); }
 .andar h3 { margin: 0 0 10px; color: var(--creme); font: 1.5rem/1.25 var(--fonte-pixel); text-wrap: balance; }
 .andar p { margin: 0; color: var(--texto-2); }
+.andar .andar-acao { margin-top: 18px; }
 
 /* Janela do prédio: moldura de esquadria com peitoril; acende ao passar o mouse. */
 .janela { position: relative; margin: 0; padding: 8px 8px 0; background: #2a2a33; box-shadow: inset 0 0 0 4px #3f3f4d; }
@@ -313,6 +317,7 @@ img.troca { opacity: .25; }
 .instalar { padding: 80px 0; background: var(--noite); border-bottom: 4px solid var(--linha); }
 .instalar-grade { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 40px; align-items: center; }
 .instalar-grade p { color: var(--texto-2); }
+.instalar-ponte { margin-top: 18px; font-size: .95rem; }
 .terminal { position: relative; min-width: 0; background: #0b0b10; box-shadow: inset 0 0 0 4px #2a2a33; }
 .terminal-barra { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: #2a2a33; color: var(--texto-2); font: .75rem var(--fonte-pixel); }
 .terminal-barra i { width: 10px; height: 10px; background: var(--vermelho); }

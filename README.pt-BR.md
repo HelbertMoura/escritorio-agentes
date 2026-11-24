@@ -20,7 +20,7 @@
   <img src="./docs/demo.gif" alt="Demonstração animada do escritório no modo demonstração, com agentes fictícios: o mapa em pixel art de dia, com agentes andando e trabalhando; a câmera aproxima de um agente com um balão de pergunta '?'; depois o cursor vai até um pedido da lista Esperando você (um clique leva até esse agente). Legendas curtas explicam cada passo." width="900">
 </picture>
 
-[Recursos](#recursos) · [Capturas](#capturas) · [Instalar](#instalar) · [Andares](#andares-vários-workspaces-no-mesmo-prédio) · [Equipe](#equipe) · [Personalizar](#personalizar-white-label) · [Vida social](#vida-social) · [Zeladoria](#zeladoria) · [Rádio da firma](#rádio-da-firma) · [Modo construção](#modo-construção) · [Modo TV](#modo-tv) · [Modo apresentação](#modo-apresentação) · [App instalável](#app-instalável-pwa) · [Visitantes](#visitantes) · [Visitas por convite](#visitas-por-convite) · [Ponte local](#ponte-local-os-terminais-deste-computador) · [Jornal](#jornal) · [Time-lapse](#time-lapse) · [Avisar no celular](#avisar-no-celular) · [Segurança](#segurança) · [Arquitetura](#arquitetura) · [Desenvolvimento](#desenvolvimento) · [Histórico de mudanças](./CHANGELOG.pt-BR.md) · [Contribuir](./CONTRIBUTING.md) · [Código de conduta](./CODE_OF_CONDUCT.md)
+[Já usa o Maestri?](#já-usa-o-maestri) · [Recursos](#recursos) · [Capturas](#capturas) · [Instalar](#instalar) · [Andares](#andares-vários-workspaces-no-mesmo-prédio) · [Equipe](#equipe) · [Personalizar](#personalizar-white-label) · [Vida social](#vida-social) · [Zeladoria](#zeladoria) · [Rádio da firma](#rádio-da-firma) · [Modo construção](#modo-construção) · [Modo TV](#modo-tv) · [Modo apresentação](#modo-apresentação) · [App instalável](#app-instalável-pwa) · [Visitantes](#visitantes) · [Visitas por convite](#visitas-por-convite) · [Ponte local](#ponte-local-os-terminais-deste-computador) · [Jornal](#jornal) · [Time-lapse](#time-lapse) · [Avisar no celular](#avisar-no-celular) · [Segurança](#segurança) · [Arquitetura](#arquitetura) · [Desenvolvimento](#desenvolvimento) · [Histórico de mudanças](./CHANGELOG.pt-BR.md) · [Contribuir](./CONTRIBUTING.md) · [Código de conduta](./CODE_OF_CONDUCT.md)
 
 🎬 **[Vídeo de lançamento](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2026.11.06)** (narração em português do Brasil, com legenda), anexado à release. 🌎 **[Vídeo do mundo e das visitas](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v1.3.0)** (1.3.0), também narrado e com legenda.
 
@@ -47,6 +47,20 @@ Com a [ponte local](#ponte-local-os-terminais-deste-computador), opcional, o map
 Ele **não chama nenhum modelo de IA** e não gasta tokens. Aprovar é sempre no agentes.chat; responder também, fora do modo opcional `"responder"`. No resto, o escritório só mostra o que está acontecendo e leva você até lá.
 
 **Para quem é:** times e empresas que rodam agentes no [agentes.chat](https://agentes.chat) e querem uma visão rápida e divertida do time: numa TV na parede, num segundo monitor ou no celular. É white-label: qualquer empresa instala a sua cópia e põe a própria marca.
+
+## Já usa o Maestri?
+
+Se o seu dia roda no [Maestri](https://www.themaestri.app/pt-br), o Firmópolis entra pela [ponte local](#ponte-local-os-terminais-deste-computador), e, por padrão, os dados dos terminais não passam pelo servidor (o espelho é opcional).
+
+- **Salas por workspace:** com a ponte ligada, cada workspace do Maestri em uso ganha sozinho uma sala no prédio, sob a placa "Projetos", e os terminais dele trabalham lá. A sala é só de exibição: não vai ao servidor nem ao modo construção.
+- **Observação, não controle:** a ponte lê o estado local e o prédio desenha; nada chama modelo nem gasta token. O padrão é só olhar.
+- **Permitir ou Negar:** nos terminais de Claude Code, Codex e OpenCode (inclusive os que rodam dentro do Maestri), os pedidos de permissão ganham os botões no cartão. O agy e o MiniMax soltos só mostram o estado.
+- **Responder a perguntas elegíveis:** o campo **Responder** não aparece em toda espera: só quando ela aceita texto livre, nos terminais do Maestri e no OpenCode. Diálogos de opções e aprovações não ganham o campo; responda no terminal.
+- **Remoto é opcional:** decidir pelo celular ou por outra máquina só com `--decidir-remoto`; sem isso, tudo acontece no navegador deste PC.
+
+**Antes de instalar:** o Firmópolis ainda exige a `AGENTES_ORG`, o id da organização do [agentes.chat](https://agentes.chat), na instalação. Não existe modo exclusivamente Maestri, e um modo assim depende de uma avaliação; não está prometido. O Maestri é uma ferramenta de outro time: a Firmópolis é independente, agradece e aponta para o site oficial, sem parceria oficial.
+
+O passo a passo, com o comando de cada sistema, está em [Ponte local](#ponte-local-os-terminais-deste-computador).
 
 ## Recursos
 
@@ -811,5 +825,6 @@ Feito para o [agentes.chat](https://agentes.chat), com autorização dos desenvo
 ## Agradecimentos
 
 - Ao time do agentes.chat, pelo conector MCP só de leitura e pelo apoio a um escritório open source.
+- Ao time do Maestri, pela ferramenta que usamos todos os dias. A Firmópolis é independente e não tem parceria oficial com o Maestri.
 - Ao [Open-Meteo](https://open-meteo.com), à [Tailscale](https://tailscale.com) e ao [PixelLab](https://pixellab.ai).
 - A quem desenhou as fontes Figtree, Silkscreen e Pixeloid Sans, por liberá-las sob a OFL.
