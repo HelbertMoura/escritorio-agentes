@@ -9,6 +9,7 @@ All notable changes to this project are listed here, newest first. The format fo
 ### Added
 - **Entry point for Maestri users:** the site has a shortcut in the hero and in the terminals section ("Already use Maestri? See your workspaces in Firmópolis"), and the READMEs have a quick guide with the official link. With the local bridge, each Maestri workspace in use gets an automatic room and its terminals appear on the map; the rooms are display-only and observation is read-only, with no model call and no tokens spent. **Permitir** (allow) and **Negar** (deny) work on Claude Code, Codex and OpenCode terminals; the **Responder** (answer) field only appears when the wait accepts free text (Maestri and OpenCode), and deciding remotely remains optional (`--decidir-remoto`). Installation still requires `AGENTES_ORG`: there is no Maestri-only mode, and that still depends on an evaluation.
 - **Go tests for the bridge in CI:** every PR runs `go test ./...` in `ponte/`, with the Go version read from `go.mod`, without the tests that require the agents installed (`PONTE_TESTE_*`) or network. Image publishing remains restricted to pushes to `main`.
+- **Video news on the What's new page:** the page now has, above the releases, a player with the week of November 18-24, 2026 recap in a fictional lab with simulated data, with controls, poster, Portuguese captions and an MP4 download link. The full tour stays on the home TV, with a link to the new video.
 
 ## 2.3.0 · 2026-11-22 · A lighter, safer office
 

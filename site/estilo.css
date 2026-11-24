@@ -224,7 +224,7 @@ img.troca { opacity: .25; }
 .elevador::before { content: ""; position: absolute; left: 50%; bottom: 100%; width: 2px; height: 4000px; background: #4a4a58; }
 .elevador-mascote { width: 24px; height: 24px; image-rendering: pixelated; }
 .elevador-visor { margin-top: 4px; min-width: 22px; padding: 1px 3px; background: var(--tinta); color: var(--ambar); font: .75rem var(--fonte-pixel); text-align: center; }
-#terminais { scroll-margin-top: 76px; }
+#terminais, #video-novidades { scroll-margin-top: 76px; }
 .andar { position: relative; display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 24px 44px; align-items: center; padding: 44px 0;
   border-bottom: 4px solid var(--linha); }
 .andar-invertido { grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); }
@@ -295,6 +295,7 @@ img.troca { opacity: .25; }
 .tv-botoes { position: absolute; right: 26px; bottom: 14px; display: flex; gap: 10px; }
 .tv-botoes i { width: 16px; height: 16px; background: #c9b79c; box-shadow: inset -3px -3px 0 #8d7b62; }
 .tv-legenda p { color: var(--texto-2); }
+.tv-legenda .tv-link { margin: 18px 0 0; }
 @media (max-width: 860px) { .tv-grade { grid-template-columns: 1fr; gap: 56px; } }
 
 /* ---------- Mural de avisos ---------- */
@@ -449,6 +450,10 @@ details p { margin: 0; padding: 0 20px 20px; color: var(--texto-2); }
 .novidades { padding-block: 56px 72px; }
 .novidades-cabeca { max-width: 68ch; margin-bottom: 40px; }
 .novidades-cabeca p { color: var(--texto-2); }
+.novidades-video { margin-bottom: 40px; }
+.novidades-video h2 { margin-bottom: 6px; }
+.novidades-video-contexto { margin: 0 0 18px; color: var(--texto-2); font-size: .95rem; }
+.novidades-video-player { display: block; width: 100%; aspect-ratio: 16 / 9; background: #0d0d12; }
 .versao { display: grid; grid-template-columns: 220px 1fr; gap: 32px; padding-block: 32px; border-top: 2px solid var(--linha); }
 .versao-cabeca { align-self: start; position: sticky; top: 88px; }
 .versao-rotulo { display: inline-block; margin: 0 0 10px; padding: 2px 8px; background: var(--ambar); color: var(--noite); font: .8125rem/1.6 var(--fonte-pixel); }
