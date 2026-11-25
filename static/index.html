@@ -14,10 +14,10 @@
   <meta name="theme-color" content="#0f0f0e">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <link rel="stylesheet" href="estilo.css?v=141">
-  <link rel="stylesheet" href="chat_sala.css?v=141">
-  <link rel="stylesheet" href="reunioes.css?v=141">
-  <link rel="stylesheet" href="linha_tempo.css?v=141">
+  <link rel="stylesheet" href="estilo.css?v=142">
+  <link rel="stylesheet" href="chat_sala.css?v=142">
+  <link rel="stylesheet" href="reunioes.css?v=142">
+  <link rel="stylesheet" href="linha_tempo.css?v=142">
 </head>
 <body>
   <a class="pular" href="#principal">Ir para o conteúdo</a>
@@ -173,6 +173,13 @@
               <p class="greve-linha"><span class="greve-ic" aria-hidden="true">✊</span><span><strong id="greve-texto">Greve</strong> <span id="greve-motivo" class="greve-motivo"></span></span></p>
               <button id="greve-atender" class="botao so-admin" type="button" aria-describedby="greve-texto greve-motivo">Atender o pedido</button>
             </div>
+            <!-- o atalho da recepção (recepcao.js + app.js): ligado ao balcão no mapa, abre a lista recolhível de pendências -->
+            <button id="recepc" class="recepc" type="button" aria-expanded="false" aria-controls="recepc-painel" hidden><span class="recepc-ponto" aria-hidden="true"></span><span class="recepc-rot">Esperando você</span><span id="recepc-n" class="recepc-n" aria-hidden="true" hidden></span></button>
+            <section id="recepc-painel" class="recepc-painel" role="region" aria-labelledby="recepc-titulo" hidden>
+              <div class="recepc-topo"><h2 id="recepc-titulo">Esperando você</h2><button id="recepc-fechar" class="recepc-fechar" type="button" aria-label="Fechar a lista da recepção">×</button></div>
+              <div id="recepc-lista" class="recepc-lista"></div>
+              <a class="recepc-todos link-suave" href="#aprovacoes">Ver em Aprovações</a>
+            </section>
             <div class="controles" role="toolbar" aria-label="Câmera">
               <button id="zoom-menos" type="button" aria-label="Afastar">−</button>
               <span id="zoom-nivel" class="zoom-nivel" aria-hidden="true">1x</span>
@@ -186,6 +193,7 @@
                 <button id="modo-tv" type="button" aria-label="Modo TV" title="Modo TV: a câmera passeia sozinha e corre para as novidades"><span class="ic" data-icone="tv" aria-hidden="true"></span><span class="rotulo-menu" aria-hidden="true">Modo TV</span></button>
                 <button id="abrir-radio" type="button" aria-label="Rádio da firma" title="Rádio da firma: ligar, trocar de estação e mudar o volume"><span class="ic" data-icone="radio" aria-hidden="true"></span><span class="rotulo-menu" aria-hidden="true">Rádio da firma</span></button>
                 <button id="abrir-timelapse" type="button" aria-label="Time-lapse do dia" title="Time-lapse do dia"><span class="ic" data-icone="filme" aria-hidden="true"></span><span class="rotulo-menu" aria-hidden="true">Time-lapse do dia</span></button>
+                <button id="recepc-toggle" type="button" aria-pressed="true" aria-label="Esconder o &quot;Esperando você&quot; do mapa"><span class="ic" data-icone="sino" aria-hidden="true"></span><span class="rotulo-menu" aria-hidden="true">Esconder recepção</span></button>
               </div>
             </div>
             <!-- modo TV (tv.js): a faixa do telejornal e os dois botões; o cursor e os botões somem com o mouse parado -->
@@ -827,36 +835,37 @@
       </div>
     </div>
   </dialog>
-  <script src="abertura.js?v=141"></script>
-  <script src="avatar.js?v=141"></script>
-  <script src="mapa.js?v=141"></script>
-  <script src="expediente.js?v=141"></script>
-  <script src="vida.js?v=141"></script>
-  <script src="apresentacao.js?v=141"></script>
-  <script src="sprites.js?v=141"></script>
-  <script src="ponte.js?v=141"></script>
-  <script src="zeladoria.js?v=141"></script>
-  <script src="som.js?v=141"></script>
-  <script src="radio.js?v=141"></script>
-  <script src="ceu.js?v=141"></script>
-  <script src="clima.js?v=141"></script>
-  <script src="festas.js?v=141"></script>
-  <script src="simular.js?v=141"></script>
-  <script src="efeitos.js?v=141"></script>
-  <script src="brincar.js?v=141"></script>
-  <script src="tv.js?v=141"></script>
-  <script src="jornal.js?v=141"></script>
-  <script src="novidades.js?v=141"></script>
-  <script src="timelapse.js?v=141"></script>
-  <script src="avisar.js?v=141"></script>
-  <script src="resposta_rapida.js?v=141"></script>
-  <script src="linha_tempo.js?v=141"></script>
-  <script src="reunioes.js?v=141"></script>
-  <script src="times_auto.js?v=141"></script>
-  <script src="app.js?v=141"></script>
-  <script src="personalizar.js?v=141"></script>
-  <script src="ajustes.js?v=141"></script>
-  <script src="assistente.js?v=141"></script>
-  <script src="chat_sala.js?v=141"></script>
+  <script src="abertura.js?v=142"></script>
+  <script src="avatar.js?v=142"></script>
+  <script src="mapa.js?v=142"></script>
+  <script src="expediente.js?v=142"></script>
+  <script src="vida.js?v=142"></script>
+  <script src="apresentacao.js?v=142"></script>
+  <script src="sprites.js?v=142"></script>
+  <script src="ponte.js?v=142"></script>
+  <script src="zeladoria.js?v=142"></script>
+  <script src="som.js?v=142"></script>
+  <script src="radio.js?v=142"></script>
+  <script src="ceu.js?v=142"></script>
+  <script src="clima.js?v=142"></script>
+  <script src="festas.js?v=142"></script>
+  <script src="simular.js?v=142"></script>
+  <script src="efeitos.js?v=142"></script>
+  <script src="brincar.js?v=142"></script>
+  <script src="tv.js?v=142"></script>
+  <script src="jornal.js?v=142"></script>
+  <script src="novidades.js?v=142"></script>
+  <script src="timelapse.js?v=142"></script>
+  <script src="avisar.js?v=142"></script>
+  <script src="resposta_rapida.js?v=142"></script>
+  <script src="linha_tempo.js?v=142"></script>
+  <script src="reunioes.js?v=142"></script>
+  <script src="times_auto.js?v=142"></script>
+  <script src="recepcao.js?v=142"></script>
+  <script src="app.js?v=142"></script>
+  <script src="personalizar.js?v=142"></script>
+  <script src="ajustes.js?v=142"></script>
+  <script src="assistente.js?v=142"></script>
+  <script src="chat_sala.js?v=142"></script>
 </body>
 </html>

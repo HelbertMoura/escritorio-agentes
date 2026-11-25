@@ -93,6 +93,12 @@ function aplicarPapel() {
   document.body.dataset.papel = souMembro() ? "membro" : "admin";
   document.body.toggleAttribute("data-predio", Andar.perfil(config).predio);
   document.body.toggleAttribute("data-saguao", Andar.perfil(config).noSaguao);
+  if (!recepcaoPermitida()) {   // saguão: o CSS esconde atalho, fila e toggle; a fila aberta não fica para trás
+    recepcaoAssinatura = "";
+    if (recepcaoUI) recepcaoUI.fechar(false);
+    if ($("recepc")) $("recepc").hidden = true;
+    invalidarRecepcao();
+  }
   if (location.hash && !Andar.telaLiberada(location.hash.slice(1), config)) rota();   // abriu direto numa tela fechada a este perfil: o rota() manda para o mapa
 }
 
@@ -406,6 +412,7 @@ function desenharCena(t) {
   Brincar.desenhar(ctx);   // realce, reações dos objetos e a festa do Konami
   const rotulo = `${String(Math.round((cam.k / dpr) * 10) / 10).replace(".", ",")}x`;
   if (rotulo !== zoomMostrado) { zoomMostrado = rotulo; $("zoom-nivel").textContent = rotulo; }   // o zoom de agora na barra da câmera
+  posicionarRecepcao();   // o atalho acompanha o balcão sem mexer no desenho do mapa
 }
 let zoomMostrado = "";
 
@@ -1027,7 +1034,13 @@ function desenharPainel() {
   const ags = estado.agentes || [], trs = estado.trabalhos || [];
   const nomeDe = id => (ags.find(a => a.id === id) || {}).nome || "Agente";
   const handleDe = id => (ags.find(a => a.id === id) || {}).handle;
-  const esperando = trs.filter(t => /^waiting_/.test(t.status)).sort((a, b) => Date.parse(desdeDe(a)) - Date.parse(desdeDe(b)));
+  const esperandoFonte = trs.filter(t => /^waiting_/.test(t.status)).sort((a, b) => Date.parse(desdeDe(a)) - Date.parse(desdeDe(b)));
+  const termPonte = terminaisDaPonte();
+  const espTFonte = termPonte.filter(d => situacaoTerminal(d) === "esp"), trabT = termPonte.filter(d => situacaoTerminal(d) === "trab");
+  // a deduplicação roda nos arrays já filtrados: o widget, as Aprovações e o atalho contam exatamente a mesma fila
+  const pend = window.Recepcao ? Recepcao.pendentes(esperandoFonte, espTFonte)
+    : { agentes: esperandoFonte, terminais: espTFonte, total: esperandoFonte.length + espTFonte.length };
+  const esperando = pend.agentes, espT = pend.terminais;
   const aprov = esperando.filter(t => t.status === "waiting_approval").length, perg = esperando.length - aprov;
   // sino da barra do celular: contador âmbar e o resumo no nome acessível
   const resumo = !esperando.length ? "" : aprov && perg ? `${esperando.length} esperando você` : aprov ? `${aprov} ${aprov === 1 ? "aprovação pendente" : "aprovações pendentes"}` : `${perg} ${perg === 1 ? "pergunta para você" : "perguntas para você"}`;
@@ -1039,7 +1052,7 @@ function desenharPainel() {
   // ficar na primeira dobra); a tela Aprovações mostra todos, completos
   // widgets embaixo do mapa: até 3 pedidos (a tela Aprovações mostra todos) e quem está trabalhando agora
   // os terminais da ponte local entram depois dos agentes (responder é no próprio terminal)
-  const espT = terminaisDaPonte().filter(d => situacaoTerminal(d) === "esp"), trabT = terminaisDaPonte().filter(d => situacaoTerminal(d) === "trab");
+  atualizarRecepcao(esperando, espT, sit);
   $("avisos").replaceChildren(...[...esperando.slice(0, 3).map(t => cartaoPedido(t, nomeDe(t.agente_id), handleDe(t.agente_id), true)),
     ...espT.slice(0, 3).map(d => linhaTerminal(d, true))].slice(0, 3));
   if (!esperando.length && !espT.length) $("avisos").append(elem("p", "widget-vazio" + carregando, txt ? txt.vazio : "Nada esperando você agora."));
@@ -1109,6 +1122,175 @@ function cartaoPedido(t, nome, handle, compacto) {
   c.append(mini(aparencia(handle)), corpo, acoes);
   metaPedido(meta);
   return c;
+}
+
+// ---------- recepção no mapa: o atalho "Esperando você" ligado ao balcão (recepcao.js) ----
+// Conta a mesma fila do widget (agentes esperando + terminais da ponte), sem pedido novo e sem somar outros andares.
+let recepcaoUI = null, recepcaoOculta = false, recepcaoAssinatura = "", recepcaoFora = false;
+let recepcaoAplicado = "", recepcaoMetricas = null;
+const CHAVE_RECEPC = "escritorio:recepcao";
+try { recepcaoOculta = localStorage.getItem(CHAVE_RECEPC) === "oculta"; } catch (e) { /* só nesta visita */ }
+
+const recepcaoEstreita = () => innerWidth <= 760;   // a decisão é da viewport; vw continua só na geometria do palco
+const recepcaoPermitida = () => !!config && !Andar.perfil(config).noSaguao;   // o saguão não tem Aprovações
+function invalidarRecepcao() { recepcaoMetricas = null; recepcaoAplicado = ""; }
+
+function aplicarRecepcaoToggle() {
+  const b = $("recepc"), t = $("recepc-toggle");
+  if (!b || !t) return;
+  t.setAttribute("aria-pressed", String(!recepcaoOculta));
+  const rot = t.querySelector(".rotulo-menu");
+  if (rot) rot.textContent = `${recepcaoOculta ? "Mostrar" : "Esconder"} recepção`;
+  t.setAttribute("aria-label", recepcaoOculta ? 'Mostrar o "Esperando você" no mapa' : 'Esconder o "Esperando você" do mapa');
+  if (recepcaoOculta && recepcaoUI && recepcaoUI.estaAberto()) recepcaoUI.fechar(false);
+  invalidarRecepcao();
+  posicionarRecepcao();
+}
+function alternarRecepcao() {
+  recepcaoOculta = !recepcaoOculta;
+  try { localStorage.setItem(CHAVE_RECEPC, recepcaoOculta ? "oculta" : "mostra"); } catch (e) { /* só nesta visita */ }
+  aplicarRecepcaoToggle();
+}
+// uma linha da fila com a chave do item: o foco volta para o mesmo pedido quando a leitura muda a lista
+function linhaDaRecepcao(el, chave) {
+  el.dataset.recepcKey = chave;
+  const alvo = el.matches && el.matches("button, a") ? el : (el.querySelector ? el.querySelector(".linha-ir") || el.querySelector("button") : null);
+  if (alvo && alvo !== el) alvo.dataset.recepcKey = chave;
+  return el;
+}
+function linhasDaRecepcao(esperando, espT) {
+  const ags = (estado && estado.agentes) || [];
+  const nomeDe = id => (ags.find(a => a.id === id) || {}).nome || "Agente", handleDe = id => (ags.find(a => a.id === id) || {}).handle;
+  return [
+    ...esperando.map(t => linhaDaRecepcao(cartaoPedido(t, nomeDe(t.agente_id), handleDe(t.agente_id), true), "a:" + (t.run_id || t.id || t.agente_id))),
+    ...espT.map(d => linhaDaRecepcao(linhaTerminal(d, true), "t:" + d.id)),
+  ];
+}
+// a assinatura inclui o andar e o que a linha mostra (estado, rótulo, link e as ações da ponte), sem relógio
+function assinaturaRecepcao(esperando, espT, sit) {
+  const ags = (estado && estado.agentes) || [];
+  const a = esperando.map(t => [t.run_id || t.id || t.agente_id, t.status, t.rotulo || "", t.url || "",
+    (ags.find(x => x.id === t.agente_id) || {}).nome || ""].join("~")).join(",");
+  const t = espT.map(d => {
+    const ps = window.Ponte && typeof Ponte.pendentes === "function" ? (Ponte.pendentes(d.id) || []) : [];
+    return [d.id, d.nome || "", d.provedor || "", d.estado || "", d.projeto || "", d.atividade || "",
+      ps.map(p => [p.id, p.tipo || "", p.enviando ? 1 : 0, p.completo ? 1 : 0, p.erro || ""].join(":")).join("+")].join("~");
+  }).join(",");
+  return [Andar.atual, esperando.length, espT.length, sit, a, t].join("|");
+}
+function montarRecepcao() {
+  if (recepcaoUI || !window.Recepcao) return;
+  const b = $("recepc"), p = $("recepc-painel");
+  if (!b || !p) return;
+  recepcaoUI = Recepcao.criar({ botao: b, painel: p, botaoFechar: $("recepc-fechar"),
+    aoAbrir: () => { invalidarRecepcao(); posicionarRecepcao(); },
+    aoFechar: () => invalidarRecepcao() });
+  b.addEventListener("click", () => {
+    if (!recepcaoUI.estaAberto() && recepcaoFora) {   // atalho de reserva: a pessoa pediu, então reenquadra a recepção
+      const s = predio && predio.salas.find(x => x.tipo === "recepcao");
+      if (s) { irParaEscritorio(); moverCamera({ x: s.px + s.pw / 2, y: s.py + s.ph / 2, k: Math.max(cam.k, 3.2 * dpr) }); }
+    }
+    recepcaoUI.alternar();
+  });
+  // a origem da ficha é marcada antes do item abrir o cartão (captura). O Responder da pergunta conta; Permitir/Negar não.
+  p.addEventListener("click", ev => {
+    if (ev.target.closest(".linha-ir, .decisao-responder") && window.Recepcao) Recepcao.marcarFichaDaRecepcao();
+  }, true);
+  p.addEventListener("click", ev => {
+    if (ev.target.closest(".linha-ir, a, .decisao-responder")) recepcaoUI.fechar(false);
+  });
+  $("recepc-toggle").addEventListener("click", alternarRecepcao);
+  if (window.ResizeObserver) {   // mudou o tamanho dos controles, do atalho ou da lista: remede no próximo quadro
+    const ro = new ResizeObserver(invalidarRecepcao);
+    for (const el of [document.querySelector(".controles"), b, p]) if (el) ro.observe(el);
+  }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(invalidarRecepcao).catch(() => {});
+  aplicarRecepcaoToggle();
+}
+function atualizarRecepcao(esperando, espT, sit) {
+  const b = $("recepc");
+  if (!b) return;
+  if (!recepcaoPermitida()) {   // saguão: sem atalho, fila e toggle; nada de fila antiga aberta
+    recepcaoAssinatura = "";
+    if (recepcaoUI) recepcaoUI.fechar(false);
+    if (!b.hidden) b.hidden = true;
+    invalidarRecepcao();
+    return;
+  }
+  const total = esperando.length + espT.length, n = $("recepc-n"), rotulo = total ? String(total) : "";
+  if (n.textContent !== rotulo) { n.textContent = rotulo; invalidarRecepcao(); }
+  if (n.hidden !== !total) { n.hidden = !total; invalidarRecepcao(); }
+  const pronto = sit === "pronto";
+  const resumo = total ? `${total} ${total === 1 ? "pendência" : "pendências"}` : pronto ? "nenhuma pendência" : "sem leitura agora";
+  const etiqueta = `Esperando você: ${resumo}. Abrir a lista`;
+  if (b.getAttribute("aria-label") !== etiqueta) { b.setAttribute("aria-label", etiqueta); b.title = `${resumo}. Abrir a lista`; }
+  const assinatura = assinaturaRecepcao(esperando, espT, sit);
+  if (assinatura === recepcaoAssinatura) return;
+  recepcaoAssinatura = assinatura;
+  const lista = $("recepc-lista");
+  const aberto = recepcaoUI && recepcaoUI.estaAberto();
+  const foco = aberto && document.activeElement && document.activeElement.closest ? document.activeElement.closest("[data-recepc-key]") : null;
+  const chave = foco ? foco.dataset.recepcKey : "";
+  const linhas = linhasDaRecepcao(esperando, espT);
+  lista.replaceChildren(...linhas);
+  if (!linhas.length) lista.append(elem("p", "widget-vazio" + (sit === "carregando" ? " carregando" : ""),
+    pronto ? "Nada esperando você agora." : (TEXTO_LEITURA[sit] ? TEXTO_LEITURA[sit].vazio : "Sem leitura de pendências agora.")));
+  invalidarRecepcao();
+  if (!aberto || !chave) return;
+  // a fila aberta acompanha a leitura: foco no mesmo pedido quando ele continua; se o alvo sumiu, fecha e volta ao gatilho
+  const mesmo = [...lista.querySelectorAll("[data-recepc-key]")].find(e => e.dataset.recepcKey === chave);
+  if (!mesmo) { recepcaoUI.fechar(true); return; }
+  const alvo = mesmo.matches && mesmo.matches("button, a") ? mesmo : (mesmo.querySelector(".linha-ir") || mesmo.querySelector("button"));
+  if (alvo) alvo.focus({ preventScroll: true });
+}
+// O chip segue o centro do balcão na câmera atual, preso ao mapa e desviando dos controles da câmera.
+function medirRecepcao() {
+  const b = $("recepc"), ctl = document.querySelector(".controles"), pr = $("palco").getBoundingClientRect();
+  let evitar = null;
+  if (ctl && !ctl.hidden) { const cr = ctl.getBoundingClientRect(); evitar = { x: cr.left - pr.left - 6, y: cr.top - pr.top - 6, w: cr.width + 12, h: cr.height + 12 }; }
+  const p = $("recepc-painel"), aberto = !!(recepcaoUI && recepcaoUI.estaAberto());
+  recepcaoMetricas = { vw, vh, bw: b.offsetWidth || 120, bh: b.offsetHeight || 30, evitar,
+    pw: aberto ? p.offsetWidth || 340 : 0, ph: aberto ? p.offsetHeight || 240 : 0 };
+}
+function posicionarRecepcao() {
+  const b = $("recepc");
+  if (!b) return;
+  const modoDeVer = document.body.classList.contains("tv") || document.body.classList.contains("modo-foto")
+    || document.documentElement.classList.contains("apresentacao");
+  const s = predio ? predio.salas.find(x => x.tipo === "recepcao") : null;
+  if (recepcaoOculta || !recepcaoPermitida() || !s || modoDeVer) {
+    if (recepcaoUI && recepcaoUI.estaAberto()) recepcaoUI.fechar(false);
+    if (recepcaoAplicado !== "oculto") {
+      if (!b.hidden) b.hidden = true;
+      b.classList.remove("recepc-fora");
+      recepcaoAplicado = "oculto";
+    }
+    return;
+  }
+  if (b.hidden) b.hidden = false;
+  if (!recepcaoMetricas || recepcaoMetricas.vw !== vw || recepcaoMetricas.vh !== vh) medirRecepcao();
+  const { bw, bh, evitar } = recepcaoMetricas;
+  const cx = (s.px + s.pw / 2 - cam.x) * cam.k / dpr + vw / 2;
+  const cy = (s.py + s.ph / 2 - cam.y) * cam.k / dpr + vh / 2;
+  // O balcão fora da vista (primeiro enquadramento em cima de quem espera, zoom no celular) não some: o atalho
+  // fica de reserva no canto de baixo, longe dos controles. Só o clique reenquadra a recepção.
+  recepcaoFora = cx < -48 || cx > vw + 48 || cy < -48 || cy > vh + 48;
+  const alvoX = recepcaoFora ? vw - bw - 12 : cx - bw / 2;
+  const alvoY = recepcaoFora ? (recepcaoEstreita() ? 12 : vh - bh - 12) : cy - bh - 10;
+  const pos = Recepcao.encaixar(alvoX, alvoY, bw, bh, { w: vw, h: vh }, evitar);
+  const aberto = !!(recepcaoUI && recepcaoUI.estaAberto());
+  const pp = aberto && !recepcaoEstreita()
+    ? Recepcao.encaixar(pos.x, pos.y - recepcaoMetricas.ph - 8, recepcaoMetricas.pw, recepcaoMetricas.ph, { w: vw, h: vh }, evitar)
+    : null;
+  const chave = [pos.x, pos.y, recepcaoFora ? 1 : 0, aberto ? 1 : 0, pp ? pp.x : "", pp ? pp.y : ""].join("|");
+  if (chave === recepcaoAplicado) return;   // mesmo lugar: nenhuma leitura de layout nem escrita
+  recepcaoAplicado = chave;
+  b.classList.toggle("recepc-fora", recepcaoFora);
+  b.style.left = pos.x + "px"; b.style.top = pos.y + "px";
+  const p = $("recepc-painel");
+  if (!p) return;
+  if (recepcaoEstreita()) { if (p.style.left) p.style.left = ""; if (p.style.top) p.style.top = ""; }
+  else if (pp) { p.style.left = pp.x + "px"; p.style.top = pp.y + "px"; }
 }
 
 // ---------- terminais deste computador (ponte.js): contam nos chips e entram nos widgets, de qualquer programa ----------
@@ -1185,7 +1367,7 @@ function blocoPergunta(d, p, compacto) {
   const resta = elem("span", "decisao-resta", restaDecisao(p.ate)); resta.dataset.ate = String(p.ate);
   item.append(oque, resta);
   if (compacto) {
-    const acoes = elem("div", "decisao-acoes"), b = elem("button", "botao decisao-sim", "Responder"); b.type = "button";
+    const acoes = elem("div", "decisao-acoes"), b = elem("button", "botao decisao-sim decisao-responder", "Responder"); b.type = "button";
     b.setAttribute("aria-label", `Responder ${d.nome}`);
     b.addEventListener("click", () => { irParaEscritorio(); abrirFichaTerminal(d.id); });
     acoes.append(b); item.append(acoes);
@@ -1271,6 +1453,9 @@ function focarAgente(b, { seguir: seg = false, foco = false } = {}) {
 }
 function abrirFicha(b, foco) {
   fecharConversa(false);
+  // aberta por um item da recepção: no celular ela vira folha de 40dvh; as outras origens seguem como sempre
+  const daRecepcao = !!(window.Recepcao && Recepcao.consumirFichaDaRecepcao());
+  $("ficha").classList.toggle("ficha-recepc", daRecepcao);
   selecionado = b.id; assinaturaFicha = ""; fichaTerm = null;
   if (!amizades || amizades.id !== b.id) amizades = null;
   if (socialLigada() && !Brincar.demo) carregarAmizades(b.id);
@@ -1280,9 +1465,16 @@ function abrirFicha(b, foco) {
 }
 function fecharFicha() {
   const estava = !$("ficha").hidden || !$("conversa").hidden;
+  const daRecepcao = $("ficha").classList.contains("ficha-recepc");
   fecharConversa(false);
-  $("ficha").hidden = true; $("ficha").classList.remove("rolavel"); selecionado = null; seguir = null; fichaTerm = null;
+  $("ficha").hidden = true; $("ficha").classList.remove("rolavel", "ficha-recepc"); selecionado = null; seguir = null; fichaTerm = null;
   if (estava && estado) desenharPainel();
+  return daRecepcao;
+}
+// o × e o Esc da ficha aberta pela recepção devolvem o foco ao atalho; as outras origens não mudam
+function fecharFichaDoAtalho() {
+  const daRecepcao = fecharFicha(), b = $("recepc");
+  if (daRecepcao && b && !b.hidden) b.focus({ preventScroll: true });
 }
 function renderFicha() {
   if (fichaTerm) return renderFichaTerminal();
@@ -1298,7 +1490,7 @@ function renderFicha() {
   const topo = elem("div", "ficha-topo"), nomes = elem("div");
   const h = elem("h2", null, b.nome); h.id = "ficha-nome";
   nomes.append(h, elem("p", "funcao", b.funcao || salaDoAgente(b.handle)));
-  const x = elem("button", "fechar", "×"); x.type = "button"; x.setAttribute("aria-label", "Fechar o cartão"); x.addEventListener("click", fecharFicha);
+  const x = elem("button", "fechar", "×"); x.type = "button"; x.setAttribute("aria-label", "Fechar o cartão"); x.addEventListener("click", fecharFichaDoAtalho);
   topo.append(mini(b.ap), nomes, x);
   const dl = elem("dl"), linha = (rot, ...conteudo) => { const dd = elem("dd"); dd.append(...conteudo); dl.append(elem("dt", null, rot), dd); };
   const chip = elem("span", `chip ${classeDe(b)}`, textoEstado(b));
@@ -1352,6 +1544,8 @@ const NECS_TERM = [["cafe", "Café"], ["social", "Conversa"], ["diversao", "Dive
 const horaMin = ms => new Date(ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 function abrirFichaTerminal(id) {
   fecharConversa(false);
+  const daRecepcao = !!(window.Recepcao && Recepcao.consumirFichaDaRecepcao());
+  $("ficha").classList.toggle("ficha-recepc", daRecepcao);
   selecionado = null; fichaTerm = id; assinaturaFicha = "";
   renderFicha();
   if (!fichaTerm) return;   // saiu do mapa entre o clique e agora
@@ -1372,7 +1566,7 @@ function renderFichaTerminal() {
   const topo = elem("div", "ficha-topo"), nomes = elem("div");
   const h = elem("h2", null, d.nome); h.id = "ficha-nome";
   nomes.append(h, elem("p", "funcao", [d.provedor, d.papel].filter(Boolean).join(" · ")));
-  const x = elem("button", "fechar", "×"); x.type = "button"; x.setAttribute("aria-label", "Fechar o cartão"); x.addEventListener("click", fecharFicha);
+  const x = elem("button", "fechar", "×"); x.type = "button"; x.setAttribute("aria-label", "Fechar o cartão"); x.addEventListener("click", fecharFichaDoAtalho);
   topo.append(miniTerminal(d, situacaoTerminal(d) === "esp"), nomes, x);
   const dl = elem("dl"), linha = (rot, ...conteudo) => { const dd = elem("dd"); dd.append(...conteudo); dl.append(elem("dt", null, rot), dd); };
   linha("Estado", elem("span", `chip ${CLASSE_TERM[d.estado] || "livre"}`, TEXTO_TERM[d.estado] || "Livre"), ...(d.gerente ? [document.createTextNode(" "), elem("span", "chip hora-extra", "Maestro")] : []));
@@ -1400,7 +1594,8 @@ function renderFichaTerminal() {
   const seg = elem("button", "botao fantasma seguir"); seg.type = "button"; seg.setAttribute("aria-pressed", String(seguir === sid));
   const ic = elem("span", "ic"); ic.append(iconeSvg("alvo")); seg.append(ic, document.createTextNode(seguir === sid ? "Seguindo" : "Seguir"));
   seg.addEventListener("click", () => { seguir = seguir === sid ? null : sid; renderFicha(); $("ficha").querySelector(".seguir").focus(); });
-  const fe = elem("button", "botao fantasma", "Fechar"); fe.type = "button"; fe.addEventListener("click", () => { fecharFicha(); focoNoMapa(); });
+  const fe = elem("button", "botao fantasma", "Fechar"); fe.type = "button";
+  fe.addEventListener("click", () => { const veio = $("ficha").classList.contains("ficha-recepc"); fecharFicha(); if (veio && !$("recepc").hidden) $("recepc").focus({ preventScroll: true }); else focoNoMapa(); });
   acoes.append(seg, fe);
   const decisao = blocoDecisao(d, false);
   f.replaceChildren(topo, dl, decisao || elem("p", "term-ajuda", "Responder é no próprio terminal."), acoes);
@@ -2607,7 +2802,11 @@ document.addEventListener("keydown", ev => {
     if (gavetaAberta()) { fecharGaveta(true); return; }
     if (!$("conversa").hidden) { fecharConversa(true); return; }
     if (!$("v-conversas").hidden && convAberta && celularConv()) { fecharConvPagina(); return; }
-    if (!$("ficha").hidden) { fecharFicha(); tela.focus(); return; }
+    if (recepcaoUI && recepcaoUI.estaAberto()) {
+      const foco = document.activeElement, campo = foco && /INPUT|SELECT|TEXTAREA/.test(foco.tagName);
+      if (!campo && (foco === $("recepc") || foco === tela || foco === document.body)) { recepcaoUI.fechar(true); return; }
+    }
+    if (!$("ficha").hidden) { const daRecepcao = $("ficha").classList.contains("ficha-recepc"); fecharFicha(); (daRecepcao && !$("recepc").hidden ? $("recepc") : tela).focus(); return; }
     if (TV.ligada) { TV.desligar(); return; }
     if ($("palco-cartao").classList.contains("cheio")) { telaCheia(false); return; }
   }
@@ -2983,6 +3182,10 @@ function voltarAoPrincipal() { trocarAndar(Andar.PRINCIPAL, `Esse andar não est
 
 // zera o que era do andar de antes: ficha, conversa aberta, eventos e pedidos deduzidos, social e greve
 function reiniciarAndar() {
+  recepcaoAssinatura = ""; recepcaoFora = false;   // a fila do andar de antes não sobrevive à troca
+  if (recepcaoUI) recepcaoUI.fechar(false);
+  if ($("recepc")) { $("recepc").hidden = true; $("recepc-lista").replaceChildren(); const n = $("recepc-n"); n.hidden = true; n.textContent = ""; }
+  invalidarRecepcao();
   Vida.aoVivo(null);   // as pessoas e o seq são do andar de antes
   assinatura = ""; selecionado = null;
   eventosLocais = []; statusAnterior = null; vistosEvento.clear();
@@ -3000,6 +3203,10 @@ async function trocarAndar(id, aviso) {
   if (id === anterior) { mostrarElevador(); return; }
   trocando = true;
   Andar.definir(id);
+  recepcaoAssinatura = ""; recepcaoFora = false;   // a fila antiga some já na troca, sem esperar a leitura do andar novo
+  if (recepcaoUI) recepcaoUI.fechar(false);
+  if ($("recepc")) $("recepc").hidden = true;
+  invalidarRecepcao();
   try {
     const c = await json("api/config");   // com o andar novo; falhando, nada do andar de antes é mexido
     reiniciarAndar();
@@ -3140,7 +3347,7 @@ Novidades.iniciar();
 pintarIcones(document);
 window.addEventListener("hashchange", () => { const id = Andar.doHash(location.hash); if (id && id !== Andar.atual) trocarAndar(id); });
 window.addEventListener("hashchange", rota);
-window.addEventListener("resize", () => { medirFaixa(); ajustarEscala(); marcarRolavel(); });
+window.addEventListener("resize", () => { medirFaixa(); ajustarEscala(); marcarRolavel(); invalidarRecepcao(); });
 rota();
 // a abertura do Firmópolis (abertura.js): uma vez por sessão, por cima do carregamento; a TV liga direto
 if (window.Abertura && new URLSearchParams(location.search).get("tv") !== "1") Abertura.tocar();
@@ -3150,6 +3357,7 @@ async function abrirAviso(a) {
   if (a.andar !== Andar.atual) await trocarAndar(a.andar);
   if (a.andar === Andar.atual && a.canal && window.ChatSala && ChatSala.abrirCanal) ChatSala.abrirCanal(a.canal);   // a troca falhou: fica onde está
 }
+montarRecepcao();   // o atalho da recepção já existe no HTML; só liga os eventos e aplica a preferência
 // PWA (ícone na tela de início): o sw.js não guarda nada; sem ele (http fora do localhost, servidor antigo), o app abre igual
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});

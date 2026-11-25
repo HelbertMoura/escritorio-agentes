@@ -296,6 +296,34 @@ h2 { font-size: 15px; margin: 0; font-weight: 600; }
   background: rgba(20, 20, 26, .97); border: 2px solid var(--borda-forte); box-shadow: 6px 6px 0 rgba(0, 0, 0, .45); }
 .controles-menu[hidden] { display: none; }
 .controles .controles-menu button { justify-content: flex-start; gap: 10px; width: 100%; padding: 0 12px; }
+
+/* atalho da recepção no mapa (app.js + recepcao.js): o chip âmbar ligado ao balcão, e a lista recolhível */
+.recepc { position: absolute; z-index: 4; display: inline-flex; align-items: center; gap: 7px; min-height: max(30px, var(--ctl)); max-width: calc(100% - 16px);
+  padding: 0 10px; border: 1px solid color-mix(in srgb, var(--ambar) 60%, transparent); border-radius: var(--r-botao); background: rgba(28, 28, 34, .94);
+  color: var(--creme); font: 600 12.5px/1 Figtree, system-ui, sans-serif; white-space: nowrap; box-shadow: var(--sombra-dura); transition: background var(--rapido); }
+.recepc:hover { background: var(--cartao2); }
+.recepc-ponto { flex: none; width: 8px; height: 8px; background: var(--ambar); box-shadow: 0 0 0 2px var(--ambar-fundo); }
+.recepc-n { flex: none; display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 0; background: var(--ambar); color: var(--ambar-sobre); font: 700 11px/1 Figtree, system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+.recepc-painel { position: absolute; z-index: 6; width: min(340px, calc(100% - 16px)); max-height: min(60%, 420px); display: flex; flex-direction: column;
+  background: var(--cartao); border: 2px solid var(--borda-forte); border-radius: var(--r-cartao); box-shadow: var(--sombra-dura); }
+.recepc-topo { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 8px 6px 12px; border-bottom: 1px solid var(--borda); }
+.recepc-topo h2 { margin: 0; color: var(--creme); font: 400 13px/1.3 var(--fonte-pixel); }
+.recepc-fechar { flex: none; min-width: 36px; min-height: 36px; border: 0; border-radius: var(--r-botao); background: transparent; color: var(--texto); font-size: 20px; line-height: 1; }
+.recepc-fechar:hover { background: rgba(255, 255, 255, .08); }
+.recepc-lista { overflow-y: auto; overscroll-behavior: contain; padding: 2px 6px 6px; }
+.recepc-lista .widget-vazio { margin: 0; padding: 12px 8px; color: var(--suave); font-size: 13.5px; }
+.recepc-lista .pedido, .recepc-lista .linha-widget { min-height: 44px; }
+.recepc-todos { flex: none; display: block; padding: 10px 12px; border-top: 1px solid var(--borda); color: var(--texto2); font-size: 13px; font-weight: 600; text-decoration: none; }
+.recepc-todos:hover { color: var(--texto); text-decoration: underline; }
+/* a recepção não aparece no modo TV, no modo foto nem na apresentação: são telas de ver, não de operar */
+body.tv .recepc, body.tv .recepc-painel, body.modo-foto .recepc, body.modo-foto .recepc-painel,
+html.apresentacao #recepc, html.apresentacao #recepc-painel { display: none !important; }
+@media (max-width: 760px) {
+  .recepc { min-height: 40px; font-size: 12px; }
+  /* a lista vira folha embaixo, sobrando o mapa: 40dvh no máximo e rolagem por dentro */
+  .recepc-painel { left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 40dvh; }
+  .recepc-topo { position: sticky; top: 0; background: var(--cartao); }
+}
 .rotulo-menu { font-size: 13.5px; font-weight: 600; white-space: nowrap; }
 .so-celular { display: none; }
 .dica-mapa { position: absolute; right: 14px; bottom: 14px; z-index: 3; height: 28px; padding: 0 11px; border-radius: 0; background: rgba(20, 20, 26, .94); border: 2px solid var(--borda-forte);
@@ -1168,6 +1196,10 @@ body.demo [data-rota="personalizar"] { display: none; }
   /* o aviso da greve também: embaixo do mapa, para não tapar a fileira de cima (nem o "!" de quem espera você) */
   .palco-cartao:not(.cheio) .aviso-greve { position: static; border: 0; border-top: 1px solid var(--borda); border-radius: 0; box-shadow: none; background: var(--cartao); padding: 8px 10px; animation: none; }
   .palco-cartao:not(.cheio) .ficha { position: static; width: auto; border: 0; border-top: 1px solid var(--borda); border-radius: 0; box-shadow: none; background: var(--cartao); }
+  /* recepção: a ficha aberta pelo atalho vira folha de 40dvh, sem empurrar o mapa; o × fica preso no topo e o resto rola */
+  #ficha.ficha-recepc { position: absolute; left: 8px; right: 8px; bottom: 8px; top: auto; width: auto; max-height: 40dvh;
+    border: 1px solid var(--borda-forte); border-radius: var(--r-cartao); box-shadow: var(--sombra-dura); background: var(--cartao); }
+  #ficha.ficha-recepc .ficha-topo { position: sticky; top: 0; z-index: 1; background: var(--cartao); box-shadow: 0 1px 0 var(--borda); }
   /* acontecendo agora: a linha inteira já leva ao mapa; o "Ver no mapa" fica só para o leitor de tela e a frase pode quebrar */
   .ver-mapa { position: absolute; width: 1px; height: 1px; min-height: 0; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
   .lista-agrupada .linha-ir .quem { white-space: normal; }
@@ -1275,7 +1307,8 @@ body:not([data-papel="membro"]) .so-membro { display: none !important; }
    nem ao jornal, e some o que é dos agentes (estados, painéis, a lista da lateral, o que acontece e os links do agentes.chat) */
 body[data-saguao] [data-conectar], body[data-saguao] #copiar-link, body[data-saguao] #faixa-link, body[data-saguao] a[data-rota="conversas"], body[data-saguao] a[data-rota="jornal"], body[data-saguao] #modo-resposta,
 body[data-saguao] a[data-rota="aprovacoes"], body[data-saguao] #estados, body[data-saguao] .widgets, body[data-saguao] #lat-agentes,
-body[data-saguao] .lat-externos, body[data-saguao] section.agora, body[data-saguao] .faixa-fora-mais, body[data-saguao] .dica-mapa { display: none !important; }
+body[data-saguao] .lat-externos, body[data-saguao] section.agora, body[data-saguao] .faixa-fora-mais, body[data-saguao] .dica-mapa,
+body[data-saguao] #recepc, body[data-saguao] #recepc-painel, body[data-saguao] #recepc-toggle { display: none !important; }
 
 /* Meu perfil (personalizar.js) e Membros (ajustes.js) */
 .form-perfil, .cv-link { display: flex; flex-direction: column; gap: 10px; max-width: 560px; }
