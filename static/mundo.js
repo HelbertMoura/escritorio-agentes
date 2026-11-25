@@ -81,6 +81,7 @@ const Mundo = (() => {
   if (!canvas) return { Camera };
   const ctx = canvas.getContext("2d"), $ = id => document.getElementById(id);
   const estado = $("mundo-estado"), botaoEntrar = $("entrar"), voltar = $("mundo-voltar"), caixaAlvos = $("mundo-alvos"), dica = $("mundo-dica");
+  const textoLongo = $("mundo-texto"), textoBairro = $("mundo-texto-bairro");
   const menos = $("mundo-menos");
   const reduzido = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const tv = new URLSearchParams(location.search).get("tv") === "1";   // passeio sozinho (passear), sem painel nem botões
@@ -114,7 +115,7 @@ const Mundo = (() => {
   // o bairro de hoje, desenhado 1:1 num quadro de 320x180 e ampliado pela câmera (a 1x, na escala fracionária que enche
   // o palco, com uma pequena irregularidade de pixel; acima de 1x, em escala inteira)
   function nivelBairro() {
-    const cena = MundoBairro.cena(entrar, { reduzido }), camera = Camera([0, 0, MundoBairro.W, MundoBairro.H]), p = cena.porta;
+    const cena = MundoBairro.cena(entrar, { reduzido, destaque: !tv }), camera = Camera([0, 0, MundoBairro.W, MundoBairro.H]), p = cena.porta;
     const quadro = document.createElement("canvas"); quadro.width = MundoBairro.W; quadro.height = MundoBairro.H;
     const qctx = quadro.getContext("2d");
     const porta = { id: "porta", x: p.x + p.w / 2, y: p.y + p.h / 2, alto: 0, titulo: "Recepção",
@@ -171,6 +172,8 @@ const Mundo = (() => {
     if (nivel) nivel.sair();
     etiquetaAte = 0;   // o tempo da etiqueta de uma construção não passa para o nível seguinte
     nome = a.ir; nivel = niveis[nome]; atualCidade = a.cidade || null;
+    botaoEntrar.classList.toggle("destaque", nome === "bairro");   // no bairro, a entrada da firma é o caminho principal
+    if (textoLongo && textoBairro) { textoLongo.hidden = nome === "bairro"; textoBairro.hidden = nome !== "bairro"; }
     if (atualCidade) ultimaCidade = atualCidade;
     cobrir(nivel.camera.tamanho(W, H, dpr));
     nivel.entrar({ cidade: atualCidade, de: deCidade, nivel: deNivel });
@@ -232,16 +235,18 @@ const Mundo = (() => {
     else estado.textContent = `${hora} · ${Clima.texto()}${c ? " · " + c.nome : ""}`;
   }
 
-  // botões invisíveis sobre as cidades (e a porta): Tab passa por eles, Enter escolhe, o foco mostra a dica
+  // botões invisíveis sobre as cidades (e a porta): Tab passa por eles, Enter escolhe, o foco mostra a dica.
+  // O alvo maior da porta é só no bairro da firma; nas outras vistas vale o de sempre.
+  const classeAlvo = a => "mundo-alvo" + (nome === "bairro" && a.id === "porta" ? " mundo-alvo-porta" : "");
   function montarAlvos() {
     const lista = nivel && nivel.alvos ? nivel.alvos() : [];
     if (botoes.length === lista.length && botoes.every(([, a], i) => a.id === lista[i].id)) {
-      botoes.forEach((b, i) => { b[1] = lista[i]; b[0].setAttribute("aria-label", lista[i].rotulo); });
+      botoes.forEach((b, i) => { b[1] = lista[i]; b[0].setAttribute("aria-label", lista[i].rotulo); b[0].className = classeAlvo(lista[i]); });
     } else {
       caixaAlvos.replaceChildren();
       botoes = lista.map(a => {
         const b = document.createElement("button"), par = [b, a];
-        b.type = "button"; b.className = "mundo-alvo"; b.setAttribute("aria-label", a.rotulo);
+        b.type = "button"; b.className = classeAlvo(a); b.setAttribute("aria-label", a.rotulo);
         b.addEventListener("click", () => {   // Enter: a ação do alvo, a etiqueta dele ou, por último, o clique no ponto
           if (trans) return;
           const a = par[1];

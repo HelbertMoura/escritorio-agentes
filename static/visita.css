@@ -51,6 +51,13 @@ select { display: block; width: 100%; min-height: 44px; border: 2px solid var(--
 .mundo-alvos { position: absolute; inset: 0; pointer-events: none; }
 .mundo-alvo { all: unset; position: absolute; left: 0; top: 0; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 0; }
 .mundo-alvo:focus-visible { outline: 3px solid #f5b83d; outline-offset: 2px; }
+/* no bairro da firma, a porta é o caminho principal: alvo maior e o acionador do painel em destaque */
+.mundo-alvo-porta { width: 56px; height: 56px; margin: -28px 0 0 -28px; }
+.mundo-painel #entrar.destaque { margin-top: 12px; min-height: 56px; font-size: 18px; font-weight: 800;
+  box-shadow: inset -4px -4px 0 var(--ambar-escuro), inset 4px 4px 0 var(--ambar-claro), 0 0 0 3px rgba(245, 184, 61, .28); }
+.mundo-mais { margin: 10px 0 0; font-size: 14px; }
+.mundo-mais a { color: var(--creme); font-weight: 600; text-underline-offset: 3px; }
+.mundo-mais a:hover { color: var(--ambar-claro); }
 .mundo-dica { position: absolute; left: 0; top: 0; margin: 0; pointer-events: none; translate: -50% -100%; display: flex; flex-direction: column; gap: 2px;
   padding: 8px 12px; border: 2px solid #f5b83d; border-radius: 0; background: rgba(14, 14, 20, .94); box-shadow: 4px 4px 0 rgba(0, 0, 0, .45); white-space: nowrap; font-size: 14px; line-height: 1.3; }
 .mundo-dica strong { font: 12px Pixeloid, monospace; letter-spacing: .04em; color: #ffe08a; text-transform: uppercase; }
@@ -63,7 +70,7 @@ select { display: block; width: 100%; min-height: 44px; border: 2px solid var(--
 /* passeio (?tv=1): só o palco, com a linha de status por cima (a tela da sala e o Modo TV do escritório) */
 .mundo.tv { display: block; position: relative; }
 .mundo.tv .mundo-painel { position: absolute; left: 16px; bottom: 16px; z-index: 2; max-width: min(560px, calc(100vw - 32px)); padding: 8px 12px; border: 0; border-radius: 0; background: rgba(14, 14, 20, .82); }
-.mundo.tv .mundo-painel > :not(#mundo-estado), .mundo.tv .mundo-controles, .mundo.tv .mundo-dica { display: none; }
+.mundo.tv .mundo-painel > :not(#mundo-estado), .mundo.tv .mundo-controles, .mundo.tv .mundo-dica, .mundo.tv .mundo-alvos { display: none; }
 .mundo.tv #mundo-estado { min-height: 0; margin: 0; }
 .mundo.tv .mundo-palco { height: 100vh; height: 100svh; }
 .mundo.tv .mundo-palco canvas { cursor: default; }
