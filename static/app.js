@@ -11,7 +11,7 @@ const ESTADOS = {
 const estadoDe = s => (Object.hasOwn(ESTADOS, s) ? ESTADOS[s] : { texto: "Trabalhando", classe: "trabalhando", balao: null, filtro: "trab" });
 
 const tela = document.getElementById("tela"), ctx = tela.getContext("2d");
-let config = null, atlas = null, predio = null, mundo = null, estado = null, assinatura = "", logoImg = null, festa = null, dtQuadro = 0;
+let config = null, atlas = null, predio = null, mundo = null, estado = null, estadoAndar = "", assinatura = "", logoImg = null, festa = null, dtQuadro = 0;
 let escala = 1, filtro = "todos", selecionado = null;
 const menosMovimento = matchMedia("(prefers-reduced-motion: reduce)");
 // câmera: centro (x,y) no mundo e k = pixels de tela por pixel do mundo; "alvo" anima até lá
@@ -93,12 +93,7 @@ function aplicarPapel() {
   document.body.dataset.papel = souMembro() ? "membro" : "admin";
   document.body.toggleAttribute("data-predio", Andar.perfil(config).predio);
   document.body.toggleAttribute("data-saguao", Andar.perfil(config).noSaguao);
-  if (!recepcaoPermitida()) {   // saguão: o CSS esconde atalho, fila e toggle; a fila aberta não fica para trás
-    recepcaoAssinatura = "";
-    if (recepcaoUI) recepcaoUI.fechar(false);
-    if ($("recepc")) $("recepc").hidden = true;
-    invalidarRecepcao();
-  }
+  if (!recepcaoPermitida()) limparFilaRecepcao();   // saguão: o CSS esconde atalho, fila e toggle
   if (location.hash && !Andar.telaLiberada(location.hash.slice(1), config)) rota();   // abriu direto numa tela fechada a este perfil: o rota() manda para o mapa
 }
 
@@ -189,6 +184,7 @@ async function buscar() {
     const lido = Brincar.demo ? Brincar.estadoDemo() : await json(TV.invisivel || !aparecer ? "api/estado?invisivel=1" : "api/estado");   // a TV e quem desligou não contam como visitante
     if (andar !== Andar.atual) return;   // trocou de andar no meio do pedido: esta leitura é do andar de antes
     estado = lido;
+    estadoAndar = andar;   // só depois da leitura confirmada é que a recepção do andar novo pode aparecer
     modoDoServidor(estado.modo_resposta, pedido);
     Clima.definir(estado.clima);
     // "Olá de novo" na tela de entrada: só o nome de quem já entrou com sucesso (o servidor só manda usuario com sessão válida)
@@ -1133,7 +1129,19 @@ try { recepcaoOculta = localStorage.getItem(CHAVE_RECEPC) === "oculta"; } catch 
 
 const recepcaoEstreita = () => innerWidth <= 760;   // a decisão é da viewport; vw continua só na geometria do palco
 const recepcaoPermitida = () => !!config && !Andar.perfil(config).noSaguao;   // o saguão não tem Aprovações
+// entre Andar.definir e a primeira leitura do andar novo, a fila antiga não volta a aparecer (nem por ponte ou quadro)
+function recepcaoDoAndarAtual() { return !trocando && estadoAndar === Andar.atual; }
 function invalidarRecepcao() { recepcaoMetricas = null; recepcaoAplicado = ""; }
+// Some com o atalho e a fila de uma vez: troca de andar, saguão e perfil sem Aprovações não deixam fila antiga para trás.
+function limparFilaRecepcao() {
+  recepcaoAssinatura = ""; recepcaoFora = false;
+  if (recepcaoUI) recepcaoUI.fechar(false);
+  const b = $("recepc"), lista = $("recepc-lista"), n = $("recepc-n");
+  if (b) b.hidden = true;
+  if (lista) lista.replaceChildren();
+  if (n) { n.hidden = true; n.textContent = ""; }
+  invalidarRecepcao();
+}
 
 function aplicarRecepcaoToggle() {
   const b = $("recepc"), t = $("recepc-toggle");
@@ -1210,13 +1218,8 @@ function montarRecepcao() {
 function atualizarRecepcao(esperando, espT, sit) {
   const b = $("recepc");
   if (!b) return;
-  if (!recepcaoPermitida()) {   // saguão: sem atalho, fila e toggle; nada de fila antiga aberta
-    recepcaoAssinatura = "";
-    if (recepcaoUI) recepcaoUI.fechar(false);
-    if (!b.hidden) b.hidden = true;
-    invalidarRecepcao();
-    return;
-  }
+  if (!recepcaoDoAndarAtual()) { limparFilaRecepcao(); return; }   // trocando de andar: a fila antiga fica fora até a leitura nova
+  if (!recepcaoPermitida()) { limparFilaRecepcao(); return; }   // saguão: sem atalho, fila e toggle
   const total = esperando.length + espT.length, n = $("recepc-n"), rotulo = total ? String(total) : "";
   if (n.textContent !== rotulo) { n.textContent = rotulo; invalidarRecepcao(); }
   if (n.hidden !== !total) { n.hidden = !total; invalidarRecepcao(); }
@@ -1258,7 +1261,7 @@ function posicionarRecepcao() {
   const modoDeVer = document.body.classList.contains("tv") || document.body.classList.contains("modo-foto")
     || document.documentElement.classList.contains("apresentacao");
   const s = predio ? predio.salas.find(x => x.tipo === "recepcao") : null;
-  if (recepcaoOculta || !recepcaoPermitida() || !s || modoDeVer) {
+  if (recepcaoOculta || !recepcaoDoAndarAtual() || !recepcaoPermitida() || !s || modoDeVer) {
     if (recepcaoUI && recepcaoUI.estaAberto()) recepcaoUI.fechar(false);
     if (recepcaoAplicado !== "oculto") {
       if (!b.hidden) b.hidden = true;
@@ -1273,7 +1276,7 @@ function posicionarRecepcao() {
   const cx = (s.px + s.pw / 2 - cam.x) * cam.k / dpr + vw / 2;
   const cy = (s.py + s.ph / 2 - cam.y) * cam.k / dpr + vh / 2;
   // O balcão fora da vista (primeiro enquadramento em cima de quem espera, zoom no celular) não some: o atalho
-  // fica de reserva no canto de baixo, longe dos controles. Só o clique reenquadra a recepção.
+  // fica de reserva no canto livre (embaixo no desktop, em cima no celular), longe dos controles. Só o clique reenquadra.
   recepcaoFora = cx < -48 || cx > vw + 48 || cy < -48 || cy > vh + 48;
   const alvoX = recepcaoFora ? vw - bw - 12 : cx - bw / 2;
   const alvoY = recepcaoFora ? (recepcaoEstreita() ? 12 : vh - bh - 12) : cy - bh - 10;
@@ -3182,10 +3185,7 @@ function voltarAoPrincipal() { trocarAndar(Andar.PRINCIPAL, `Esse andar não est
 
 // zera o que era do andar de antes: ficha, conversa aberta, eventos e pedidos deduzidos, social e greve
 function reiniciarAndar() {
-  recepcaoAssinatura = ""; recepcaoFora = false;   // a fila do andar de antes não sobrevive à troca
-  if (recepcaoUI) recepcaoUI.fechar(false);
-  if ($("recepc")) { $("recepc").hidden = true; $("recepc-lista").replaceChildren(); const n = $("recepc-n"); n.hidden = true; n.textContent = ""; }
-  invalidarRecepcao();
+  limparFilaRecepcao();   // a fila do andar de antes não sobrevive à troca
   Vida.aoVivo(null);   // as pessoas e o seq são do andar de antes
   assinatura = ""; selecionado = null;
   eventosLocais = []; statusAnterior = null; vistosEvento.clear();
@@ -3203,10 +3203,7 @@ async function trocarAndar(id, aviso) {
   if (id === anterior) { mostrarElevador(); return; }
   trocando = true;
   Andar.definir(id);
-  recepcaoAssinatura = ""; recepcaoFora = false;   // a fila antiga some já na troca, sem esperar a leitura do andar novo
-  if (recepcaoUI) recepcaoUI.fechar(false);
-  if ($("recepc")) $("recepc").hidden = true;
-  invalidarRecepcao();
+  limparFilaRecepcao();   // a fila antiga some já na troca, sem esperar a leitura do andar novo
   try {
     const c = await json("api/config");   // com o andar novo; falhando, nada do andar de antes é mexido
     reiniciarAndar();
@@ -3224,6 +3221,8 @@ async function trocarAndar(id, aviso) {
     trocando = false;
     if (id === Andar.PRINCIPAL) { falhou = true; mostrarConexao(); atualizarEstados(); setTimeout(() => location.reload(), 10000); return; }   // como a carga inicial
     Andar.definir(anterior); mostrarElevador();
+    if (estado && estadoAndar === Andar.atual) desenharPainel();   // a fila do andar de antes volta com a leitura que já estava na tela
+    invalidarRecepcao(); posicionarRecepcao();
     anunciarAndar(e instanceof AndarInvalido ? "Esse andar não está mais disponível." : "Não deu para ir para esse andar agora. Tente de novo.");
     if (e instanceof AndarInvalido) recarregarAndares();
   }
