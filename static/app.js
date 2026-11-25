@@ -601,6 +601,11 @@ const banheiroEmUso = () => !!(predio.banheiro && (predio.banheiro.cabines.some(
 // salas vazias (dá para ler) e branco quente nas salas acesas, que ficam bem mais claras que o resto
 const NOITE = [78, 88, 150], SALA_APAGADA = [58, 64, 112], SALA_ACESA = [255, 234, 200];
 const tingir = (cor, n) => `rgb(${cor.map(v => Math.round(255 + (v - 255) * n)).join(",")})`;
+// portaria fechada: discreta, mas ainda legível; o expediente.js decide o aberto/fechado pela hora e pelo fuso do andar
+const PORTARIA_FECHADA = 0.22, LUZ_MINIMA = 0.5;
+// como o ceu.js: ?hora= só vale na faixa 0..24; lido uma vez, fora do laço (a URL não muda sem recarregar)
+const HORA_SIMULADA = (() => { try { const v = parseFloat(new URLSearchParams(location.search).get("hora")); return v >= 0 && v < 24; } catch (e) { return false; } })();
+let luzDeVolta = false;   // a aba voltou: o primeiro quadro mostra o estado final, sem refazer o fade do tempo parado
 function desenharLuzes(dt, ceu) {
   // sala acesa = trabalho de verdade: agente na mesa com tarefa, terminal ocupado parado nela, ou gente nas vagas da sala
   const ocupadas = new Set();
@@ -613,10 +618,23 @@ function desenharLuzes(dt, ceu) {
   for (const k of window.Sprites ? Vida.terminais() : []) if (!k.dentro && !k.rota.length && k.dado && k.dado.estado === "ocupado") { const s = salaEm(k); if (s) ocupadas.add(s); }
   const noite = ceu.escuro; // 0 = dia claro, 1 = noite
   const todas = [...predio.salas, ...predio.baixo];
+  // a portaria (a recepção) acende no expediente do andar e fica discreta fora dele; o trabalho real (mesas e banheiro)
+  // continua aceso, e o atalho "Esperando você" não depende da luz. Sem fade na carga, na troca de andar, na aba oculta,
+  // com movimento reduzido e na hora simulada (?hora): o estado atual aparece já no primeiro quadro.
+  const aberto = !Expediente.fora(ceu.h), banheiro = banheiroEmUso();
+  const semFade = menosMovimento.matches || document.hidden || luzDeVolta || HORA_SIMULADA;
   for (const s of todas) {
-    s.acesa = s.tipo === "recepcao" || ocupadas.has(s) || (s.tipo === "banheiro" && banheiroEmUso());
-    s.luz += ((s.acesa ? 1 : 0) - s.luz) * Math.min(1, dt * 2.5);   // acende e apaga num fade curto, sem piscar
+    const funcional = ocupadas.has(s) || (s.tipo === "banheiro" && banheiro);
+    const alvo = funcional ? 1 : s.tipo === "recepcao" ? (aberto ? 1 : PORTARIA_FECHADA) : 0;
+    if (!s.luzPronta) { s.luz = alvo; s.luzPronta = true; }   // carga inicial e troca de andar: nada de arrastar do 1
+    else if (semFade) s.luz = alvo;
+    else {
+      s.luz += (alvo - s.luz) * Math.min(1, dt * 2.5);   // acende e apaga num fade curto, sem piscar
+      if (Math.abs(alvo - s.luz) < 0.01) s.luz = alvo;   // chega no estado final e para de repetir o resto
+    }
+    s.acesa = s.luz >= LUZ_MINIMA;
   }
+  luzDeVolta = false;
   if (noite > 0.02) {
     const v = vistaMundo(), l = Math.min(0, v.l), t = Math.min(0, v.t), r = Math.max(predio.W, v.r), b = Math.max(predio.H, v.b);
     ctx.globalCompositeOperation = "multiply";
@@ -2103,7 +2121,7 @@ async function carregarConvPagina(it) {
 }
 // a aba voltou a ficar visível: se o item aberto mudou enquanto ela estava escondida, relê agora
 // a aba voltou (o navegador segura o setInterval de aba escondida): relê já, e um pedido respondido em outro aparelho sai
-document.addEventListener("visibilitychange", () => { if (!document.hidden) buscar(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { luzDeVolta = true; buscar(); } });
 
 // ---------- resposta pela página Conversas (fase R) -------------------------------------
 // O modo resposta vive no servidor (1 h renovada a cada envio, teto de 8 h, só nesta sessão do navegador): o navegador só
