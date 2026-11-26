@@ -1,0 +1,206 @@
+{
+ "versao": 1,
+ "id": "maputo",
+ "W": 576,
+ "H": 400,
+ "texto": {
+  "cena": "Maputo em pixel art, com a Catedral de Nossa Senhora da Conceição no largo calçado, os jacarandás roxos e o casario da Baixa",
+  "vida": "Dois pedestres entre a portaria e o largo da Catedral e um carro na rua do oeste",
+  "portaria": "no sobrado de colunas em frente ao largo"
+ },
+ "portaria": {
+  "x": 242,
+  "y": 256,
+  "r": [
+   234,
+   231,
+   250,
+   256
+  ],
+  "placa": [
+   242,
+   235
+  ],
+  "farol": [
+   242,
+   245
+  ]
+ },
+ "praca": {
+  "x": 398,
+  "y": 248,
+  "r": [
+   345,
+   214,
+   452,
+   258
+  ],
+  "fonte": [
+   18,
+   20
+  ]
+ },
+ "pontos": [
+  {
+   "x": 370,
+   "y": 212,
+   "r": [
+    335,
+    95,
+    410,
+    212
+   ],
+   "nome": "Catedral · Maputo"
+  }
+ ],
+ "calcadas": {
+  "nos": [
+   [
+    242,
+    256
+   ],
+   [
+    262,
+    255
+   ],
+   [
+    270,
+    252
+   ],
+   [
+    299,
+    252
+   ],
+   [
+    320,
+    252
+   ],
+   [
+    352,
+    251
+   ],
+   [
+    398,
+    252
+   ],
+   [
+    428,
+    252
+   ]
+  ],
+  "arestas": null,
+  "travessias": [
+   2
+  ],
+  "pontes": []
+ },
+ "pista": [
+  [
+   280.0,
+   182.0
+  ],
+  [
+   280.0,
+   220.0
+  ],
+  [
+   282.0,
+   222.5
+  ],
+  [
+   285.5,
+   223.5
+  ],
+  [
+   289.0,
+   222.5
+  ],
+  [
+   291.0,
+   220.0
+  ],
+  [
+   291.0,
+   182.0
+  ],
+  [
+   289.0,
+   179.5
+  ],
+  [
+   285.5,
+   178.5
+  ],
+  [
+   282.0,
+   179.5
+  ]
+ ],
+ "carros": [
+  {
+   "s": 0,
+   "v": 14,
+   "peca": "carro-1",
+   "tamanho": [
+    8,
+    4
+   ]
+  }
+ ],
+ "pedestres": [
+  {
+   "de": 0,
+   "para": 1,
+   "s": 6,
+   "v": 14
+  },
+  {
+   "de": 5,
+   "para": 6,
+   "s": 10,
+   "v": 15
+  }
+ ],
+ "oclusoes": [],
+ "cordoes": [
+  [
+   349,
+   248,
+   447,
+   248
+  ]
+ ],
+ "luzes": [],
+ "superficies": {
+  "calcada": [
+   "dcbd8d",
+   "e6c996",
+   "ae8765",
+   "997255",
+   "c59f74",
+   "75554d",
+   "7d5d51",
+   "543639",
+   "5b3b38",
+   "63423f",
+   "694b3d",
+   "eec582",
+   "895f44",
+   "7d5440",
+   "a77647",
+   "734d3e"
+  ],
+  "faixa": [
+   "92797f"
+  ],
+  "ponte": [],
+  "asfalto": [
+   "1c152e",
+   "3e2636",
+   "3a3148",
+   "2f1c2e",
+   "251d34",
+   "412a39"
+  ]
+ }
+}

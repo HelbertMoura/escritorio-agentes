@@ -86,6 +86,16 @@ PNG indexado sem perda (RGBA igual ao do bruto).
 | `belo-horizonte` | `belo-horizonte-pixen-616x424.png` | `7bcee6130ce51529ab30c2eda67fff359138d325dc1674693ae6112e79040af3` | 26/11/2026 |
 | `salvador` | `salvador-pixen-576x400-retry.png` | `75e3a22612b830e74b1dc8ecbc6bb84aa6a77088bc0a0d713f4d35a996056bdc` | 26/11/2026 |
 | `mateus-leme` | `mateus-leme-pixen-576x400.png` | `339378138c03c9079e75345263e20568b9076ae55296eae73093f30172a8b53b` | 26/11/2026 |
+| `sao-paulo` | `sao-paulo-pixen-576x400.png` | `810cdf158d56dffee53b8ad0410cb721608f02edc0c90dbb0becab84af6ab9a7` | 26/11/2026 |
+| `aracaju` | `aracaju-pixen-576x400.png` | `cfbcb59af8c5a5fc90e649f8d5e89e56595e95725ef4c17de2f79f3344667c47` | 26/11/2026 |
+| `palmas` | `palmas-pixen-576x400.png` | `25943ecdf544aab9995387d8a9bd448af4a03c1c2ab6546a8d137325b23856cb` | 26/11/2026 |
+| `lisboa` | `lisboa-pixen-576x400.png` | `b30b2ce43be338a118b72cf4834b59779cab0cfe8c1f61030a1c0857998ddd64` | 26/11/2026 |
+| `luanda` | `luanda-pixen-576x400.png` | `8a48d7e4667b7cf480e00c109d29aa8eaa9815b2efb656fc073293455e9acce5` | 26/11/2026 |
+| `maputo` | `maputo-pixen-576x400.png` | `dd4a69150c08e4668ccdfe8a98df402aaf90d2f0d265f81bd028ace276dd4d71` | 26/11/2026 |
+| `buenos-aires` | `buenos-aires-pixen-576x400.png` | `e8f2289b64fabb9056b0177ff26175b98b59fe668acdc196a40a064c44c14baf` | 26/11/2026 |
+| `montevideu` | `montevideu-pixen-576x400.png` | `3223fef13d8402541d4f08aac29fbedb40e5b93dd938fe4cfd2731bb78d0ca73` | 26/11/2026 |
+| `santiago` | `santiago-pixen-576x400.png` | `5acf0a747c15481c37c4418b7cadfcd1dc8cc972b5cdafe3a88d1a077017ab65` | 26/11/2026 |
+| `cidade-do-mexico` | `cidade-do-mexico-pixen-576x400.png` | `313979337b057b8540760169c3272d374884c93c791d1840c98dbba70d169240` | 26/11/2026 |
 
 Piloto (26/11/2026): Manaus, Belo Horizonte, Salvador e Mateus Leme, autoria pelo Opus com `montar_cenas.py`.
 Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`, escolhidos pelo `trabalho/escolhas.json` (Manaus e
