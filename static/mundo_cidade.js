@@ -91,8 +91,10 @@ const MundoCidade = (() => {
     const portaPronta = () => ehCasa() && !!recorte(p.casa.peca);   // placa e porta só com o desenho do chalé
     const marco = () => info(id).marco;
     const temMarco = () => typeof marco() === "string" && !!recorte("marco-" + marco());
-    // o desenho de uma peça: a vaga da casa tem o chalé só na casa (fora dela, uma árvore); o centro, o marco
-    const nomeDe = s => s === p.casa ? (portaPronta() ? p.casa.peca : p.casa.arvore) : s === p.centro && temMarco() ? "marco-" + marco() : s.peca;
+    // o desenho de uma peça: a vaga da casa tem o chalé só na casa (fora dela, uma árvore); o centro, o marco; a arte
+    // de cidade só entra com o atlas novo (sem ela, o prédio genérico da base, sem outra chamada)
+    const nomeDe = s => s === p.casa ? (portaPronta() ? p.casa.peca : p.casa.arvore) : s === p.centro && temMarco() ? "marco-" + marco()
+      : s.base && !recorte(s.peca) ? s.base : s.peca;
     function caixaCasa() {   // o chalé e a placa em cima dele: a área da porta
       const [, , w, h] = recorte(p.casa.peca) || [0, 0, 60, 57];
       return [p.casa.x - w / 2, p.casa.y - h - PLACA_H - 1, w, h + PLACA_H + 1];
@@ -109,7 +111,10 @@ const MundoCidade = (() => {
     function montarNotaveis() {
       const l = [];
       if (temMarco()) l.push({ s: p.centro, nome: info(id).marco_nome || "Marco da cidade" });
-      for (const s of p.notaveis) if (s.x > -20 && s.x < W + 20 && s.y > -20 && s.y < H + 70) l.push({ s, nome: CidadePlanta.NOMES[s.peca] });
+      for (const s of p.notaveis) {
+        const nome = s.base && !recorte(s.peca) ? CidadePlanta.NOMES[s.base] : CidadePlanta.NOMES[s.peca];
+        if (nome && s.x > -20 && s.x < W + 20 && s.y > -20 && s.y < H + 70) l.push({ s, nome });
+      }
       notaveis = l.filter(n => recorte(nomeDe(n.s))).map((n, i) => ({ ...n, id: "notavel-" + i, maiusculo: n.nome.toUpperCase(), e: null, k: 0 }));
     }
     function alvoNotavel(n) {

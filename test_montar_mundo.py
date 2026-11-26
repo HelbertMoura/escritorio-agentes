@@ -38,6 +38,9 @@ DESENHADOS = {"onibus-cima-1": [44, 17], "onibus-cima-2": [44, 17], "bici-1": [1
 # peças de festa que podem faltar na arte: entram no atlas quando existem, na metade como o mobiliário
 OPCIONAIS = {"festa-arvore-natal", "festa-fogueira", "festa-barraca-junina", "festa-abobora", "festa-ovo-pascoa",
              "festa-carro-alegorico", "festa-palco-anonovo"}
+# a arte de cidade (Recife, Manaus e a serra de BH): opcional; a serra entra no atlas reduzida a 96x36 (o original fica 128x48)
+ARTES_CIDADE = {"cidade-recife", "cidade-manaus", "cidade-bh-serra-curral"}
+TAM_CIDADE = {"cidade-recife": (78, 55), "cidade-manaus": (90, 58), "cidade-bh-serra-curral": (96, 36)}
 METADE = ({"carro-1", "carro-2", "carro-3", "carro-4", "carro-5", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1",
            "rua-1", "rua-2", "rua-3", "rua-4", "canteiro-1", "canteiro-2", "praia-1", "praia-2"} | OPCIONAIS)
 # o porte de cada cidade (pela população da capital) e as capitais de praia (Belém e Macapá ficam no rio)
@@ -309,8 +312,13 @@ class Montagem(unittest.TestCase):
         marcos |= {"marco-" + m for m in MARCOS_FORA}
         self.assertEqual(set(atlas), {"versao", "quadros", "janelas"})
         self.assertIsInstance(atlas["versao"], int)
-        presentes = {n for n in OPCIONAIS if os.path.exists(os.path.join(ARTE, n + ".png"))}
+        presentes = {n for n in OPCIONAIS | ARTES_CIDADE if os.path.exists(os.path.join(ARTE, n + ".png"))}
         self.assertEqual(set(atlas["quadros"]), marcos | GENERICOS | set(DESENHADOS) | presentes | MINIS)
+        for nome in ARTES_CIDADE & presentes:   # a arte de cidade entra no tamanho combinado (a serra, derivada a 96x36)
+            self.assertEqual(atlas["quadros"][nome][2:], list(TAM_CIDADE[nome]), nome)
+        from PIL import Image
+        with Image.open(os.path.join(ARTE, "cidade-bh-serra-curral.png")) as im:
+            self.assertEqual(im.size, (128, 48), "o original da serra fica 128x48 no repo")
         for nome, tam in DESENHADOS.items():
             self.assertEqual(atlas["quadros"][nome][2:], tam, nome)
         self.assertFalse(any(n.startswith("bicho-") for n in atlas["quadros"]), "os bichos ficam fora")

@@ -259,7 +259,7 @@ async function principal() {
     assert.ok(casas.length >= 10 && p.cercas.length >= casas.length, `${id}: ${casas.length} casas`);
     for (const c of p.cercas) assert.ok(c.tipo === "sebe" || c.tipo === "cerca", id);
     const MOBILIA = /^(banca-1|ponto-onibus-1|banco-poste-1|carrinho-1|rua-[123])$/;
-    const CONHECIDA = /^(predios-([1-9]|1[0-4])|casa-[1-6]|chale-[1-8]|arvore-[1-7]|canteiro-[12]|lazer-[1-6]|praia-[1-4]|praca-1|rua-4)$/;
+    const CONHECIDA = /^(predios-([1-9]|1[0-4])|casa-[1-6]|chale-[1-8]|arvore-[1-7]|canteiro-[12]|lazer-[1-6]|praia-[1-4]|praca-1|rua-4|cidade-(recife|manaus|bh-serra-curral))$/;
     assert.ok(itens.every(s => CONHECIDA.test(s.peca) || MOBILIA.test(s.peca)), `${id}: peça desconhecida`);
     assert.ok(de(MOBILIA).filter(naCaixa).length >= (cc.litoral ? 1 : 2), `${id}: mobiliário à vista`);
     predios[id] = de(/^predios-/).filter(naCaixa).length; totais[id] = de(/^predios-/).length;
@@ -323,6 +323,26 @@ async function principal() {
       const cruzes = [...new Set(p.cruzamentos.map(([x, y]) => (c.eixo === "h" ? x : y)))];
       assert.ok(cruzes.every(k => Math.abs(c.s - k) >= CP.E / 2 + 16), `${id}: carro começa no cruzamento ${c.s}`);
     }
+  }
+  // a arte própria de Recife, Manaus e Belo Horizonte ocupa um lote já sorteado, com a caixa do desenho dentro da
+  // vaga e da cidade; as outras cidades não mudam
+  const TAM_CIDADE = { "cidade-recife": [78, 55], "cidade-manaus": [90, 58], "cidade-bh-serra-curral": [96, 36] };
+  for (const [cid, arte] of [["recife", "cidade-recife"], ["manaus", "cidade-manaus"], ["belo-horizonte", "cidade-bh-serra-curral"]]) {
+    const pp = plantaDe(cid), s = pp.pecas.find(x => x.peca === arte), [aw, ah] = TAM_CIDADE[arte];
+    assert.ok(s && /^(predios-|casa-|chale-)/.test(s.base), `${cid}: ${arte} num lote de construção`);
+    assert.ok(pp.notaveis.includes(s), `${cid}: ${arte} nomeável`);
+    const box = [s.x - aw / 2, s.y - ah, s.x + aw / 2, s.y];
+    assert.ok(box[0] >= 0 && box[2] <= pp.W && box[1] >= 0 && box[3] <= pp.H + 20, `${cid}: caixa na cidade`);
+    assert.ok(s.r[0] <= box[0] && box[2] <= s.r[2] && s.r[1] <= box[1] && box[3] <= s.r[3], `${cid}: caixa dentro do lote`);
+    if (cid === "recife") {
+      assert.equal(s.base, "predios-10", "o casario ocupa o lote do Hospital ilustrativo (não há casa segura na orla)");
+      assert.ok(s.r[2] <= pp.orla.x, "recife: casario antes da orla");
+    }
+    if (cid === "manaus") assert.equal(s.base, "predios-14", "o Mercado Municipal vira o Adolpho Lisboa");
+    if (cid === "belo-horizonte") assert.equal(s.base, "predios-8", "a serra usa o lote largo do predios-8");
+  }
+  for (const cid of ["sao-paulo", "curitiba", "mateus-leme"]) {
+    assert.ok(!plantaDe(cid).pecas.some(x => x.base), `${cid}: sem arte de cidade`);
   }
   // o porte: a cidade pequena tem menos prédios (à vista e no todo) que as metrópoles; Mateus Leme é do interior, com a
   // Matriz e a praça (o Rio, com a praia num lado, mostra menos quadras a 1x: lá vale o todo)
