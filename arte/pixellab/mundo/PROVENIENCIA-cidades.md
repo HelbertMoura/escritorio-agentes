@@ -51,7 +51,7 @@ foi desenhado sobre os polígonos da malha, junto dos acessos existentes.
 
 ## Recife · cena integral no Mundo (26/11/2026)
 
-`static/mundo/recife.png` é o PNG nativo de 632×424 do mesmo job
+`static/mundo/cenas/recife.png` é o PNG nativo de 632×424 do mesmo job
 `15ab011e-04b6-494f-bd2e-898e893dd9ef`, copiado sem recorte, escala ou
 reprocessamento: o arquivo versionado é byte a byte o original (SHA-256
 `63dd8988030d4ea21198d938284f95b64a3e36881bd465c34dd1a77ad430cad2`), então o
@@ -59,10 +59,15 @@ repositório passa a ser a fonte dele. Ele não passa pelo
 `ferramentas/montar_mundo.py`. Integrá-lo custou **0 gerações adicionais**.
 
 Ao contrário do encaixe por recortes descrito acima, aqui a planta se ajusta à
-imagem: `CidadePlanta.recifeRaster()` define nas coordenadas do PNG a rede de
-calçadas, as travessias, os dois tabuleiros, a pista do carro, a praça, a
-portaria (a fachada azul) e as faixas de oclusão. O navegador confere os bytes
-pelo `integrity` do Fetch antes de decodificar. Trocar o PNG exige atualizar
-`RECIFE_SHA` e `RECIFE_INTEGRIDADE` em `static/mundo_cidade.js` e refazer essas
-coordenadas. Sem a imagem (rede, 404, integridade ou tamanho errado), o Recife
-usa a malha navegável e tenta de novo na próxima entrada.
+imagem: `static/mundo/cenas/recife.json` (esquema v1) define nas coordenadas do
+PNG a rede de calçadas, as travessias, os dois tabuleiros, a pista do carro, a
+praça, a portaria (a fachada azul), os textos e as faixas de oclusão, e
+`CidadePlanta.cena(dados)` valida esses dados e monta a planta. O manifesto
+`static/mundo_cidade_cenas.js` guarda a versão e o `integrity` do PNG e do JSON,
+e o navegador confere os bytes dos dois pelo Fetch antes de usá-los. Trocar o PNG
+exige refazer as coordenadas do JSON; mudar qualquer um dos dois exige atualizar
+o manifesto (o `test_montar_cenas.py` confere que ele bate com o disco). Sem os
+dois arquivos válidos (rede, 404, integridade, esquema ou tamanho errado), o
+Recife usa a malha navegável e tenta de novo na próxima entrada. O servidor lê a
+lista de `static/mundo/cenas/` na partida: arquivo novo só aparece depois de
+reiniciar.
