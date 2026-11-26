@@ -53,6 +53,10 @@ const CidadePlanta = (() => {
     "R. do Comércio", "R. da Paz", "R. das Acácias", "R. do Rosário", "Av. da Saudade", "R. do Mercado", "R. da Esperança",
     "R. das Mangueiras", "R. Boa Vista", "R. do Campo", "R. dos Pássaros", "R. da Aurora", "R. das Hortênsias"];
 
+  // a cena integral: o id da cidade, os textos (sem marcação nem controle), os veículos e as cores
+  const ID_CENA = /^[a-z0-9]+(?:-[a-z0-9]+)*$/, TEXTO_CENA = /^[^<>\p{Cc}]{1,160}$/u;
+  const VEICULO_CENA = /^(?:carro-[1-5]|bici-[1-3])$/, COR_CENA = /^[0-9a-f]{6}$/;
+
   // FNV-1a na semente, mulberry32 nos sorteios
   function sorteio(id) {
     let h = 2166136261;
@@ -669,49 +673,144 @@ const CidadePlanta = (() => {
       notaveis: pecas.filter(s => NOMES[s.peca]), porte, regiao: d.regiao, carros, postes, rede, pedestres };
   }
 
-  // Recife integral: pontos no PNG nativo. Cada aresta tem uma superfície; só as embocaduras usam o asfalto.
-  function recifeRaster() {
-    const caixa = [0, 0, 632, 424], casa = { x: 467, y: 163, r: [454, 114, 479, 163] };
-    const centro = { x: 468, y: 230, r: [438, 182, 504, 230] };
-    const praca = { x: 481, y: 222, r: [448, 187, 520, 232], fonte: [22, 15] };
-    const nos = [
-      [400, 306], [394, 318], [378, 318], [354, 325], [260, 325], [234, 318], [221, 306],
-      [221, 119], [221, 104], [239, 104], [257, 111], [356, 111], [381, 104], [393, 104],
-      [402, 119], [402, 159], [403, 168], [444, 170], [444, 203],
-      [462, 191], [467, 175], [casa.x, casa.y],
-    ];
-    const travessias = [0, 1, 5, 7, 8, 12, 13], pontes = [2, 3, 4, 9, 10, 11];
-    // O retângulo localiza os pixels da frente; chão e frestas ficam transparentes. A faixa de pés determina a camada.
-    const piso = [0x3b2a5e, 0xd7d0b6, 0xc6b48c, 0xc7b89c, 0xada592, 0x9f8883, 0xad8a6d];
-    const oclusoes = [
-      { frente: [215, 138, 228, 185], pes: [215, 139, 224, 186], transparente: piso },
-      { frente: [404, 105, 414, 161], pes: [394, 104, 405, 161], transparente: piso },
-      { frente: [251, 112, 359, 121], pes: [251, 100, 359, 112], transparente: [] },
-      { frente: [258, 326, 356, 334], pes: [258, 312, 356, 326], transparente: [] },
-    ];
-    const faixaPorAresta = Object.fromEntries(travessias.map(i => [chaveAresta(i, i + 1), { carros: false }]));
-    const viz = nos.map((_, i) => [i - 1, i + 1].filter(j => j >= 0 && j < nos.length));
-    const via = [[227, 176], [227, 293], [228, 295.5], [230.5, 296.5], [233, 295.5],
-      [234, 293], [234, 176], [233, 173.5], [230.5, 172.5], [228, 173.5]];
+  // Cena integral (esquema v1, mundo/cenas/<id>.json): a geometria em pixel nativo do PNG vira a planta que o desenho
+  // anda. Cada aresta de calçada tem uma superfície; só a travessia usa o asfalto.
+  function cena(d) {
+    const exigir = (ok, motivo) => { if (!ok) throw new Error("cena inválida: " + motivo); };
+    const objeto = (v, nome) => { exigir(v && typeof v === "object" && !Array.isArray(v), nome); return v; };
+    const lista = (v, min, max, nome) => { exigir(Array.isArray(v) && v.length >= min && v.length <= max, nome); return v; };
+    const inteiro = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
+    const numero = (v, min, max) => Number.isFinite(v) && v >= min && v <= max;
+
+    objeto(d, "formato");
+    const { id, W, H } = d;
+    exigir(d.versao === 1, "versao");
+    exigir(typeof id === "string" && ID_CENA.test(id), "id");
+    exigir(inteiro(W, 480, 704) && inteiro(H, 320, 480), "W e H");
+    const ponto = (v, nome) => {
+      exigir(Array.isArray(v) && v.length === 2 && inteiro(v[0], 0, W) && inteiro(v[1], 0, H), nome);
+      return [v[0], v[1]];
+    };
+    const retangulo = (v, nome) => {
+      lista(v, 4, 4, nome);
+      const [x0, y0] = ponto([v[0], v[1]], nome), [x1, y1] = ponto([v[2], v[3]], nome);
+      exigir(x0 < x1 && y0 < y1, nome);
+      return [x0, y0, x1, y1];
+    };
+    const dentro = ([x, y], [x0, y0, x1, y1]) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
+    const lugar = (v, nome) => {   // o pé (x, y) e a caixa
+      objeto(v, nome);
+      const [x, y] = ponto([v.x, v.y], nome);
+      return { x, y, r: retangulo(v.r, nome + ".r") };
+    };
+
+    const texto = {};
+    for (const k of ["cena", "vida", "portaria"]) {
+      const v = objeto(d.texto, "texto")[k];
+      exigir(typeof v === "string" && TEXTO_CENA.test(v), "texto." + k);
+      texto[k] = v;
+    }
+    const casa = lugar(d.portaria, "portaria"), placa = ponto(d.portaria.placa, "portaria.placa");
+    const farol = ponto(d.portaria.farol, "portaria.farol");
+    exigir(casa.r[2] - casa.r[0] >= 16 && casa.r[3] - casa.r[1] >= 24, "portaria.r menor que 16x24");
+    exigir([[casa.x, casa.y - 1], placa, farol].every(z => dentro(z, casa.r)), "porta, placa ou farol fora de portaria.r");
+    const praca = lugar(d.praca, "praca");
+    praca.fonte = ponto(d.praca.fonte, "praca.fonte");
+    const [fw, fh] = praca.fonte;
+    exigir(dentro([praca.x - fw / 2, praca.y - fh / 2], praca.r) && dentro([praca.x + fw / 2, praca.y + fh / 2], praca.r),
+      "fonte fora da praça");
+    const pontos = lista(d.pontos, 1, 6, "pontos").map(v => {
+      const s = lugar(v, "ponto");
+      exigir(typeof v.nome === "string" && v.nome.length >= 1 && v.nome.length <= 40, "ponto.nome");
+      return { s, nome: v.nome };
+    });
+
+    const c = objeto(d.calcadas, "calcadas");
+    const nos = lista(c.nos, 2, 160, "calcadas.nos").map(v => ponto(v, "nó"));
+    exigir(nos.every((a, i) => nos.every((b, j) => i === j || dist(a, b) >= 2)), "nós a menos de 2 px");
+    exigir(nos.some(([x, y]) => x === casa.x && y === casa.y), "portaria fora da rede");
+    // arestas null: a cadeia (i, i+1)
+    const arestas = c.arestas === null ? nos.slice(1).map((_, i) => [i, i + 1]) : lista(c.arestas, 1, 240, "calcadas.arestas");
+    const viz = nos.map(() => []);
+    for (const a of arestas) {
+      exigir(Array.isArray(a) && a.length === 2 && a.every(i => inteiro(i, 0, nos.length - 1)) && a[0] !== a[1], "aresta");
+      viz[a[0]].push(a[1]); viz[a[1]].push(a[0]);
+    }
+    const alcancados = new Set([0]);   // o Set percorre também o que entra durante a volta
+    for (const i of alcancados) for (const j of viz[i]) alcancados.add(j);
+    exigir(alcancados.size === nos.length, "calçadas desconexas");
+    const indice = (k, nome) => { exigir(inteiro(k, 0, arestas.length - 1), nome); return k; };
+    const pontes = lista(c.pontes, 0, arestas.length, "pontes").map(k => indice(k, "ponte"));
+    // a travessia inteira não tem carro; a que tem centro faz o pedestre esperar o carro, nos dois sentidos
+    const faixaPorAresta = {};
+    const travessias = lista(c.travessias, 0, arestas.length, "travessias").map(v => {
+      const livre = Number.isInteger(v), k = indice(livre ? v : objeto(v, "travessia").aresta, "travessia");
+      const [i, j] = arestas[k];
+      if (livre) faixaPorAresta[chaveAresta(i, j)] = { carros: false };
+      else faixaPorAresta[chaveAresta(i, j)] = faixaPorAresta[chaveAresta(j, i)] = { carros: true, centro: ponto(v.centro, "travessia.centro") };
+      return k;
+    });
+
+    // a pista (volta fechada) aceita meio pixel, para as curvas
+    const via = lista(d.pista, 4, 64, "pista").map(v => {
+      exigir(Array.isArray(v) && v.length === 2 && numero(v[0], 0, W) && numero(v[1], 0, H) && v.every(n => Number.isInteger(n * 2)), "pista");
+      return [v[0], v[1]];
+    });
     let L = 0;
     const trechos = via.map((a, i) => {
       const b = via[(i + 1) % via.length], u = unitario(a, b), inicio = L;
       L += dist(a, b);
       return { a, u, angulo: Math.atan2(u[1], u[0]), inicio, fim: L };
     });
+    exigir(L > 0, "pista sem comprimento");
+    const carros = lista(d.carros, 0, 6, "carros").map(v => {
+      const { s, v: velocidade, peca, tamanho } = objeto(v, "carro");
+      exigir(numero(s, 0, L) && s < L && numero(velocidade, 0, Number.MAX_VALUE), "carro: posição ou velocidade");
+      exigir(typeof peca === "string" && VEICULO_CENA.test(peca), "carro.peca");
+      exigir(Array.isArray(tamanho) && tamanho.length === 2 && tamanho.every(n => inteiro(n, 1, W)), "carro.tamanho");
+      return { s, v: velocidade, peca, tamanho: [...tamanho] };
+    });
+    const pedestres = lista(d.pedestres, 0, 8, "pedestres").map((v, i) => {
+      const { de, para, s, v: velocidade } = objeto(v, "pedestre");
+      exigir(inteiro(de, 0, nos.length - 1) && viz[de].includes(para), "pedestre fora de uma calçada");
+      exigir(numero(s, 0, dist(nos[de], nos[para])) && numero(velocidade, 0, Number.MAX_VALUE), "pedestre: posição ou velocidade");
+      return { de, para, s, v: velocidade, semente: id + ":calcada" + (i ? "#" + i : "") };
+    });
+
+    // O retângulo localiza os pixels da frente; as cores de chão e frestas ficam transparentes. A faixa de pés
+    // determina a camada.
+    let area = 0;
+    const oclusoes = lista(d.oclusoes, 0, 12, "oclusoes").map(o => {
+      const frente = retangulo(objeto(o, "oclusão").frente, "oclusão.frente"), pes = retangulo(o.pes, "oclusão.pes");
+      area += (frente[2] - frente[0]) * (frente[3] - frente[1]);
+      const transparente = lista(o.transparente, 0, 256, "oclusão.transparente").map(h => {
+        exigir(typeof h === "string" && COR_CENA.test(h), "oclusão: cor");
+        return parseInt(h, 16);
+      });
+      return { frente, pes, transparente };
+    });
+    exigir(area <= 30000, "oclusões grandes demais");
+    const cordoes = lista(d.cordoes, 0, Infinity, "cordoes").map(v => {
+      lista(v, 4, 4, "cordão");
+      return [...ponto([v[0], v[1]], "cordão"), ...ponto([v[2], v[3]], "cordão")];
+    });
+    const luzes = lista(d.luzes, 0, 48, "luzes").map(v => {
+      lista(v, 4, 4, "luz");
+      exigir(inteiro(v[2], 4, 16) && numero(v[3], 0, 0.6), "luz: raio ou força");
+      return [...ponto([v[0], v[1]], "luz"), v[2], v[3]];
+    });
+
     return {
-      cena: { pontes, travessias, oclusoes, farol: [467, 153], placa: [467, 142] }, W: caixa[2], H: caixa[3], casa, centro, praca,
-      pontos: [{ s: centro, nome: "Marco Zero · Recife Antigo" }],
-      malha: { caixa, pista: { L, trechos }, placas: [], cordoes: [[431, 184, 511, 184]] },
+      cena: { pontes, travessias, oclusoes, farol, placa, luzes, texto }, W, H, casa, centro: pontos[0].s, praca, pontos,
+      malha: { caixa: [0, 0, W, H], pista: { L, trechos }, placas: [], cordoes },
       pecas: [], postes: [], cruzamentos: [],
       rede: { nos, viz, peso: nos.map(() => 1), faixaPorAresta },
-      carros: [{ s: 74, v: 19, peca: "carro-1", tamanho: [8, 4] }],
-      pedestres: [{ de: nos.length - 5, para: nos.length - 4, s: 16, v: 17, semente: "recife:calcada" }],
+      carros, pedestres,
     };
   }
 
   function loteUrbano([peca, x, y, r, base], zona) { return { peca, x, y, r, base, zona }; }
 
-  return { planta, recifeRaster, sorteio, W, H, E, C, NOMES, PORTES, aguaEm, ponteEm, naPista, chaveAresta };
+  return { planta, cena, sorteio, W, H, E, C, NOMES, PORTES, aguaEm, ponteEm, naPista, chaveAresta };
 })();
 window.CidadePlanta = CidadePlanta;

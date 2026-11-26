@@ -29,10 +29,11 @@ function elemento() {
 // Opções: clima (a resposta da rota), climaFalha (a rota cai), climaPendente (a resposta nunca chega), reduzido, tela
 // [w, h, dpr], atlas, som, busca (location.search, como "?data=2026-12-25"), escuro (a noite do Ceu, de 0 a 1), opaco
 // (getImageData devolve pixels opacos: o contorno dos telhados), passo (ms de relógio por quadro; o dt vai até 0,25 s) e
-// globoFalha (Globo.criar lança erro) e fontePendente (document.fonts.load nunca termina). O globo é sempre o de verdade: o
-// campo de nuvens só é montado quando ele desenha
+// globoFalha (Globo.criar lança erro) e fontePendente (document.fonts.load nunca termina). Das cenas de cidade:
+// imagemRecife(opcoes, id) responde o PNG de qualquer cena (sem ela, 404), jsonCena(id, opcoes) troca o JSON do disco e
+// cenas troca o manifesto. O globo é sempre o de verdade: o campo de nuvens só é montado quando ele desenha
 async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false, climaPendente = false, tela = [640, 400, 1],
-  atlas = ATLAS, som = null, busca = "", escuro = 0, opaco = false, passo = 16, globoFalha = false, fontePendente = false, imagemRecife } = {}) {
+  atlas = ATLAS, som = null, busca = "", escuro = 0, opaco = false, passo = 16, globoFalha = false, fontePendente = false, imagemRecife, jsonCena, cenas } = {}) {
   const quadros = [], requisicoes = [], intervalos = [], tamanho = [...tela];
   // putImageData conta as passadas pixel a pixel do globo; getImageData dá pixels zerados (ou opacos) quando o teste faz uma
   // imagem carregar. drawImage guarda o recorte de origem [sx, sy, sw, sh] quando o teste liga contexto.gravar (um array);
@@ -95,7 +96,13 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
              desenhar() { contexto.desenhos = (contexto.desenhos || 0) + 1; }, balanco: () => 0 },
     fetch: async (url, opcoes) => {
       requisicoes.push([url, opcoes]);
-      if (url.startsWith("/mundo/recife.png")) return imagemRecife ? imagemRecife(opcoes) : { ok: false };
+      const [, cena, tipo] = url.match(/^\/mundo\/cenas\/([a-z0-9-]+)\.(png|json)\?/) || [];
+      if (tipo === "png") return imagemRecife ? imagemRecife(opcoes, cena) : { ok: false };
+      if (tipo === "json") {
+        if (jsonCena) return jsonCena(cena, opcoes);
+        const arquivo = `static/mundo/cenas/${cena}.json`;
+        return fs.existsSync(arquivo) ? { ok: true, json: async () => JSON.parse(fs.readFileSync(arquivo, "utf8")) } : { ok: false };
+      }
       if (url.startsWith("/mundo/mundo.json")) return { ok: true, json: async () => JSON.parse(JSON.stringify(MUNDO)) };
       if (url.startsWith("/mundo/atlas.json")) return { ok: true, json: async () => JSON.parse(JSON.stringify(atlas)) };
       if (url.startsWith("/mundo/perto/ufs.json")) return { ok: true, json: async () => JSON.parse(JSON.stringify(UFS_PERTO)) };
@@ -110,12 +117,13 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
   contexto.window.Som = som;
   const scripts = ["static/festas.js", "static/avatar.js", "static/mundo_bairro.js", "static/mundo_mapa_arte.js", "static/mundo_mapa_perto.js",
     "static/mundo_mapa.js",
-    "static/mundo_globo.js", "static/mundo_cidade_planta.js", "static/mundo_festa.js",
+    "static/mundo_globo.js", "static/mundo_cidade_cenas.js", "static/mundo_cidade_planta.js", "static/mundo_festa.js",
     "static/mundo_cidade_chao.js", "static/mundo_cidade_letreiro.js", "static/mundo_cidade.js", "static/mundo.js"];
   for (const f of scripts) {   // cada script compilado uma vez para o arquivo todo (as páginas abertas o reaproveitam)
     if (!COMPILADOS.has(f)) COMPILADOS.set(f, new vm.Script(fs.readFileSync(f, "utf8"), { filename: f }));
     COMPILADOS.get(f).runInContext(contexto);
   }
+  if (cenas) janela.CidadeCenas = cenas;
   if (globoFalha) vm.runInContext("Globo.criar = () => { throw new Error('globo quebrado'); };", contexto);
   for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r));   // mundo.json e clima chegam
   let relogio = 0;

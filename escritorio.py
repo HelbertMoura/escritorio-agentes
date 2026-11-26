@@ -176,7 +176,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "festas.js": "text/javascript; charset=utf-8", "efeitos.js": "text/javascript; charset=utf-8",
     "estilo.css": "text/css; charset=utf-8", "tema/atlas.png": "image/png", "tema/atlas.json": "application/json",
     "mundo/terra.png": "image/png", "mundo/brasil.png": "image/png", "mundo/mundo.json": "application/json",
-    "mundo/recife.png": "image/png", "mundo/atlas.png": "image/png", "mundo/atlas.json": "application/json",
+    "mundo/atlas.png": "image/png", "mundo/atlas.json": "application/json",
     "mundo/bairro.png": "image/png", "mundo/bairro.json": "application/json",
     "logo.png": "image/png", "fontes/figtree.ttf": "font/ttf", "fontes/silkscreen.ttf": "font/ttf",
     "fontes/figtree.woff2": "font/woff2", "fontes/silkscreen.woff2": "font/woff2",
@@ -207,6 +207,15 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
 AZULEJOS_PERTO = ({f"mundo/perto/{i}-{j}.png" for i in range(4) for j in range(4)}
                   | {f"mundo/perto4x/{i}-{j}.png" for i in range(8) for j in range(8)})
 ARQUIVOS.update(dict.fromkeys(sorted(AZULEJOS_PERTO), "image/png"), **{"mundo/perto/ufs.json": "application/json"})
+# as cenas integrais das cidades (a arte e a geometria de cada uma) e o manifesto delas: a lista fechada sai do disco na
+# partida, só com nomes <id>.png e <id>.json que sejam arquivos de verdade
+_CENA = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\.(?:png|json)")
+_DIR_CENAS = os.path.join(ESTATICO, "mundo", "cenas")
+CENAS_CIDADE = frozenset(
+    "mundo/cenas/" + n for n in (sorted(os.listdir(_DIR_CENAS)) if os.path.isdir(_DIR_CENAS) else ())
+    if _CENA.fullmatch(n) and os.path.isfile(os.path.join(_DIR_CENAS, n)) and not os.path.islink(os.path.join(_DIR_CENAS, n)))
+ARQUIVOS.update({n: "image/png" if n.endswith(".png") else "application/json" for n in sorted(CENAS_CIDADE)})
+ARQUIVOS["mundo_cidade_cenas.js"] = "text/javascript; charset=utf-8"
 TIMEOUT = 20
 
 
@@ -2901,9 +2910,10 @@ PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "sprites.js", "convite.html"
             "visita.html", "visita.js", "visita.css", "mapa.js", "tema/atlas.png", "tema/atlas.json",
             "mundo.html", "mundo.js", "ceu.js", "clima.js", "som.js",  # bairro público: só código de desenho e som, sem dados
             # mapa do mundo: imagens, cidades e código de desenho, sem dados do escritório
-            "mundo/terra.png", "mundo/brasil.png", "mundo/mundo.json", "mundo/recife.png", "mundo/atlas.png", "mundo/atlas.json", "mundo/bairro.png", "mundo/bairro.json",
+            "mundo/terra.png", "mundo/brasil.png", "mundo/mundo.json", "mundo/atlas.png", "mundo/atlas.json", "mundo/bairro.png", "mundo/bairro.json",
             "mundo_globo.js", "mundo_mapa.js", "mundo_mapa_arte.js", "mundo_cidade.js", "mundo_cidade_planta.js", "mundo_bairro.js",
             "mundo_festa.js", "mundo_cidade_chao.js", "mundo_cidade_letreiro.js", "mundo_mapa_perto.js", *AZULEJOS_PERTO, "mundo/perto/ufs.json",
+            "mundo_cidade_cenas.js", *CENAS_CIDADE,
             "festas.js",  # o calendário embutido; as datas próprias só chegam pelo /api/config
             "fontes/PixeloidSans.woff2", "logo.png",  # liberados na tela de login
             # PWA: o navegador busca o manifesto sem cookie; nenhum deles tem segredo. O sw.js fica na raiz (escopo /)

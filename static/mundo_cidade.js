@@ -20,15 +20,15 @@
 // o desenho do chalé chega. O tempo vem pelo Clima (o mundo.js o define); a noite, pelo Ceu. Com movimento reduzido,
 // carros, pedestres, copas, mar e pombos parados, e nada de partículas, fumaça ou passarinhos. O atlas é pedido na primeira
 // entrada numa cidade (e de novo se falhar). Nada é alocado por quadro: listas, vista e opções são reaproveitadas.
-// O Recife tem a cena integral (mundo/recife.png, planta em CidadePlanta.recifeRaster): o PNG chega depois da planta de
-// reserva, entra sem mexer no nível e, sem ele, a reserva segue e a próxima entrada tenta de novo. Na cena, a portaria
-// (a fachada azul) vale sem o atlas, e as máscaras de oclusão escondem o pedestre atrás do que está pintado na frente.
+// As cidades do manifesto (mundo_cidade_cenas.js) têm a cena integral (mundo/cenas/<id>.png e .json, planta em
+// CidadePlanta.cena): os dois chegam depois da planta de reserva, conferidos pelo integrity, e entram sem mexer no nível;
+// sem eles, a reserva segue e a próxima entrada tenta de novo. Ficam guardadas as 3 cenas usadas por último. Na cena, a
+// portaria vale sem o atlas, e as máscaras de oclusão escondem o pedestre atrás do que está pintado na frente.
 "use strict";
 const MundoCidade = (() => {
   const { W, H, E, C } = CidadePlanta, FAIXA = 8, B = E / 2 + C, PLACA_H = 12, POSTE = 28, FOLGA = 4;
   const QUADRA = [192, 160];   // o zoom máximo ainda mostra uma quadra inteira
-  const RECIFE_INTEGRIDADE = "sha256-Y92JiAMNTqIRmNk4KE+Vtko+Nogb1GXDTdGnetQwytI=";
-  const RECIFE_SHA = "63dd8988030d4ea21198d938284f95b64a3e36881bd465c34dd1a77ad430cad2";
+  const CENAS_MAX = 3;         // cada cena guardada ocupa perto de 1 MB de imagem, fora as máscaras
   const PERTO = 1.8;           // a partir daqui (z), os detalhes de perto
   const ALTO_MAX = 130;        // a altura do maior desenho do atlas (os marcos chegam a 125)
   const LUZ = [255, 214, 130];   // a cor dos postes, janelas e faróis à noite
@@ -51,7 +51,8 @@ const MundoCidade = (() => {
     const info = id => cidades.get(id) || (mapa && mapa.porId.get(id)) || {};   // a média vem do mapa (porte, praia e UF)
     let id = null, p = CidadePlanta.planta(""), carros = [], pedestres = [], pecas = [], postes = [], rua = Math.random;
     let atlas = null, quadros = {}, janelas = {}, pedido = false, escolhido = null, notaveis = [], rascunho = null, placaCasa = null;
-    let recife = null, mascarasRecife = [], pedidoRecife = false, visitaRecife = false;
+    const cenas = new Map(), pedidas = new Set();   // id → { dados, img, mascaras }, da usada há mais tempo à mais recente
+    let visita = null, atual = null;   // a cidade na tela (null fora do nível) e a cena em uso
     let placas = [];   // as plaquinhas de cada cruzamento (com os letreiros guardados), entram na ordem de profundidade
     const lista = [], vista = [0, 0, W, H], brilhos = new Map();
     const vida = { fumaca: 0, passaros: 0, balanco: 0, janelas: 0, janelasCobertas: 0, recortes: 0, pombos: 0, placas: 0,
@@ -78,16 +79,20 @@ const MundoCidade = (() => {
           img.src = "/mundo/atlas.png?v=" + (Number.isInteger(d.versao) ? d.versao : 0);
         });
     }
-    async function carregarRecife() {
-      if (pedidoRecife || recife || typeof Request !== "function" || !("integrity" in Request.prototype)) return;
-      pedidoRecife = true;
+    async function carregarCena(alvo) {
+      const manifesto = window.CidadeCenas || {};
+      if (!Object.hasOwn(manifesto, alvo) || cenas.has(alvo) || pedidas.has(alvo)
+        || typeof Request !== "function" || !("integrity" in Request.prototype)) return;
+      pedidas.add(alvo);
       try {
         // O Fetch valida os bytes também em HTTP local. O Image decodifica a resposta já validada.
-        const r = await fetch("/mundo/recife.png?v=" + RECIFE_SHA, {
-          credentials: "omit", mode: "same-origin", cache: "no-cache", integrity: RECIFE_INTEGRIDADE,
+        const pedir = tipo => fetch(`/mundo/cenas/${alvo}.${tipo}?v=${manifesto[alvo].v}`, {
+          credentials: "omit", mode: "same-origin", cache: "no-cache", integrity: manifesto[alvo][tipo],
         });
-        if (!r.ok) return;
-        const url = URL.createObjectURL(await r.blob());
+        const [json, png] = await Promise.all([pedir("json"), pedir("png")]);
+        if (!json.ok || !png.ok) return;
+        const dados = await json.json(), planta = CidadePlanta.cena(dados);
+        const url = URL.createObjectURL(await png.blob());
         const img = new Image();
         try {
           await new Promise((resolve, reject) => {
@@ -98,16 +103,15 @@ const MundoCidade = (() => {
         } finally {
           URL.revokeObjectURL(url);
         }
-        const nova = CidadePlanta.recifeRaster();
-        if (img.naturalWidth !== nova.W || img.naturalHeight !== nova.H) return;
-        mascarasRecife = mascaras(img, nova);
-        recife = img;
-        // Guardar o PNG permite voltar do bairro com a fachada pronta. Só a visita ativa pode trocar a cena.
-        if (visitaRecife) ativarRecife(nova);
+        if (img.naturalWidth !== planta.W || img.naturalHeight !== planta.H) return;
+        // Guardar a cena permite voltar do bairro com a fachada pronta. Só a visita ativa pode trocar a planta.
+        cenas.set(alvo, { dados, img, mascaras: mascaras(img, planta) });
+        if (cenas.size > CENAS_MAX) for (const k of cenas.keys()) if (k !== id) { cenas.delete(k); break; }
+        if (visita === alvo) ativarCena(CidadePlanta.cena(dados));
       } catch {
-        // Rede, integridade e decodificação deixam a planta de reserva disponível.
+        // Rede, integridade, esquema e decodificação deixam a planta de reserva disponível.
       } finally {
-        pedidoRecife = false;
+        pedidas.delete(alvo);
       }
     }
 
@@ -139,12 +143,13 @@ const MundoCidade = (() => {
     }
 
     function ocultar(ctx, x, y) {
-      for (const { pes: [x0, y0, x1, y1], recorte } of mascarasRecife) {
+      for (const { pes: [x0, y0, x1, y1], recorte } of atual.mascaras) {
         if (x >= x0 && x < x1 && y >= y0 && y < y1) ctx.clip(recorte, "evenodd");
       }
     }
 
-    function ativarRecife(nova) {
+    function ativarCena(nova) {
+      atual = cenas.get(visita);
       const rx = camera.x / p.W, ry = camera.y / p.H;
       const focouPorta = cidade.destaque === "porta";
       montar(nova);
@@ -189,7 +194,7 @@ const MundoCidade = (() => {
       const c = mapa.porId.get(id), [, , , h] = caixaCasa();
       return { id: "porta", x: p.casa.x, y: p.casa.y, alto: h * camera.P / camera.dpr, titulo: "Recepção",
                texto: p.cena ? "Portaria · descer ao bairro" : "Chalé do escritório · descer ao bairro",   // a portaria fica à direita: texto curto cabe no celular
-               rotulo: `${p.cena ? "Portaria na fachada azul" : "Chalé com a placa"}, o escritório em ${c ? c.nome : "esta cidade"}: descer ao bairro`,
+               rotulo: `${p.cena ? "Portaria " + p.cena.texto.portaria : "Chalé com a placa"}, o escritório em ${c ? c.nome : "esta cidade"}: descer ao bairro`,
                acao: { ir: "bairro", cidade: id } };
     }
     // as construções notáveis da parte da cidade que aparece a 1x, com o nome do tipo (o marco, com o do ponto turístico)
@@ -553,7 +558,7 @@ const MundoCidade = (() => {
       enfeites.comecar((atlas || p.cena) && festa ? festa() : null, p, id, postes);
       opChao.neve = tipo === "neve"; opChao.ceu = ceu; opChao.tipo = tipo; opChao.casa = casa; opChao.t = tt; opChao.perto = vida.perto && !!atlas;
       opChao.desvio = enfeites.desvio;
-      if (p.cena) ctx.drawImage(recife, 0, 0);
+      if (p.cena) ctx.drawImage(atual.img, 0, 0);
       else chao.desenhar(ctx, vista, opChao);
       enfeites.chao(ctx, escuro, t);
       if (atlas || p.cena) {
@@ -630,6 +635,10 @@ const MundoCidade = (() => {
           }
           else if (s.peca === "banco-poste-1") brilho(ctx, s.x - 6, s.y - 22, 12, 0.45 * escuro, LUZ, s.y);   // o lampião do banco
         }
+        if (p.cena) for (let i = 0; i < p.cena.luzes.length; i++) {   // as luzes pintadas na cena
+          const l = p.cena.luzes[i];
+          brilho(ctx, l[0], l[1], l[2], l[3] * escuro, LUZ, l[1]);
+        }
         if (casa) {
           const [x, y] = p.cena ? p.cena.farol : [p.casa.x, p.casa.y - 18];
           brilho(ctx, x, y, p.cena ? 10 : 22, 0.55 * escuro, LUZ, p.casa.y);
@@ -705,18 +714,20 @@ const MundoCidade = (() => {
     const cidade = {
       nome: "cidade", camera, destaque: null,
       entrar(params) {
-        id = params.cidade; visitaRecife = id === "recife";
-        montar(visitaRecife && recife ? CidadePlanta.recifeRaster() : CidadePlanta.planta(id, info(id)));
+        id = visita = params.cidade;
+        atual = cenas.get(id) || null;
+        if (atual) { cenas.delete(id); cenas.set(id, atual); }   // volta a ser a usada por último
+        montar(atual ? CidadePlanta.cena(atual.dados) : CidadePlanta.planta(id, info(id)));
         if (params.nivel === "bairro" && ehCasa() && !reduzido) {   // voltando do bairro, a câmera sai de perto da casa
           camera.x = p.casa.x; camera.y = p.casa.y - (p.cena ? 12 : 28); camera.z = 4; camera.zoomPara(1);
         } else { camera.x = p.W / 2; camera.y = p.H / 2; camera.z = camera.alvoZ = 1; }
         camera.limitar(p.malha ? p.malha.caixa : [0, 0, W, H]);
         medirVista(); mover(0); carregar(); clima(); letreiros.pedir();
-        if (visitaRecife) carregarRecife();
+        carregarCena(id);
       },
       sair() {
         cidade.destaque = null; escolhido = null;
-        visitaRecife = false;
+        visita = null;
       },
       quadro,
       clique(x, y) {
@@ -737,9 +748,8 @@ const MundoCidade = (() => {
       mergulho() { return ehCasa() ? [p.casa.x, p.casa.y - (p.cena ? 12 : 28)] : [p.W / 2, p.H / 2]; },
       rotulo() {
         const c = mapa.porId.get(id), f = festa ? festa() : null, m = temMarco() ? p.tituloCentro || info(id).marco_nome : "";
-        if (p.cena) return "Recife Antigo em pixel art, com o Marco Zero, o casario e duas pontes sobre o Capibaribe. " +
-          "Um pedestre nas calçadas e um carro na rua oeste" +
-          (portaPronta() ? ", com a portaria do escritório na fachada azul" : "") +
+        if (p.cena) return `${p.cena.texto.cena}. ${p.cena.texto.vida}` +
+          (portaPronta() ? `, com a portaria do escritório ${p.cena.texto.portaria}` : "") +
           (f ? `. Hoje é ${f.nome}: a cidade está enfeitada` : "");
         if (p.malha) return `${c ? c.nome : "Cidade"} vista de cima em pixel art: ${p.malha.resumo}. ` +
           (m ? `Em destaque, o marco da cidade, ${m}. ` : "") +

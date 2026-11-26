@@ -8,7 +8,7 @@ const { abrir, carregar, espera, CLIMA } = require("./test_mundo_navegacao.js");
 
 const CASA = { ...CLIMA, casa: "recife" };
 const PNG = { ok: true, blob: async () => "blob:recife" };
-const pedidos = m => m.requisicoes.filter(([url]) => url.startsWith("/mundo/recife.png")).length;
+const pedidos = m => m.requisicoes.filter(([url]) => url.startsWith("/mundo/cenas/recife.png")).length;
 const ids = c => c.alvos().map(a => a.id).join();
 const botoes = m => m.elementos["mundo-alvos"].filhos;
 
@@ -55,8 +55,8 @@ async function reservaENovaTentativa() {
   await carregar(m);
   assert.equal(c.planta.cena, undefined, "falha de rede retém a planta");
   assert.ok(c.alvos().some(a => a.id === "porta"), "fallback com atlas tem porta");
-  assert.equal(m.requisicoes.find(([u]) => u.startsWith("/mundo/recife.png"))[1].integrity,
-    "sha256-" + createHash("sha256").update(readFileSync("static/mundo/recife.png")).digest("base64"), "integridade do PNG versionado");
+  assert.equal(m.requisicoes.find(([u]) => u.startsWith("/mundo/cenas/recife.png"))[1].integrity,
+    "sha256-" + createHash("sha256").update(readFileSync("static/mundo/cenas/recife.png")).digest("base64"), "integridade do PNG versionado");
   falhar = false;
   m.M.ir("brasil"); m.rodar(); m.M.ir("cidade", { cidade: "recife" }); m.rodar();
   assert.equal(pedidos(m), 2, "a reentrada tenta de novo");
