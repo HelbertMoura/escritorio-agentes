@@ -86,6 +86,16 @@ PNG indexado sem perda (RGBA igual ao do bruto).
 | `belo-horizonte` | `belo-horizonte-pixen-616x424.png` | `7bcee6130ce51529ab30c2eda67fff359138d325dc1674693ae6112e79040af3` | 26/11/2026 |
 | `salvador` | `salvador-pixen-576x400-retry.png` | `75e3a22612b830e74b1dc8ecbc6bb84aa6a77088bc0a0d713f4d35a996056bdc` | 26/11/2026 |
 | `mateus-leme` | `mateus-leme-pixen-576x400.png` | `339378138c03c9079e75345263e20568b9076ae55296eae73093f30172a8b53b` | 26/11/2026 |
+| `rio-branco` | `rio-branco-pixen-576x400.png` | `83c1cd5c20edaee97216181537211fe4ad832aeef5260ea2ffd46f80f63e80b3` | 26/11/2026 |
+| `maceio` | `maceio-pixen-576x400.png` | `71e3a7f490bf7b9671df4a2701e625c29fded0fe6858c77c27d4628485c5518b` | 26/11/2026 |
+| `macapa` | `macapa-pixen-576x400.png` | `ddd9d59f7ac45f5ed384d6fbc764f91263ab7389cf1a1ee5d053a881c0aed86a` | 26/11/2026 |
+| `fortaleza` | `fortaleza-pixen-576x400.png` | `39d6b159dcdc5f97af51d15d159755a1b2ea7e748017911060efe11e5fdc7c0d` | 26/11/2026 |
+| `brasilia` | `brasilia-pixen-576x400.png` | `a61e754460f5ac0c9581ce1994351189cc2ae90588a6283da676eee58f4ca31b` | 26/11/2026 |
+| `vitoria` | `vitoria-pixen-576x400.png` | `6c581d17b34c33b8ba9a6f88c80d2319cd2ebce59e9ef00317248e35e4d458d8` | 26/11/2026 |
+| `goiania` | `goiania-pixen-576x400.png` | `01704f377729f8e97fe5c85e4e62ce8e38c61610982ea991b7912a1512f5939b` | 26/11/2026 |
+| `sao-luis` | `sao-luis-pixen-576x400.png` | `e301def308e3921e8af9d158e511c54bdd9572479a4c6c5780a6680a1134351c` | 26/11/2026 |
+| `cuiaba` | `cuiaba-pixen-576x400.png` | `1d6f923cb9c68e2e53e69c3670854b7796487f9379671c430805d4b8292010bd` | 26/11/2026 |
+| `campo-grande` | `campo-grande-pixen-576x400.png` | `9f8846422d5363c23d5bcac48a072807f5db47a0c0c25b9fda5d01260861b9ae` | 26/11/2026 |
 
 Piloto (26/11/2026): Manaus, Belo Horizonte, Salvador e Mateus Leme, autoria pelo Opus com `montar_cenas.py`.
 Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`, escolhidos pelo `trabalho/escolhas.json` (Manaus e
