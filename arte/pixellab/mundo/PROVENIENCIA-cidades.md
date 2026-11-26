@@ -86,6 +86,20 @@ PNG indexado sem perda (RGBA igual ao do bruto).
 | `belo-horizonte` | `belo-horizonte-pixen-616x424.png` | `7bcee6130ce51529ab30c2eda67fff359138d325dc1674693ae6112e79040af3` | 26/11/2026 |
 | `salvador` | `salvador-pixen-576x400-retry.png` | `75e3a22612b830e74b1dc8ecbc6bb84aa6a77088bc0a0d713f4d35a996056bdc` | 26/11/2026 |
 | `mateus-leme` | `mateus-leme-pixen-576x400.png` | `339378138c03c9079e75345263e20568b9076ae55296eae73093f30172a8b53b` | 26/11/2026 |
+| `belem` | `belem-pixen-576x400.png` | `164c696c05c7c7930894648cfe7fa380240824911495ababfe679fad389cc051` | 26/11/2026 |
+| `joao-pessoa` | `joao-pessoa-pixen-576x400.png` | `ab6125f3d94c9d32d0a2e6a04e5144d3d014a0fed06744e017c2c26ab6595759` | 26/11/2026 |
+| `curitiba` | `curitiba-pixen-576x400.png` | `7959b2cbe8d8d42f5b9c17b30776af72efd373071d6b1b52f3539ff5e6202992` | 26/11/2026 |
+| `teresina` | `teresina-pixen-576x400.png` | `219646941b7420f45955137984a2e514f7b1fa32e4b628782e00829eed7835e2` | 26/11/2026 |
+| `rio-de-janeiro` | `rio-de-janeiro-pixen-576x400.png` | `d6346d5dd66da43d81daa38dd478d767b80bb660dcf2e7b3f0922b8199e9e5d2` | 26/11/2026 |
+| `natal` | `natal-pixen-576x400.png` | `4453b6bd990760ff65a47670d472b9302a36fdf6fd9ec0f37f722773a709bdad` | 26/11/2026 |
+| `porto-alegre` | `porto-alegre-pixen-576x400.png` | `7f65561987dfaf63cc44f2ce7ae99550dcbf81e6d180c1bb01f86e3e0dd90db4` | 26/11/2026 |
+| `porto-velho` | `porto-velho-pixen-576x400.png` | `3e5578c6bcb681faf0f239cee95e15c1a8ec0791da6febd320bef39741f7bf39` | 26/11/2026 |
+| `boa-vista` | `boa-vista-pixen-576x400.png` | `c03f380f9c17219b7dd02bceb14ee720247b5c9abde4952955701b356ccc0d56` | 26/11/2026 |
+| `florianopolis` | `florianopolis-pixen-576x400.png` | `4e91e6cb5f6d7017158f1af18bf5cbda18fff79cbdb73a28f7a980fc230046ba` | 26/11/2026 |
+
+Lote 2 (26/11/2026): Belém, João Pessoa, Curitiba, Teresina, Rio de Janeiro, Natal, Porto Alegre, Porto Velho, Boa Vista e
+Florianópolis, autoria pelo Opus com `montar_cenas.py`. Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`, 1ª tentativa
+(nenhuma tem entrada no `escolhas.json`), sem retoque de pixel.
 
 Piloto (26/11/2026): Manaus, Belo Horizonte, Salvador e Mateus Leme, autoria pelo Opus com `montar_cenas.py`.
 Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`, escolhidos pelo `trabalho/escolhas.json` (Manaus e

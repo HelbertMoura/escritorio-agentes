@@ -1,0 +1,212 @@
+{
+ "versao": 1,
+ "id": "rio-de-janeiro",
+ "W": 576,
+ "H": 400,
+ "texto": {
+  "cena": "Rio de Janeiro em pixel art, com o Cristo Redentor no morro, os prédios de Copacabana e o calçadão de ondas na praia",
+  "vida": "Dois pedestres na calçada da portaria e um carro na rua de baixo",
+  "portaria": "no prédio de janelas azuis, de frente para o Cristo"
+ },
+ "portaria": {
+  "x": 358,
+  "y": 341,
+  "r": [
+   348,
+   316,
+   368,
+   341
+  ],
+  "placa": [
+   358,
+   320
+  ],
+  "farol": [
+   358,
+   330
+  ]
+ },
+ "praca": {
+  "x": 360,
+  "y": 230,
+  "r": [
+   305,
+   196,
+   415,
+   238
+  ],
+  "fonte": [
+   22,
+   15
+  ]
+ },
+ "pontos": [
+  {
+   "x": 368,
+   "y": 180,
+   "r": [
+    300,
+    30,
+    430,
+    180
+   ],
+   "nome": "Cristo Redentor"
+  },
+  {
+   "x": 520,
+   "y": 200,
+   "r": [
+    465,
+    60,
+    576,
+    250
+   ],
+   "nome": "Calçadão de Copacabana"
+  }
+ ],
+ "calcadas": {
+  "nos": [
+   [
+    320,
+    341
+   ],
+   [
+    358,
+    341
+   ],
+   [
+    390,
+    341
+   ],
+   [
+    414,
+    341
+   ],
+   [
+    421,
+    334
+   ],
+   [
+    421,
+    290
+   ],
+   [
+    421,
+    245
+   ]
+  ],
+  "arestas": null,
+  "travessias": [],
+  "pontes": []
+ },
+ "pista": [
+  [
+   408.5,
+   350
+  ],
+  [
+   325.5,
+   350
+  ],
+  [
+   322,
+   353.5
+  ],
+  [
+   325.5,
+   357
+  ],
+  [
+   408.5,
+   357
+  ],
+  [
+   412,
+   353.5
+  ]
+ ],
+ "carros": [
+  {
+   "s": 0,
+   "v": 17,
+   "peca": "carro-3",
+   "tamanho": [
+    8,
+    4
+   ]
+  }
+ ],
+ "pedestres": [
+  {
+   "de": 0,
+   "para": 1,
+   "s": 12,
+   "v": 15
+  },
+  {
+   "de": 4,
+   "para": 5,
+   "s": 20,
+   "v": 16
+  }
+ ],
+ "oclusoes": [],
+ "cordoes": [
+  [
+   308,
+   230,
+   412,
+   230
+  ]
+ ],
+ "luzes": [
+  [
+   345,
+   197,
+   10,
+   0.45
+  ],
+  [
+   387,
+   197,
+   10,
+   0.45
+  ],
+  [
+   484,
+   47,
+   10,
+   0.45
+  ]
+ ],
+ "superficies": {
+  "calcada": [
+   "625266",
+   "ddc29e",
+   "d4b997",
+   "55465b",
+   "bd9e82",
+   "b29277",
+   "4b3d54",
+   "caad8d",
+   "695965",
+   "a88871"
+  ],
+  "faixa": [],
+  "ponte": [],
+  "asfalto": [
+   "52384f",
+   "724a4c",
+   "4d344d",
+   "1e122c",
+   "322435",
+   "b4a79b",
+   "7c534d",
+   "68454d",
+   "291d38",
+   "49314a",
+   "3a2340",
+   "643632"
+  ]
+ }
+}
