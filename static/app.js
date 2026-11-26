@@ -1026,20 +1026,52 @@ function atualizarEstados() {
     if (alvo.textContent !== String(n[k])) alvo.textContent = n[k];
     b.classList.toggle("zero", !n[k] && k !== "todos");
   }
+  // no celular o resumo não repete "esperando você": o atalho da recepção e o sino do topo já mostram essa pendência.
+  const estreita = innerWidth <= 760;
   const partes = [[n.esp, "esperando você", "esperando você"], [n.trab, "trabalhando", "trabalhando"], [n.livres, "livre", "livres"], [n.fora, "fora", "fora"]]
-    .filter(([q], i) => q || i < 3).map(([q, um, varios]) => `${q} ${q === 1 ? um : varios}`);
+    .filter(([q], i) => (q || i < 3) && !(estreita && i === 0)).map(([q, um, varios]) => `${q} ${q === 1 ? um : varios}`);
   const sit = estadoDaLeitura(), txt = TEXTO_LEITURA[sit];
   const resumo = config && Andar.perfil(config).noSaguao ? "Saguão do prédio" : n.todos ? partes.join(" · ") : txt ? txt.titulo : "Nenhum agente nesta organização ainda";
   const r = $("resumo-esc");
   if (r.textContent !== resumo) r.textContent = resumo;
   if (r.dataset.estado !== sit) r.dataset.estado = sit;
+  atualizarFiltroAtual();
 }
 function filtrar(qual) {
   filtro = qual;
   document.querySelectorAll("[data-filtro]").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.filtro === filtro)));
+  atualizarFiltroAtual();
   if (estado) desenharPainel();
 }
 for (const b of document.querySelectorAll("[data-filtro]")) b.addEventListener("click", () => filtrar(filtro === b.dataset.filtro && filtro !== "todos" ? "todos" : b.dataset.filtro));   // clicar de novo desliga o filtro
+
+// No celular os filtros viram um disclosure compacto: a barra mostra o filtro ativo e o painel abre só quando a pessoa
+// quer. Os mesmos botões de #estados são usados, sem duplicar nada; no computador o botão some e a barra fica sempre à vista.
+const filtrosEstreitos = () => innerWidth <= 760;
+let filtrosAbertos = false, filtrosModo = null;
+const NOME_FILTRO = { todos: "Todos", trab: "Trabalhando", esp: "Esperando você", livres: "Livres", fora: "Fora" };
+function atualizarFiltroAtual() {
+  const atual = $("filtros-atual"), b = $("filtros-abrir");
+  if (!atual || !b) return null;
+  const botao = document.querySelector(`#estados [data-filtro="${filtro}"]`);
+  const n = botao && botao.querySelector(".n") ? botao.querySelector(".n").textContent : "";
+  const nome = NOME_FILTRO[filtro] || NOME_FILTRO.todos;
+  atual.textContent = n ? `${nome} · ${n}` : nome;
+  b.setAttribute("aria-label", `${filtrosAbertos ? "Ocultar" : "Mostrar"} filtros. Filtro ativo: ${nome}${n ? ` (${n})` : ""}`);
+  return nome;
+}
+function sincronizarFiltros() {
+  const b = $("filtros-abrir"), e = $("estados");
+  if (!b || !e) return;
+  const estreito = filtrosEstreitos(), cruzou = filtrosModo !== null && filtrosModo !== estreito;
+  filtrosModo = estreito;   // a preferência do disclosure sobrevive à rotação; só o breakpoint a redefine
+  b.hidden = !estreito;
+  e.hidden = estreito && !filtrosAbertos;
+  b.setAttribute("aria-expanded", String(estreito ? filtrosAbertos : true));
+  atualizarFiltroAtual();
+  if (cruzou) atualizarEstados();   // o resumo compacto depende da largura: refaz só ao cruzar o breakpoint
+}
+$("filtros-abrir").addEventListener("click", () => { filtrosAbertos = !filtrosAbertos; sincronizarFiltros(); });
 
 // ---------- painel: esperando você, agentes e pedidos ---------------------------------
 function desenharPainel() {
@@ -1513,14 +1545,19 @@ function renderFicha() {
   nomes.append(h, elem("p", "funcao", b.funcao || salaDoAgente(b.handle)));
   const x = elem("button", "fechar", "×"); x.type = "button"; x.setAttribute("aria-label", "Fechar o cartão"); x.addEventListener("click", fecharFichaDoAtalho);
   topo.append(mini(b.ap), nomes, x);
-  const dl = elem("dl"), linha = (rot, ...conteudo) => { const dd = elem("dd"); dd.append(...conteudo); dl.append(elem("dt", null, rot), dd); };
+  // aberta pela recepção no celular, a ficha tem 40dvh: o resumo e as ações ficam em cima e os detalhes longos descem.
+  const recepc = f.classList.contains("ficha-recepc");
+  const dl = elem("dl"), detalhe = recepc ? elem("dl", "ficha-detalhe") : null;
+  const acrescentar = (destino, rot, conteudo) => { const dd = elem("dd"); dd.append(...conteudo); destino.append(elem("dt", null, rot), dd); };
+  const linha = (rot, ...conteudo) => acrescentar(dl, rot, conteudo);
+  const linhaDetalhe = detalhe ? (rot, ...conteudo) => acrescentar(detalhe, rot, conteudo) : linha;
   const chip = elem("span", `chip ${classeDe(b)}`, textoEstado(b));
   linha("Estado", chip, ...(extra ? [document.createTextNode(" "), elem("span", "chip hora-extra", "Hora extra")] : []),
     ...(t ? [document.createTextNode(" "), elem("span", "ficha-tempo suave", tempoNoEstado(t))] : []));
   if (t) linha("Fazendo", document.createTextNode(t.rotulo || "Tarefa sem descrição"));
   linha("Onde", document.createTextNode(ondeEsta(b)));
-  if (!Brincar.demo && !Andar.perfil(config).noSaguao) linha("Hoje", LinhaTempo.noCard(b.id));   // a linha do tempo (linha_tempo.js)
-  if (social && !Brincar.demo) linha("Amizades", secaoAmizades(b));   // a demonstração não tem amizades: nada vai ao servidor
+  if (!Brincar.demo && !Andar.perfil(config).noSaguao) linhaDetalhe("Hoje", LinhaTempo.noCard(b.id));   // a linha do tempo (linha_tempo.js)
+  if (social && !Brincar.demo) linhaDetalhe("Amizades", secaoAmizades(b));   // a demonstração não tem amizades: nada vai ao servidor
   const acoes = elem("div", "acoes");
   if (resp) { // uma caixa só: a resposta mora na página Conversas, e a ficha leva até ela
     const rb = elem("button", "botao", "Responder"); rb.type = "button"; rb.setAttribute("aria-label", `Responder ${b.nome} na página Conversas`);
@@ -1544,7 +1581,7 @@ function renderFicha() {
     if (motivo) { rg.disabled = true; rg.setAttribute("aria-describedby", "ficha-motivo"); const p = elem("p", "ficha-motivo", motivo); p.id = "ficha-motivo"; fim.push(p); }
     rg.addEventListener("click", () => abrirRingue(b, rg)); acoes.append(rg);
   }
-  f.replaceChildren(topo, dl, acoes, ...fim);
+  f.replaceChildren(topo, dl, acoes, ...fim, ...(detalhe && detalhe.childNodes.length ? [detalhe] : []));   // ações junto do resumo; detalhes depois
   requestAnimationFrame(marcarRolavel);
 }
 // o fade da base (o "tem mais embaixo") só quando o conteúdo passa da altura do cartão: sem ele, o último botão
@@ -1589,7 +1626,11 @@ function renderFichaTerminal() {
   nomes.append(h, elem("p", "funcao", [d.provedor, d.papel].filter(Boolean).join(" · ")));
   const x = elem("button", "fechar", "×"); x.type = "button"; x.setAttribute("aria-label", "Fechar o cartão"); x.addEventListener("click", fecharFichaDoAtalho);
   topo.append(miniTerminal(d, situacaoTerminal(d) === "esp"), nomes, x);
-  const dl = elem("dl"), linha = (rot, ...conteudo) => { const dd = elem("dd"); dd.append(...conteudo); dl.append(elem("dt", null, rot), dd); };
+  const recepc = f.classList.contains("ficha-recepc");
+  const dl = elem("dl"), detalhe = recepc ? elem("dl", "ficha-detalhe") : null;
+  const acrescentar = (destino, rot, conteudo) => { const dd = elem("dd"); dd.append(...conteudo); destino.append(elem("dt", null, rot), dd); };
+  const linha = (rot, ...conteudo) => acrescentar(dl, rot, conteudo);
+  const linhaDetalhe = detalhe ? (rot, ...conteudo) => acrescentar(detalhe, rot, conteudo) : linha;
   linha("Estado", elem("span", `chip ${CLASSE_TERM[d.estado] || "livre"}`, TEXTO_TERM[d.estado] || "Livre"), ...(d.gerente ? [document.createTextNode(" "), elem("span", "chip hora-extra", "Maestro")] : []));
   if (d.projeto) linha("Projeto", document.createTextNode(d.projeto));
   if (d.atividade) linha("Fazendo", document.createTextNode(d.atividade));
@@ -1606,11 +1647,11 @@ function renderFichaTerminal() {
       enc.style.width = `${nec[n]}%`; bar.append(enc);
       l.append(elem("span", null, rot), bar, elem("span", "amz-valor", String(nec[n]))); barras.append(l);
     }
-    linha("Necessidades", barras);
+    linhaDetalhe("Necessidades", barras);
   }
   const lista = (itens, vazio) => { if (!itens.length) return elem("span", "suave", vazio); const ul = elem("ul", "term-lista"); ul.append(...itens.map(t => elem("li", null, t))); return ul; };
-  linha("Amizades", lista(amz.map(a => `${a.nome} · ${a.valor}`), "Nenhuma ainda"));
-  linha("Hoje", lista(dia.map(e => `${horaMin(e.ts)} ${(TEXTO_TERM[e.estado] || "").toLowerCase()}${e.ferramenta ? ` · ${e.ferramenta}` : ""}`), "Nada ainda hoje"));
+  linhaDetalhe("Amizades", lista(amz.map(a => `${a.nome} · ${a.valor}`), "Nenhuma ainda"));
+  linhaDetalhe("Hoje", lista(dia.map(e => `${horaMin(e.ts)} ${(TEXTO_TERM[e.estado] || "").toLowerCase()}${e.ferramenta ? ` · ${e.ferramenta}` : ""}`), "Nada ainda hoje"));
   const acoes = elem("div", "acoes");
   const seg = elem("button", "botao fantasma seguir"); seg.type = "button"; seg.setAttribute("aria-pressed", String(seguir === sid));
   const ic = elem("span", "ic"); ic.append(iconeSvg("alvo")); seg.append(ic, document.createTextNode(seguir === sid ? "Seguindo" : "Seguir"));
@@ -1619,7 +1660,8 @@ function renderFichaTerminal() {
   fe.addEventListener("click", () => { const veio = $("ficha").classList.contains("ficha-recepc"); fecharFicha(); if (veio && !$("recepc").hidden) $("recepc").focus({ preventScroll: true }); else focoNoMapa(); });
   acoes.append(seg, fe);
   const decisao = blocoDecisao(d, false);
-  f.replaceChildren(topo, dl, decisao || elem("p", "term-ajuda", "Responder é no próprio terminal."), acoes);
+  f.replaceChildren(topo, dl, decisao || elem("p", "term-ajuda", "Responder é no próprio terminal."), acoes,
+    ...(detalhe && detalhe.childNodes.length ? [detalhe] : []));   // decisão e ações junto do resumo; o resto depois
   requestAnimationFrame(marcarRolavel);
 }
 
@@ -3364,8 +3406,9 @@ Novidades.iniciar();
 pintarIcones(document);
 window.addEventListener("hashchange", () => { const id = Andar.doHash(location.hash); if (id && id !== Andar.atual) trocarAndar(id); });
 window.addEventListener("hashchange", rota);
-window.addEventListener("resize", () => { medirFaixa(); ajustarEscala(); marcarRolavel(); invalidarRecepcao(); });
+window.addEventListener("resize", () => { medirFaixa(); ajustarEscala(); marcarRolavel(); invalidarRecepcao(); sincronizarFiltros(); });
 rota();
+sincronizarFiltros();
 // a abertura do Firmópolis (abertura.js): uma vez por sessão, por cima do carregamento; a TV liga direto
 if (window.Abertura && new URLSearchParams(location.search).get("tv") !== "1") Abertura.tocar();
 iniciar().catch(() => { falhou = true; mostrarConexao(); atualizarEstados(); setTimeout(() => location.reload(), 10000); });

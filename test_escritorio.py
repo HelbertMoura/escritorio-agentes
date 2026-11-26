@@ -985,6 +985,27 @@ class Estaticos(unittest.TestCase):
                 if publico:
                     self.assertIn(nome, e.PUBLICOS, f"{folha} carrega {u}, que exige login")
 
+    def test_mobile_do_escritorio_tem_filtros_recolhiveis_e_chip_de_44(self):
+        # no celular os filtros viram um disclosure com o filtro ativo à mostra, e o atalho da recepção tem 44 px úteis
+        with open(os.path.join(e.ESTATICO, "index.html"), encoding="utf-8") as f:
+            html = f.read()
+        self.assertRegex(html, r'<button id="filtros-abrir"[^>]*aria-controls="estados"')
+        self.assertIn('id="filtros-atual"', html)
+        with open(os.path.join(e.ESTATICO, "estilo.css"), encoding="utf-8") as f:
+            css = f.read()
+        self.assertIn("#estados[hidden]", css)
+        self.assertRegex(css, r"\.filtros-abrir\s*\{[^}]*display:\s*none")
+        self.assertRegex(css, r"\.recepc\s*\{[^}]*min-height:\s*44px")
+
+    def test_pagina_do_mundo_prioriza_o_mapa_e_recolhe_a_ajuda(self):
+        # o palco vem antes do painel no documento (a ordem de foco acompanha a tela no celular) e a ajuda longa vira details
+        with open(os.path.join(e.ESTATICO, "mundo.html"), encoding="utf-8") as f:
+            html = f.read()
+        self.assertLess(html.index('class="mundo-palco"'), html.index('class="mundo-painel"'))
+        self.assertRegex(html, r'<details id="mundo-ajuda"[\s\S]*?<summary>Como explorar</summary>')
+        self.assertIn('id="mundo-vista"', html)
+        self.assertIn('id="mundo-cena"', html)
+
 class Visitantes(unittest.TestCase):
     """A presença fica só na memória, com teto, validade de 45 s e um id que não leva de volta à sessão."""
     def test_validade_teto_e_chave_da_subida(self):

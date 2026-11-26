@@ -241,6 +241,11 @@ h2 { font-size: 15px; margin: 0; font-weight: 600; }
 .estados button[aria-pressed="true"], .estados button[aria-selected="true"] { background: var(--cartao3); color: var(--texto); box-shadow: var(--afundado); }
 .estados .n { min-width: 18px; height: 18px; padding: 0 6px; border-radius: 0; background: rgba(239, 239, 236, .09); color: var(--texto2); font-size: 11.5px; display: inline-flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
 .estados [data-filtro="fora"].zero:not([aria-pressed="true"]) { display: none; }   /* "Fora" só aparece quando alguém foi para casa */
+#estados[hidden] { display: none; }
+/* disclosure dos filtros: só no celular, onde o botão ocupa o lugar da barra e mostra o filtro ativo */
+.filtros-abrir { display: none; }
+.filtros-abrir svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform var(--rapido); }
+.filtros-abrir[aria-expanded="true"] svg { transform: rotate(180deg); }
 .led { display: inline-block; width: 7px; height: 7px; flex: none; border-radius: 0; }
 .led.trabalhando { background: var(--verde); } .led.aprovacao { background: var(--ambar); } .led.pergunta { background: var(--azul); }
 .led.livre { background: var(--livre); } .led.fora { background: var(--fora); } .led.todos { background: var(--texto); }
@@ -319,9 +324,10 @@ h2 { font-size: 15px; margin: 0; font-weight: 600; }
 body.tv .recepc, body.tv .recepc-painel, body.modo-foto .recepc, body.modo-foto .recepc-painel,
 html.apresentacao #recepc, html.apresentacao #recepc-painel { display: none !important; }
 @media (max-width: 760px) {
-  .recepc { min-height: 40px; font-size: 12px; }
+  .recepc { min-height: 44px; font-size: 12px; }
   /* a lista vira folha embaixo, sobrando o mapa: 40dvh no máximo e rolagem por dentro */
-  .recepc-painel { left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 40dvh; }
+  .recepc-painel { left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right));
+    bottom: max(8px, env(safe-area-inset-bottom)); width: auto; max-height: 40dvh; }
   .recepc-topo { position: sticky; top: 0; background: var(--cartao); }
 }
 .rotulo-menu { font-size: 13.5px; font-weight: 600; white-space: nowrap; }
@@ -387,6 +393,7 @@ body.travado { overflow: hidden; }
 .ficha dd { margin: 0; overflow-wrap: anywhere; }
 .ficha .acoes { display: flex; flex-wrap: wrap; gap: 8px; }
 .ficha .seguir[aria-pressed="true"] { background: var(--cartao3); border-color: transparent; color: var(--texto); box-shadow: var(--afundado); }
+.ficha .ficha-detalhe { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--borda); }
 /* vida social na ficha (app.js): amizades com barra e número, e o motivo embaixo do botão do ringue desabilitado */
 .amizades { display: grid; gap: 4px; }
 .amizades p { margin: 0; }
@@ -1161,9 +1168,12 @@ body.demo [data-rota="personalizar"] { display: none; }
   h1 { font-size: 27px; }
   .cabeca { margin-bottom: 10px; }
   .cabeca-esc { margin-bottom: 16px; }
-  .estados { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: -4px -16px; padding: 4px 16px; gap: 6px; border: 0; border-radius: 0; background: none; width: calc(100% + 32px); }
-  .estados::-webkit-scrollbar { display: none; }
-  .estados button { min-height: 44px; padding: 0 14px; border-radius: var(--r-botao); border: 1px solid var(--borda); background: var(--campo); color: var(--texto2); font-size: 14px; }
+  .estados { flex-wrap: wrap; overflow: visible; margin: 0 0 8px; padding: 3px; gap: 2px; border: 1px solid var(--borda); border-radius: var(--r-botao); background: var(--campo); width: auto; }
+  .estados button { min-height: 44px; padding: 0 12px; border-radius: 0; border: 0; background: transparent; color: var(--texto2); font-size: 14px; }
+  .filtros-abrir { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; margin: 0 0 8px; padding: 0 12px;
+    border: 1px solid var(--borda); border-radius: var(--r-botao); background: var(--campo); color: var(--texto2); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .filtros-abrir-rot { color: var(--texto2); }
+  .filtros-abrir-atual { margin-left: auto; color: var(--creme); font-weight: 700; }
   .cartao { border-radius: 0; }
   /* a câmera numa barra baixa no canto de baixo à esquerda: não cobre a borda direita do mapa nem o topo */
   .controles { top: auto; bottom: 8px; left: 8px; right: auto; gap: 0; padding: 0; border-radius: 0; border: 1px solid rgba(255,255,255,.18); background: rgba(15,15,17,.84); }
@@ -1176,14 +1186,15 @@ body.demo [data-rota="personalizar"] { display: none; }
   /* o mapa logo abaixo do título; filtros, "Só você está olhando" e "Aparecer" vêm depois dele */
   #v-escritorio:not([hidden]) { display: flex; flex-direction: column; }
   #v-escritorio > .cabeca-esc, #v-escritorio > .cabeca-esc > div:first-child { display: contents; }
-  #v-escritorio h1 { order: 0; }
-  #resumo-esc { order: 0; margin-bottom: 12px; }
+  #v-escritorio h1 { order: 0; font-size: 24px; margin-bottom: 2px; }   /* cabeçalho compacto: o mapa sobe para a primeira dobra */
+  #resumo-esc { order: 0; margin-bottom: 8px; font-size: 14px; }
   #palco-cartao { order: 1; }
-  #estados { order: 2; margin-top: -4px; margin-bottom: 4px; }
-  #olhando { order: 3; margin: 0 0 8px; }
-  #equipe { order: 4; }
-  #atualizado { order: 4; }
-  #v-escritorio > .widgets, #v-escritorio > .agora { order: 5; }
+  #filtros-abrir { order: 2; }
+  #estados { order: 3; }
+  #olhando { order: 4; margin: 0 0 8px; }
+  #equipe { order: 5; }
+  #atualizado { order: 5; }
+  #v-escritorio > .widgets, #v-escritorio > .agora { order: 6; }
   .selo-vivo { left: 10px; top: 10px; max-width: calc(100% - 20px); }
   .aviso-greve { left: 8px; right: 8px; bottom: 62px; max-width: none; gap: 8px; padding: 6px 6px 6px 10px; }   /* tela cheia: acima da barra da câmera (embaixo à esquerda) */
   .greve-linha { font-size: 13px; }
@@ -1197,7 +1208,8 @@ body.demo [data-rota="personalizar"] { display: none; }
   .palco-cartao:not(.cheio) .aviso-greve { position: static; border: 0; border-top: 1px solid var(--borda); border-radius: 0; box-shadow: none; background: var(--cartao); padding: 8px 10px; animation: none; }
   .palco-cartao:not(.cheio) .ficha { position: static; width: auto; border: 0; border-top: 1px solid var(--borda); border-radius: 0; box-shadow: none; background: var(--cartao); }
   /* recepção: a ficha aberta pelo atalho vira folha de 40dvh, sem empurrar o mapa; o × fica preso no topo e o resto rola */
-  #ficha.ficha-recepc { position: absolute; left: 8px; right: 8px; bottom: 8px; top: auto; width: auto; max-height: 40dvh;
+  #ficha.ficha-recepc { position: absolute; left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right));
+    bottom: max(8px, env(safe-area-inset-bottom)); top: auto; width: auto; max-height: 40dvh;
     border: 1px solid var(--borda-forte); border-radius: var(--r-cartao); box-shadow: var(--sombra-dura); background: var(--cartao); }
   #ficha.ficha-recepc .ficha-topo { position: sticky; top: 0; z-index: 1; background: var(--cartao); box-shadow: 0 1px 0 var(--borda); }
   /* acontecendo agora: a linha inteira já leva ao mapa; o "Ver no mapa" fica só para o leitor de tela e a frase pode quebrar */
@@ -1208,8 +1220,8 @@ body.demo [data-rota="personalizar"] { display: none; }
 }
 @media (max-width: 520px) {
   /* os filtros viram uma grade 2x2: a barra que corria de lado cortava "Esperando v..." no meio da palavra */
-  #estados { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: auto; margin: 0 0 4px; padding: 0; overflow: visible; border: 0; border-radius: 0; background: none; }
-  #estados button { min-height: 44px; justify-content: flex-start; padding: 0 12px; }
+  #estados { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: auto; margin: 0 0 8px; padding: 0; overflow: visible; border: 0; border-radius: 0; background: none; }
+  #estados button { min-height: 44px; justify-content: flex-start; padding: 0 12px; border: 1px solid var(--borda); border-radius: var(--r-botao); background: var(--campo); }
   #estados [data-filtro="fora"] { grid-column: 1 / -1; }   /* 5º filtro ocupa a linha inteira em vez de sobrar sozinho */
 }
 /* modo foto: a faixa "Simulação" (simular.js) sairia em cima da barra do modo foto; some enquanto ele está aberto */
@@ -1308,7 +1320,7 @@ body:not([data-papel="membro"]) .so-membro { display: none !important; }
 body[data-saguao] [data-conectar], body[data-saguao] #copiar-link, body[data-saguao] #faixa-link, body[data-saguao] a[data-rota="conversas"], body[data-saguao] a[data-rota="jornal"], body[data-saguao] #modo-resposta,
 body[data-saguao] a[data-rota="aprovacoes"], body[data-saguao] #estados, body[data-saguao] .widgets, body[data-saguao] #lat-agentes,
 body[data-saguao] .lat-externos, body[data-saguao] section.agora, body[data-saguao] .faixa-fora-mais, body[data-saguao] .dica-mapa,
-body[data-saguao] #recepc, body[data-saguao] #recepc-painel, body[data-saguao] #recepc-toggle { display: none !important; }
+body[data-saguao] #recepc, body[data-saguao] #recepc-painel, body[data-saguao] #recepc-toggle, body[data-saguao] #filtros-abrir { display: none !important; }
 
 /* Meu perfil (personalizar.js) e Membros (ajustes.js) */
 .form-perfil, .cv-link { display: flex; flex-direction: column; gap: 10px; max-width: 560px; }

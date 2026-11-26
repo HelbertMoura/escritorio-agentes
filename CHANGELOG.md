@@ -14,6 +14,11 @@ All notable changes to this project are listed here, newest first. The format fo
 - **Go tests for the bridge in CI:** every PR runs `go test ./...` in `ponte/`, with the Go version read from `go.mod`, without the tests that require the agents installed (`PONTE_TESTE_*`) or network. Image publishing remains restricted to pushes to `main`.
 - **Video news on the What's new page:** the page now has, above the releases, a player with the week of November 18-24, 2026 recap in a fictional lab with simulated data, with controls, poster, Portuguese captions and an MP4 download link. The full tour stays on the home TV, with a link to the new video.
 
+### Changed
+- **Firmópolis mobile round:** at ≤760 px the office keeps the map in the first fold with a compact header, stops repeating the pending count already shown by the reception shortcut, and groups the state filters into a compact disclosure that keeps the active filter visible; the reception shortcut now has 44 useful pixels, keeps the persistent hide mode and the Approvals access, and a card opened from reception keeps its 40dvh sheet with the header and close button pinned while the rest scrolls, primary actions next to the summary. Canvas size and the pinch/scroll gestures are unchanged.
+- **World on the phone:** the map comes first in both document and focus order, the long help collapses into “Como explorar”, a short current-view label (Globe, Brazil, city with name, Neighbourhood) and the time/weather sit next to the scene, and Back keeps a predictable destination label; the globe start, fragments, the invite CTA and Meu escritório stay.
+- **Neighbourhood framing:** on the phone the scene uses a 16:9 frame that shows the door and the street with fewer dark bands, keeping the touch target, the animated scene and reduced-motion behaviour; the time/weather and the controls stay within reach without covering the door. Desktop keeps its layout apart from the navigation help.
+
 ## 2.3.0 · 2026-11-22 · A lighter, safer office
 
 Release [`v2.3.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2.3.0). Commits: [`v2.2.0...v2.3.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v2.2.0...v2.3.0).

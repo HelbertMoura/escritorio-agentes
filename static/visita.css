@@ -41,12 +41,21 @@ select { display: block; width: 100%; min-height: 44px; border: 2px solid var(--
 .aviso { margin: 8px 0; padding: 10px 12px; border-left: 3px solid #f5b83d; background: #1d1a12; color: #f2e6c8; font-size: 14px; }
 /* mundo dos escritórios: painel à esquerda e o mapa ocupando o resto da tela (no celular, um embaixo do outro) */
 @font-face { font-family: Silkscreen; src: url("/fontes/silkscreen.woff2") format("woff2"), url("/fontes/silkscreen.ttf") format("truetype"); font-display: swap; }
-.mundo { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); min-height: 100vh; min-height: 100svh; }
-.mundo-painel { padding: clamp(24px, 3vw, 40px); border-right: 4px solid var(--linha); background: var(--estrelas), var(--ceu); }
+.mundo { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); grid-template-areas: "painel palco"; min-height: 100vh; min-height: 100svh; }
+.mundo-painel { grid-area: painel; padding: clamp(24px, 3vw, 40px); border-right: 4px solid var(--linha); background: var(--estrelas), var(--ceu); }
+/* a ajuda longa: no computador aparece aberta e sem o "summary"; no celular vira o disclosure "Como explorar" */
+.mundo-ajuda { margin: 6px 0; }
+.mundo-ajuda > summary { display: none; }
 .mundo-painel h1 { margin-top: 20px; font-size: clamp(28px, 3vw, 40px); }
 .mundo-teclas { color: #b9b3c9; font-size: 13px; }
 #mundo-estado { color: #d9d3e8; font-size: 14px; min-height: 3em; }
-.mundo-palco { position: relative; overflow: hidden; height: 100vh; height: 100svh; background: #0b0d12; }
+.mundo-palco { grid-area: palco; position: relative; overflow: hidden; height: 100vh; height: 100svh; background: #0b0d12; }
+/* a vista atual e o tempo junto da cena (no celular); no computador o painel já conta tudo */
+.mundo-cena-topo { position: absolute; z-index: 3; left: max(10px, env(safe-area-inset-left)); top: max(10px, env(safe-area-inset-top));
+  display: none; flex-direction: column; align-items: flex-start; gap: 4px; pointer-events: none; }
+.mundo-cena-topo p { margin: 0; display: inline-flex; align-items: center; min-height: 26px; padding: 0 9px; border: 1px solid var(--linha);
+  background: rgba(14, 14, 20, .9); color: var(--texto); font-size: 13px; line-height: 1.2; box-shadow: 3px 3px 0 rgba(0, 0, 0, .35); }
+.mundo-vista { font: 400 12px/1 var(--fonte-pixel); letter-spacing: .05em; text-transform: uppercase; color: var(--creme) !important; }
 .mundo-palco canvas { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; margin: 0; background: #0b0d12; cursor: grab; touch-action: none; }
 .mundo-alvos { position: absolute; inset: 0; pointer-events: none; }
 .mundo-alvo { all: unset; position: absolute; left: 0; top: 0; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 0; }
@@ -69,21 +78,36 @@ select { display: block; width: 100%; min-height: 44px; border: 2px solid var(--
 .mundo-controles button:disabled { opacity: .4; }
 /* passeio (?tv=1): só o palco, com a linha de status por cima (a tela da sala e o Modo TV do escritório) */
 .mundo.tv { display: block; position: relative; }
+.mundo.tv .mundo-cena-topo { display: none; }
 .mundo.tv .mundo-painel { position: absolute; left: 16px; bottom: 16px; z-index: 2; max-width: min(560px, calc(100vw - 32px)); padding: 8px 12px; border: 0; border-radius: 0; background: rgba(14, 14, 20, .82); }
 .mundo.tv .mundo-painel > :not(#mundo-estado), .mundo.tv .mundo-controles, .mundo.tv .mundo-dica, .mundo.tv .mundo-alvos { display: none; }
 .mundo.tv #mundo-estado { min-height: 0; margin: 0; }
 .mundo.tv .mundo-palco { height: 100vh; height: 100svh; }
 .mundo.tv .mundo-palco canvas { cursor: default; }
 @media (max-width: 760px) {
+  /* o mapa vem primeiro (DOM e tela na mesma ordem) e ocupa a primeira dobra; a ajuda longa desce recolhida */
   .mundo { display: block; }
-  .mundo-painel { padding: 16px; border-right: 0; border-bottom: 4px solid var(--linha); }
+  .mundo:not(.tv) .mundo-cena-topo { display: flex; }
+  .mundo-painel { padding: 16px; border-right: 0; border-top: 4px solid var(--linha); border-bottom: 0; }
   .mundo-painel h1 { margin: 8px 0 4px; font-size: 26px; }
   .mundo-painel p { margin: 6px 0; font-size: 15px; }
+  .mundo-ajuda > summary { display: flex; align-items: center; min-height: 44px; padding: 0 12px; border: 1px solid var(--linha);
+    background: var(--grafite-2); color: var(--creme); font-weight: 600; font-size: 15px; cursor: pointer; list-style: none; }
+  .mundo-ajuda > summary::-webkit-details-marker { display: none; }
+  .mundo-ajuda > summary::after { content: "▾"; margin-left: auto; color: var(--suave); }
+  .mundo-ajuda[open] > summary::after { content: "▴"; }
   .mundo-teclas { display: none; }
   .mundo-painel #entrar { min-height: 44px; margin-top: 4px; }
   #mundo-estado { min-height: 0; }
   .mundo-palco { height: min(130vw, 75svh); }
-  .mundo-controles { right: 10px; bottom: 10px; }
+  /* No bairro normal o canvas mantém 16:9 e os controles descem para uma faixa em fluxo logo abaixo: não cobrem a rua
+     nem encostam no alvo da porta. A arte não é dimensionada pela barra; a TV segue em tela cheia. */
+  .mundo.no-bairro:not(.tv) .mundo-palco { display: flex; flex-direction: column; height: auto; }
+  .mundo.no-bairro:not(.tv) .mundo-palco canvas { position: relative; inset: auto; width: 100%; height: auto; aspect-ratio: 16 / 9; }
+  .mundo.no-bairro:not(.tv) .mundo-controles { position: static; justify-content: flex-end; min-height: 56px;
+    padding: 4px max(10px, env(safe-area-inset-right)) 4px max(10px, env(safe-area-inset-left));
+    background: #0b0d12; border-top: 1px solid var(--linha); }
+  .mundo-controles { right: max(10px, env(safe-area-inset-right)); bottom: max(10px, env(safe-area-inset-bottom)); }
 }
 @media (max-width: 700px) { .layout { display: block; } .conversa { min-height: 60vh; } }
 

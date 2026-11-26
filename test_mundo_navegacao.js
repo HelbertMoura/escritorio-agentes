@@ -54,7 +54,8 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
   const ctx = pincel;
   const canvas = elemento(); canvas.getContext = () => ctx;
   canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: tamanho[0], height: tamanho[1] });
-  const ids = ["mundo", "entrar", "mundo-estado", "mundo-alvos", "mundo-dica", "mundo-voltar", "mundo-mais", "mundo-menos"];
+  const ids = ["mundo", "entrar", "mundo-estado", "mundo-alvos", "mundo-dica", "mundo-voltar", "mundo-mais", "mundo-menos",
+    "mundo-vista", "mundo-cena", "mundo-ajuda"];
   const elementos = Object.fromEntries(ids.map(id => [id, id === "mundo" ? canvas : elemento()]));
   // os botões no canto de baixo à direita do canvas, como na página (Voltar, + e −)
   const botao = (dx, w) => () => ({ left: tamanho[0] - dx, top: tamanho[1] - 52, width: w, height: 40 });
@@ -63,6 +64,7 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
   elementos["mundo-menos"].getBoundingClientRect = botao(72, 48);
   const janela = elemento();
   janela.devicePixelRatio = tela[2];
+  janela.innerWidth = tela[0];
   janela.matchMedia = q => ({ matches: reduzido && q === "(prefers-reduced-motion: reduce)", addEventListener() {} });
   const documento = elemento();
   documento.hidden = false;
@@ -116,7 +118,7 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
   for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r));   // mundo.json e clima chegam
   let relogio = 0;
   const rodar = (n = 1) => { for (let i = 0; i < n; i++) { const f = quadros.shift(); if (!f) return; relogio += passo; f(relogio); } };
-  const redimensionar = (w, h) => { tamanho[0] = w; tamanho[1] = h; janela.disparar("resize"); };
+  const redimensionar = (w, h) => { tamanho[0] = w; tamanho[1] = h; janela.innerWidth = w; janela.disparar("resize"); };
   const M = contexto.window.Mundo;
   const ponteiro = (tipo, x, y) => canvas.disparar(tipo, { pointerId: 1, clientX: x, clientY: y, button: 0, isPrimary: true });
   const clicar = (x, y) => { ponteiro("pointerdown", x, y); ponteiro("pointerup", x, y); };
@@ -830,6 +832,32 @@ async function principal() {
   ze.rodar(110);
   assert.equal(ze.elementos["mundo-estado"].textContent, daCapital, "o tempo da etiqueta da cidade não troca o status do Brasil");
 
+  // vista curta e hora/clima junto da cena: reaproveitam o nível e a cidade atuais; no celular a ajuda longa começa recolhida
+  const vv = await abrir("#globo");
+  await carregar(vv);
+  assert.equal(vv.elementos["mundo-vista"].textContent, "Globo");
+  assert.equal(vv.elementos["mundo-cena"].textContent, "12:00 · céu limpo");
+  assert.equal(vv.elementos["mundo-ajuda"].open, false, "no celular a ajuda vira o disclosure recolhido");
+  vv.elementos["mundo-ajuda"].open = true;   // a pessoa abriu: um resize de altura (barra do navegador) não pode reencolher
+  vv.redimensionar(640, 500);
+  assert.equal(vv.elementos["mundo-ajuda"].open, true, "resize de altura no mesmo breakpoint preserva a ajuda aberta");
+  vv.redimensionar(1024, 400);
+  assert.equal(vv.elementos["mundo-ajuda"].open, true, "no computador a ajuda fica aberta como antes");
+  vv.redimensionar(640, 400);
+  assert.equal(vv.elementos["mundo-ajuda"].open, false, "ao cruzar de volta para o celular, recolhe");
+  const vc = await abrir("#cidade=recife");
+  await carregar(vc);
+  assert.equal(vc.elementos["mundo-vista"].textContent, "Recife · PE");
+  assert.equal(vc.elementos["mundo-cena"].textContent, "12:00 · céu limpo · Recife");
+  assert.equal(vc.elementos["mundo-voltar"]["aria-label"], "Voltar para o Brasil");
+  vc.M.ir("bairro"); vc.rodar(30);
+  assert.equal(vc.M.nivel, "bairro");
+  assert.equal(vc.elementos["mundo-vista"].textContent, "Bairro");
+  assert.equal(vc.elementos["mundo-voltar"]["aria-label"], "Voltar para a cidade");
+  const vf = await abrir("#cidade=paris");
+  await carregar(vf);
+  assert.equal(vf.elementos["mundo-vista"].textContent, "Paris · França");
+  assert.equal(vf.elementos["mundo-voltar"]["aria-label"], "Voltar para o globo", "cidade estrangeira sobe ao globo");
 }
 module.exports = { abrir, espera, carregar, MUNDO, ATLAS, CLIMA, UFS_PERTO };
 if (require.main === module) principal().catch(e => { console.error(e); process.exitCode = 1; });

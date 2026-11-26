@@ -14,6 +14,11 @@ As mudanças que importam neste projeto ficam aqui, da mais nova para a mais ant
 - **Testes Go da ponte no CI:** todo PR roda `go test ./...` em `ponte/`, com a versão do Go lida do `go.mod`, sem os testes que exigem os agentes instalados (`PONTE_TESTE_*`) nem rede. A publicação da imagem continua restrita ao push na `main`.
 - **Novidades em vídeo na página Novidades:** a página ganhou, acima das versões, um player com o resumo da semana de 18 a 24 de novembro de 2026 em um laboratório fictício com dados simulados, com controles, pôster, legendas em português e link para baixar o MP4. O tour completo continua na TV da home, com um link para o vídeo novo.
 
+### Mudado
+- **Rodada mobile do Firmópolis:** em ≤760 px o escritório mantém o mapa na primeira dobra com o cabeçalho compacto, para de repetir a contagem de pendências que o atalho da recepção já mostra e agrupa os filtros de estado num disclosure compacto que mantém o filtro ativo à vista; o atalho da recepção ganha 44 px úteis, mantém o modo oculto persistente e o acesso por Aprovações, e a ficha aberta pela recepção segue como folha de 40dvh com cabeça e fechar presos enquanto o resto rola, com as ações primárias junto do resumo. O tamanho do canvas e os gestos de pinça e rolagem não mudam.
+- **Mundo no celular:** o mapa vem primeiro no documento e na ordem de foco, a ajuda longa vira o “Como explorar” recolhido, uma indicação curta da vista (Globo, Brasil, cidade com nome, Bairro) e a hora/clima ficam junto da cena, e o Voltar mantém um destino previsível no rótulo; o globo como partida, os fragmentos, o CTA do convite e o Meu escritório continuam.
+- **Enquadramento do bairro:** no celular a cena usa um quadro 16:9 que mostra a porta e a rua com menos faixas escuras, preservando o toque na porta, a cena animada e o movimento reduzido; hora/clima e controles ficam ao alcance sem cobrir a porta. O desktop preserva o layout, afora a ajuda de navegação.
+
 ## 2.3.0 · 2026-11-22 · O escritório mais leve e seguro
 
 Release [`v2.3.0`](https://github.com/HelbertMoura/escritorio-agentes/releases/tag/v2.3.0). Commits: [`v2.2.0...v2.3.0`](https://github.com/HelbertMoura/escritorio-agentes/compare/v2.2.0...v2.3.0).
