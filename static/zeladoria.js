@@ -36,7 +36,8 @@ const Zeladoria = (() => {
   const interditado = () => z.sujeira >= INTERDITA;
   const bloqueado = () => interditado() || z.limpando;          // interditado ou a faxineira lá dentro: a fila espera
   function limpar() { z.sujeira = 0; z.limpando = false; }
-  // migalhas e copos na cozinha ou na sala comunal (o vida.js chama no fim do café e do lanche); metade das vezes
+  // migalhas, copos e a caneca na cozinha ou na sala comunal (o vida.js chama no fim do café e do lanche): metade das
+  // vezes fica o rastro; a faxineira recolhe na mesma passagem, sem mexer em quem está trabalhando
   function migalha(x, y, tipo = "migalha", sempre = false) {
     if (z.migalhas.length >= MAX_MIGALHAS || (!sempre && Math.random() < 0.5)) return false;
     z.migalhas.push({ x: Math.round(x + entre(-4, 4)), y: Math.round(y + entre(1, 3)), tipo });
@@ -110,8 +111,10 @@ const Zeladoria = (() => {
       passos.push(fazer("limpar", LIMPAR_T, "Limpando o banheiro", n => { limpar(); falar(n, sorteia(FRASES.limpo), 2.5); }));
     }
     for (const g of z.migalhas) {
-      passos.push(ir([g.x - 4, g.y], g.tipo === "copo" ? "Recolhendo os copos" : "Varrendo as migalhas"));
-      passos.push(fazer("varrer", VARRER_T, g.tipo === "copo" ? "Recolhendo os copos" : "Varrendo as migalhas", () => { const i = z.migalhas.indexOf(g); if (i >= 0) z.migalhas.splice(i, 1); }));
+      const recolhendo = g.tipo === "copo" || g.tipo === "caneca";
+      const fazendo = recolhendo ? (g.tipo === "caneca" ? "Recolhendo as canecas" : "Recolhendo os copos") : "Varrendo as migalhas";
+      passos.push(ir([g.x - 4, g.y], fazendo));
+      passos.push(fazer("varrer", VARRER_T, fazendo, () => { const i = z.migalhas.indexOf(g); if (i >= 0) z.migalhas.splice(i, 1); }));
     }
     if (!passos.length) return null;
     const n = novoNpc("limpeza", ...rua(m));
@@ -141,6 +144,14 @@ const Zeladoria = (() => {
     return n;
   }
   function falar(n, txt, s) { n.fala = txt; n.ate = agoraS() + s; }
+  // a entrega da greve chegou ao balcão (vida.js): o porteiro vira para quem chegou e acena; é só encenação local,
+  // sem tarefa, som ou evento novo, e não tira ninguém do posto.
+  function chegada(m, x) {
+    for (const n of z.npcs.values()) {
+      if (n.saindo || (n.papel !== "portaria" && n.papel !== "vigia")) continue;
+      n.olha = x < n.x ? "esq" : "dir"; n.lado = x < n.x ? -1 : 1; n.aceno = agoraS() + 1.4;
+    }
+  }
   // onde a faxineira passa o rodo: no meio do banheiro, entre as cabines e a bancada (sem a sala, na porta)
   function pontoFaxina(m) {
     const b = m.predio.banheiro, s = b.sala;
@@ -276,8 +287,11 @@ const Zeladoria = (() => {
       else { c.fillStyle = "#d5d9de"; for (let k = 0; k < 9; k++) c.fillRect(x + (k % 4 < 2 ? 0 : 1), y + k, 2, 1); c.fillStyle = "#f7f7f2"; for (let k = 0; k < 9; k++) c.fillRect(x + (k % 4 < 2 ? 0 : 1), y + k, 1, 1); }   // o papel saindo pela fresta
     }
     for (const g of z.migalhas) {
-      if (g.tipo === "copo") { c.fillStyle = "#14131f"; c.fillRect(g.x - 1, g.y - 4, 4, 5); c.fillStyle = "#f4efe4"; c.fillRect(g.x, g.y - 3, 2, 3); c.fillStyle = "#7a4a2a"; c.fillRect(g.x, g.y - 3, 2, 1); }
-      else { c.fillStyle = "#c9a26a"; c.fillRect(g.x, g.y, 1, 1); c.fillRect(g.x + 2, g.y - 1, 1, 1); c.fillRect(g.x - 2, g.y + 1, 1, 1); c.fillStyle = "#8a6a3e"; c.fillRect(g.x + 1, g.y + 1, 1, 1); }
+      if (g.tipo === "copo" || g.tipo === "caneca") { // a caneca da cozinha ganha a alça; o copo descartável fica liso
+        c.fillStyle = "#14131f"; c.fillRect(g.x - 1, g.y - 4, 4, 5);
+        c.fillStyle = "#f4efe4"; c.fillRect(g.x, g.y - 3, 2, 3); c.fillStyle = "#7a4a2a"; c.fillRect(g.x, g.y - 3, 2, 1);
+        if (g.tipo === "caneca") { c.fillStyle = "#f4efe4"; c.fillRect(g.x + 3, g.y - 2, 1, 2); }
+      } else { c.fillStyle = "#c9a26a"; c.fillRect(g.x, g.y, 1, 1); c.fillRect(g.x + 2, g.y - 1, 1, 1); c.fillRect(g.x - 2, g.y + 1, 1, 1); c.fillStyle = "#8a6a3e"; c.fillRect(g.x + 1, g.y + 1, 1, 1); }
     }
   }
   // por cima da cena: fedor e moscas nas cabines do banheiro, o cone e a placa de interditado na porta, a cafeteira quebrada,
@@ -429,7 +443,7 @@ const Zeladoria = (() => {
     z.proxQuebra = z.proxDemo = z.proxRonda = agoraS() + 600;
   }
 
-  return { SUJA, INTERDITA, USO, sujeiraNoChao, sujar, suja, interditado, bloqueado, limpar, migalha, quebrar, consertar, quebrado, chamar, passo,
+  return { SUJA, INTERDITA, USO, sujeiraNoChao, sujar, suja, interditado, bloqueado, limpar, migalha, quebrar, consertar, quebrado, chamar, passo, chegada,
     chao, ar, npc, falas, lampadaApagada, npcEm, npcs, mexendo, estado, zerar, sujeira: () => z.sujeira };
 })();
 

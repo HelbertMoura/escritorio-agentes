@@ -1162,11 +1162,16 @@ const Vida = (() => {
     const id = "entrega-" + ev.id, [ponto] = pontosNaFrente(m, r, 1, { tipo: "entrega", dono: id });
     if (!ponto) return;
     ponto.ocupante = "entregador";   // o lugar do item: ninguém da turma senta em cima
+    const balc = tipo.entregador ? balcao(m) : null;
+    // duas etapas: o entregador chega ao balcão da recepção (o porteiro reage) e só depois leva o pedido ao destino
+    // real, a sala comunal. Sem entregador (faixa, ar), o pedido "chega" direto pelo ponto da sala, como antes.
+    const duasEtapas = !!(balc && (balc.x !== ponto.x || balc.y !== ponto.y));
     const e = { id, motivo: ev.motivo, pedido, tipo, item: tipo.item, faixa: tipo.faixa || null, fase: "chegando", x: ponto.x, y: ponto.y, ponto,
-      r, participantes: (Array.isArray(ev.participantes) ? ev.participantes : []).filter(x => typeof x === "string"), desde: agora, prox: 0, entregador: null };
+      r, parada: duasEtapas ? balc : ponto, etapa: duasEtapas ? "balcao" : "destino", balcaoEm: 0, esperaBalcao: 0,
+      participantes: (Array.isArray(ev.participantes) ? ev.participantes : []).filter(x => typeof x === "string"), desde: agora, prox: 0, entregador: null };
     if (tipo.entregador) {   // da calçada, pela recepção e pelo corredor, como quem chega para trabalhar
-      const p = m.predio, parada = (tipo.recepcao && balcao(m)) || ponto, rota = caminho(m, { tipo: "fora" }, { tipo: "vaga", vaga: parada });
-      e.entregador = { id: "entregador", x: -24, y: p.entrada.calcadaY, rota, destino: { tipo: "vaga", vaga: parada }, parada, pose: "andando", olha: "dir",
+      const p = m.predio, rota = caminho(m, { tipo: "fora" }, { tipo: "vaga", vaga: e.parada });
+      e.entregador = { id: "entregador", x: -24, y: p.entrada.calcadaY, rota, destino: { tipo: "vaga", vaga: e.parada }, parada: e.parada, pose: "andando", olha: "dir",
         ap: AP_ENTREGADOR, semente: 7, sentado: false, chave: 0, passos: 0, carrega: true, fala: null, ate: 0 };
     }
     m.entrega = e;
@@ -1184,6 +1189,14 @@ const Vida = (() => {
 
   const naEntrega = (b, e) => !b.rota.length && b.lugar && b.lugar.vaga && b.lugar.vaga.dono === e.id;
 
+  // primeira etapa vencida: o porteiro reage (um aceno discreto), o pedido espera um instante no balcão e o entregador
+  // segue para a sala comunal. Só a encenação: nenhum evento de trabalho é inventado nem enviado ao servidor.
+  function chegouNoBalcao(m, e, agora) {
+    if (e.etapa !== "balcao") return;
+    e.etapa = "destino"; e.balcaoEm = agora; e.esperaBalcao = agora + 1.15; e.desde = agora;
+    if (window.Zeladoria && Zeladoria.chegada) Zeladoria.chegada(m, e.parada.x);
+  }
+
   function cuidarDaEntrega(m, dt, agora) {
     const e = m.entrega;
     if (!e) return;
@@ -1192,14 +1205,30 @@ const Vida = (() => {
       if (g.fala && agora > g.ate) g.fala = null;
       if (g.rota.length) andar(m, g, dt, agora);
       g.pose = g.rota.length ? "andando" : "parado"; g.chave = g.y + 0.5;
-      if (!g.rota.length && e.fase === "chegando") entregar(m, e, agora);
+      if (!g.rota.length && e.fase === "chegando") {
+        if (e.etapa === "balcao") chegouNoBalcao(m, e, agora);
+        else if (g.parada === e.ponto && (!e.esperaBalcao || agora >= e.esperaBalcao)) entregar(m, e, agora);
+      }
+      if (e.fase === "chegando" && e.etapa === "destino" && !g.rota.length && e.esperaBalcao && agora >= e.esperaBalcao) {
+        // a pausa curta no balcão acabou: segue para o destinatário na sala comunal
+        const p = m.predio;
+        g.destino = { tipo: "vaga", vaga: e.ponto }; g.parada = e.ponto;
+        g.rota = caminho(m, { tipo: "vaga", vaga: e.parada }, { tipo: "vaga", vaga: e.ponto });
+        g.olha = p && p.corredorY && e.ponto.y < e.parada.y ? "cima" : "dir"; e.esperaBalcao = 0;
+      }
       if (e.fase !== "chegando" && !g.rota.length && agora > e.entregueEm + ENTREGADOR_FICA && g.destino) {   // entregou: volta para a rua
         g.rota = caminho(m, { tipo: "vaga", vaga: g.parada }, { tipo: "fora" }); g.destino = null; g.olha = "esq";
       }
       if (!g.destino && !g.rota.length) e.entregador = null;   // sumiu na calçada
     }
     if (e.fase === "chegando" && !g && (m.lista.some(b => naEntrega(b, e)) || agora - e.desde > ENTREGA_CHEGAR)) entregar(m, e, agora);
-    if (e.fase === "chegando" && g && agora - e.desde > ENTREGA_CHEGAR) { entregar(m, e, agora); e.entregador = null; }   // caminho travado: não espera para sempre
+    if (e.fase === "chegando" && g && agora - e.desde > ENTREGA_CHEGAR) {   // caminho travado: não espera para sempre
+      if (e.etapa === "balcao") {
+        g.rota = [];   // a rota antiga não fica pendurada: o entregador aparece na parada do balcão
+        if (e.parada) { g.x = e.parada.x; g.y = e.parada.y; g.destino = { tipo: "vaga", vaga: e.parada }; g.parada = e.parada; }
+        chegouNoBalcao(m, e, agora);
+      } else { entregar(m, e, agora); e.entregador = null; }
+    }
     if (e.fase === "fim") { if (!e.entregador) encerrarEntrega(m); return; }
     if (e.fase === "entregue" && agora > e.entregueEm + ENTREGA_DURA) {   // cada um volta para o seu canto (o decidir solta a vaga)
       e.fase = "fim"; e.ponto.ocupante = null;
@@ -1211,6 +1240,7 @@ const Vida = (() => {
 
   // a entrega chegou: campainha, o entregador anuncia, a turma comemora (ou come, toma café, cochila)
   function entregar(m, e, agora) {
+    if (e.fase === "entregue") return;   // uma campainha por entrega, mesmo se o caminho e o tempo limite coincidirem
     e.fase = "entregue"; e.entregueEm = agora;
     if (e.entregador) { e.entregador.carrega = false; e.entregador.fala = sorteia(FRASES.social.entrega.chegou); e.entregador.ate = agora + 3; }
     m.eventos.push({ nome: "campainha" });
@@ -1920,7 +1950,7 @@ const Vida = (() => {
     t.feliz = a.tipo === "jogo" && !vez; t.dorme = a.tipo === "cochilo";
     if (agora < a.ate) return;
     t.nec[ENCHE[a.tipo]] = 100;
-    if ((a.tipo === "cafe" || a.tipo === "fome") && window.Zeladoria) Zeladoria.migalha(t.x, t.y, a.tipo === "cafe" ? "copo" : "migalha");   // o copo ou as migalhas ficam
+    if ((a.tipo === "cafe" || a.tipo === "fome") && window.Zeladoria) Zeladoria.migalha(t.x, t.y, a.tipo === "cafe" ? "caneca" : "migalha");   // a caneca da cozinha ou as migalhas ficam
     if (par) { par.nec[ENCHE[a.tipo]] = 100; somarAfinidade(t.dado.id, par.dado.id); terminarAtiv(m, par, agora); }
     terminarAtiv(m, t, agora);
   }

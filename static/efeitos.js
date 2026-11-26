@@ -649,6 +649,21 @@ const Efeitos = (() => {
   };
   // item entregue, no chão do ponto (o app.js ordena pela chave y, como os móveis)
   function entrega(c, e, t) { const f = ITENS[e.item]; if (f && e.fase === "entregue") f(c, Math.round(e.x), Math.round(e.y), t, false); }
+  // a chegada ao balcão (vida.js: entrega em duas etapas): dois anéis discretos e a luzinha da campainha, sem som novo
+  function chegadaBalcao(c, e) {
+    const x = e && e.parada && e.parada.x, y = e && e.parada && e.parada.y - 6;
+    if (!e || !e.balcaoEm || x == null) return;
+    const f = (performance.now() / 1000 - e.balcaoEm) / 1.6, g = calmo.matches ? 0.35 : f;
+    if (f < 0 || f >= 1) return;
+    c.save(); c.globalCompositeOperation = "lighter"; c.lineWidth = 1;
+    for (let k = 0; k < 2; k++) {
+      const q = (g + k * 0.45) % 1, r = 3 + q * 15;
+      c.strokeStyle = `rgba(255,214,140,${0.55 * (1 - q)})`;
+      c.beginPath(); c.ellipse(x, y, r, r * 0.65, 0, 0, Math.PI * 2); c.stroke();
+    }
+    c.fillStyle = "#ffd36b"; c.fillRect(Math.round(x) - 1, Math.round(y) - 7, 2, 2); c.fillStyle = "#fff3c4"; c.fillRect(Math.round(x), Math.round(y) - 7, 1, 1);
+    c.restore();
+  }
   // item nas mãos do entregador; x,y = canto do quadro 22x22 do Avatar.boneco
   function itemNaMao(c, item, x, y, t) { const f = ITENS[item]; if (f && item !== "ar" && item !== "faixa") f(c, x + 11, y + 17, t, true); }
   // o motoboy da pizza: capacete vermelho por cima do boné, com a viseira para o lado em que anda, e a bag térmica nas
@@ -878,7 +893,7 @@ const Efeitos = (() => {
   // H) onde está o robô aspirador agora (null de dia ou fora da sala comunal)
   const posAspirador = () => (aspirador ? { x: aspirador.x, y: aspirador.y } : null);
 
-  return { lancar, aspirador: posAspirador, tela, objeto, animado, iniciar, exterior, luzesNoite, depoisObjeto, chapeu, emote, particulas, robo, painelLogo, festaChao, festaAr, cena, placas, entrega, itemNaMao, uniforme, moto, entregaAr, faixaVencedor, placar };
+  return { lancar, aspirador: posAspirador, tela, objeto, animado, iniciar, exterior, luzesNoite, depoisObjeto, chapeu, emote, particulas, robo, painelLogo, festaChao, festaAr, cena, placas, entrega, chegadaBalcao, itemNaMao, uniforme, moto, entregaAr, faixaVencedor, placar };
 })();
 
 window.Efeitos = Efeitos;

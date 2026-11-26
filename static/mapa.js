@@ -598,7 +598,7 @@ function montar(atlas, config, grupos, planta) {
   const fundo = document.createElement("canvas"); fundo.width = W; fundo.height = H;
   const c = fundo.getContext("2d"); c.imageSmoothingEnabled = false;
   const pc = sprite(atlas, "piso0");
-  pintarExterior(c, atlas, W, H, predioRet, marca);
+  const fachada = pintarExterior(c, atlas, W, H, predioRet, marca);
   // corredores: o granilite vai exatamente de parede a parede das salas; à esquerda, a entrada do prédio (no principal)
   // e o corredor de ligação, que desce do principal até os de baixo
   const cx0 = MX * T, cx1 = B * T, cT0 = corredor.ty * T, cB0 = cT0 + corredor.h * T;
@@ -805,7 +805,16 @@ function montar(atlas, config, grupos, planta) {
         const [w, h, desenha] = ASSINATURAS[funcao], lugar = lugarNaParede(w, h, cx, baseParede);
         if (lugar) { desenha(c, lugar.px, lugar.py, rng(semente(s.nome + "a")), corTime); quadros.push({ nome: "assinatura_" + funcao, x: lugar.px, y: lugar.py, w, h }); continue; }
       }
-      if (tipo === "ops" && i === 0 && !anterior.has("telas_noc") && (usoPredio.get("telas_noc") || 0) <= (usoPredio.get("tv_grafico") || 0)) { usoPredio.set("telas_noc", (usoPredio.get("telas_noc") || 0) + 1); minhas.add("telas_noc"); const t = ancorar(atlas, "telas_noc_0", cx, baseParede - 4); if (t.w) { animados.push({ tipo: "telas_noc", parede: true, ...t }); paredeOcupada.push({ x: t.x - 4, w: t.w + 8, y: t.y }); continue; } }
+      // faixa de monitores: a cara do Ops (primeiro trecho) e, no Dev, o segundo (a lousa de código fica no primeiro)
+      const querTelas = (tipo === "ops" && i === 0) || (funcao === "dev" && i >= 1);
+      if (querTelas && !minhas.has("telas_noc") && !anterior.has("telas_noc") && (tipo !== "ops" || (usoPredio.get("telas_noc") || 0) <= (usoPredio.get("tv_grafico") || 0))) {
+        // só marca a sala e o uso do prédio quando a peça coube: o próximo trecho (o Dev tem vários) tenta outra posição
+        const t = ancorar(atlas, "telas_noc_0", cx, baseParede - 4);
+        if (t.w && paredeLivreEm(t.x + 1, t.x + t.w - 1, chao)) {
+          usoPredio.set("telas_noc", (usoPredio.get("telas_noc") || 0) + 1); minhas.add("telas_noc");
+          animados.push({ tipo: "telas_noc", parede: true, ...t }); paredeOcupada.push({ x: t.x - 4, w: t.w + 8, y: t.y }); continue;
+        }
+      }
       const nome = escolheNova(r, opcoesParede, usados); usados.add(nome); minhas.add(nome);
       naParede(nome, cx, baseParede - (nome === "relogio" ? 8 : 0));
     }
@@ -1369,7 +1378,7 @@ function montar(atlas, config, grupos, planta) {
       c.drawImage(atlas.img, ps[0], ps[1], 2 * T, 15, px - T, s.py + 33, 2 * T, 15);
       if (PISOS_DO_TIME.has(s.piso) && s.tipo !== "cozinha") { c.save(); c.globalCompositeOperation = "multiply"; c.globalAlpha = 0.55; pintaPx(c, px - T, s.py + 1, 2 * T, 47, s.cor || CORES_CARPETE[semente(s.nome) % CORES_CARPETE.length]); c.restore(); }
       pintaPx(c, px - T, s.py - 3, 2 * T, 4, "#d6cfbf"); pintaPx(c, px - T, s.py + 1, 2 * T, 1, "#b5ad9c"); pintaPx(c, px - T, s.py + 2, 2 * T, 2, "rgba(36,20,8,.16)");
-      portas.push({ tipo: s.tipo === "cozinha" ? "vaivem" : "vidro", x: px - T, y: s.py - 3, w: 2 * T, h: PAREDE * T + 3, abre: 0 });
+      portas.push({ tipo: s.tipo === "cozinha" ? "vaivem" : "vidro", sala: s, x: px - T, y: s.py - 3, w: 2 * T, h: PAREDE * T + 3, abre: 0 });
     }
   }
   // F) mural de cada sala (1.6, só com o store: config.equipe.mural), no trecho de parede que sobrou livre, da direita
@@ -1416,7 +1425,13 @@ function montar(atlas, config, grupos, planta) {
     }
     ringue.plateia = pts.filter(([px, py]) => livre(px, py) && !(py > y + h && Math.abs(px - meio) < RINGUE.abertura / 2 + 6));
   }
-  return { livre, W, H, fundo, salas, baixo, lounge, ringue, corredorY, objetos, animados, vagas, janelas, portas, quadros, predioRet, externos, entrada, luzesTeto, luzesTeto2, banheiro, corredorTopo: corredor.ty * T, corredorAlt: corredor.h * T, corredores, rotulos, planta: resumoPlanta };
+  // a geometria da fachada por planta: cada janela agrega todas as salas da sua coluna (as de cima, as comuns e os
+  // blocos extras, que são as mesmas referências de `salas`), sem guardar nome ou gente — só a luz da sala no app.js
+  if (fachada) fachada.colunas = fachada.janelas.map(j => {
+    const cx = j.x + j.w / 2;
+    return [...salas, ...baixo].filter(s => cx >= s.px && cx <= s.px + s.pw);
+  });
+  return { livre, W, H, fundo, salas, baixo, lounge, ringue, corredorY, objetos, animados, vagas, janelas, portas, quadros, predioRet, externos, entrada, luzesTeto, luzesTeto2, banheiro, fachada, corredorTopo: corredor.ty * T, corredorAlt: corredor.h * T, corredores, rotulos, planta: resumoPlanta };
 }
 
 // Área externa: grama, calçada em volta do prédio e rua embaixo, com os detalhes sorteados por empresa.
@@ -1440,7 +1455,7 @@ function pintarExterior(c, atlas, W, H, p, marca) {
   c.fillStyle = "#8f8578"; c.fillRect(p.x, p.y, p.w, p.h);   // a estrutura do prédio: entre as salas, parede grossa
   // sombra do prédio (embaixo, a fachada faz a sombra)
   c.fillStyle = "rgba(0,0,0,.22)"; c.fillRect(p.x + p.w, p.y + 4, 5, p.h + FACHADA);
-  pintarFachada(c, atlas, p, r);
+  const fachada = pintarFachada(c, atlas, p, r);
   // calçada da rua, logo embaixo da fachada, com rachaduras e tufos de grama no meio-fio
   const yRua = ruaY(p), alt = RUA_ALT, y0 = p.y + p.h + FACHADA;
   c.fillStyle = "#b9b6ae"; c.fillRect(0, y0, W, yRua - 3 - y0);
@@ -1460,6 +1475,7 @@ function pintarExterior(c, atlas, W, H, p, marca) {
   }
   c.fillStyle = "#ecebe6"; for (let x = p.x - 40; x < p.x - 4; x += 6) c.fillRect(x, yRua + 3, 3, alt - 6);   // faixa de pedestre na frente da entrada
   c.fillStyle = "#4f8a3c"; for (let i = 0; i < W / 40; i++) c.fillRect(Math.floor(r() * W), yRua - 4, 1, 1);
+  return fachada;
 }
 
 // A frente do prédio, vista de frente, numa faixa embaixo da planta: reboco, cornija, rodapé de pedra, janelas, a porta de
@@ -1472,16 +1488,17 @@ function pintarFachada(c, atlas, p, r) {
   c.fillStyle = "#958d80"; c.fillRect(x0, y0 + h - 3, p.w, 3); c.fillStyle = "#7d766b"; c.fillRect(x0, y0 + h - 1, p.w, 1);   // rodapé
   for (let x = x0 + 40; x < x1; x += 80) { c.fillStyle = "#d4b88c"; c.fillRect(x, y0 + 4, 2, h - 7); }   // pilastras
   const peca = (n, cx, base) => { const s = sprite(atlas, n); if (s) c.drawImage(atlas.img, s[0], s[1], s[2], s[3], Math.round(cx - s[2] / 2), base - s[3], s[2], s[3]); return s; };
-  const porta = Math.round(x0 + p.w / 2), fora = [porta - 34, porta + 34];
-  for (let x = x0 + 20; x < x1 - 10; x += 40) if (Math.abs(x - porta) > 30) peca("fachada_janela", x, y0 + h - 3);
+  const porta = Math.round(x0 + p.w / 2), fora = [porta - 34, porta + 34], janelas = [];
+  for (let x = x0 + 20; x < x1 - 10; x += 40) if (Math.abs(x - porta) > 30) {
+    const s = peca("fachada_janela", x, y0 + h - 3);
+    if (s) janelas.push({ x: Math.round(x - s[2] / 2), y: y0 + h - 3 - s[3], w: s[2], h: s[3] });
+  }
   peca("fachada_porta", porta, y0 + h - 2);
-  for (const x of [porta - 18, porta + 18]) peca("fachada_arandela", x, y0 + 22);
+  const arandelas = [porta - 18, porta + 18].map(x => { peca("fachada_arandela", x, y0 + 22); return { x, y: y0 + 8 }; });   // a lâmpada, não a base do sprite
   // floreiras entre as janelas, na calçada
   for (let x = x0 + 40; x < x1 - 20; x += 160) if (!fora.some(f => Math.abs(f - x) < 40)) peca("fachada_floreira", x, y0 + h + 8);
+  return { janelas, arandelas, porta: { x: porta, y: y0 + h - 2 } };
 }
-// onde ficam as arandelas da fachada (acendem à noite, com os postes)
-const arandelas = p => { const porta = Math.round(p.x + p.w / 2); return [porta - 18, porta + 18].map(x => ({ x, y: p.y + p.h + 8 })); };
-
 function montarExterior(atlas, obj0, W, H, p, marca, portaY) {
   const r = rng(marca ^ 11), ext = { carros: [], postes: [], ruaY: ruaY(p), ruaAlt: RUA_ALT, folga: FOLGA_CARRO };
   const tem = n => !!sprite(atlas, n);
@@ -1498,7 +1515,6 @@ function montarExterior(atlas, obj0, W, H, p, marca, portaY) {
   for (let x = 160 + r() * 70; x < W - 20; x += passo + (r() - 0.5) * 40) {
     const o = obj("poste", x, meioFio); if (o) ext.postes.push({ x: o.x + o.w / 2, y: o.y + 4 });
   }
-  ext.postes.push(...arandelas(p));
   obj("caixa_correio", p.x - 6, meioFio);
   const urbano = ["banco", "banco", "lixeira_rua", "lixeira_rua", "hidrante"].filter(tem);
   const vagasRua = Math.max(3, Math.floor((W - p.x - 200) / 220));
@@ -1583,6 +1599,6 @@ function desenharPlacaReuniao(c, s) {
   c.restore();
 }
 
-return { pintarQuadroPlacar, desenharCabines, iconeStatus, desenharStatus, placaReuniao, desenharPlacaReuniao, nomePlaca, montarPredio, desenharMesa, lampadaX, desenharCadeira, mistura, hex6, cor, rgb, T, TELAS, PLACA_FONTE, PLACA_H, CATALOGO, FIXOS, SEM_ESPELHO, tamanho };
+return { pintarQuadroPlacar, desenharCabines, iconeStatus, desenharStatus, placaReuniao, desenharPlacaReuniao, nomePlaca, montarPredio, desenharMesa, lampadaX, desenharCadeira, mistura, hex6, cor, rgb, funcaoDaSala, T, TELAS, PLACA_FONTE, PLACA_H, CATALOGO, FIXOS, SEM_ESPELHO, tamanho };
 })();
 window.Mapa = Mapa;

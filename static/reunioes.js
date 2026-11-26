@@ -362,6 +362,17 @@ const Reunioes = (() => {
     avisar(aviso, url ? `Link da ${sala.nome} salvo.` : `Link da ${sala.nome} tirado.`);
   }
 
+  // ---- o resumo da sala no mapa: a próxima reunião visível daquela sala, se a agenda estiver ligada
+  function proximaNaSala(chave) {
+    if (!ligado(cfg()) || typeof chave !== "string") return null;
+    const agora = Math.floor(Date.now() / 1000), vistos = new Set();
+    const lista = [...s.proximas, ...s.rs].filter(r => {
+      if (!r || r.sala !== chave || !numero(r.inicio) || !numero(r.fim) || r.fim <= agora) return false;
+      const k = `${r.id}:${r.inicio}`; if (vistos.has(k)) return false; vistos.add(k); return true;
+    }).sort((a, b) => a.inicio - b.inicio);
+    return lista[0] || null;
+  }
+
   // ---- o aviso de "começa em 5 min" (a minha reunião ou a que me convidou), uma vez por reunião
   const paraMim = r => !!r.meu || (login() && (r.usuario === login() || (Array.isArray(r.convidados) && r.convidados.some(c => c && c.usuario === login()))));
   async function carregarProximas() {
@@ -438,6 +449,6 @@ const Reunioes = (() => {
   }
   // o toque no aviso de reunião (app.js): a próxima agenda que abrir põe o foco nesse cartão
   const destacar = id => { s.destaque = id; };
-  return { ...puro, iniciar, configurar, ligado, abrir, ajustes, entrar, pintar: pintarTodos, recarregar, destacar };
+  return { ...puro, iniciar, configurar, ligado, abrir, ajustes, entrar, proximaNaSala, pintar: pintarTodos, recarregar, destacar };
 })();
 if (typeof window !== "undefined") window.Reunioes = Reunioes;

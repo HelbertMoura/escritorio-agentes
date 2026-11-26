@@ -166,9 +166,11 @@ function montar(agentes) {
   cam.ajustada = false;
   enquadradoInicial = false;
   fecharFicha();
+  fecharResumoSala(false);
   ajustarEscala();
   montarSalas();
   Brincar.montar(predio);
+  montarCamadaSalas();
   return true;
 }
 
@@ -281,6 +283,240 @@ function enquadrar(s, ja) {
   moverCamera({ x: s.px + s.pw / 2, y: s.py + s.ph / 2 - 6, k: kInteiro }, ja);
 }
 function focarSala(s) { enquadrar(s); marcarSala(s); }
+
+// ---------- resumo compacto da sala ------------------------------------------------------
+// Porta e placa no mapa abrem um resumo da sala. O clique/toque usa o hit-test do canvas; o teclado e o leitor de tela
+// usam os botões invisíveis sobre a placa (o mesmo molde da camada dos objetos, brincar.js). Nada de dado novo: a
+// ocupação vem do mundo e da agenda que a tela já leu, e a fila é a mesma do atalho da recepção.
+let resumoAberto = null, resumoGatilho = null, resumoAssinatura = "", camadaSalas = null, ultimaCamSalas = "";
+const botoesSalas = new Map();
+const TIPO_DA_SALA = { recepcao: "Recepção", reuniao: "Reunião", cozinha: "Cozinha", lounge: "Sala comunal", banheiro: "Banheiro" };
+const FUNCAO_DO_TIME = { dev: "Desenvolvimento", marketing: "Marketing", vendas: "Vendas", produto: "Produto" };
+
+function montarCamadaSalas() {
+  const palco = $("palco"); if (!palco || !predio) return;
+  if (!camadaSalas) {
+    camadaSalas = document.createElement("div");
+    camadaSalas.className = "objetos-mapa salas-mapa";
+    camadaSalas.setAttribute("role", "group");
+    camadaSalas.setAttribute("aria-label", "Salas do escritório");
+    palco.append(camadaSalas);
+  }
+  botoesSalas.clear(); ultimaCamSalas = "";
+  const salas = [...predio.salas, ...predio.baixo];
+  camadaSalas.replaceChildren(...salas.map(s => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "obj-mapa sala-mapa"; b.hidden = true;
+    b.setAttribute("aria-label", `${s.nome}: abrir o resumo da sala`);
+    b.addEventListener("click", () => { if (resumoAberto === s) fecharResumoSala(true); else abrirResumoSala(s, b); });
+    botoesSalas.set(s, b);
+    return b;
+  }));
+}
+
+function posicionarCamadaSalas() {
+  if (!camadaSalas || !predio) return;
+  const modo = document.body.classList.contains("tv") || document.body.classList.contains("modo-foto")
+    || document.documentElement.classList.contains("apresentacao");
+  if (modo && resumoAberto) fecharResumoSala(false);
+  if (![...botoesSalas.keys()].every(s => s.placaRet)) {   // as placas ainda não foram desenhadas neste quadro
+    for (const b of botoesSalas.values()) if (!b.hidden) b.hidden = true;
+    ultimaCamSalas = ""; return;
+  }
+  const chaveCam = [cam.x, cam.y, cam.k, vw, vh, modo ? 1 : 0].join("|");
+  if (chaveCam === ultimaCamSalas) return;   // câmera parada: nenhuma leitura de layout nem escrita de estilo
+  ultimaCamSalas = chaveCam;
+  for (const [s, b] of botoesSalas) {
+    const r = s.placaRet;
+    if (modo || !r) { if (!b.hidden) b.hidden = true; continue; }
+    const x0 = (r.x - cam.x) * cam.k / dpr + vw / 2, y0 = (r.y - cam.y) * cam.k / dpr + vh / 2;
+    const x1 = (r.x + r.w - cam.x) * cam.k / dpr + vw / 2, y1 = (r.y + r.h - cam.y) * cam.k / dpr + vh / 2;
+    const w = Math.max(44, x1 - x0), h = Math.max(44, y1 - y0), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    const fora = cx < 0 || cy < 0 || cx > vw || cy > vh;
+    if (b.hidden !== fora) b.hidden = fora;
+    if (!fora) { b.style.transform = `translate(${Math.round(cx - w / 2)}px, ${Math.round(cy - h / 2)}px)`; b.style.width = `${Math.round(w)}px`; b.style.height = `${Math.round(h)}px`; }
+  }
+}
+
+function salaDaPortaEm(p) {
+  if (!predio) return null;
+  for (const q of predio.portas) {
+    if (!q.sala) continue;
+    const z = q.zona || (q.zona = zonaPorta(q));
+    if (p.x >= z.x - 3 && p.x <= z.x + z.w + 3 && p.y >= z.y - 3 && p.y <= z.y + z.h + 3) return q.sala;
+  }
+  return null;
+}
+
+function genteNaSala(s) {
+  if (!predio || !mundo || !s) return { equipe: [], terminais: [], visitas: [], total: 0 };
+  const dentro = (x, y) => x >= s.px && x <= s.px + s.pw && y >= s.py && y <= s.py + s.ph;
+  const vistos = new Set(), equipe = [], terminais = [], visitas = [];
+  const juntar = (lista, id, nome) => {
+    if (typeof id !== "string" || !id || vistos.has(id)) return;   // a mesma pessoa nunca conta duas vezes
+    vistos.add(id); lista.push({ id, nome: typeof nome === "string" && nome ? nome : "Alguém" });
+  };
+  for (const b of mundo.bonecos.values()) {
+    const v = b.lugar && b.lugar.vaga, m = b.lugar && b.lugar.mesa, d = b.destino && b.destino.vaga;
+    if ((v && v.sala === s) || (m && m.sala === s) || (d && d.sala === s) || (dentro(b.x, b.y) && !b.rota.length)) juntar(equipe, b.id, b.nome);
+  }
+  for (const k of (window.Sprites ? Vida.terminais() : [])) {
+    if (k.dentro) continue;
+    const d = k.destino && k.destino.vaga;
+    if ((d && d.sala === s) || dentro(k.x, k.y)) juntar(terminais, k.id, k.nome || "Terminal");
+  }
+  for (const p of Vida.pessoas()) if (dentro(p.x, p.y)) juntar(visitas, p.id, p.nome);
+  return { equipe, terminais, visitas, total: equipe.length + terminais.length + visitas.length };
+}
+
+// mesas com dono e alguém sentado de verdade (não quem só está a caminho, nem terminal nem visita)
+function mesasOcupadas(s) {
+  const mesas = (s.mesas || []).filter(m => m.handle);
+  if (!mesas.length || !mundo) return { total: 0, ocupadas: 0 };
+  const ocupadas = new Set();
+  for (const b of mundo.bonecos.values()) {
+    const l = b.lugar;
+    if (l && l.tipo === "mesa" && l.mesa && mesas.includes(l.mesa)) ocupadas.add(l.mesa);
+  }
+  return { total: mesas.length, ocupadas: ocupadas.size };
+}
+
+function tipoDaSala(s) {
+  if (TIPO_DA_SALA[s.tipo]) return TIPO_DA_SALA[s.tipo];
+  if (s.tipo === "mesas") return FUNCAO_DO_TIME[Mapa.funcaoDaSala(s)] || "Time";
+  return s.projeto ? "Projeto" : "Sala";
+}
+
+// assinatura do que o resumo mostra: dados, gente e agenda. O DOM só é refeito quando ela muda (nunca por quadro),
+// e os botões mantêm o foco pelo data-resumo-foco.
+function assinaturaResumoSala(s) {
+  const g = genteNaSala(s), mesas = s.tipo === "mesas" ? mesasOcupadas(s) : null;
+  const reuniao = !!(window.Vida && Vida.emReuniao(s.chave)), partes = [s.chave, tipoDaSala(s), reuniao ? 1 : 0, s.acesa ?? (s.luz >= 0.5)];
+  for (const lista of [g.equipe, g.terminais, g.visitas]) partes.push(lista.map(p => p.id + "~" + p.nome).join(","));
+  if (mesas) partes.push(mesas.ocupadas + "/" + mesas.total);
+  if (s.tipo === "recepcao" && recepcaoPermitida()) {
+    const sit = estadoDaLeitura(), lida = recepcaoDoAndarAtual() && sit === "pronto";
+    partes.push(recepcaoOculta ? "oculta" : "mostra", lida ? "lida" : sit, lida ? ($("recepc-n").textContent || "0") : "");
+  }
+  if (window.Reunioes && Reunioes.ligado(config)) {
+    const prox = Reunioes.proximaNaSala(s.chave);
+    partes.push(prox ? [prox.id, prox.inicio, prox.titulo || ""].join("~") : "sem");
+  }
+  return partes.join("|");
+}
+
+function atualizarResumoSala() {
+  const caixa = $("resumo-sala");
+  if (!caixa || caixa.hidden || !resumoAberto) return;
+  if (assinaturaResumoSala(resumoAberto) === resumoAssinatura) return;
+  renderResumoSala(true);
+}
+
+function abrirResumoSala(s, gatilho) {
+  const caixa = $("resumo-sala");
+  if (!caixa || !s || !predio || ![...predio.salas, ...predio.baixo].includes(s)) return;
+  if (document.body.classList.contains("tv") || document.body.classList.contains("modo-foto")
+    || document.documentElement.classList.contains("apresentacao")) return;
+  fecharFicha();
+  if (recepcaoUI && recepcaoUI.estaAberto()) recepcaoUI.fechar(false);   // fila e resumo não ficam abertos juntos
+  resumoAberto = s; resumoGatilho = gatilho || tela;
+  renderResumoSala(false);
+  caixa.hidden = false;
+  if (innerWidth <= 760) $("palco-cartao").scrollIntoView({ block: "start", behavior: menosMovimento.matches ? "auto" : "smooth" });
+  caixa.focus({ preventScroll: true });
+  focarSala(s);
+}
+
+function fecharResumoSala(foco) {
+  const caixa = $("resumo-sala"); if (!caixa) return;
+  const aberto = !caixa.hidden;
+  caixa.hidden = true; caixa.replaceChildren();
+  const alvo = resumoGatilho;
+  resumoAberto = null; resumoGatilho = null; resumoAssinatura = "";
+  if (!aberto) return;
+  if (!foco) return;
+  const visivel = el => !!(el && el.isConnected && !el.hidden && el.offsetParent !== null);
+  const voltar = () => {
+    if (alvo && alvo !== tela && visivel(alvo)) {
+      alvo.focus({ preventScroll: true });
+      if (document.activeElement === alvo || (document.activeElement && alvo.contains(document.activeElement))) return;
+    }
+    // a gaveta fechou (ou o gatilho saiu da tela): o foco não pode cair no body. Não reabre a gaveta: mapa ou menu.
+    const mapa = $("tela");
+    if (visivel(mapa)) { mapa.focus({ preventScroll: true }); if (document.activeElement === mapa) return; }
+    const menu = $("abrir-menu"); if (visivel(menu)) menu.focus({ preventScroll: true });
+  };
+  voltar();
+}
+
+function renderResumoSala(preservarFoco) {
+  const s = resumoAberto, caixa = $("resumo-sala");
+  if (!s || !caixa) return;
+  const foco = preservarFoco && caixa.contains(document.activeElement) ? document.activeElement : null;
+  const chaveFoco = foco && foco.dataset ? foco.dataset.resumoFoco || "" : "";
+  resumoAssinatura = assinaturaResumoSala(s);
+  const topo = elem("div", "resumo-topo"), nomes = elem("div"), h = elem("h2", null, s.nome);
+  h.id = "resumo-sala-titulo";
+  nomes.append(h, elem("p", "resumo-tipo", tipoDaSala(s)));
+  const x = elem("button", "fechar", "×"); x.type = "button"; x.setAttribute("aria-label", "Fechar o resumo da sala");
+  x.dataset.resumoFoco = "fechar";
+  x.addEventListener("click", () => fecharResumoSala(true));
+  topo.append(nomes, x);
+  const dl = elem("dl"), acoes = elem("div", "resumo-acoes");
+  const linha = (rot, ...conteudo) => { const dd = elem("dd"); dd.append(...conteudo); dl.append(elem("dt", null, rot), dd); };
+  const lista = (rot, gente) => { const ul = elem("ul", "resumo-gente"); for (const g of gente) ul.append(elem("li", null, g.nome)); linha(rot, ul); };
+  const gente = genteNaSala(s), reuniao = window.Vida && Vida.emReuniao(s.chave);
+  const acesa = s.acesa ?? (s.luz >= 0.5);
+  linha("Agora", document.createTextNode(reuniao ? "Em reunião" : acesa ? "Acesa" : "Apagada"),
+    document.createTextNode(` · ${gente.total} ${gente.total === 1 ? "pessoa" : "pessoas"} na sala`));
+  if (gente.equipe.length) lista("Na sala", gente.equipe);
+  else if (!gente.total) linha("Na sala", elem("p", "resumo-vazio", "Ninguém agora."));
+  if (gente.terminais.length) lista("Terminais", gente.terminais);
+  if (gente.visitas.length) lista("Visitas", gente.visitas);
+  if (s.tipo === "mesas") {
+    const mesas = mesasOcupadas(s);
+    if (mesas.total) linha("Mesas", document.createTextNode(`${mesas.ocupadas} de ${mesas.total} com alguém`));
+  }
+  if (s.tipo === "recepcao" && recepcaoPermitida()) {
+    const sit = estadoDaLeitura(), lida = recepcaoDoAndarAtual() && sit === "pronto";
+    const n = lida ? Number.parseInt($("recepc-n").textContent, 10) || 0 : null;
+    const vazio = TEXTO_LEITURA[sit] ? TEXTO_LEITURA[sit].vazio : "Sem leitura de pendências agora.";
+    linha("Fila", document.createTextNode(recepcaoOculta ? "Oculta neste navegador" : !lida ? vazio : n ? `${n} ${n === 1 ? "pendência" : "pendências"}` : "Nada esperando você agora"));
+    if (recepcaoOculta) {   // o atalho está oculto: ir a Aprovações não mexe na preferência nem no que o perfil libera
+      const abrir = elem("button", "botao", "Ver em Aprovações"); abrir.type = "button"; abrir.dataset.resumoFoco = "aprovacoes";
+      abrir.addEventListener("click", () => { fecharResumoSala(false); location.hash = "#aprovacoes"; });
+      acoes.append(abrir);
+    } else if (lida) {
+      const abrir = elem("button", "botao", n ? "Abrir a fila" : "Ver a recepção"); abrir.type = "button"; abrir.dataset.resumoFoco = "abrir";
+      abrir.addEventListener("click", () => { fecharResumoSala(false); if (!$("recepc").hidden) $("recepc").click(); });
+      acoes.append(abrir);
+    }
+    const ocultar = elem("button", "secundario", recepcaoOculta ? "Mostrar recepção" : "Esconder do mapa"); ocultar.type = "button";
+    ocultar.dataset.resumoFoco = "ocultar";
+    ocultar.addEventListener("click", () => { alternarRecepcao(); renderResumoSala(true); });   // o foco fica no próprio toggle
+    acoes.append(ocultar);
+  }
+  if (window.Reunioes && Reunioes.ligado(config)) {
+    if (reuniao) linha("Reunião", document.createTextNode("Acontecendo agora"));
+    const prox = Reunioes.proximaNaSala(s.chave);
+    if (prox) {
+      const quando = Reunioes.mesmoDia(new Date(), new Date(prox.inicio * 1000)) ? "hoje" : new Date(prox.inicio * 1000).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" });
+      linha("Próxima", document.createTextNode(`${prox.titulo || "Reunião"} · ${quando}, ${Reunioes.faixa(prox)}`));
+    } else linha("Próxima", elem("p", "resumo-vazio", "Nada na agenda de hoje."));
+    const entrar = Reunioes.entrar(s.chave, s.nome, "botao secundario"); if (!entrar.hidden) { entrar.dataset.resumoFoco = "entrar"; acoes.append(entrar); }
+  }
+  caixa.replaceChildren(topo, dl);
+  if (acoes.childElementCount) caixa.append(acoes);
+  if (chaveFoco) {   // a leitura mudou com o painel aberto: o foco continua no mesmo controle
+    const alvo = caixa.querySelector(`[data-resumo-foco="${chaveFoco}"]`);
+    if (alvo) alvo.focus({ preventScroll: true }); else caixa.focus({ preventScroll: true });
+  }
+}
+// Esc fecha o resumo e devolve o foco à placa/botão que o abriu (também com o foco no mapa, no gatilho ou no body)
+$("resumo-sala").addEventListener("keydown", ev => {
+  if (ev.key !== "Escape" || $("resumo-sala").hidden) return;
+  ev.preventDefault(); ev.stopPropagation(); fecharResumoSala(true);
+});
 function paraMundo(cx, cy) {
   const r = tela.getBoundingClientRect();
   const sx = (cx - r.left) * dpr, sy = (cy - r.top) * dpr;
@@ -370,6 +606,7 @@ function desenharCena(t) {
   const ent = mundo.entrega;   // entrega da greve atendida (vida.js): o item no ponto e o entregador, na ordem da cena
   if (ent && ent.fase === "entregue") cena.push({ chave: ent.y, desenha: () => Efeitos.entrega(ctx, ent, t) });
   if (ent && ent.entregador) cena.push({ chave: ent.entregador.chave ?? ent.entregador.y + 0.5, desenha: () => desenharEntregador(ent, t) });
+  if (ent && ent.balcaoEm) cena.push({ chave: (ent.parada && ent.parada.y + 0.6) || ent.y, desenha: () => Efeitos.chegadaBalcao(ctx, ent) });
   if (ent && ent.entregador && ent.item === "pizza" && predio.entrada) { // a moto fica na calçada cinza, à direita do caminho da entrada, até o motoboy ir embora
     const mx = predio.entrada.x + 12, my = predio.entrada.calcadaY - 6;
     cena.push({ chave: my, desenha: () => Efeitos.moto(ctx, mx, my) });
@@ -386,7 +623,9 @@ function desenharCena(t) {
   for (const s of [...predio.salas, ...predio.baixo]) if (Vida.emReuniao(s.chave)) Mapa.desenharPlacaReuniao(ctx, s);   // a placa "em reunião" na porta (mapa.js)
   if (Z) naEscala(() => Z.ar(ctx, ta));   // moscas, a placa de interditado, a cafeteira quebrada, o brilho e as faíscas
   Clima.desenhar(ctx, predio, dtQuadro, t, Som.ligado ? Som : null);
+  desenharMarcasDeSala(ceu);   // antes do multiply da noite: a placa pertence à parede e recebe a luz da sala
   desenharLuzes(dt0(t), ceu);
+  desenharLuzesDasSalas(ceu);
   Efeitos.luzesNoite(ctx, ceu);
   Efeitos.festaAr(ctx, festa, t, dtQuadro, ceu);
   Efeitos.particulas(ctx, dtQuadro, mundo, t);
@@ -409,6 +648,7 @@ function desenharCena(t) {
   const rotulo = `${String(Math.round((cam.k / dpr) * 10) / 10).replace(".", ",")}x`;
   if (rotulo !== zoomMostrado) { zoomMostrado = rotulo; $("zoom-nivel").textContent = rotulo; }   // o zoom de agora na barra da câmera
   posicionarRecepcao();   // o atalho acompanha o balcão sem mexer no desenho do mapa
+  posicionarCamadaSalas();   // os botões invisíveis das salas (teclado e leitor de tela) acompanham as placas
 }
 let zoomMostrado = "";
 
@@ -683,6 +923,66 @@ function desenharLuzes(dt, ceu) {
       brilho(Mapa.lampadaX(o.mesa) + 2.5, o.mesa.topo + 1, 20, `rgba(255,200,120,${noite * 0.5})`);
     ctx.globalCompositeOperation = "source-over";
   }
+}
+
+// O que está aceso dentro vaza para as janelas e para a fachada. Só o agregado de cada sala (s.luz, calculado em
+// desenharLuzes pelo trabalho real) atravessa a parede: nome, tarefa ou qualquer dado de gente fica dentro do app.
+function desenharLuzesDasSalas(ceu) {
+  const noite = ceu.escuro, aberto = !Expediente.fora(ceu.h), todas = [...predio.salas, ...predio.baixo];
+  const media = todas.length ? todas.reduce((t, s) => t + (s.luz || 0), 0) / todas.length : 0;
+  const f = predio.fachada;
+  // mapa.js já pré-calculou a coluna de cada janela (salas de cima, comuns e blocos extras): a média da coluna
+  // atravessa a parede sem identificar ninguém; coluna sem sala (entrada/corredor) usa a média geral
+  const luzDaFachada = (i) => {
+    const naColuna = f && f.colunas && f.colunas[i];
+    const lista = naColuna && naColuna.length ? naColuna : todas;
+    return lista.length ? lista.reduce((t, s) => t + (s.luz || 0), 0) / lista.length : media;
+  };
+  if (f) {
+    ctx.save();
+    for (let i = 0; i < f.janelas.length; i++) {
+      const j = f.janelas[i];
+      const forca = luzDaFachada(i) * (0.16 + 0.34 * noite) * (aberto ? 1 : 0.55);
+      if (forca < 0.012) continue;
+      ctx.globalCompositeOperation = noite > 0.35 ? "lighter" : "source-over";
+      ctx.fillStyle = `rgba(255,226,164,${forca})`; ctx.fillRect(j.x + 1, j.y + 1, j.w - 2, j.h - 2);
+    }
+    if (aberto) { // arandelas do expediente, no mesmo ritmo dos postes
+      ctx.globalCompositeOperation = "lighter";
+      for (const a of f.arandelas) { brilho(a.x, a.y + 2, 12, `rgba(255,214,140,${0.14 + 0.16 * noite})`); ctx.fillStyle = `rgba(255,240,190,${0.65 + 0.25 * noite})`; ctx.fillRect(a.x - 1, a.y - 1, 3, 2); }
+    }
+    ctx.restore();
+  }
+  ctx.save();   // janelas internas: o vidro ganha o calor da sala, de dia quase nada e de noite como as lâmpadas
+  for (const j of predio.janelas) {
+    const s = salaEm({ x: j.x + j.w / 2, y: j.y + j.h / 2 }); if (!s) continue;
+    const forca = (s.luz || 0) * (0.05 + 0.22 * noite);
+    if (forca >= 0.012) { ctx.fillStyle = `rgba(255,226,170,${forca})`; ctx.fillRect(j.x + 1, j.y + 1, j.w - 2, j.h - 2); }
+  }
+  ctx.restore();
+}
+
+// Marcas funcionais pequenas, desenhadas por cima do prédio: a recepção ganha a placa do elevador no trecho livre da
+// parede do alto, entre o logo [110..146] e o relógio [179..194] (x = 156 no tema padrão). A preferência é o vão depois
+// do logo; se a config mudar a largura ou os quadros, procura o vão livre mais perto comparando o retângulo inteiro.
+// São só composição (sem colisão, sem editor) e reusam as cores do mapa; não inventam tarefa nem dado.
+function desenharMarcasDeSala(ceu) {
+  const s = predio.salas.find(r => r.tipo === "recepcao"); if (!s) return;
+  const w = 14, h = 12, y = s.py + 6, preferido = Math.round(s.px + s.pw - 52);
+  const sobre = (r, o) => o && r.x < o.x + o.w && r.x + r.w > o.x && r.y < o.y + o.h && r.y + r.h > o.y;
+  const ocupados = [...(predio.quadros || []), ...(predio.janelas || []), ...(predio.animados || []).filter(a => a.parede), s.placaLogo];
+  const livre = x => x >= s.px + 4 && x + w <= s.px + s.pw - 4 && !ocupados.some(o => sobre({ x, y, w, h }, o));
+  let x = preferido;
+  if (!livre(x)) {   // o tema ou a marca mudou: o vão livre mais próximo do preferido, sem cobrir logo, janela ou relógio
+    const achado = [0, -8, 8, -16, 16, -24, 24, -32, 32, -40, 40].map(d => preferido + d).find(livre);
+    if (achado !== undefined) x = achado;
+  }
+  const aberto = !Expediente.fora(ceu.h);
+  ctx.fillStyle = "#1b1a26"; ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+  ctx.fillStyle = "#3a3f4c"; ctx.fillRect(x, y, w, h); ctx.fillStyle = "#565d6e"; ctx.fillRect(x, y, w, 1);
+  ctx.fillStyle = "#cfd6e4"; // setas de subir e descer
+  for (const [dy, dir] of [[3, -1], [8, 1]]) for (let k = 0; k < 3; k++) ctx.fillRect(x + 3 + (dir < 0 ? k : 2 - k), y + dy + k, 7 - 2 * k, 1);
+  ctx.fillStyle = aberto ? "#6ee7a0" : "#f5c518"; ctx.fillRect(x + w - 4, y + h - 4, 2, 2);   // o andar em serviço
 }
 
 // onde fica a lâmpada em cada luminária solta (x, y a partir do canto do sprite; espelhada, o x vira)
@@ -1136,6 +1436,7 @@ function desenharPainel() {
   const salasTxt = `${nSalas} ${nSalas === 1 ? "sala" : "salas"}`;   // o saguão não tem agentes: só as salas
   $("org-resumo").textContent = Andar.perfil(config).noSaguao ? salasTxt : `${bs.length} ${bs.length === 1 ? "agente" : "agentes"} · ${salasTxt}`;
   atualizarEstados();
+  atualizarResumoSala();   // dados ou agenda mudaram: o resumo aberto acompanha sem refazer o DOM à toa
 }
 
 function cartaoPedido(t, nome, handle, compacto) {
@@ -1241,9 +1542,10 @@ function montarRecepcao() {
   const b = $("recepc"), p = $("recepc-painel");
   if (!b || !p) return;
   recepcaoUI = Recepcao.criar({ botao: b, painel: p, botaoFechar: $("recepc-fechar"),
-    aoAbrir: () => { invalidarRecepcao(); posicionarRecepcao(); },
+    aoAbrir: () => { fecharResumoSala(false); invalidarRecepcao(); posicionarRecepcao(); },   // fila e resumo não ficam abertos juntos
     aoFechar: () => invalidarRecepcao() });
   b.addEventListener("click", () => {
+    if (!recepcaoUI.estaAberto()) fecharResumoSala(false);
     if (!recepcaoUI.estaAberto() && recepcaoFora) {   // atalho de reserva: a pessoa pediu, então reenquadra a recepção
       const s = predio && predio.salas.find(x => x.tipo === "recepcao");
       if (s) { irParaEscritorio(); moverCamera({ x: s.px + s.pw / 2, y: s.py + s.ph / 2, k: Math.max(cam.k, 3.2 * dpr) }); }
@@ -1466,7 +1768,12 @@ function montarSalas() {
     const ic = elem("span", "sala-ic", "#"); ic.setAttribute("aria-hidden", "true"); ic.style.color = clarear(corDaSala(s), 0.25);
     b.append(ic, elem("span", "sala-nome", s.nome), elem("span", "sala-n"));
     b.addEventListener("click", () => { irParaEscritorio(); fecharFicha(); focarSala(s); if (innerWidth <= 760) $("palco-cartao").scrollIntoView({ block: "start", behavior: menosMovimento.matches ? "auto" : "smooth" }); });
-    li.append(b, Reunioes.entrar(s.chave, s.nome)); return li;   // o "Entrar na reunião" da sala, ao lado (reunioes.js)
+    li.append(b, Reunioes.entrar(s.chave, s.nome));   // o "Entrar na reunião" da sala, ao lado (reunioes.js)
+    // o resumo também fica aqui: com o teclado ou a lista, a sala fora da janela do mapa não fica sem caminho
+    const resumo = elem("button", "sala-resumo", "resumo"); resumo.type = "button";
+    resumo.setAttribute("aria-label", `Resumo da sala ${s.nome}`);
+    resumo.addEventListener("click", () => { irParaEscritorio(); fecharFicha(); abrirResumoSala(s, resumo); });
+    li.append(resumo); return li;
   }));
   atualizarSalas();
 }
@@ -1505,6 +1812,7 @@ function focarAgente(b, { seguir: seg = false, foco = false } = {}) {
   desenharPainel();
 }
 function abrirFicha(b, foco) {
+  fecharResumoSala(false);
   fecharConversa(false);
   // aberta por um item da recepção: no celular ela vira folha de 40dvh; as outras origens seguem como sempre
   const daRecepcao = !!(window.Recepcao && Recepcao.consumirFichaDaRecepcao());
@@ -1601,6 +1909,7 @@ const TEXTO_TERM = { ocupado: "Trabalhando", aprovacao: "Pede aprovação", erro
 const NECS_TERM = [["cafe", "Café"], ["social", "Conversa"], ["diversao", "Diversão"], ["fome", "Fome"], ["bexiga", "Banheiro"]];
 const horaMin = ms => new Date(ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 function abrirFichaTerminal(id) {
+  fecharResumoSala(false);
   fecharConversa(false);
   const daRecepcao = !!(window.Recepcao && Recepcao.consumirFichaDaRecepcao());
   $("ficha").classList.toggle("ficha-recepc", daRecepcao);
@@ -2766,9 +3075,12 @@ tela.addEventListener("pointerup", ev => {
   const pessoa = pessoaEm(p, ev.pointerType === "touch" ? 16 : 12);
   if (pessoa) { abrirEquipe(true, pessoa.ref); return; }   // a pessoa da equipe: a lista abre nela (ir até, acenar)
   const s = [...predio.salas, ...predio.baixo].find(r => r.placaRet && p.x >= r.placaRet.x && p.x <= r.placaRet.x + r.placaRet.w + 20 && p.y >= r.placaRet.y && p.y <= r.placaRet.y + r.placaRet.h);
-  if (s) { focarSala(s); return; }
+  if (s) { abrirResumoSala(s, tela); return; }
   if (Brincar.tocar(p, ev.pointerType)) return;   // objeto do mapa (TV, café, sino…)
+  const daPorta = salaDaPortaEm(p);
+  if (daPorta) { abrirResumoSala(daPorta, tela); return; }   // a porta também abre o resumo, sem roubar o móvel da frente
   fecharFicha();
+  fecharResumoSala(false);
   Vida.irAte(mundo, p);   // o chão: o meu boneco anda até lá (na TV e com "Aparecer" desligado não há boneco)
 });
 // cartão rápido ao passar o mouse (no toque, a ficha faz esse papel)
@@ -2776,7 +3088,7 @@ tela.addEventListener("pointermove", ev => {
   const card = $("cartao-agente");
   if (ev.pointerType !== "mouse" || !mundo || (arrasto && arrasto.moveu)) { card.hidden = true; return; }
   const p = paraMundo(ev.clientX, ev.clientY);
-  const perto = seloEm(p) || agenteEm(p, 11), npc = !perto && window.Zeladoria && Zeladoria.npcEm(p), objeto = npc || Brincar.sobre(p) || muralEm(p) || pessoaEm(p, 11) || terminalEm(p);
+  const perto = seloEm(p) || agenteEm(p, 11), npc = !perto && window.Zeladoria && Zeladoria.npcEm(p), objeto = npc || Brincar.sobre(p) || muralEm(p) || pessoaEm(p, 11) || terminalEm(p) || salaDaPortaEm(p);
   tela.style.cursor = perto || objeto ? "pointer" : "";
   if (npc) cartaoNpc(npc, ev.clientX, ev.clientY); else mostrarCartao(perto, ev.clientX, ev.clientY);
 });
@@ -2865,6 +3177,10 @@ document.addEventListener("keydown", ev => {
     if (gavetaAberta()) { fecharGaveta(true); return; }
     if (!$("conversa").hidden) { fecharConversa(true); return; }
     if (!$("v-conversas").hidden && convAberta && celularConv()) { fecharConvPagina(); return; }
+    if (!$("resumo-sala").hidden) {   // o foco pode estar no mapa, no gatilho ou no body: o resumo fecha do mesmo jeito
+      const foco = document.activeElement, campo = foco && /INPUT|SELECT|TEXTAREA/.test(foco.tagName);
+      if (!campo && !document.querySelector("dialog[open]")) { fecharResumoSala(true); return; }
+    }
     if (recepcaoUI && recepcaoUI.estaAberto()) {
       const foco = document.activeElement, campo = foco && /INPUT|SELECT|TEXTAREA/.test(foco.tagName);
       if (!campo && (foco === $("recepc") || foco === tela || foco === document.body)) { recepcaoUI.fechar(true); return; }
@@ -2891,6 +3207,7 @@ $("aparecer").addEventListener("change", () => {
 });
 // as pessoas da equipe no mapa (vida.js); a TV e quem desligou "Aparecer" leem sem marcar presença. Na prévia não há conta
 addEventListener("aovivo", mostrarOlhando);   // a cada leitura das pessoas do andar
+addEventListener("aovivo", atualizarResumoSala);   // gente, terminais e agenda novas: o resumo aberto acompanha
 function ligarAoVivo() { if (!Brincar.demo && !config.previa) Vida.aoVivo({ invisivel: () => TV.invisivel || !aparecer }); }
 // os outros vêm das pessoas deste andar no mapa (vida.js); antes da 1ª leitura e na prévia, do /api/estado.
 // O texto é o botão que abre a lista de quem está no andar
@@ -3246,6 +3563,7 @@ function voltarAoPrincipal() { trocarAndar(Andar.PRINCIPAL, `Esse andar não est
 // zera o que era do andar de antes: ficha, conversa aberta, eventos e pedidos deduzidos, social e greve
 function reiniciarAndar() {
   limparFilaRecepcao();   // a fila do andar de antes não sobrevive à troca
+  fecharResumoSala(false);   // e o resumo da sala também não
   Vida.aoVivo(null);   // as pessoas e o seq são do andar de antes
   assinatura = ""; selecionado = null;
   eventosLocais = []; statusAnterior = null; vistosEvento.clear();
@@ -3264,6 +3582,7 @@ async function trocarAndar(id, aviso) {
   trocando = true;
   Andar.definir(id);
   limparFilaRecepcao();   // a fila antiga some já na troca, sem esperar a leitura do andar novo
+  fecharResumoSala(false);   // o resumo da sala do andar de antes também
   try {
     const c = await json("api/config");   // com o andar novo; falhando, nada do andar de antes é mexido
     reiniciarAndar();

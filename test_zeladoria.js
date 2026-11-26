@@ -109,6 +109,26 @@ const daEquipe = (Z, papel) => Z.npcs().filter(n => n.papel === papel);
   assert.ok(rodar(Z, m, 40, () => Z.estado().migalhas === 0), "recolhe os copos");
 }
 
+// a caneca esquecida na cozinha: a faxineira vai até ela na mesma passagem, recolhe e vai embora; no fim da passagem
+// não sobra caneca no chão nem gente da limpeza (e ninguém que estava trabalhando foi deslocado)
+{
+  const Z = carregar(), m = predio();
+  Z.passo(m, 0.1, agora, h);
+  const trabalhando = { id: "a1", x: 60, y: 140, rota: [], lugar: { tipo: "mesa", mesa: { sala: { tipo: "cozinha" } } }, trabalho: { status: "running" } };
+  m.lista.push(trabalhando);
+  assert.ok(Z.migalha(60, 140, "caneca", true));
+  assert.ok(Z.chamar("limpeza"), "a faxineira é chamada para a caneca");
+  let viuRecolhendo = false;
+  assert.ok(rodar(Z, m, 40, () => {
+    if (daEquipe(Z, "limpeza").some(n => /canecas/.test(n.fazendo))) viuRecolhendo = true;
+    return Z.estado().migalhas === 0;
+  }), "a caneca é recolhida");
+  assert.ok(viuRecolhendo, "a passagem da caneca tem nome próprio");
+  assert.ok(rodar(Z, m, 15, () => daEquipe(Z, "limpeza").length === 0), "a faxineira termina a passagem e vai embora");
+  assert.equal(Z.estado().migalhas, 0, "no fim da passagem não sobra caneca");
+  assert.deepEqual({ x: trabalhando.x, y: trabalhando.y, rota: trabalhando.rota }, { x: 60, y: 140, rota: [] }, "quem trabalhava não saiu do lugar");
+}
+
 // a cafeteira quebra: as vagas de café fecham (a que já estava fechada continua); o zelador vem, conserta e elas reabrem
 {
   const Z = carregar(), m = predio();
