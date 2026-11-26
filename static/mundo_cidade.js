@@ -20,10 +20,15 @@
 // o desenho do chalé chega. O tempo vem pelo Clima (o mundo.js o define); a noite, pelo Ceu. Com movimento reduzido,
 // carros, pedestres, copas, mar e pombos parados, e nada de partículas, fumaça ou passarinhos. O atlas é pedido na primeira
 // entrada numa cidade (e de novo se falhar). Nada é alocado por quadro: listas, vista e opções são reaproveitadas.
+// O Recife tem a cena integral (mundo/recife.png, planta em CidadePlanta.recifeRaster): o PNG chega depois da planta de
+// reserva, entra sem mexer no nível e, sem ele, a reserva segue e a próxima entrada tenta de novo. Na cena, a portaria
+// (a fachada azul) vale sem o atlas, e as máscaras de oclusão escondem o pedestre atrás do que está pintado na frente.
 "use strict";
 const MundoCidade = (() => {
   const { W, H, E, C } = CidadePlanta, FAIXA = 8, B = E / 2 + C, PLACA_H = 12, POSTE = 28, FOLGA = 4;
   const QUADRA = [192, 160];   // o zoom máximo ainda mostra uma quadra inteira
+  const RECIFE_INTEGRIDADE = "sha256-Y92JiAMNTqIRmNk4KE+Vtko+Nogb1GXDTdGnetQwytI=";
+  const RECIFE_SHA = "63dd8988030d4ea21198d938284f95b64a3e36881bd465c34dd1a77ad430cad2";
   const PERTO = 1.8;           // a partir daqui (z), os detalhes de perto
   const ALTO_MAX = 130;        // a altura do maior desenho do atlas (os marcos chegam a 125)
   const LUZ = [255, 214, 130];   // a cor dos postes, janelas e faróis à noite
@@ -46,6 +51,7 @@ const MundoCidade = (() => {
     const info = id => cidades.get(id) || (mapa && mapa.porId.get(id)) || {};   // a média vem do mapa (porte, praia e UF)
     let id = null, p = CidadePlanta.planta(""), carros = [], pedestres = [], pecas = [], postes = [], rua = Math.random;
     let atlas = null, quadros = {}, janelas = {}, pedido = false, escolhido = null, notaveis = [], rascunho = null, placaCasa = null;
+    let recife = null, mascarasRecife = [], pedidoRecife = false, visitaRecife = false;
     let placas = [];   // as plaquinhas de cada cruzamento (com os letreiros guardados), entram na ordem de profundidade
     const lista = [], vista = [0, 0, W, H], brilhos = new Map();
     const vida = { fumaca: 0, passaros: 0, balanco: 0, janelas: 0, janelasCobertas: 0, recortes: 0, pombos: 0, placas: 0,
@@ -72,6 +78,84 @@ const MundoCidade = (() => {
           img.src = "/mundo/atlas.png?v=" + (Number.isInteger(d.versao) ? d.versao : 0);
         });
     }
+    async function carregarRecife() {
+      if (pedidoRecife || recife || typeof Request !== "function" || !("integrity" in Request.prototype)) return;
+      pedidoRecife = true;
+      try {
+        // O Fetch valida os bytes também em HTTP local. O Image decodifica a resposta já validada.
+        const r = await fetch("/mundo/recife.png?v=" + RECIFE_SHA, {
+          credentials: "omit", mode: "same-origin", cache: "no-cache", integrity: RECIFE_INTEGRIDADE,
+        });
+        if (!r.ok) return;
+        const url = URL.createObjectURL(await r.blob());
+        const img = new Image();
+        try {
+          await new Promise((resolve, reject) => {
+            img.addEventListener("load", resolve, { once: true });
+            img.addEventListener("error", reject, { once: true });
+            img.src = url;
+          });
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+        const nova = CidadePlanta.recifeRaster();
+        if (img.naturalWidth !== nova.W || img.naturalHeight !== nova.H) return;
+        mascarasRecife = mascaras(img, nova);
+        recife = img;
+        // Guardar o PNG permite voltar do bairro com a fachada pronta. Só a visita ativa pode trocar a cena.
+        if (visitaRecife) ativarRecife(nova);
+      } catch {
+        // Rede, integridade e decodificação deixam a planta de reserva disponível.
+      } finally {
+        pedidoRecife = false;
+      }
+    }
+
+    function mascaras(img, planta) {
+      if (typeof Path2D !== "function") return [];
+      const tela = document.createElement("canvas");
+      tela.width = planta.W; tela.height = planta.H;
+      const ctx = tela.getContext("2d");
+      if (!ctx) return [];
+      ctx.drawImage(img, 0, 0);
+      return planta.cena.oclusoes.map(({ frente: [x, y, x1, y1], pes, transparente }) => {
+        const w = x1 - x, h = y1 - y, { data } = ctx.getImageData(x, y, w, h);
+        const recorte = new Path2D();
+        recorte.rect(0, 0, planta.W, planta.H);
+        for (let j = 0; j < h; j++) {
+          let inicio = -1;
+          for (let i = 0; i <= w; i++) {
+            const p = (j * w + i) * 4, rgb = data[p] << 16 | data[p + 1] << 8 | data[p + 2];
+            const opaco = i < w && data[p + 3] && !transparente.includes(rgb);
+            if (opaco && inicio < 0) inicio = i;
+            if (!opaco && inicio >= 0) {
+              recorte.rect(x + inicio, y + j, i - inicio, 1);
+              inicio = -1;
+            }
+          }
+        }
+        return { pes, recorte };
+      });
+    }
+
+    function ocultar(ctx, x, y) {
+      for (const { pes: [x0, y0, x1, y1], recorte } of mascarasRecife) {
+        if (x >= x0 && x < x1 && y >= y0 && y < y1) ctx.clip(recorte, "evenodd");
+      }
+    }
+
+    function ativarRecife(nova) {
+      const rx = camera.x / p.W, ry = camera.y / p.H;
+      const focouPorta = cidade.destaque === "porta";
+      montar(nova);
+      camera.x = focouPorta ? p.casa.x : rx * p.W;
+      camera.y = focouPorta ? p.casa.y : ry * p.H;
+      camera.limitar(p.malha.caixa);
+      camera.zoomPara(camera.alvoZ);   // a caixa mudou: o zoom volta a parar em escala inteira
+      medirVista(); mover(0);
+      if (avisar) avisar(true);
+    }
+
     const recortes = new Map();   // o recorte validado de cada nome, guardado (o atlas chega uma vez)
     const recorte = nome => {
       if (!atlas) return null;
@@ -88,14 +172,15 @@ const MundoCidade = (() => {
       if (r) ctx.drawImage(atlas, r[0], r[1], r[2], r[3], Math.round(x - r[2] / 2), Math.round(y - r[3]), r[2], r[3]);
     }
     const ehCasa = () => !!id && mapa.casa === id;
-    const portaPronta = () => ehCasa() && !!recorte(p.casa.peca);   // placa e porta só com o desenho do chalé
+    const portaPronta = () => ehCasa() && (!!p.cena || !!recorte(p.casa.peca));   // placa e porta só com o desenho do chalé
     const marco = () => info(id).marco;
-    const temMarco = () => typeof marco() === "string" && !!recorte("marco-" + marco());
+    const temMarco = () => !p.cena && typeof marco() === "string" && !!recorte("marco-" + marco());
     // o desenho de uma peça: a vaga da casa tem o chalé só na casa (fora dela, uma árvore); o centro, o marco; a arte
     // de cidade só entra com o atlas novo (sem ela, o prédio genérico da base, sem outra chamada)
     const nomeDe = s => s === p.casa ? (portaPronta() ? p.casa.peca : p.casa.arvore) : s === p.centro && temMarco() ? "marco-" + marco()
       : s.base && !recorte(s.peca) ? s.base : s.peca;
     function caixaCasa() {   // o chalé e a placa em cima dele: a área da porta
+      if (p.cena) { const [x, y, x1, y1] = p.casa.r; return [x, y, x1 - x, y1 - y]; }
       const [, , w, h] = recorte(p.casa.peca) || [0, 0, 60, 57];
       return [p.casa.x - w / 2, p.casa.y - h - PLACA_H - 1, w, h + PLACA_H + 1];
     }
@@ -103,36 +188,43 @@ const MundoCidade = (() => {
     function alvoPorta() {
       const c = mapa.porId.get(id), [, , , h] = caixaCasa();
       return { id: "porta", x: p.casa.x, y: p.casa.y, alto: h * camera.P / camera.dpr, titulo: "Recepção",
-               texto: "Chalé do escritório · descer ao bairro",
-               rotulo: `Chalé com a placa, o escritório em ${c ? c.nome : "esta cidade"}: descer ao bairro`,
+               texto: p.cena ? "Portaria · descer ao bairro" : "Chalé do escritório · descer ao bairro",   // a portaria fica à direita: texto curto cabe no celular
+               rotulo: `${p.cena ? "Portaria na fachada azul" : "Chalé com a placa"}, o escritório em ${c ? c.nome : "esta cidade"}: descer ao bairro`,
                acao: { ir: "bairro", cidade: id } };
     }
     // as construções notáveis da parte da cidade que aparece a 1x, com o nome do tipo (o marco, com o do ponto turístico)
     function montarNotaveis() {
       const l = [];
+      if (p.cena) l.push(...p.pontos);
       if (temMarco()) l.push({ s: p.centro, nome: p.tituloCentro || info(id).marco_nome || "Marco da cidade" });
-      for (const s of p.notaveis) {
+      for (const s of p.notaveis || []) {
         const nome = s.base && !recorte(s.peca) ? CidadePlanta.NOMES[s.base] : CidadePlanta.NOMES[s.peca];
         if (nome && s.x > -20 && s.x < p.W + 20 && s.y > -20 && s.y < p.H + 70) l.push({ s, nome });
       }
-      notaveis = l.filter(n => recorte(nomeDe(n.s))).map((n, i) => ({ ...n, id: "notavel-" + i, maiusculo: n.nome.toUpperCase(), e: null, k: 0 }));
+      notaveis = l.filter(n => p.cena || recorte(nomeDe(n.s))).map((n, i) => ({ ...n, id: "notavel-" + i, maiusculo: n.nome.toUpperCase(), e: null, k: 0 }));
     }
+    const alturaNotavel = n => p.cena ? n.s.y - n.s.r[1] : (recorte(nomeDe(n.s)) || [0, 0, 0, 0])[3];
     function alvoNotavel(n) {
-      const [, , , h] = recorte(nomeDe(n.s)) || [0, 0, 0, 40];
+      const h = alturaNotavel(n) || 40;
       return { id: n.id, x: n.s.x, y: n.s.y - Math.round(h / 3), alto: h * camera.P / camera.dpr / 2, titulo: n.nome, texto: "",
                rotulo: `${n.nome}: mostrar o nome`, etiqueta: true };
     }
     function notavelEm(x, y) {   // a construção notável sob o ponto (a da frente, se duas se cobrem)
       let achado = null;
       for (const n of notaveis) {
-        const r = recorte(nomeDe(n.s));
-        if (!r || x < n.s.x - r[2] / 2 || x > n.s.x + r[2] / 2 || y < n.s.y - r[3] || y > n.s.y) continue;
+        if (p.cena) {
+          const [x0, y0, x1, y1] = n.s.r;
+          if (x < x0 || x > x1 || y < y0 || y > y1) continue;
+        } else {
+          const r = recorte(nomeDe(n.s));
+          if (!r || x < n.s.x - r[2] / 2 || x > n.s.x + r[2] / 2 || y < n.s.y - r[3] || y > n.s.y) continue;
+        }
         if (!achado || n.s.y > achado.s.y) achado = n;
       }
       return achado;
     }
     function preparar() {   // o atlas chegou ou a cidade mudou: o chão e as notáveis
-      chao.preparar(p, pecas, s => (s.poste ? null : nomeDe(s)), s => (s === p.praca ? s.x + enfeites.desvio : s.x));
+      if (!p.cena) chao.preparar(p, pecas, s => (s.poste ? null : nomeDe(s)), s => (s === p.praca ? s.x + enfeites.desvio : s.x));
       montarNotaveis();
     }
     function escolher(n) {   // mostra a etiqueta da notável por 5 s e devolve o anúncio para o status
@@ -146,7 +238,7 @@ const MundoCidade = (() => {
       vista[0] = -ox / P; vista[1] = -oy / P; vista[2] = (camera.W - ox) / P; vista[3] = (camera.H - oy) / P;
     }
     // o carro no eixo dele: metade do comprimento; cobre(s, m, k): o trecho [s - m, s + m] cruza o miolo do cruzamento k
-    const meio = c => { const r = recorte(c.peca); return r ? r[2] / 2 : 13; };
+    const meio = c => { const r = recorte(c.peca); return c.tamanho ? c.tamanho[0] / 2 : r ? r[2] / 2 : 13; };
     const cobre = (s, m, k) => s - m < k + E / 2 && k - E / 2 < s + m;
     const dentro = (o, X, Y) => o.eixo === "h" ? o.rua === Y && cobre(o.s, meio(o), X) : o.rua === X && cobre(o.s, meio(o), Y);
     function andar(c, dt) {
@@ -166,7 +258,14 @@ const MundoCidade = (() => {
       }
       c.s = s;
     }
-    const posicao = { x: 0, y: 0, angulo: 0 };
+    const posicao = { x: 0, y: 0, angulo: 0 }, atras = {}, frente = {};
+    function carroNaPista(pista, s, alvo) {
+      CidadePlanta.naPista(pista, s, alvo);
+      if (!p.cena) return;
+      CidadePlanta.naPista(pista, (s - 1.5 + pista.L) % pista.L, atras);
+      CidadePlanta.naPista(pista, (s + 1.5) % pista.L, frente);
+      alvo.angulo = Math.atan2(frente.y - atras.y, frente.x - atras.x);
+    }
     // A distância ao longo da volta vale também na emenda. A faixa é reservada para quem já começou a atravessar.
     function andarMalha(c, dt) {
       const m = p.malha, s = (c.s + c.v * dt) % m.pista.L;
@@ -175,7 +274,7 @@ const MundoCidade = (() => {
         const frente = (o.s - c.s + m.pista.L) % m.pista.L;
         if (frente < 38 + c.v * dt) return;
       }
-      CidadePlanta.naPista(m.pista, s, posicao);
+      carroNaPista(m.pista, s, posicao);
       for (const a of pedestres) {
         if (a.s <= 0) continue;
         const f = p.rede.faixaPorAresta[CidadePlanta.chaveAresta(a.de, a.para)];
@@ -313,12 +412,18 @@ const MundoCidade = (() => {
     }
     function desenhar(ctx, s, t, casa, escuro) {
       if (s.ped) {
-        if (vida.perto) {   // de perto, a sombra no chão
+        if (vida.perto && !p.cena) {   // de perto, a sombra no chão
           ctx.globalAlpha = 0.25; ctx.fillStyle = "#16202a"; ctx.fillRect(Math.round(s.x) - 3, Math.round(s.y) - 1, 7, 2); ctx.globalAlpha = 1;
         }
         if (!window.Avatar) return;
+        if (p.cena) {
+          ctx.save();
+          ocultar(ctx, s.x, s.y);
+          ctx.translate(s.b.x, s.b.y); ctx.scale(0.5, 0.5); ctx.translate(-s.b.x, -s.b.y);
+        }
         const q = Avatar.boneco(ctx, s.b, t, 1), f = s.festeiro && festa ? festa() : null;
         if (f) Avatar.chapeu(ctx, q.x, q.y, f);   // na festa do dia, três em cada cinco de chapéu
+        if (p.cena) ctx.restore();
         return;
       }
       if (s.enfeite) return enfeites.desenhar(ctx, s);
@@ -418,19 +523,22 @@ const MundoCidade = (() => {
       vida.etiqueta = null;
       let n = null;
       if (alvo) for (let i = 0; i < notaveis.length; i++) if (notaveis[i].id === alvo) n = notaveis[i];
-      const r = n && recorte(nomeDe(n.s));
-      if (!r) return;
+      const h = n && alturaNotavel(n);
+      if (!h) return;
       const k = Math.max(2, Math.round(camera.dpr * 2));   // 16 px de CSS
       if (n.k !== k || !n.e) { n.e = letreiros.letreiro(n.maiusculo, "etiqueta", k); n.k = n.e ? k : 0; }
       const e = n.e;
       vida.etiqueta = n.nome;
       if (!e) return;
       const P = camera.P, ox = Math.round(camera.W / 2 - camera.x * P), oy = Math.round(camera.H / 2 - camera.y * P);
-      const sx = Math.round(ox + n.s.x * P - e.width / 2), sy = Math.max(2 * k, Math.round(oy + (n.s.y - r[3] - 2) * P) - e.height - 4 * k);
+      let sx = Math.round(ox + n.s.x * P - e.width / 2);
+      const sy = Math.max(2 * k, Math.round(oy + (n.s.y - h - 2) * P) - e.height - 4 * k), seta = sx + Math.round(e.width / 2);
+      // na cena integral o Marco Zero fica perto da borda: no celular a etiqueta encosta nela e a seta segue no alvo
+      if (p.cena) sx = Math.max(2 * k, Math.min(camera.W - e.width - 2 * k, sx));
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.drawImage(e, sx, sy);
-      ctx.fillStyle = "#2a1d14"; ctx.fillRect(sx + Math.round(e.width / 2) - 2 * k, sy + e.height, 4 * k, 2 * k);
-      ctx.fillRect(sx + Math.round(e.width / 2) - k, sy + e.height + 2 * k, 2 * k, k);
+      ctx.fillStyle = "#2a1d14"; ctx.fillRect(seta - 2 * k, sy + e.height, 4 * k, 2 * k);
+      ctx.fillRect(seta - k, sy + e.height + 2 * k, 2 * k, k);
       ctx.setTransform(P, 0, 0, P, ox, oy);
     }
 
@@ -442,16 +550,17 @@ const MundoCidade = (() => {
       vida.fumaca = vida.passaros = vida.balanco = vida.janelas = vida.janelasCobertas = vida.recortes = vida.pombos = 0;
       vida.placas = vida.depoisDaPlaca = 0;
       vida.perto = camera.z >= PERTO;
-      enfeites.comecar(atlas && festa ? festa() : null, p, id, postes);
+      enfeites.comecar((atlas || p.cena) && festa ? festa() : null, p, id, postes);
       opChao.neve = tipo === "neve"; opChao.ceu = ceu; opChao.tipo = tipo; opChao.casa = casa; opChao.t = tt; opChao.perto = vida.perto && !!atlas;
       opChao.desvio = enfeites.desvio;
-      chao.desenhar(ctx, vista, opChao);
+      if (p.cena) ctx.drawImage(recife, 0, 0);
+      else chao.desenhar(ctx, vista, opChao);
       enfeites.chao(ctx, escuro, t);
-      if (atlas) {
+      if (atlas || p.cena) {
         ctx.globalAlpha = 0.3 * chao.estado.forca; ctx.fillStyle = "#16202a";
         for (let i = 0; i < carros.length; i++) {   // a sombra dos carros, de dia
           const c = carros[i], r = recorte(c.peca);
-          if (!r || !chao.estado.forca) continue;
+          if (p.cena || !r || !chao.estado.forca) continue;
           if (p.malha) {
             ctx.save(); ctx.translate(Math.round(c.x) + 1, Math.round(c.y) + 2); ctx.rotate(giro(c));
             ctx.fillRect(-Math.floor(r[2] / 2), -Math.floor(r[3] / 2), r[2] - 1, r[3] - 1); ctx.restore();
@@ -462,11 +571,16 @@ const MundoCidade = (() => {
         }
         ctx.globalAlpha = 1;
         for (let i = 0; i < carros.length; i++) {   // os carros no chão, por baixo das construções (o atlas já os traz na escala)
-          const c = carros[i], r = recorte(c.peca);
-          const m = r ? r[2] / 2 + 2 : 0;
-          if (!r || !naVista(c.x - m, c.y - m, c.x + m, c.y + m)) continue;
-          ctx.save(); ctx.translate(Math.round(c.x), Math.round(c.y)); ctx.rotate(giro(c));
-          ctx.drawImage(atlas, r[0], r[1], r[2], r[3], -Math.round(r[2] / 2), -Math.round(r[3] / 2), r[2], r[3]);
+          const c = carros[i], r = recorte(c.peca), m = meio(c) + 2;
+          if ((!r && !c.tamanho) || !naVista(c.x - m, c.y - m, c.x + m, c.y + m)) continue;
+          const [w, h] = c.tamanho || r.slice(2);
+          ctx.save(); ctx.translate(p.cena ? c.x : Math.round(c.x), p.cena ? c.y : Math.round(c.y)); ctx.rotate(giro(c));
+          if (r) ctx.drawImage(atlas, r[0], r[1], r[2], r[3], -Math.round(w / 2), -Math.round(h / 2), w, h);
+          else {
+            ctx.fillStyle = "#222739"; ctx.fillRect(-4, -2, 8, 4);
+            ctx.fillStyle = "#e3b46e"; ctx.fillRect(-3, -2, 6, 3);
+            ctx.fillStyle = "#44617a"; ctx.fillRect(1, -2, 1, 3);
+          }
           ctx.restore();
         }
       }
@@ -478,12 +592,12 @@ const MundoCidade = (() => {
         const s = placas[i];
         if (naVista(s.x - 2, s.y - 60, s.x + 60, s.y + 2)) lista.push(s);
       }
-      if (atlas) for (let i = 0; i < pedestres.length; i++) {
+      if (atlas || p.cena) for (let i = 0; i < pedestres.length; i++) {
         const a = pedestres[i];
         if (naVista(a.x - 12, a.y - 24, a.x + 12, a.y + 3)) lista.push(a);
       }
       ordenar(lista);
-      if (atlas) {
+      if (atlas || p.cena) {
         for (let i = 0; i < lista.length; i++) desenhar(ctx, lista[i], t, casa, escuro);
         if (!reduzido) { fumaca(ctx, t); if (escuro < 0.4) passaros(ctx, t); }   // passarinhos só de dia
       }
@@ -492,12 +606,17 @@ const MundoCidade = (() => {
       ctx.globalAlpha = 0.1; ctx.fillStyle = ceu.cima; ctx.fillRect(x0, y0, w, h);   // o tom do céu
       if (escuro > 0) { ctx.globalAlpha = escuro * 0.62; ctx.fillStyle = "#060a22"; ctx.fillRect(x0, y0, w, h); }
       ctx.globalAlpha = 1;
-      const cx = p.casa.x, cy = p.casa.y - (recorte(p.casa.peca) || [0, 0, 60, 57])[3] - PLACA_H - 1;
+      const [cx, cy] = p.cena ? p.cena.placa : [p.casa.x, p.casa.y - (recorte(p.casa.peca) || [0, 0, 60, 57])[3] - PLACA_H - 1];
       if (casa) {   // a placa do escritório, por cima da noite (acesa)
         if (!placaCasa) placaCasa = letreiros.letreiro("RECEPÇÃO", "placa", 1);
-        if (placaCasa) ctx.drawImage(placaCasa, Math.round(cx - placaCasa.width / 2), Math.round(cy));
+        if (placaCasa) {
+          if (p.cena) {
+            const w = Math.round(placaCasa.width / 2);
+            ctx.drawImage(placaCasa, Math.round(cx - w / 2), cy, w, placaCasa.height / 2);
+          } else ctx.drawImage(placaCasa, Math.round(cx - placaCasa.width / 2), Math.round(cy));
+        }
       }
-      if (escuro > 0.05 && atlas) {   // à noite: janelas, postes, faróis e a casa acesos
+      if (escuro > 0.05 && (atlas || p.cena)) {   // à noite: janelas, postes, faróis e a casa acesos
         if (escuro > 0.3) acender(ctx, escuro, Number.isFinite(ceu.h) ? ceu.h : 22);
         ctx.globalCompositeOperation = "lighter";
         for (let i = 0; i < lista.length; i++) {
@@ -511,10 +630,13 @@ const MundoCidade = (() => {
           }
           else if (s.peca === "banco-poste-1") brilho(ctx, s.x - 6, s.y - 22, 12, 0.45 * escuro, LUZ, s.y);   // o lampião do banco
         }
-        if (casa) brilho(ctx, p.casa.x, p.casa.y - 18, 22, 0.55 * escuro, LUZ, p.casa.y);
+        if (casa) {
+          const [x, y] = p.cena ? p.cena.farol : [p.casa.x, p.casa.y - 18];
+          brilho(ctx, x, y, p.cena ? 10 : 22, 0.55 * escuro, LUZ, p.casa.y);
+        }
         for (let i = 0; i < carros.length; i++) {   // os faróis (a bicicleta, uma luz pequena)
           const c = carros[i], a = giro(c), m = meio(c) + 1, bici = c.peca.startsWith("bici-");
-          brilho(ctx, c.x + Math.cos(a) * m, c.y + Math.sin(a) * m, bici ? 5 : 9, (bici ? 0.35 : 0.5) * escuro, LUZ, c.y);
+          brilho(ctx, c.x + Math.cos(a) * m, c.y + Math.sin(a) * m, p.cena || bici ? 5 : 9, (bici ? 0.35 : 0.5) * escuro, LUZ, c.y);
         }
         ctx.globalCompositeOperation = "source-over";
       }
@@ -535,7 +657,7 @@ const MundoCidade = (() => {
         ctx.fillRect(a0, b0, 4, 1); ctx.fillRect(a0, b0, 1, 4); ctx.fillRect(a1 - 3, b0, 4, 1); ctx.fillRect(a1, b0, 1, 4);
         ctx.fillRect(a0, b1, 4, 1); ctx.fillRect(a0, b1 - 3, 1, 4); ctx.fillRect(a1 - 3, b1, 4, 1); ctx.fillRect(a1, b1 - 3, 1, 4);
       }
-      if (atlas) etiqueta(ctx, t);
+      if (atlas || p.cena) etiqueta(ctx, t);
     }
     // pela profundidade (y, depois x), por inserção: a lista quase não muda de um quadro para o outro, e o sort do
     // navegador montaria uma cópia a cada quadro
@@ -558,36 +680,44 @@ const MundoCidade = (() => {
       return l.join(", ");
     }
 
+    function montar(planta) {
+      p = planta; rua = CidadePlanta.sorteio(id + ":rua");
+      carros = p.carros.map(c => {
+        const v = { ...c, x: 0, y: 0 };
+        if (p.malha) carroNaPista(p.malha.pista, v.s, v);
+        return v;
+      });
+      pedestres = p.pedestres.map((a, i) => {   // b: o boneco do avatar.js, com a aparência da semente local
+        const ap = window.Avatar ? Avatar.padrao(a.semente) : null;
+        return { ...a, ped: true, festeiro: i % 5 < 3, x: 0, y: 0, b: { x: 0, y: 0, ap, pose: reduzido ? "parado" : "andando", olha: "baixo", semente: i * 7 } };
+      });
+      // o lado do braço de cada poste: para a rua vertical do cruzamento dele
+      postes = p.postes.map(([x, y], i) => ({ x, y, poste: true, lado: p.malha ? (i % 2 ? 1 : -1) : p.cruzamentos.some(([X]) => X > x && X - x < E) ? 1 : -1 }));
+      pecas = p.cena ? [] : [p.centro, p.casa, ...p.pecas, ...postes].sort((a, b) => a.y - b.y || a.x - b.x);   // já na profundidade
+      placas = p.malha ? p.malha.placas.map(s => ({ ...s, placa: true, a: null, b: null, k: 0 })) : [];
+      if (!p.malha) for (const x of p.ruas.v) for (const y of p.ruas.h) {
+        placas.push({ placa: true, x: x + E / 2 + 2, y: y - E / 2 - 2, rv: x, rh: y, a: null, b: null, k: 0 });
+      }
+      escolhido = null;
+      preparar();
+      camera.vx = camera.vy = 0; camera.voo = camera.ancora = null;
+    }
     const cidade = {
       nome: "cidade", camera, destaque: null,
       entrar(params) {
-        id = params.cidade; p = CidadePlanta.planta(id, info(id)); rua = CidadePlanta.sorteio(id + ":rua");
-        carros = p.carros.map(c => {
-          const v = { ...c, x: 0, y: 0 };
-          if (p.malha) CidadePlanta.naPista(p.malha.pista, v.s, v);
-          return v;
-        });
-        pedestres = p.pedestres.map((a, i) => {   // b: o boneco do avatar.js, com a aparência da semente local
-          const ap = window.Avatar ? Avatar.padrao(a.semente) : null;
-          return { ...a, ped: true, festeiro: i % 5 < 3, x: 0, y: 0, b: { x: 0, y: 0, ap, pose: reduzido ? "parado" : "andando", olha: "baixo", semente: i * 7 } };
-        });
-        // o lado do braço de cada poste: para a rua vertical do cruzamento dele
-        postes = p.postes.map(([x, y], i) => ({ x, y, poste: true, lado: p.malha ? (i % 2 ? 1 : -1) : p.cruzamentos.some(([X]) => X > x && X - x < E) ? 1 : -1 }));
-        pecas = [p.centro, p.casa, ...p.pecas, ...postes].sort((a, b) => a.y - b.y || a.x - b.x);   // já na profundidade
-        placas = p.malha ? p.malha.placas.map(s => ({ ...s, placa: true, a: null, b: null, k: 0 })) : [];
-        if (!p.malha) for (const x of p.ruas.v) for (const y of p.ruas.h) {
-          placas.push({ placa: true, x: x + E / 2 + 2, y: y - E / 2 - 2, rv: x, rh: y, a: null, b: null, k: 0 });
-        }
-        escolhido = null;
-        preparar();
-        camera.vx = camera.vy = 0; camera.voo = camera.ancora = null;
+        id = params.cidade; visitaRecife = id === "recife";
+        montar(visitaRecife && recife ? CidadePlanta.recifeRaster() : CidadePlanta.planta(id, info(id)));
         if (params.nivel === "bairro" && ehCasa() && !reduzido) {   // voltando do bairro, a câmera sai de perto da casa
-          camera.x = p.casa.x; camera.y = p.casa.y - 28; camera.z = 4; camera.zoomPara(1);
+          camera.x = p.casa.x; camera.y = p.casa.y - (p.cena ? 12 : 28); camera.z = 4; camera.zoomPara(1);
         } else { camera.x = p.W / 2; camera.y = p.H / 2; camera.z = camera.alvoZ = 1; }
         camera.limitar(p.malha ? p.malha.caixa : [0, 0, W, H]);
         medirVista(); mover(0); carregar(); clima(); letreiros.pedir();
+        if (visitaRecife) carregarRecife();
       },
-      sair() { cidade.destaque = null; escolhido = null; },
+      sair() {
+        cidade.destaque = null; escolhido = null;
+        visitaRecife = false;
+      },
       quadro,
       clique(x, y) {
         if (naCasa(x, y)) return alvoPorta().acao;
@@ -604,9 +734,13 @@ const MundoCidade = (() => {
         return n ? alvoNotavel(n) : null;
       },
       alvos() { return [...(portaPronta() ? [alvoPorta()] : []), ...notaveis.map(alvoNotavel)]; },
-      mergulho() { return ehCasa() ? [p.casa.x, p.casa.y - 28] : [p.W / 2, p.H / 2]; },
+      mergulho() { return ehCasa() ? [p.casa.x, p.casa.y - (p.cena ? 12 : 28)] : [p.W / 2, p.H / 2]; },
       rotulo() {
         const c = mapa.porId.get(id), f = festa ? festa() : null, m = temMarco() ? p.tituloCentro || info(id).marco_nome : "";
+        if (p.cena) return "Recife Antigo em pixel art, com o Marco Zero, o casario e duas pontes sobre o Capibaribe. " +
+          "Um pedestre nas calçadas e um carro na rua oeste" +
+          (portaPronta() ? ", com a portaria do escritório na fachada azul" : "") +
+          (f ? `. Hoje é ${f.nome}: a cidade está enfeitada` : "");
         if (p.malha) return `${c ? c.nome : "Cidade"} vista de cima em pixel art: ${p.malha.resumo}. ` +
           (m ? `Em destaque, o marco da cidade, ${m}. ` : "") +
           "Pedestres nas calçadas e carros nas ruas" +
@@ -621,7 +755,7 @@ const MundoCidade = (() => {
       // cada veículo como [x, y, largura, altura] na tela do mundo (o desenho já girado)
       get veiculos() {
         return carros.map(c => {
-          const [, , w, h] = recorte(c.peca) || [0, 0, 26, 14];
+          const [w, h] = c.tamanho || (recorte(c.peca) || [0, 0, 26, 14]).slice(2);
           if (p.malha) {
             const x = Math.abs(Math.cos(giro(c))), y = Math.abs(Math.sin(giro(c)));
             return [c.x, c.y, w * x + h * y, w * y + h * x];
@@ -632,7 +766,7 @@ const MundoCidade = (() => {
       get pedestres() { return pedestres.map(a => [a.x, a.y]); },
       get enfeites() { return enfeites.estado; },
       get vida() {
-        const e = chao.estado;
+        const e = p.cena ? { sombras: 0, forca: 0, detalhes: 0, novos: 0, faltam: 0 } : chao.estado;
         return { ...vida, sombras: e.sombras, forca: e.forca, detalhes: e.detalhes, novos: e.novos, faltam: e.faltam };
       },
     };

@@ -258,7 +258,8 @@ const Mundo = (() => {
     } else if (nome === "cidade") {
       const casa = mapa.casa && mapa.porId.get(mapa.casa);
       estado.textContent = `${c.nome} (${c.uf}), ${mapa.texto(c)}.${hojeE()} ` +
-        (casa === c ? "O chalé com a placa é o escritório: clique nele para descer ao bairro."
+        (casa === c ? (nivel.planta.cena ? "A portaria do escritório fica na fachada azul. Selecione-a para descer ao bairro."
+                                         : "O chalé com a placa é o escritório: clique nele para descer ao bairro.")
         : casa ? `O escritório fica em ${casa.nome}; Esc volta ${c.fora ? "ao globo" : "ao mapa"}.` : `Esc volta ${c.fora ? "ao globo" : "ao mapa"}.`);
     }
     else estado.textContent = `${hora} · ${Clima.texto()}${c ? " · " + c.nome : ""}`;
@@ -491,7 +492,18 @@ const Mundo = (() => {
       mapa = MundoMapa.criar({ dados, Camera, reduzido, festa: () => festa });
       Object.assign(niveis, mapa.niveis, {
         cidade: MundoCidade.criar({ dados, Camera, reduzido, mapa, clima: climaDaCidade, festa: () => festa,
-          avisar: () => { if (nome === "cidade") { rotular(); montarAlvos(); } } }) });   // o atlas chegou: placa, porta e marco
+          avisar: cena => {
+            if (nome !== "cidade") return;
+            // a cena integral troca os alvos: o foco do teclado fica no mesmo alvo (ou no primeiro, se ele saiu)
+            const focado = cena && botoes.find(([b]) => b === document.activeElement);
+            rotular(); montarAlvos();
+            if (cena) {
+              const novo = focado && (botoes.find(([, a]) => a.id === focado[1].id) || botoes[0]);
+              if (novo) novo[0].focus();
+              if (nivel.destaque) destacar(nivel.alvos().find(a => a.id === nivel.destaque));
+              if (!etiquetaAte) mostrar();
+            }
+          } }) });
       // sem o globo, a página abre no Brasil; a falha fica no console
       try { niveis.globo = Globo.criar({ dados, Camera, reduzido }); } catch (e) { console.error("Globo não abriu:", e); }
     })

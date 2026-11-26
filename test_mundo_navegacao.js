@@ -32,7 +32,7 @@ function elemento() {
 // globoFalha (Globo.criar lança erro) e fontePendente (document.fonts.load nunca termina). O globo é sempre o de verdade: o
 // campo de nuvens só é montado quando ele desenha
 async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false, climaPendente = false, tela = [640, 400, 1],
-  atlas = ATLAS, som = null, busca = "", escuro = 0, opaco = false, passo = 16, globoFalha = false, fontePendente = false } = {}) {
+  atlas = ATLAS, som = null, busca = "", escuro = 0, opaco = false, passo = 16, globoFalha = false, fontePendente = false, imagemRecife } = {}) {
   const quadros = [], requisicoes = [], intervalos = [], tamanho = [...tela];
   // putImageData conta as passadas pixel a pixel do globo; getImageData dá pixels zerados (ou opacos) quando o teste faz uma
   // imagem carregar. drawImage guarda o recorte de origem [sx, sy, sw, sh] quando o teste liga contexto.gravar (um array);
@@ -87,6 +87,7 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
       carregar() { this.width = 512; this.height = 2048; for (const f of this.ouvintes.load || []) f(); }   // o tamanho do atlas
       falhar() { for (const f of this.ouvintes.error || []) f(); }
     },
+    Request, URL: { createObjectURL: blob => blob, revokeObjectURL() {} },
     Som: som,
     Ceu: { agora: () => ({ h: escuro > 0.5 ? 22 : 12, cima: "#3d95ee", baixo: "#a9d8ff", escuro, hora: escuro > 0.5 ? "22:00" : "12:00" }) },
     // desenhar conta as chamadas: as partículas de chuva e neve e o clarão do raio só saem do Clima.desenhar
@@ -94,6 +95,7 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
              desenhar() { contexto.desenhos = (contexto.desenhos || 0) + 1; }, balanco: () => 0 },
     fetch: async (url, opcoes) => {
       requisicoes.push([url, opcoes]);
+      if (url.startsWith("/mundo/recife.png")) return imagemRecife ? imagemRecife(opcoes) : { ok: false };
       if (url.startsWith("/mundo/mundo.json")) return { ok: true, json: async () => JSON.parse(JSON.stringify(MUNDO)) };
       if (url.startsWith("/mundo/atlas.json")) return { ok: true, json: async () => JSON.parse(JSON.stringify(atlas)) };
       if (url.startsWith("/mundo/perto/ufs.json")) return { ok: true, json: async () => JSON.parse(JSON.stringify(UFS_PERTO)) };

@@ -669,8 +669,49 @@ const CidadePlanta = (() => {
       notaveis: pecas.filter(s => NOMES[s.peca]), porte, regiao: d.regiao, carros, postes, rede, pedestres };
   }
 
+  // Recife integral: pontos no PNG nativo. Cada aresta tem uma superfície; só as embocaduras usam o asfalto.
+  function recifeRaster() {
+    const caixa = [0, 0, 632, 424], casa = { x: 467, y: 163, r: [454, 114, 479, 163] };
+    const centro = { x: 468, y: 230, r: [438, 182, 504, 230] };
+    const praca = { x: 481, y: 222, r: [448, 187, 520, 232], fonte: [22, 15] };
+    const nos = [
+      [400, 306], [394, 318], [378, 318], [354, 325], [260, 325], [234, 318], [221, 306],
+      [221, 119], [221, 104], [239, 104], [257, 111], [356, 111], [381, 104], [393, 104],
+      [402, 119], [402, 159], [403, 168], [444, 170], [444, 203],
+      [462, 191], [467, 175], [casa.x, casa.y],
+    ];
+    const travessias = [0, 1, 5, 7, 8, 12, 13], pontes = [2, 3, 4, 9, 10, 11];
+    // O retângulo localiza os pixels da frente; chão e frestas ficam transparentes. A faixa de pés determina a camada.
+    const piso = [0x3b2a5e, 0xd7d0b6, 0xc6b48c, 0xc7b89c, 0xada592, 0x9f8883, 0xad8a6d];
+    const oclusoes = [
+      { frente: [215, 138, 228, 185], pes: [215, 139, 224, 186], transparente: piso },
+      { frente: [404, 105, 414, 161], pes: [394, 104, 405, 161], transparente: piso },
+      { frente: [251, 112, 359, 121], pes: [251, 100, 359, 112], transparente: [] },
+      { frente: [258, 326, 356, 334], pes: [258, 312, 356, 326], transparente: [] },
+    ];
+    const faixaPorAresta = Object.fromEntries(travessias.map(i => [chaveAresta(i, i + 1), { carros: false }]));
+    const viz = nos.map((_, i) => [i - 1, i + 1].filter(j => j >= 0 && j < nos.length));
+    const via = [[227, 176], [227, 293], [228, 295.5], [230.5, 296.5], [233, 295.5],
+      [234, 293], [234, 176], [233, 173.5], [230.5, 172.5], [228, 173.5]];
+    let L = 0;
+    const trechos = via.map((a, i) => {
+      const b = via[(i + 1) % via.length], u = unitario(a, b), inicio = L;
+      L += dist(a, b);
+      return { a, u, angulo: Math.atan2(u[1], u[0]), inicio, fim: L };
+    });
+    return {
+      cena: { pontes, travessias, oclusoes, farol: [467, 153], placa: [467, 142] }, W: caixa[2], H: caixa[3], casa, centro, praca,
+      pontos: [{ s: centro, nome: "Marco Zero · Recife Antigo" }],
+      malha: { caixa, pista: { L, trechos }, placas: [], cordoes: [[431, 184, 511, 184]] },
+      pecas: [], postes: [], cruzamentos: [],
+      rede: { nos, viz, peso: nos.map(() => 1), faixaPorAresta },
+      carros: [{ s: 74, v: 19, peca: "carro-1", tamanho: [8, 4] }],
+      pedestres: [{ de: nos.length - 5, para: nos.length - 4, s: 16, v: 17, semente: "recife:calcada" }],
+    };
+  }
+
   function loteUrbano([peca, x, y, r, base], zona) { return { peca, x, y, r, base, zona }; }
 
-  return { planta, sorteio, W, H, E, C, NOMES, PORTES, aguaEm, ponteEm, naPista, chaveAresta };
+  return { planta, recifeRaster, sorteio, W, H, E, C, NOMES, PORTES, aguaEm, ponteEm, naPista, chaveAresta };
 })();
 window.CidadePlanta = CidadePlanta;

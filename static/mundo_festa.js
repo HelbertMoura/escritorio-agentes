@@ -88,7 +88,7 @@ const MundoFesta = (() => {
 
     // a festa nova (ou outra cidade): cordões, peças da praça e o anel de luzes saem da planta
     function preparar(f, p, id) {
-      const k = f ? `${id}|${f.chave}|${!!recorte(p.praca.peca)}` : "";
+      const k = f ? `${id}|${f.chave}|${!!recorte(p.praca.peca)}${p.cena ? "|" + !!atlas() : ""}` : "";
       if (k === chave) return;
       chave = k; festa = f; cordoes = []; itens = []; anel = []; fogos = []; confete = []; fitas = []; desvio = 0; fonteR = null;
       rgbs = f ? f.cores.map(rgb) : [];   // o RGB de cada cor da festa, uma vez (o brilho guarda o sprite pela cor, não pelo array)
@@ -108,7 +108,8 @@ const MundoFesta = (() => {
       }
       praca(p);
       if (tem("pisca")) {   // o pisca no chão, contornando a frente e os lados do círculo da praça (atrás ficam os bancos)
-        const fonte = recorte(p.praca.peca), rx = (fonte ? fonte[2] : 90) / 2 + 3, ry = rx * 0.64, cy = p.praca.y - ry + 1;
+        const [largura, altura] = ancoraPraca(p);
+        const rx = largura / 2 + 3, ry = p.cena ? altura / 2 + 2 : rx * 0.64, cy = p.praca.y - ry + 1;
         const n = Math.round(Math.PI * (rx + ry) / 3.5);
         for (let i = 0; i < n; i++) {
           const a = i / n * Math.PI * 2;
@@ -120,19 +121,27 @@ const MundoFesta = (() => {
     // no atlas) ou a forma por código. A maior vai
     // num lado da fonte e as outras no espaço que sobra, sem cruzar a fonte nem sair da fila da praça. Numa praça
     // estreita, a fonte se afasta para o outro lado (desvio) até a maior caber; só se nem assim couber, entra a forma
+    function ancoraPraca(p) {
+      const fonte = recorte(p.praca.peca);
+      return p.praca.fonte || (fonte ? fonte.slice(2) : [90, 68]);
+    }
     function praca(p) {
       const lista = [], M = 2;
+      const arteQueCabe = nome => {
+        const r = recorte(nome);
+        return r && (!p.cena || p.praca.y - r[3] >= p.praca.r[1]) ? r : null;
+      };
       for (const e of festa.enfeites) if (e in NA_PRACA) {
-        const arte = NA_PRACA[e] && recorte(NA_PRACA[e]), forma = { forma: e, w: FORMAS[e][0].length, brilha: BRILHA[e] };
+        const arte = NA_PRACA[e] && arteQueCabe(NA_PRACA[e]), forma = { forma: e, w: FORMAS[e][0].length, brilha: BRILHA[e] };
         lista.push(arte ? { peca: NA_PRACA[e], w: arte[2], brilha: BRILHA[e], reserva: forma } : forma);
       }
-      for (const n of EXTRAS[festa.chave] || []) { const arte = recorte(n); if (arte) lista.push({ peca: n, w: arte[2] }); }
+      for (const n of EXTRAS[festa.chave] || []) { const arte = arteQueCabe(n); if (arte) lista.push({ peca: n, w: arte[2] }); }
       lista.sort((a, b) => b.w - a.w);
-      const fonte = recorte(p.praca.peca), meia = Math.ceil((fonte ? fonte[2] : 90) / 2), [x0, , x1] = p.praca.r;
+      const [largura, altura] = ancoraPraca(p), meia = Math.ceil(largura / 2), [x0, , x1] = p.praca.r;
       const esq = p.praca.x - meia - M - (x0 + M), dir = x1 - M - (p.praca.x + meia + M), maior = lista.length ? lista[0].w : 0;
-      desvio = maior > Math.max(esq, dir) ? Math.min(maior - esq, dir) : 0;   // a fonte vai para a direita
+      desvio = !p.cena && maior > Math.max(esq, dir) ? Math.min(maior - esq, dir) : 0;   // a fonte vai para a direita
       const cx = p.praca.x + desvio;
-      fonteR = [cx - meia, p.praca.y - (fonte ? fonte[3] : 68), cx + meia, p.praca.y];
+      fonteR = [cx - meia, p.praca.y - altura, cx + meia, p.praca.y];
       const lados = [{ a: x0 + M, b: cx - meia - M, l: [] }, { a: cx + meia + M, b: x1 - M, l: [] }];
       const livre = g => g.b - g.a - g.l.reduce((s, i) => s + i.w + 2, 0);
       for (let it of lista) {

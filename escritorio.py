@@ -176,7 +176,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "festas.js": "text/javascript; charset=utf-8", "efeitos.js": "text/javascript; charset=utf-8",
     "estilo.css": "text/css; charset=utf-8", "tema/atlas.png": "image/png", "tema/atlas.json": "application/json",
     "mundo/terra.png": "image/png", "mundo/brasil.png": "image/png", "mundo/mundo.json": "application/json",
-    "mundo/atlas.png": "image/png", "mundo/atlas.json": "application/json",
+    "mundo/recife.png": "image/png", "mundo/atlas.png": "image/png", "mundo/atlas.json": "application/json",
     "mundo/bairro.png": "image/png", "mundo/bairro.json": "application/json",
     "logo.png": "image/png", "fontes/figtree.ttf": "font/ttf", "fontes/silkscreen.ttf": "font/ttf",
     "fontes/figtree.woff2": "font/woff2", "fontes/silkscreen.woff2": "font/woff2",
@@ -2901,7 +2901,7 @@ PUBLICOS = {"entrar.css", "entrar.js", "avatar.js", "sprites.js", "convite.html"
             "visita.html", "visita.js", "visita.css", "mapa.js", "tema/atlas.png", "tema/atlas.json",
             "mundo.html", "mundo.js", "ceu.js", "clima.js", "som.js",  # bairro público: só código de desenho e som, sem dados
             # mapa do mundo: imagens, cidades e código de desenho, sem dados do escritório
-            "mundo/terra.png", "mundo/brasil.png", "mundo/mundo.json", "mundo/atlas.png", "mundo/atlas.json", "mundo/bairro.png", "mundo/bairro.json",
+            "mundo/terra.png", "mundo/brasil.png", "mundo/mundo.json", "mundo/recife.png", "mundo/atlas.png", "mundo/atlas.json", "mundo/bairro.png", "mundo/bairro.json",
             "mundo_globo.js", "mundo_mapa.js", "mundo_mapa_arte.js", "mundo_cidade.js", "mundo_cidade_planta.js", "mundo_bairro.js",
             "mundo_festa.js", "mundo_cidade_chao.js", "mundo_cidade_letreiro.js", "mundo_mapa_perto.js", *AZULEJOS_PERTO, "mundo/perto/ufs.json",
             "festas.js",  # o calendário embutido; as datas próprias só chegam pelo /api/config
