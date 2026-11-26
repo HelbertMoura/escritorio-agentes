@@ -6,6 +6,10 @@ As mudanças que importam neste projeto ficam aqui, da mais nova para a mais ant
 
 ## Não lançado
 
+### Corrigido
+- **Dica do mapa na tela pequena:** a dica de um ponto perto da borda (no mapa, na cidade ou na cena) agora fica dentro da tela, a 8 px da borda.
+- **Conferência das cenas:** a pista aceita faixa de pedestre (com pelo menos 70% do eixo no asfalto ou na ponte), cada cor entra em uma só classe de superfície, uma oclusão listrada não esconde mais uma calçada traçada fora da arte, o JSON editado sem `indice` reprova e a fonte da festa precisa caber na praça (ajuste em Belo Horizonte e Mateus Leme). O `sugerir` passa a limpar ruído e respeitar o teto de nós, e o `importar` registra retoques na proveniência.
+
 ### Adicionado
 - **Cenas integrais de Manaus, Belo Horizonte, Salvador e Mateus Leme:** as quatro cidades passam a ser desenhadas como uma cena única em pixel art, como o Recife: o Teatro Amazonas e o porto no Rio Negro, a Igreja da Pampulha com a lagoa e a Serra do Curral, o Elevador Lacerda com as igrejas do Pelourinho e a Baía, e a Igreja Matriz no adro de pedra. Cada uma tem portaria do escritório por clique, toque ou teclado, pedestres nas calçadas, carro na rua, praça para as festas e luzes à noite. Se a imagem não chegar ou não conferir, a cidade usa a planta de antes e tenta de novo na próxima entrada.
 - **Cenas por cidade, ferramenta de autoria:** o Recife passa a ser lido de um formato de cena por cidade (`static/mundo/cenas/`, mesmos pixels e arquivo menor), e `ferramentas/montar_cenas.py` importa a arte, ajuda a traçar calçadas e pista, confere a geometria contra as cores da arte e gera o manifesto.

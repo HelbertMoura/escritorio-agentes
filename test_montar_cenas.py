@@ -168,6 +168,10 @@ class Validacao(unittest.TestCase):
             f.write(b" ")
         self.assertTrue(any(v.startswith("A1: ") and "manifesto" in v for v in mc.validar("manaus", raiz)[0]))
         self.assertTrue(any("manifesto" in v for v in self.violacoes(indexar=False)))
+        raiz = self.raiz()   # o JSON editado sem o indice
+        with open(os.path.join(raiz, "static", "mundo", "cenas", "manaus.json"), "a", encoding="utf-8") as f:
+            f.write("\n")
+        self.assertTrue(any(v.startswith("A1: ") and "manifesto" in v for v in mc.validar("manaus", raiz)[0]))
 
     def test_a2_pedestre_em_jardim_ou_na_rua(self):
         self.reprova("A2", pintar=lambda g: g.rectangle([120, 97, 130, 103], fill=JARDIM))
@@ -198,6 +202,25 @@ class Validacao(unittest.TestCase):
         achadas = self.violacoes(mudar=mudar, pintar=pintar)
         self.assertTrue(any("aresta 2" in v and "escondidas" in v for v in achadas), achadas)
 
+    def test_a2_oclusao_listrada_nao_zera_a_sequencia(self):
+        """Colunas que escondem alternadas com colunas vazadas: o pedestre aparece fora da calçada o tempo todo."""
+        def mudar(d):
+            d["oclusoes"].append({"frente": [100, 90, 120, 106], "pes": [100, 90, 120, 106], "transparente": [CORES[0]]})
+
+        def pintar(g):
+            for x in range(100, 120):
+                g.line([x, 97, x, 103], fill=JARDIM if x % 2 else FUNDO)
+        achadas = self.violacoes(mudar=mudar, pintar=pintar)
+        self.assertTrue(any(v.startswith("A2: aresta 0") and "10 px seguidos" in v for v in achadas), achadas)
+        self.assertFalse(any("amostras visíveis fora" in v for v in achadas), "o total segue dentro dos 3%")
+
+    def test_a3_faixa_vale_ate_30_por_cento_da_linha_central(self):
+        def faixa(ate):   # o eixo do lado de cima (200 das 640 amostras da volta)
+            return lambda g: g.line([101, 160, ate, 160], fill=FAIXA)
+        self.assertEqual(self.violacoes(pintar=faixa(250)), [], "23% em faixa")
+        achadas = self.violacoes(pintar=faixa(299))
+        self.assertTrue(any(v.startswith("A3:") and "70%" in v for v in achadas), achadas)
+
     def test_a3_pista(self):
         for y in (158, 160, 162):   # as duas paralelas e a central
             self.reprova("A3", pintar=lambda g: g.line([150, y, 160, y], fill=JARDIM))
@@ -222,6 +245,13 @@ class Validacao(unittest.TestCase):
                 with self.subTest(regra=regra, caso=i):
                     self.reprova(regra, mudar=mudar)
 
+    def test_a7_fonte_apoiada_no_pe(self):
+        """O caso de Belo Horizonte: a fonte cabe centrada em (x, y), mas a festa a desenha de y - 15 até y."""
+        achadas = self.violacoes(mudar=lambda d: d["praca"].update(r=[380, 279, 440, 301], fonte=[22, 15]))
+        self.assertTrue(any(v.startswith("A7:") for v in achadas), achadas)
+        self.assertFalse(any(v.startswith("esquema:") for v in achadas), achadas)
+        self.assertEqual(self.violacoes(mudar=lambda d: d["praca"].update(r=[399, 275, 421, 298], fonte=[22, 15])), [])
+
     def test_a6_mascara_inutil_e_so_aviso(self):
         violacoes, avisos = mc.validar("manaus", self.raiz(
             mudar=lambda d: d["oclusoes"][0].update(frente=[10, 10, 20, 20], pes=[10, 10, 20, 20])))
@@ -233,6 +263,11 @@ class Validacao(unittest.TestCase):
                       lambda d: d["superficies"].update(calcada=[]), lambda d: d["superficies"].update(asfalto=[]),
                       lambda d: d["superficies"]["ponte"].append("123456"), lambda d: d["superficies"].update(faixa=["FFF"])):
             self.reprova("superficies", mudar=mudar)
+
+    def test_superficies_sem_cor_em_duas_classes(self):
+        achadas = self.violacoes(mudar=lambda d: d["superficies"]["faixa"].append(CORES[CALCADA]))
+        self.assertTrue(any(v.startswith("superficies:") and CORES[CALCADA] in v and "calcada" in v and "faixa" in v
+                            for v in achadas), achadas)
 
     def test_esquema_igual_ao_do_cliente(self):
         self.reprova("esquema", mudar=lambda d: d["carros"][0].update(v=41))
@@ -257,7 +292,9 @@ class Validacao(unittest.TestCase):
             with open(os.path.join(saida, "manaus-sugestao.json"), encoding="utf-8") as f:
                 s = json.load(f)
         nos, arestas = s["calcadas"]["nos"], s["calcadas"]["arestas"]
-        for alvo in ((60, 100), (200, 100), (400, 100), (400, 250), (200, 200)):
+        # (200, 200) fica do outro lado da rua: fora do componente da portaria, sai da sugestão
+        self.assertTrue(all(y < 160 for x, y in nos if x < 300), nos)
+        for alvo in ((60, 100), (200, 100), (400, 100), (400, 250), (200, 149)):
             self.assertLessEqual(min(abs(x - alvo[0]) + abs(y - alvo[1]) for x, y in nos), 10, (alvo, nos))
         self.assertTrue(all(0 <= i < len(nos) and 0 <= j < len(nos) and i != j for i, j in arestas))
         self.assertTrue(s["calcadas"]["pontes"])
@@ -267,6 +304,124 @@ class Validacao(unittest.TestCase):
         for dentro in (e.ESTATICO, os.path.join(raiz, "saida")):
             with self.assertRaises(mc.Erro):
                 mc.paleta("manaus", dentro, raiz)
+
+
+    def test_paleta_so_precisa_do_png(self):
+        raiz = self.raiz()
+        with tempfile.TemporaryDirectory() as saida:
+            arquivo = os.path.join(saida, "manaus-paleta.png")
+            mc.paleta("manaus", saida, raiz)
+            com_json = ler(arquivo)
+            os.remove(os.path.join(raiz, "static", "mundo", "cenas", "manaus.json"))
+            mc.paleta("manaus", saida, raiz)
+            self.assertNotEqual(ler(arquivo), com_json, "com o JSON, a classe de cada cor aparece por cima")
+
+
+# a cena para o sugerir: uma rua em volta e outra que a corta, calçadas, um rio com ponte, ruído e uma calçada solta
+AGUA = JARDIM
+CRUZAMENTO = [[100, 80], [380, 80], [380, 240], [100, 240]]
+RUIDO = [(20, 20), (460, 20), (240, 130), (30, 300), (450, 300)]
+
+
+def arte_de_ruas():
+    img = Image.new("P", (480, 320), FUNDO)
+    img.putpalette([int(c[i:i + 2], 16) for c in CORES for i in (0, 2, 4)])
+    g = ImageDraw.Draw(img)
+    g.rectangle([225, 0, 255, 319], fill=AGUA)
+    g.rectangle([76, 56, 404, 264], fill=CALCADA)
+    g.rectangle([84, 64, 396, 256], fill=ASFALTO)
+    g.rectangle([116, 96, 364, 224], fill=CALCADA)
+    g.rectangle([124, 104, 356, 216], fill=FUNDO)
+    g.rectangle([84, 150, 396, 170], fill=ASFALTO)   # a segunda rua
+    g.rectangle([225, 104, 255, 149], fill=AGUA)
+    g.rectangle([225, 56, 255, 63], fill=PONTE)
+    for x, y in RUIDO:   # pontos soltos, um borrão pequeno e um risco de 1 px
+        g.rectangle([x, y, x + 3, y + 3], fill=CALCADA)
+        g.rectangle([x + 8, y, x + 13, y + 5], fill=ASFALTO)
+        g.line([x, y + 10, x + 14, y + 10], fill=CALCADA)
+    g.rectangle([20, 100, 25, 220], fill=CALCADA)   # grande, mas longe da portaria
+    return img
+
+
+@FERRAMENTA
+class Sugerir(unittest.TestCase):
+    def raiz(self, img):
+        pasta = tempfile.mkdtemp(prefix="cenas-sugerir-")
+        self.addCleanup(shutil.rmtree, pasta)
+        cenas = os.path.join(pasta, "static", "mundo", "cenas")
+        os.makedirs(cenas)
+        img.save(os.path.join(cenas, "manaus.png"))
+        with open(os.path.join(cenas, "manaus.json"), "w", encoding="utf-8") as f:   # a autoria no começo
+            json.dump({"portaria": {"x": 80, "y": 60}, "carros": [{"tamanho": [8, 4]}],
+                       "superficies": {"calcada": [CORES[CALCADA]], "faixa": [], "ponte": [CORES[PONTE]],
+                                       "asfalto": [CORES[ASFALTO]]}}, f)
+        saida = tempfile.mkdtemp(prefix="cenas-saida-")
+        self.addCleanup(shutil.rmtree, saida)
+        return pasta, saida
+
+    def test_ruido_some_e_a_pista_fica_no_asfalto(self):
+        raiz, saida = self.raiz(arte_de_ruas())
+        antes = ler(raiz, "static", "mundo", "cenas", "manaus.json")
+        s = mc.sugerir("manaus", saida, raiz)
+        self.assertEqual(ler(raiz, "static", "mundo", "cenas", "manaus.json"), antes, "só sugestão")
+        nos, arestas = s["calcadas"]["nos"], s["calcadas"]["arestas"]
+        self.assertTrue(4 <= len(nos) <= 160, nos)
+        self.assertEqual(s["eps"], 1.5)
+        for x, y in nos:   # nada no ruído nem na calçada solta: só o anel da portaria
+            self.assertTrue(70 <= x <= 410 and 50 <= y <= 270, (x, y))
+        for i, a in enumerate(nos):
+            for b in nos[i + 1:]:
+                self.assertGreaterEqual((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2, 9, (a, b))
+        vistos = {0}
+        for _ in nos:
+            vistos |= {k for i, j in arestas for k in (i, j) if i in vistos or j in vistos}
+        self.assertEqual(len(vistos), len(nos), "um componente só")
+        self.assertTrue(all(0 <= k < len(arestas) for k in s["calcadas"]["pontes"] + s["calcadas"]["travessias"]))
+        self.assertTrue(s["calcadas"]["pontes"])
+        self.assertGreaterEqual(len(s["pista"]), 4)
+        with Image.open(os.path.join(raiz, "static", "mundo", "cenas", "manaus.png")) as im:
+            d = {"superficies": {"asfalto": [CORES[ASFALTO]], "ponte": [], "faixa": []}, "carros": [{"tamanho": [8, 4]}],
+                 "pista": s["pista"]}
+            self.assertEqual(list(mc.a3_pista(d, im.convert("RGBA"), [])), [])
+
+    def test_saida_identica_byte_a_byte(self):
+        raiz, saida = self.raiz(arte_de_ruas())
+
+        def rodar():
+            mc.sugerir("manaus", saida, raiz)
+            return [ler(saida, "manaus-sugestao" + ext) for ext in (".json", ".png")]
+        self.assertEqual(rodar(), rodar())
+
+    def test_pista_reprovada_no_a3_sai(self):
+        img = arte_de_ruas()
+        g = ImageDraw.Draw(img)
+        g.rectangle([0, 0, 479, 319], fill=FUNDO)
+        g.rectangle([40, 40, 200, 160], fill=ASFALTO)   # um anel de 6 px: o carro de 4 px de largura não cabe nas curvas
+        g.rectangle([46, 46, 194, 154], fill=FUNDO)
+        raiz, saida = self.raiz(img)
+        with open(os.path.join(raiz, "static", "mundo", "cenas", "manaus.json"), "r+", encoding="utf-8") as f:
+            d = json.load(f)
+            d["carros"] = [{"tamanho": [8, 20]}]
+            f.seek(0)
+            f.truncate()
+            json.dump(d, f)
+        self.assertEqual(mc.sugerir("manaus", saida, raiz)["pista"], [])
+
+    def test_acima_do_teto_o_eps_sobe(self):
+        img = arte_de_ruas()
+        g = ImageDraw.Draw(img)
+        g.rectangle([0, 0, 479, 319], fill=FUNDO)
+        pontos = []
+        for k, y in enumerate(range(20, 300, 20)):   # uma serpentina em dentes de 4 px
+            linha = [(x, y + (4 if x // 8 % 2 else 0)) for x in range(24, 457, 8)]
+            pontos += linha[::-1] if k % 2 else linha
+        g.line(pontos, fill=CALCADA, width=3)
+        raiz, saida = self.raiz(img)
+        with contextlib.redirect_stdout(io.StringIO()) as texto:
+            s = mc.sugerir("manaus", saida, raiz)
+        self.assertGreater(s["eps"], 1.5)
+        self.assertLessEqual(len(s["calcadas"]["nos"]), 160)
+        self.assertIn(f"eps {s['eps']}", texto.getvalue())
 
 
 @FERRAMENTA
@@ -319,6 +474,62 @@ class Importar(unittest.TestCase):
                 mc.importar(cidade, self.bruto(**opcoes), self.raiz)
         self.assertEqual(os.listdir(os.path.join(self.raiz, "static", "mundo", "cenas")), [])
         self.assertEqual(ler(self.proveniencia).decode(), "# Proveniência\n")
+
+    def retocado(self, bruto, pasta="retoques", mudar=None):
+        os.makedirs(os.path.join(self.base, pasta), exist_ok=True)
+        arq = os.path.join(self.base, pasta, os.path.basename(bruto))
+        with Image.open(bruto) as im:
+            novo = im.convert("RGBA")
+        novo.putpixel((5, 5), novo.getpixel((6, 5)))
+        (mudar(novo) if mudar else novo).save(arq)
+        return arq
+
+    def test_importar_o_retocado(self):
+        bruto = self.bruto()
+        mc.importar("manaus", bruto, self.raiz)
+        retocado = self.retocado(bruto)
+        nota = "um carro desenhado coberto com a faixa ao lado"
+        argumentos = ("manaus", bruto, self.raiz, retocado, nota)
+        mc.importar(*argumentos)
+        with Image.open(os.path.join(self.raiz, "static", "mundo", "cenas", "manaus.png")) as a, Image.open(retocado) as b:
+            self.assertEqual(a.convert("RGBA").tobytes(), b.convert("RGBA").tobytes())
+        texto = ler(self.proveniencia).decode()
+        linha = [l for l in texto.splitlines() if nota in l]
+        self.assertEqual(len(linha), 1)
+        for trecho in ("| `manaus` |", hashlib.sha256(ler(bruto)).hexdigest(), hashlib.sha256(ler(retocado)).hexdigest(),
+                       f"`{retocado}`"):
+            self.assertIn(trecho, linha[0])
+        mc.importar(*argumentos)
+        self.assertEqual(ler(self.proveniencia).decode(), texto, "o mesmo retoque, uma linha só")
+        mc.importar("manaus", self.bruto(semente=1), self.raiz)   # a linha nova entra na tabela dos brutos
+        linhas = ler(self.proveniencia).decode().split(mc.SECAO_RETOQUES)
+        self.assertEqual((linhas[0].count("| `manaus` |"), linhas[1].count("| `manaus` |")), (2, 1))
+
+    def test_retoque_recusado(self):
+        bruto = self.bruto()
+        bom = self.retocado(bruto)
+        no_repo = os.path.join(self.raiz, "retoque.png")
+        shutil.copy(bom, no_repo)
+        casos = {
+            "sem nota": (bom, None), "sem retocado": (None, "nota"), "nota vazia": (bom, ""),
+            "nota longa": (bom, "a" * 161), "nota quebrada": (bom, "a\nb"), "nota com barra": (bom, "a|b"),
+            "dentro do repositório": (no_repo, "nota"),
+            "outro tamanho": (self.retocado(bruto, "outro", lambda im: im.crop((0, 0, 479, 320))), "nota"),
+            "cores demais": (self.retocado(bruto, "cores", lambda im: Image.merge("RGBA", (
+                Image.linear_gradient("L").resize(im.size), Image.linear_gradient("L").rotate(90).resize(im.size),
+                im.getchannel("B"), im.getchannel("A")))), "nota"),
+            "sem arquivo": (bom + ".nada", "nota"),
+        }
+        for nome, (retocado, nota) in casos.items():
+            with self.subTest(nome), self.assertRaises(mc.Erro):
+                mc.importar("manaus", bruto, self.raiz, retocado, nota)
+        self.assertEqual(os.listdir(os.path.join(self.raiz, "static", "mundo", "cenas")), [])
+        self.assertEqual(ler(self.proveniencia).decode(), "# Proveniência\n")
+
+    def test_comando_pede_as_duas_opcoes_juntas(self):
+        with contextlib.redirect_stderr(io.StringIO()) as erro:
+            self.assertEqual(mc.main(["importar", "manaus", self.bruto(), "--nota", "só a nota"]), 1)
+        self.assertIn("--retocado", erro.getvalue())
 
     def test_escolhas_manda(self):
         with open(os.path.join(self.base, "trabalho", "escolhas.json"), "w", encoding="utf-8") as f:

@@ -4,7 +4,7 @@
 const assert = require("node:assert/strict");
 const { createHash } = require("node:crypto");
 const { readFileSync } = require("node:fs");
-const { abrir, carregar, espera, CLIMA } = require("./test_mundo_navegacao.js");
+const { abrir, carregar, espera, chegarAtlas: atlas, festaNaPraca, festasDaCidade, CLIMA } = require("./test_mundo_navegacao.js");
 
 const CASA = { ...CLIMA, casa: "recife" };
 const PNG = { ok: true, blob: async () => "blob:recife" };
@@ -24,12 +24,6 @@ async function decodificar(m, w = 632, h = 424) {
   assert.ok(img, "a imagem do Recife foi criada com a resposta validada");
   img.naturalWidth = w; img.naturalHeight = h; img.carregar();
   await espera(); m.rodar(2);
-}
-// o atlas chega sem mexer na imagem do Recife
-async function atlas(m) {
-  await espera();
-  for (const img of m.contexto.imagens || []) if (String(img.src).startsWith("/mundo/atlas.png")) img.carregar();
-  m.rodar(2);
 }
 // os botões de teclado passam a ter foco como no navegador: focus() marca o ativo e remover o ativo dispara blur
 function comFoco(m) {
@@ -118,9 +112,11 @@ async function saidaRapida() {
   assert.equal(pedidos(m), 1);
 }
 
-// sem o atlas, a cena segue com porta, vida e festa; o movimento reduzido para carro e pedestre
+// sem o atlas, a cena segue com porta, vida e festa (o movimento reduzido para carro e pedestre); quando ele chega, a
+// festa fica na praça
 async function semAtlasComFesta() {
   for (const reduzido of [false, true]) {
+    const vistas = [];
     for (const data of ["2026-02-16", "2026-06-24", "2026-10-31", "2026-12-25", "2026-12-31"]) {
       const m = await abrir("#cidade=recife", { clima: CASA, reduzido, escuro: 1, busca: "?data=" + data, passo: 100,
         imagemRecife: () => PNG });
@@ -130,12 +126,12 @@ async function semAtlasComFesta() {
       const antes = JSON.stringify([c.carros, c.pedestres]);
       m.rodar(20);
       assert.equal(JSON.stringify([c.carros, c.pedestres]) === antes, reduzido, `${data}: vida ${reduzido ? "parada" : "andando"}`);
-      assert.ok(c.enfeites.chave, `${data}: a festa do dia`);
       assert.match(c.rotulo(), /a cidade está enfeitada/);
-      const [x0, y0, x1, y1] = c.planta.praca.r;
-      for (const s of c.enfeites.pecas) assert.ok(s[1] >= x0 && s[2] >= y0 && s[3] <= x1 && s[4] <= y1, `${data}: ${s[0]} na praça`);
+      await atlas(m);
+      vistas.push(festaNaPraca(c, data));
       assert.deepEqual(m.contexto.erros || [], []);
     }
+    festasDaCidade(vistas, JSON.parse(readFileSync("static/mundo/cenas/recife.json", "utf8")).praca, "Recife");
   }
 }
 

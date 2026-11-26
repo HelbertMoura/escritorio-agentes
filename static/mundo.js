@@ -127,6 +127,7 @@ const Mundo = (() => {
   botaoEntrar.textContent = convite ? "Entrar com convite" : "Entrar na recepção";
 
   let W = 0, H = 0, dpr = 1, mapa = null, nome = null, nivel = null, atualCidade = null, ultimaCidade = null, trans = null;
+  const MARGEM = 8;   // a folga da dica até a borda do palco, em px CSS
   let botoes = [], chaveAlvos = "", dicaAlvo = null, anterior = performance.now(), pedido_ = false, gesto = null, roda = 0;
   let toque = null;   // o último toque solto (tempo e ponto): o segundo, logo depois e perto, aproxima no ponto
   // a festa do dia (festas.js): só depois da resposta do clima, que traz as festas desligadas (antes dela, nada de
@@ -309,8 +310,14 @@ const Mundo = (() => {
     if (chave === chaveAlvos) return;
     chaveAlvos = chave;
     for (const [b, a] of botoes) { const [x, y] = cam.tela(a.x, a.y); b.style.transform = `translate(${x / dpr}px, ${y / dpr - a.alto / 2}px)`; }
-    if (dicaAlvo) { const [x, y] = cam.tela(dicaAlvo.x, dicaAlvo.y); dica.style.transform = `translate(${x / dpr}px, ${y / dpr - dicaAlvo.alto}px)`; }
+    if (dicaAlvo) {   // a dica ocupa [cx - w/2, cx + w/2] x [by - h, by] (o translate do visita.css) e não sai do palco
+      const [x, y] = cam.tela(dicaAlvo.x, dicaAlvo.y), w = dica.offsetWidth, h = dica.offsetHeight, Wc = W / dpr, Hc = H / dpr;
+      const cx = w > Wc - 2 * MARGEM ? Math.round(Wc / 2) : prender(x / dpr, MARGEM + w / 2, Wc - MARGEM - w / 2);
+      dica.style.transform = `translate(${cx}px, ${prender(y / dpr - dicaAlvo.alto, MARGEM + h, Hc - MARGEM)}px)`;
+    }
   }
+  // em px CSS: o valor que cabe fica como está; o que passa para no limite, em pixel inteiro e para dentro
+  function prender(v, min, max) { return Math.min(Math.max(v, Math.ceil(min)), Math.floor(max)); }
 
   function medir() {
     const r = canvas.getBoundingClientRect(), d = window.devicePixelRatio || 1;

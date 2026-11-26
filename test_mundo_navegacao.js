@@ -15,6 +15,7 @@ const COMPILADOS = new Map();
 function elemento() {
   const el = {
     ouvintes: {}, style: {}, dataset: {}, hidden: false, textContent: "", filhos: [], disabled: false,
+    offsetWidth: 0, offsetHeight: 0,   // o tamanho em px CSS: o teste da dica ajusta
     addEventListener(t, f) { (el.ouvintes[t] ||= []).push(f); },
     disparar(t, ev = {}) { for (const f of el.ouvintes[t] || []) f({ preventDefault() {}, stopPropagation() {}, target: el, ...ev }); },
     setAttribute(k, v) { el[k] = String(v); }, removeAttribute(k) { delete el[k]; },
@@ -141,6 +142,30 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
 }
 const espera = async () => { for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r)); };
 const carregar = async m => { await espera(); for (const img of m.contexto.imagens || []) img.carregar(); m.rodar(2); };
+// o atlas chega sem mexer nas outras imagens (a da cena)
+async function chegarAtlas(m) {
+  await espera();
+  for (const img of m.contexto.imagens || []) if (String(img.src).startsWith("/mundo/atlas.png")) img.carregar();
+  m.rodar(2);
+}
+// a festa do dia na cena de uma cidade (com o atlas): algo desenhado, e a fonte e cada peça dentro da praça.
+// Devolve se alguma arte do atlas apareceu e se alguma forma por código apareceu
+function festaNaPraca(c, onde) {
+  const e = c.enfeites, [x0, y0, x1, y1] = c.planta.praca.r;
+  const dentro = r => r[0] >= x0 && r[1] >= y0 && r[2] <= x1 && r[3] <= y1;
+  assert.ok(e.chave, `${onde}: a festa do dia`);
+  assert.ok(e.formas.length + e.pecas.length + e.cordoes > 0, `${onde}: algo desenhado`);
+  assert.ok(e.fonte && dentro(e.fonte), `${onde}: fonte ${e.fonte} na praça`);
+  for (const s of e.pecas) assert.ok(dentro(s.slice(1)), `${onde}: ${s[0]} na praça`);
+  return { pecas: e.pecas.length > 0, formas: e.formas.length > 0 };
+}
+// em todas as datas juntas: se alguma arte de festa do atlas cabe na praça (a altura acima do pé e a largura no vão ao
+// lado da fonte, com as folgas de 2 px do mundo_festa.js), ao menos uma peça; senão, ao menos uma forma por código
+function festasDaCidade(vistas, praca, onde) {
+  const [x0, y0, x1] = praca.r, meia = Math.ceil(praca.fonte[0] / 2), vao = Math.max(praca.x - meia - x0, x1 - praca.x - meia) - 4;
+  const cabe = Object.entries(ATLAS.quadros).some(([n, r]) => n.startsWith("festa-") && r[2] <= vao && r[3] <= praca.y - y0);
+  assert.ok(vistas.some(v => (cabe ? v.pecas : v.formas)), `${onde}: ${cabe ? "arte" : "forma"} em ao menos uma data`);
+}
 
 const cidade = id => MUNDO.cidades.find(c => c.id === id);
 const NOITE_TODAS = { ...CLIMA, cidades: Object.fromEntries(MUNDO.cidades.map(c => [c.id, { tipo: "limpo", vento: 0, noite: true }])) };
@@ -883,6 +908,61 @@ async function principal() {
   await carregar(vf);
   assert.equal(vf.elementos["mundo-vista"].textContent, "Paris · França");
   assert.equal(vf.elementos["mundo-voltar"]["aria-label"], "Voltar para o globo", "cidade estrangeira sobe ao globo");
+  await dicaNoNucleo();
 }
-module.exports = { abrir, espera, carregar, MUNDO, ATLAS, CLIMA, UFS_PERTO };
+
+// a dica do alvo fica a pelo menos 8 px CSS das bordas do palco, em qualquer nível; longe delas, o transform não muda
+async function dicaNoNucleo() {
+  const M_ = 8, LARG = 200, ALT = 60;
+  const lida = m => m.elementos["mundo-dica"].style.transform.match(/^translate\((-?[\d.]+)px, (-?[\d.]+)px\)$/).slice(1).map(Number);
+  for (const dpr of [1, 2]) {
+    const W = 360, H = 600, m = await abrir("#brasil", { tela: [W, H, dpr], reduzido: true }), n = m.M.niveis.brasil;
+    // um alvo só, de teste: o ponto muda e a assinatura nova faz o mundo reposicionar com a câmera parada
+    const alvo = { id: "teste", x: 0, y: 0, alto: 10, titulo: "Alvo", texto: "texto", rotulo: "Alvo" };
+    let versao = 0;
+    n.alvos = () => [alvo]; n.assinatura = () => versao;
+    m.M.ir("globo"); m.M.ir("brasil"); m.rodar(2);
+    const dica = m.elementos["mundo-dica"];
+    dica.offsetWidth = LARG; dica.offsetHeight = ALT;
+    m.elementos["mundo-alvos"].filhos[0].disparar("focus"); m.rodar(60);
+    const por = (sx, sy) => {   // o alvo no ponto (sx, sy) do palco, em px CSS
+      [alvo.x, alvo.y] = n.camera.mundo(sx * dpr, sy * dpr); versao++; m.rodar();
+      return lida(m);
+    };
+    const antiga = () => { const [x, y] = n.camera.tela(alvo.x, alvo.y); return `translate(${x / dpr}px, ${y / dpr - alvo.alto}px)`; };
+    por(180.25, 300.75);
+    assert.equal(dica.style.transform, antiga(), `(a) no centro, dpr ${dpr}: o transform de sempre`);
+    assert.equal(por(5, 300)[0], M_ + LARG / 2, `(b) borda esquerda, dpr ${dpr}`);
+    assert.equal(por(358, 300)[0], W - M_ - LARG / 2, `(c) borda direita, dpr ${dpr}`);
+    assert.equal(por(180, 20)[1], M_ + ALT, `(d) topo, dpr ${dpr}`);
+    assert.equal(por(180, 640)[1], H - M_, `base, dpr ${dpr}`);
+    assert.deepEqual(por(2, 4), [M_ + LARG / 2, M_ + ALT], `(e) em px CSS no dpr ${dpr}`);
+    dica.offsetWidth = 359; alvo.x++; versao++;
+    assert.equal(por(5, 300)[0], W / 2, `(f) mais larga que a tela: centrada, dpr ${dpr}`);
+    dica.offsetWidth = 101;
+    assert.equal(por(5, 300)[0], Math.ceil(M_ + 101 / 2), "preso na borda, em px inteiro e para dentro");
+    assert.equal(por(358, 300)[0], Math.floor(W - M_ - 101 / 2));
+  }
+  // (g) Manaus a 360 px, no zoom máximo e com o foco na portaria
+  const cena = JSON.parse(fs.readFileSync("static/mundo/cenas/manaus.json", "utf8"));
+  const g = await abrir("#cidade=manaus", { tela: [360, 600, 1], clima: { ...CLIMA, casa: "manaus" }, reduzido: true,
+    imagemRecife: () => ({ ok: true, blob: async () => "blob:manaus" }) });
+  await espera();
+  const img = g.contexto.imagens.find(i => i.src === "blob:manaus");
+  img.naturalWidth = cena.W; img.naturalHeight = cena.H; img.carregar();
+  await espera(); g.rodar(2);
+  const n = g.M.niveis.cidade, cam = n.camera, porta = n.alvos()[0], dica = g.elementos["mundo-dica"];
+  assert.equal(porta.id, "porta"); assert.ok(n.planta.cena);
+  for (let i = 0; i < 8; i++) g.elementos["mundo-mais"].disparar("click");
+  g.rodar(60);
+  // a portaria a 50 px da borda esquerda: dentro da margem de 40 px do foco, a câmera não sai do lugar
+  cam.voar(porta.x + (180 - 50) / cam.P, porta.y); g.rodar(60);
+  assert.ok(Math.abs(cam.tela(porta.x, porta.y)[0] - 50) <= cam.P, "a portaria perto da borda: " + cam.tela(porta.x, porta.y)[0]);
+  dica.offsetWidth = 300; dica.offsetHeight = ALT;
+  g.elementos["mundo-alvos"].filhos[0].disparar("focus"); g.rodar(60);
+  const [x, y] = lida(g);
+  assert.ok(x - 150 >= M_ && x + 150 <= 360 - M_, `(g) a dica cabe na largura: ${x}`);
+  assert.ok(y - ALT >= M_ && y <= 600 - M_, `(g) a dica cabe na altura: ${y}`);
+}
+module.exports = { abrir, espera, carregar, chegarAtlas, festaNaPraca, festasDaCidade, MUNDO, ATLAS, CLIMA, UFS_PERTO };
 if (require.main === module) principal().catch(e => { console.error(e); process.exitCode = 1; });

@@ -6,7 +6,7 @@ const assert = require("node:assert/strict");
 const { createHash } = require("node:crypto");
 const { readFileSync } = require("node:fs");
 const vm = require("node:vm");
-const { abrir, carregar, espera, CLIMA } = require("./test_mundo_navegacao.js");
+const { abrir, carregar, espera, chegarAtlas, festaNaPraca, festasDaCidade, CLIMA } = require("./test_mundo_navegacao.js");
 
 const contexto = vm.createContext({ window: {} });
 for (const f of ["static/mundo_cidade_cenas.js", "static/mundo_cidade_planta.js"]) vm.runInContext(readFileSync(f, "utf8"), contexto);
@@ -189,23 +189,24 @@ async function doManifesto(id) {
     for (const z of c.carros) assert.ok(pista.some((a, i) => distancia(z, a, pista[(i + 1) % pista.length]) < 0.5), `${id}: carro fora em ${z}`);
   }
   assert.deepEqual(m.contexto.erros || [], []);
+  const vistas = [];
   for (const data of ["2026-02-16", "2026-06-24", "2026-10-31", "2026-12-25", "2026-12-31"]) {
     const f = await abrir("#cidade=" + id, { clima: casa, escuro: 1, busca: "?data=" + data, imagemRecife: () => png(id) });
     await decodificar(f, dados.W, dados.H);
-    const n = f.M.niveis.cidade, [x0, y0, x1, y1] = n.planta.praca.r;
-    assert.ok(n.enfeites.chave, `${id} ${data}: a festa do dia`);
-    for (const s of n.enfeites.pecas) assert.ok(s[1] >= x0 && s[2] >= y0 && s[3] <= x1 && s[4] <= y1, `${id} ${data}: ${s[0]} na praça`);
+    await chegarAtlas(f);
+    vistas.push(festaNaPraca(f.M.niveis.cidade, `${id} ${data}`));
     assert.deepEqual(f.contexto.erros || [], []);
   }
+  festasDaCidade(vistas, dados.praca, id);
 }
 
 // (c) nada de cena no globo, no Brasil ou em cidade sem cena; na cidade com cena, um JSON e um PNG, os do manifesto
 async function preguicosa() {
-  // a cidade sem cena sai do mundo.json (a 1ª fora do manifesto), para não quebrar a cada lote de cenas
-  const mundo = JSON.parse(readFileSync("static/mundo/mundo.json", "utf8"));
-  const semCena = [...mundo.cidades, ...mundo.exterior, ...mundo.niveis.brasil.medias].map(c => c.id).find(id => !Object.hasOwn(MANIFESTO, id));
-  for (const hash of ["#globo", "#brasil", "#cidade=" + semCena]) {
-    const m = await abrir(hash, { reduzido: true });
+  // a cidade sem cena é Manaus fora de um manifesto de teste: não depende de quantas cidades já têm cena
+  const semManaus = copia(MANIFESTO);
+  delete semManaus.manaus;
+  for (const hash of ["#globo", "#brasil", "#cidade=manaus"]) {
+    const m = await abrir(hash, { reduzido: true, cenas: semManaus });
     await carregar(m);
     assert.deepEqual(todos(m), [], hash);
   }

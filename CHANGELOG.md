@@ -6,6 +6,10 @@ All notable changes to this project are listed here, newest first. The format fo
 
 ## Unreleased
 
+### Fixed
+- **Map tooltip on small screens:** the tooltip of a point near the edge (map, city or scene) now stays on screen, 8 px from the edge.
+- **Scene checks:** the car loop accepts crosswalk pixels (with at least 70% of its centre line on asphalt or bridge), each colour belongs to a single surface class, a striped occlusion no longer hides a sidewalk traced off the art, a JSON edited without `indice` fails, and the festival fountain must fit inside the square (adjusted in Belo Horizonte and Mateus Leme). `sugerir` now removes noise and respects the node cap, and `importar` records retouches in the provenance file.
+
 ### Added
 - **Full scenes for Manaus, Belo Horizonte, Salvador and Mateus Leme:** the four cities are now drawn as a single pixel-art scene, like Recife: the Amazon Theatre and the Rio Negro port, the Pampulha church with its lake and the Serra do Curral, the Lacerda Elevator with the Pelourinho churches and the bay, and the main church on its stone churchyard. Each has the office entrance by click, tap or keyboard, pedestrians on the sidewalks, a car on the street, a square for the holidays and lights at night. If the image does not arrive or does not match, the city falls back to the previous map and tries again on the next visit.
 - **City scenes and authoring tool:** Recife is now read from a per-city scene format (`static/mundo/cenas/`, same pixels in a smaller file), and `ferramentas/montar_cenas.py` imports the art, helps trace sidewalks and the car loop, checks the geometry against the art colours and generates the manifest.

@@ -96,6 +96,6 @@ Salvador são as novas tentativas; BH e Mateus Leme, a 1ª).
   `[181,196,192,217]` com a fonte 30 px abaixo, `[181,263,192,286]` com a fonte 30 px acima e `[206,319,228,331]` com
   a fonte 30 px à direita (borda direita e inferior exclusivas). Bruto original
   `manaus-pixen-600x436-retry.png` (SHA-256 `ae6d827feeee026c1f24da92992c0bb82fefb26f77c8974a2750ec05c3fd924f`);
-  o retocado, com o mesmo nome em `firmopolis-pixellab-cenas/retoque/raw/`, é o da linha acima (`ec71224d…`). O
-  script é `retoque/retocar.py`.
+  o retocado, com o mesmo nome em `firmopolis-pixellab-cenas/retoques/raw/`, é o da linha acima (`ec71224d…`). O
+  script é `retoques/retocar.py`.
 - BH, Salvador e Mateus Leme entram sem retoque: a pista passa só por trechos de faixa sem carro desenhado.

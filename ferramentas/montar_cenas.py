@@ -5,8 +5,13 @@
 Uso: python3 ferramentas/montar_cenas.py <subcomando>
   importar <id> <png_bruto>   grava o PNG indexado, sem perda, e anota a proveniência. O bruto é o que o
                               ../trabalho/escolhas.json (ao lado da pasta dele) mandar; sem escolha, o da 1ª tentativa
-  paleta <id> --saida DIR     cada cor da arte, com índice, hex, contagem e onde aparece (para preencher "superficies")
-  sugerir <id> --saida DIR    rede de calçadas e pista tiradas das "superficies": só sugestão, o autor copia e corrige
+      --retocado PNG --nota TEXTO   (juntas) importa o retoque do bruto: mesmo tamanho, até 256 cores, guardado fora do
+                              repositório (firmopolis-pixellab-cenas/retoques/); a nota tem até 160 caracteres.
+                              Retocar cidade já integrada é troca de arte e volta ao gate
+  paleta <id> --saida DIR     cada cor do PNG, com índice, hex, contagem e onde aparece (para preencher "superficies");
+                              se o JSON existir, a classe de cada cor vai por cima
+  sugerir <id> --saida DIR    rede de calçadas (até 160 nós) e pista tiradas das "superficies": só sugestão, o autor copia
+                              e corrige. A pista que reprova no A3 sai vazia
   validar [id ...]            esquema, limites e o aceite A1 a A9; sai com 1 e lista as violações (sem id: todas)
   revisar <id> --saida DIR    a arte a 3x com a geometria por cima, de dia, e a arte à noite com as luzes
   indice                      regrava static/mundo_cidade_cenas.js (rode antes do validar: o A1 confere o manifesto)
@@ -36,7 +41,16 @@ COR = re.compile(r"[0-9a-f]{6}")
 LARGURAS, ALTURAS, TETO_PNG = (480, 704), (320, 480), 120 * 1024
 CLASSES = ("calcada", "faixa", "ponte", "asfalto")
 TOLERANCIA, SEGUIDOS = 0.03, 2   # amostras fora da superfície: parte do total e quantas seguidas
+NO_ASFALTO = 0.7   # a linha central da pista: no mínimo esta parte em asfalto ou ponte (o resto pode ser faixa)
+# o sugerir: componente menor sai, raio inscrito mínimo, galho menor sai, nós mais perto que isto viram um, teto de nós
+MINIMO, RAIO = {"calcada": 24, "asfalto": 80}, {"calcada": 1, "asfalto": 2}
+GALHO, FUSAO, TETO_NOS, EPS = 8, 3, 160, (1.5, 2.5, 4)
 SECAO = "## Cenas importadas (montar_cenas.py)"
+CABECALHO = ("PNG indexado sem perda (RGBA igual ao do bruto ou, com retoque, ao do retocado).\n\n"
+             "| Cidade | Arquivo de origem | SHA-256 do bruto | Data |\n|---|---|---|---|")
+SECAO_RETOQUES = "## Retoques das cenas importadas (montar_cenas.py)"
+CABECALHO_RETOQUES = ("| Cidade | SHA-256 do bruto | SHA-256 do retocado | Retocado | Nota | Data |\n"
+                      "|---|---|---|---|---|---|")
 LUZ = (255, 214, 130)   # a cor das luzes do mundo_cidade.js
 # o esquema e os limites são os do cliente: uma fonte só
 NODE = ('const fs=require("fs"),vm=require("vm"),c=vm.createContext({window:{}});'
@@ -64,16 +78,33 @@ def gravar(arquivo, dados):
     os.replace(arquivo + ".tmp", arquivo)
 
 
-def carregar(cidade, raiz):
-    """O JSON da cena e a arte dela em RGBA."""
-    if not ID.fullmatch(cidade):
-        raise Erro(f"id inválido: {cidade!r}")
+def abrir_arte(arquivo):
+    """Os bytes do arquivo e a imagem em RGBA."""
     try:
-        dados = json.loads(ler(caminho(raiz, cidade + ".json")))
-        with Image.open(caminho(raiz, cidade + ".png")) as im:
+        dados = ler(arquivo)
+        with Image.open(io.BytesIO(dados)) as im:
             return dados, im.convert("RGBA")
     except (OSError, ValueError) as erro:
-        raise Erro(f"{cidade}: não deu para ler a cena ({erro})") from erro
+        raise Erro(f"não deu para ler a imagem {arquivo} ({erro})") from erro
+
+
+def ler_json(cidade, raiz):
+    try:
+        return json.loads(ler(caminho(raiz, cidade + ".json")))
+    except (OSError, ValueError) as erro:
+        raise Erro(f"{cidade}: não deu para ler o JSON da cena ({erro})") from erro
+
+
+def arte_de(cidade, raiz):
+    if not ID.fullmatch(cidade):
+        raise Erro(f"id inválido: {cidade!r}")
+    return abrir_arte(caminho(raiz, cidade + ".png"))[1]
+
+
+def carregar(cidade, raiz):
+    """O JSON da cena e a arte dela em RGBA."""
+    arte = arte_de(cidade, raiz)
+    return ler_json(cidade, raiz), arte
 
 
 # manifesto
@@ -92,12 +123,13 @@ def ids(raiz=RAIZ):
     return cidades
 
 
+def linha_do_manifesto(cidade, png, cena):
+    return (f'  "{cidade}": Object.freeze({{ v: "{hashlib.sha256(png).hexdigest()[:12]}", '
+            f'png: "{sri(png)}", json: "{sri(cena)}" }}),\n')
+
+
 def indice_texto(raiz=RAIZ):
-    linhas = []
-    for c in ids(raiz):
-        png, cena = ler(caminho(raiz, c + ".png")), ler(caminho(raiz, c + ".json"))
-        linhas.append(f'  "{c}": Object.freeze({{ v: "{hashlib.sha256(png).hexdigest()[:12]}", '
-                      f'png: "{sri(png)}", json: "{sri(cena)}" }}),\n')
+    linhas = [linha_do_manifesto(c, ler(caminho(raiz, c + ".png")), ler(caminho(raiz, c + ".json"))) for c in ids(raiz)]
     return ('"use strict";\n// gerado por ferramentas/montar_cenas.py indice: não editar\n'
             "const CidadeCenas = Object.freeze({\n" + "".join(linhas) + "});\nwindow.CidadeCenas = CidadeCenas;\n")
 
@@ -113,7 +145,16 @@ def cidades_do_mundo(raiz):
     return {c["id"] for c in mundo["cidades"] + mundo["exterior"] + mundo["niveis"]["brasil"]["medias"]}
 
 
-def importar(cidade, bruto, raiz=RAIZ):
+def no_repositorio(arquivo, raiz):
+    real = os.path.realpath(arquivo)
+    return any(os.path.commonpath([real, os.path.realpath(r)]) == os.path.realpath(r) for r in (RAIZ, raiz))
+
+
+def importar(cidade, bruto, raiz=RAIZ, retocado=None, nota=None):
+    if (retocado is None) != (nota is None):
+        raise Erro("--retocado e --nota andam juntas")
+    if nota is not None and (not 1 <= len(nota) <= 160 or any(c == "|" or unicodedata.category(c) == "Cc" for c in nota)):
+        raise Erro("a nota tem de 1 a 160 caracteres, sem | nem controle")
     if not ID.fullmatch(cidade) or cidade not in cidades_do_mundo(raiz):
         raise Erro(f"cidade fora do mundo.json: {cidade!r}")
     nome = os.path.basename(bruto)
@@ -123,9 +164,14 @@ def importar(cidade, bruto, raiz=RAIZ):
         raise Erro(f"o escolhas.json manda usar {escolha}")
     if not escolha and nome.endswith("-retry.png"):
         raise Erro("nova tentativa só entra se o escolhas.json mandar")
-    dados = ler(bruto)
-    with Image.open(io.BytesIO(dados)) as im:
-        arte = im.convert("RGBA")
+    dados, arte = abrir_arte(bruto)
+    if retocado is not None:
+        if no_repositorio(retocado, raiz):
+            raise Erro("o retocado fica fora do repositório (firmopolis-pixellab-cenas/retoques/)")
+        feito, nova = abrir_arte(retocado)
+        if nova.size != arte.size:
+            raise Erro(f"o retocado tem {nova.width}x{nova.height} e o bruto {arte.width}x{arte.height}")
+        arte = nova
     W, H = arte.size
     if not (LARGURAS[0] <= W <= LARGURAS[1] and ALTURAS[0] <= H <= ALTURAS[1]):
         raise Erro(f"tamanho {W}x{H} fora de {LARGURAS} x {ALTURAS}")
@@ -145,27 +191,34 @@ def importar(cidade, bruto, raiz=RAIZ):
     saida.save(buffer, "PNG", **opcoes)
     with Image.open(io.BytesIO(buffer.getvalue())) as volta:
         if volta.convert("RGBA").tobytes() != arte.tobytes():
-            raise Erro("o PNG indexado não saiu igual ao bruto, pixel a pixel")
+            raise Erro("o PNG indexado não saiu igual à arte, pixel a pixel")
     os.makedirs(caminho(raiz), exist_ok=True)
     gravar(caminho(raiz, cidade + ".png"), buffer.getvalue())
-    anotar(raiz, cidade, nome, hashlib.sha256(dados).hexdigest())
+    arquivo = os.path.join(raiz, "arte", "pixellab", "mundo", "PROVENIENCIA-cidades.md")
+    texto, hoje = ler(arquivo).decode(), f"{datetime.date.today():%d/%m/%Y}"
+    soma = hashlib.sha256(dados).hexdigest()
+    texto = anotar(texto, SECAO, CABECALHO, [cidade, f"`{nome}`", f"`{soma}`", hoje], (soma,))
+    if retocado is not None:
+        nova_soma = hashlib.sha256(feito).hexdigest()
+        texto = anotar(texto, SECAO_RETOQUES, CABECALHO_RETOQUES, [cidade, f"`{soma}`", f"`{nova_soma}`",
+                       f"`{os.path.abspath(retocado)}`", nota, hoje], (soma, nova_soma))
+    gravar(arquivo, texto.encode())
     return len(buffer.getvalue())
 
 
-def anotar(raiz, cidade, nome, soma):
-    """Uma linha por cidade e bruto na seção das cenas importadas da proveniência."""
-    arquivo = os.path.join(raiz, "arte", "pixellab", "mundo", "PROVENIENCIA-cidades.md")
-    texto = ler(arquivo).decode()
-    if any(l.startswith(f"| `{cidade}` |") and f"`{soma}`" in l for l in texto.splitlines()):
-        return
-    if SECAO not in texto:
-        texto = (texto.rstrip("\n") + f"\n\n{SECAO}\n\nPNG indexado sem perda (RGBA igual ao do bruto).\n\n"
-                 "| Cidade | Arquivo de origem | SHA-256 do bruto | Data |\n|---|---|---|---|\n")
-    antes, depois = texto.split(SECAO)
-    linhas = depois.split("\n")
+def anotar(texto, secao, cabecalho, colunas, somas):
+    """O texto com a linha na tabela da seção (criada no fim, se faltar): uma só por cidade e somas."""
+    if secao not in texto:
+        texto = texto.rstrip("\n") + f"\n\n{secao}\n\n{cabecalho}\n"
+    antes, depois = texto.split(secao)
+    corpo, proxima, resto = depois.partition("\n## ")
+    linhas = corpo.split("\n")
+    inicio = f"| `{colunas[0]}` |"
+    if any(l.startswith(inicio) and all(f"`{s}`" in l for s in somas) for l in linhas):
+        return texto
     ultima = max(i for i, l in enumerate(linhas) if l.startswith("|"))
-    linhas.insert(ultima + 1, f"| `{cidade}` | `{nome}` | `{soma}` | {datetime.date.today():%d/%m/%Y} |")
-    gravar(arquivo, (antes + SECAO + "\n".join(linhas)).encode())
+    linhas.insert(ultima + 1, " | ".join([f"{inicio[:-2]}", *colunas[1:]]) + " |")
+    return antes + secao + "\n".join(linhas) + proxima + resto
 
 
 # validar
@@ -243,9 +296,8 @@ def a1_png(d, arte, cidade, raiz):
         yield f"PNG com {len(dados)} bytes (teto {TETO_PNG})"
     arquivo = os.path.join(raiz, "static", "mundo_cidade_cenas.js")
     manifesto = ler(arquivo).decode() if os.path.isfile(arquivo) else ""
-    esperado = f'"{cidade}": Object.freeze({{ v: "{hashlib.sha256(dados).hexdigest()[:12]}", png: "{sri(dados)}",'
-    if esperado not in manifesto:
-        yield "o SHA do PNG não é o do manifesto (rode: montar_cenas.py indice)"
+    if linha_do_manifesto(cidade, dados, ler(caminho(raiz, cidade + ".json"))) not in manifesto:
+        yield "o SHA do PNG ou do JSON não é o do manifesto (rode: montar_cenas.py indice)"
 
 
 def a2_calcadas(d, arte, resumo):
@@ -256,15 +308,16 @@ def a2_calcadas(d, arte, resumo):
     for k, (i, j) in enumerate(arestas_de(d)):
         aceitas = chao | rua if k in travessias else chao
         amostras = list(bresenham(nos[i], nos[j]))
-        # a amostra com o pé escondido não conta (e interrompe a sequência), mas não desculpa a aresta inteira
-        ocultas = [escondido(d, arte, x, y) for x, y in amostras]
-        fora = [not o and cor_em(arte, x, y) not in aceitas for (x, y), o in zip(amostras, ocultas)]
-        total += len(amostras) - sum(ocultas)
+        # a amostra com o pé escondido sai da conta (a sequência segue pelas visíveis), mas não desculpa a aresta inteira
+        visiveis = [(x, y) for x, y in amostras if not escondido(d, arte, x, y)]
+        ocultas = len(amostras) - len(visiveis)
+        fora = [cor_em(arte, x, y) not in aceitas for x, y in visiveis]
+        total += len(visiveis)
         ruins += sum(fora)
-        if sum(ocultas) * 2 > len(amostras):
-            yield f"aresta {k} ({i}-{j}): {sum(ocultas)} de {len(amostras)} amostras escondidas por oclusão (mais da metade)"
+        if ocultas * 2 > len(amostras):
+            yield f"aresta {k} ({i}-{j}): {ocultas} de {len(amostras)} amostras escondidas por oclusão (mais da metade)"
         if maior_sequencia(fora) > SEGUIDOS:
-            onde = amostras[fora.index(True)]
+            onde = visiveis[fora.index(True)]
             yield f"aresta {k} ({i}-{j}): {maior_sequencia(fora)} px seguidos fora da calçada (1º fora em {onde})"
     resumo.append(f"A2 {ruins}/{total} amostras visíveis fora ({ruins / max(total, 1):.1%})")
     if ruins > TOLERANCIA * total:
@@ -284,7 +337,8 @@ def amostras_da_volta(pista, desvio):
 
 
 def a3_pista(d, arte, resumo):
-    aceitas = set(d["superficies"]["asfalto"]) | set(d["superficies"]["ponte"])
+    rua = set(d["superficies"]["asfalto"]) | set(d["superficies"]["ponte"])
+    aceitas = rua | set(d["superficies"]["faixa"])
     meia = max((c["tamanho"][1] for c in d["carros"]), default=0) / 2
     for nome, desvio in (("central", 0), ("direita", meia), ("esquerda", -meia)):
         amostras = list(amostras_da_volta(d["pista"], desvio))
@@ -295,6 +349,10 @@ def a3_pista(d, arte, resumo):
                    f"(1º fora em {amostras[fora.index(True)]})")
         if sum(fora) > TOLERANCIA * len(amostras):
             yield f"linha {nome}: {sum(fora)} de {len(amostras)} amostras fora (teto {TOLERANCIA:.0%})"
+        if not desvio:
+            n = sum(cor_em(arte, x, y) in rua for x, y in amostras)
+            if n < NO_ASFALTO * len(amostras):
+                yield f"linha central: só {n / len(amostras):.1%} em asfalto ou ponte (mínimo {NO_ASFALTO:.0%})"
 
 
 def contem(r, ponto):
@@ -339,10 +397,12 @@ def a6_oclusoes(d):
 
 
 def a7_praca(d):
+    """A caixa da fonte como a festa a desenha (mundo_festa.js): apoiada no pé, de y - h até y."""
     p = d["praca"]
     w, h = p["fonte"]
-    if not (contem(p["r"], (p["x"] - w / 2, p["y"] - h / 2)) and contem(p["r"], (p["x"] + w / 2, p["y"] + h / 2))):
-        yield f"a fonte {w}x{h} não cabe em praca.r {p['r']}"
+    caixa = [p["x"] - math.ceil(w / 2), p["y"] - h, p["x"] + math.ceil(w / 2), p["y"]]
+    if not (contem(p["r"], caixa[:2]) and contem(p["r"], caixa[2:])):
+        yield f"a fonte {w}x{h}, apoiada no pé ({caixa}), não cabe em praca.r {p['r']}"
 
 
 def a8_grafo(d):
@@ -393,6 +453,13 @@ def superficies(d, arte):
             yield f"{classe}: vazia"
         elif set(cores) - da_arte:
             yield f"{classe}: cores que a arte não tem: {', '.join(sorted(set(cores) - da_arte))}"
+    onde = {}
+    for classe in CLASSES:
+        for cor in sup[classe] if isinstance(sup[classe], list) else []:
+            onde.setdefault(str(cor), set()).add(classe)
+    for cor, classes in sorted(onde.items()):
+        if len(classes) > 1:
+            yield f"cor {cor} em mais de uma classe ({', '.join(sorted(classes))}): as classes são disjuntas"
 
 
 def validar(cidade, raiz=RAIZ, resumo=None):
@@ -426,16 +493,21 @@ def validar(cidade, raiz=RAIZ, resumo=None):
 
 def fora_do_repositorio(saida, raiz):
     real = os.path.realpath(saida)
-    for r in (RAIZ, raiz):
-        if os.path.commonpath([real, os.path.realpath(r)]) == os.path.realpath(r):
-            raise Erro("--saida precisa ficar fora do repositório")
+    if no_repositorio(real, raiz):
+        raise Erro("--saida precisa ficar fora do repositório")
     os.makedirs(real, exist_ok=True)
     return real
 
 
 def paleta(cidade, saida, raiz=RAIZ):
     saida = fora_do_repositorio(saida, raiz)
-    _, arte = carregar(cidade, raiz)
+    arte = arte_de(cidade, raiz)
+    classes = {}
+    if os.path.isfile(caminho(raiz, cidade + ".json")):
+        sup = ler_json(cidade, raiz).get("superficies") or {}
+        for classe in CLASSES:
+            for cor in sup.get(classe, []):
+                classes.setdefault(cor, []).append(classe)
     pixels = np.asarray(arte)
     cores = sorted(arte.getcolors(arte.width * arte.height), key=lambda c: (-c[0], c[1]))
     w, h, colunas = arte.width // 2, arte.height // 2, 6
@@ -451,6 +523,10 @@ def paleta(cidade, saida, raiz=RAIZ):
         g.text((x + 24, y + 5), f"#{i}  {hexa(cor)}  {n} px" + ("" if cor[3] == 255 else f"  alfa {cor[3]}"),
                fill=(255, 255, 255))
         folha.paste(Image.fromarray(mapa), (x, y + 22))
+        if hexa(cor) in classes:
+            rotulo = " + ".join(classes[hexa(cor)])
+            g.rectangle([x, y + 22, x + 8 + g.textlength(rotulo), y + 36], fill=(0, 0, 0))
+            g.text((x + 4, y + 23), rotulo, fill=(255, 224, 138))
     folha.save(os.path.join(saida, f"{cidade}-paleta.png"))
 
 
@@ -679,6 +755,110 @@ def maior_volta(trechos):
     return melhor
 
 
+def componentes(mascara):
+    """Os pixels (x, y) de cada componente da máscara, com vizinhança de 8."""
+    faltam = {(int(x), int(y)) for y, x in zip(*np.nonzero(mascara))}
+    for inicio in sorted(faltam):
+        if inicio not in faltam:
+            continue
+        faltam.remove(inicio)
+        grupo = [inicio]
+        for x, y in grupo:
+            for q in ((x + dx, y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1)):
+                if q in faltam:
+                    faltam.remove(q)
+                    grupo.append(q)
+        yield grupo
+
+
+def largas(mascara, raio):
+    """O que um disco do raio cobre sem sair da máscara: o núcleo é onde a distância até a borda passa do raio."""
+    disco = [(dy, dx) for dy in range(-raio, raio + 1) for dx in range(-raio, raio + 1) if dx * dx + dy * dy <= raio * raio]
+
+    def vizinhas(m):
+        borda = np.pad(m, raio)
+        return [borda[raio + dy:raio + dy + m.shape[0], raio + dx:raio + dx + m.shape[1]] for dy, dx in disco]
+
+    nucleo = np.logical_and.reduce(vizinhas(mascara))
+    return mascara & np.logical_or.reduce(vizinhas(nucleo))
+
+
+def esqueleto(mascara, tipo):
+    """Os trechos do esqueleto: sem componentes pequenos, sem o que é estreito demais e sem galhos curtos."""
+    limpa = mascara.copy()
+    for grupo in componentes(mascara):
+        if len(grupo) < MINIMO[tipo]:
+            for x, y in grupo:
+                limpa[y, x] = False
+    fino = afinar(largas(limpa, RAIO[tipo]))
+    trechos = tracar(fino)
+    graus = {}
+    for a, b, _ in trechos:
+        graus[a] = graus.get(a, 0) + 1
+        graus[b] = graus.get(b, 0) + 1
+    for a, b, pontos in trechos:
+        pontas = [p for p in (a, b) if graus[p] == 1]
+        if a != b and pontas and len(pontos) < GALHO:
+            for x, y in pontos[1:-1] + pontas:
+                fino[y, x] = False
+    return tracar(afinar(fino))
+
+
+def rede(trechos, classe, eps, portaria):
+    """(nós, arestas, o tipo de cada aresta): os trechos simplificados, nós colados fundidos e só o componente da portaria."""
+    nos, arestas, tipos = [], [], []
+
+    def no(p):
+        for i, q in enumerate(nos):
+            if math.dist(p, q) < FUSAO:
+                return i
+        nos.append([int(p[0]), int(p[1])])
+        return len(nos) - 1
+
+    for _, _, trecho in trechos:
+        for tipo, parte in por_classe(trecho, classe):
+            linha = simplificar(parte, eps)
+            if len(linha) == 2 and linha[0] == linha[1]:
+                continue
+            if linha[0] == linha[-1]:   # uma volta: parte no meio para a RDP ter dois extremos
+                meio = len(parte) // 2
+                linha = simplificar(parte[:meio + 1], eps) + simplificar(parte[meio:], eps)[1:]
+            for a, b in zip(linha, linha[1:]):
+                i, j = no(a), no(b)
+                if i != j and [i, j] not in arestas and [j, i] not in arestas:
+                    arestas.append([i, j])
+                    tipos.append(tipo)
+    if portaria and nos:
+        grupo = list(range(len(nos)))   # união dos componentes
+
+        def raiz_de(i):
+            while grupo[i] != i:
+                i = grupo[i]
+            return i
+
+        for i, j in arestas:
+            grupo[raiz_de(i)] = raiz_de(j)
+        escolhido = raiz_de(min(range(len(nos)), key=lambda i: math.dist(nos[i], portaria)))
+        novo = {i: k for k, i in enumerate(i for i in range(len(nos)) if raiz_de(i) == escolhido)}
+        ficam = [(a, t) for a, t in zip(arestas, tipos) if a[0] in novo]
+        nos = [nos[i] for i in novo]
+        arestas, tipos = [[novo[i], novo[j]] for (i, j), _ in ficam], [t for _, t in ficam]
+    return nos, arestas, tipos
+
+
+def volta_do_carro(trechos):
+    """A maior volta do esqueleto do asfalto, simplificada até caber em 64 pontos."""
+    volta, pista, eps = maior_volta(trechos), [], EPS[0]
+    while volta:
+        meio = len(volta) // 2
+        pista = simplificar(volta[:meio + 1], eps)[:-1] + simplificar(volta[meio:], eps)[:-1]
+        pista = [[int(x), int(y)] for i, (x, y) in enumerate(pista) if (x, y) != tuple(pista[i - 1])]
+        if len(pista) <= 64:
+            break
+        eps *= 1.5
+    return pista
+
+
 def sugerir(cidade, saida, raiz=RAIZ):
     saida = fora_do_repositorio(saida, raiz)
     d, arte = carregar(cidade, raiz)
@@ -697,41 +877,24 @@ def sugerir(cidade, saida, raiz=RAIZ):
     def classe(p):
         return next((c for c, m in mapas.items() if m[p[1], p[0]]), "calcada")
 
-    nos, arestas, travessias, pontes = [], [], [], []
-
-    def no(p):
-        for i, q in enumerate(nos):
-            if math.dist(p, q) < 2:
-                return i
-        nos.append([int(p[0]), int(p[1])])
-        return len(nos) - 1
-
-    for _, _, trecho in tracar(afinar(mascara("calcada", "faixa", "ponte"))):
-        for tipo, parte in por_classe(trecho, classe):
-            linha = simplificar(parte)
-            if len(linha) == 2 and linha[0] == linha[1]:
-                continue
-            if linha[0] == linha[-1]:   # uma volta: parte no meio para a RDP ter dois extremos
-                meio = len(parte) // 2
-                linha = simplificar(parte[:meio + 1]) + simplificar(parte[meio:])[1:]
-            for a, b in zip(linha, linha[1:]):
-                i, j = no(a), no(b)
-                if i == j or [i, j] in arestas or [j, i] in arestas:
-                    continue
-                if tipo == "faixa":
-                    travessias.append(len(arestas))
-                elif tipo == "ponte":
-                    pontes.append(len(arestas))
-                arestas.append([i, j])
-    volta, pista, eps = maior_volta(tracar(afinar(mascara("asfalto", "ponte")))), [], 1.5
-    while volta:
-        meio = len(volta) // 2
-        pista = simplificar(volta[:meio + 1], eps)[:-1] + simplificar(volta[meio:], eps)[:-1]
-        pista = [[int(x), int(y)] for i, (x, y) in enumerate(pista) if (x, y) != tuple(pista[i - 1])]
-        if len(pista) <= 64:
+    portaria = d.get("portaria")
+    portaria = portaria and (portaria["x"], portaria["y"])
+    trechos = esqueleto(mascara("calcada", "faixa", "ponte"), "calcada")
+    for eps in EPS:
+        nos, arestas, tipos = rede(trechos, classe, eps, portaria)
+        if len(nos) <= TETO_NOS:
             break
-        eps *= 1.5
-    sugestao = {"calcadas": {"nos": nos, "arestas": arestas, "travessias": travessias, "pontes": pontes}, "pista": pista}
+    if eps != EPS[0]:
+        print(f"{cidade}: calçadas simplificadas com eps {eps} ({len(nos)} nós, teto {TETO_NOS})")
+    travessias, pontes = ([k for k, t in enumerate(tipos) if t == tipo] for tipo in ("faixa", "ponte"))
+    pista = volta_do_carro(esqueleto(mascara("asfalto", "ponte"), "asfalto"))
+    prova = {"superficies": {c: sup.get(c, []) for c in CLASSES}, "carros": d.get("carros") or [], "pista": pista}
+    reprovas = list(a3_pista(prova, arte, [])) if len(pista) >= 4 else ["não há volta no asfalto"]
+    if reprovas:
+        print(f"{cidade}: sem pista sugerida ({'; '.join(reprovas)})")
+        pista = []
+    sugestao = {"calcadas": {"nos": nos, "arestas": arestas, "travessias": travessias, "pontes": pontes},
+                "pista": pista, "eps": eps}
     with open(os.path.join(saida, f"{cidade}-sugestao.json"), "w", encoding="utf-8") as f:
         json.dump(sugestao, f)
     tela = tela_3x(arte)
@@ -746,6 +909,8 @@ def main(argv=None):
     p = sub.add_parser("importar")
     p.add_argument("id")
     p.add_argument("png_bruto")
+    p.add_argument("--retocado")
+    p.add_argument("--nota")
     for nome in ("paleta", "sugerir", "revisar"):
         p = sub.add_parser(nome)
         p.add_argument("id")
@@ -755,7 +920,8 @@ def main(argv=None):
     a = comandos.parse_args(argv)
     try:
         if a.comando == "importar":
-            print(f"{a.id}: {importar(a.id, a.png_bruto)} bytes, pixels iguais aos do bruto")
+            tamanho = importar(a.id, a.png_bruto, retocado=a.retocado, nota=a.nota)
+            print(f"{a.id}: {tamanho} bytes, pixels iguais aos do {'retocado' if a.retocado else 'bruto'}")
         elif a.comando == "indice":
             indice()
         elif a.comando == "validar":
