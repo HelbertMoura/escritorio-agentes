@@ -229,7 +229,7 @@ async function principal() {
   k.clicar(320, 200); k.rodar(12);
   assert.equal(k.M.nivel, "cidade", "Manaus não é a casa: o clique na cidade não desce ao bairro");
 
-  // nível Cidade: a planta sai da semente do id e dos dados da cidade, nas 28 cidades (sempre a mesma para o mesmo id)
+  // nível Cidade: a planta do id é determinística. As grades procedurais e as malhas autorais têm geometrias próprias.
   const Cid = k.contexto.window.MundoCidade, CP = k.contexto.window.CidadePlanta;
   const plantaDe = id => Cid.planta(id, cidade(id)), planta = id => JSON.stringify(plantaDe(id));
   assert.equal(planta("recife"), planta("recife"), "a mesma cidade, a mesma planta");
@@ -244,6 +244,7 @@ async function principal() {
     const p = plantaDe(cc.id), id = cc.id, itens = [p.centro, p.casa, ...p.pecas], de = re => itens.filter(s => re.test(s.peca));
     assert.equal(planta(id), JSON.stringify(p), `${id}: determinística`);
     assert.equal(p.porte, cc.porte, id);
+    if (p.malha) continue;   // as três malhas têm suas próprias asserções geométricas em test_mundo_malhas.js
     // as zonas: o marco no centro, o parque com a praça (fonte ou lago) e o coreto ou a feira, o esporte com o campo e a
     // quadra ou o parquinho, e as casas (casas e chalés, cada uma num lote cercado)
     assert.ok(p.zonas.centro.centro && p.zonas.parque.anel === 1 && p.zonas.esporte.anel === 1, id);
@@ -324,22 +325,16 @@ async function principal() {
       assert.ok(cruzes.every(k => Math.abs(c.s - k) >= CP.E / 2 + 16), `${id}: carro começa no cruzamento ${c.s}`);
     }
   }
-  // a arte própria de Recife, Manaus e Belo Horizonte ocupa um lote já sorteado, com a caixa do desenho dentro da
-  // vaga e da cidade; as outras cidades não mudam
+  // A arte própria ocupa os lotes históricos das três malhas, com um desenho de reserva do mesmo atlas.
   const TAM_CIDADE = { "cidade-recife": [78, 55], "cidade-manaus": [90, 58], "cidade-bh-serra-curral": [96, 36] };
   for (const [cid, arte] of [["recife", "cidade-recife"], ["manaus", "cidade-manaus"], ["belo-horizonte", "cidade-bh-serra-curral"]]) {
     const pp = plantaDe(cid), s = pp.pecas.find(x => x.peca === arte), [aw, ah] = TAM_CIDADE[arte];
-    assert.ok(s && /^(predios-|casa-|chale-)/.test(s.base), `${cid}: ${arte} num lote de construção`);
+    assert.ok(s && ATLAS.quadros[s.base], `${cid}: ${arte} tem imagem de reserva`);
     assert.ok(pp.notaveis.includes(s), `${cid}: ${arte} nomeável`);
     const box = [s.x - aw / 2, s.y - ah, s.x + aw / 2, s.y];
     assert.ok(box[0] >= 0 && box[2] <= pp.W && box[1] >= 0 && box[3] <= pp.H + 20, `${cid}: caixa na cidade`);
     assert.ok(s.r[0] <= box[0] && box[2] <= s.r[2] && s.r[1] <= box[1] && box[3] <= s.r[3], `${cid}: caixa dentro do lote`);
-    if (cid === "recife") {
-      assert.equal(s.base, "predios-10", "o casario ocupa o lote do Hospital ilustrativo (não há casa segura na orla)");
-      assert.ok(s.r[2] <= pp.orla.x, "recife: casario antes da orla");
-    }
-    if (cid === "manaus") assert.equal(s.base, "predios-14", "o Mercado Municipal vira o Adolpho Lisboa");
-    if (cid === "belo-horizonte") assert.equal(s.base, "predios-8", "a serra usa o lote largo do predios-8");
+    assert.ok(!pp.orla && pp.malha.agua.length, `${cid}: paisagem e vias vêm da malha`);
   }
   for (const cid of ["sao-paulo", "curitiba", "mateus-leme"]) {
     assert.ok(!plantaDe(cid).pecas.some(x => x.base), `${cid}: sem arte de cidade`);

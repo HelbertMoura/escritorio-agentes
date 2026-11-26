@@ -35,88 +35,122 @@ const CidadeChao = (() => {
   const MAR = { raso_claro: "#3a7a99", raso: "#2a5a7c", mar: "#1d3b5c", fundo: "#1a3452", espuma: "#e8f3f6", brilho: "#9fd0e0" };
   const SOMBRA = [22, 30, 40];
 
-  // ---- a paisagem: o que o chão mostra de cada cidade, em poucos polígonos, pintados antes das peças da rua ----
-  // O Recife ganha o canal da orla, entre o calçadão e a margem de areia, com duas pontes de madeira nos eixos das ruas
-  // horizontais do meio. O Manaus, o trecho de água escura a leste do Mercado, com a margem recortada e o cais de estacas.
-  // Belo Horizonte, a lagoa em degraus no lado norte da praça central, com a margem de pedra marcada perto da igreja.
-  const CANAL = "#24586e", CANAL_FUNDO = "#1b4257", CANAL_BRILHO = "#3d7d96";
-  const AGUA = "#16324a", AGUA_FUNDO = "#0f2336", AGUA_BRILHO = "#2c5f80";
-  const MADEIRA = "#6d4c30", MADEIRA_CLARA = "#8f6942", MADEIRA_ESCURA = "#3b2917";
-  const LAGO = "#1e4f6d", LAGO_CLARO = "#2f7194";
-  const paisagemDe = (id, p) => {
-    if (id === "recife" && p.orla) {
-      const o = p.orla, canal = o.areia + 36;   // o canal fica entre o calçadão (que termina na areia) e a margem de areia
-      return [{ t: "canal", r: [o.areia, -600, canal, 1000] },
-              { t: "ponte", r: [o.areia - 12, 110, canal + 10, 122] },
-              { t: "ponte", r: [o.areia - 12, 306, canal + 10, 318] }];
-    }
-    if (id === "manaus") {
-      return [{ t: "agua", r: [555, 335, 600, 352] }, { t: "cais", r: [551, 335, 555, 352] },
-              { t: "agua", r: [563, 352, 600, 372] }, { t: "cais", r: [559, 352, 563, 372] },
-              { t: "agua", r: [556, 372, 600, 400] }, { t: "cais", r: [552, 372, 556, 400] }];
-    }
-    if (id === "belo-horizonte") {
-      const q = p.zonas && p.zonas.centro;   // a quadra do marco, com a praça de pedra no meio
-      if (!q) return null;
-      const x0 = q.x0 + 8, x1 = q.x1 - 8, y0 = q.y0 + 8, m = Math.round((x0 + x1) / 2);
-      return [{ t: "lago", pts: [[x0, y0 + 8], [x0 + 40, y0 + 8], [x0 + 40, y0], [x1 - 40, y0], [x1 - 40, y0 + 8],
-                                 [x1, y0 + 8], [x1, y0 + 22], [x1 - 40, y0 + 22], [x1 - 40, y0 + 28], [x0 + 40, y0 + 28],
-                                 [x0 + 40, y0 + 22], [x0, y0 + 22]],
-                brilho: [[x0, y0 + 8, x0 + 40, y0 + 10], [x0 + 40, y0, x1 - 40, y0 + 2], [x1 - 40, y0 + 8, x1, y0 + 10]] },
-              { t: "margem", r: [m - 56, y0 + 22, m + 56, y0 + 29] }];
-    }
-    return null;
+  const AGUAS = {
+    canal: ["#285d6d", "#649898", "#3c7580"],
+    estuário: ["#23445f", "#507d90", "#315a75"],
+    rio: ["#20374a", "#63828a", "#365568"],
+    lagoa: ["#2b617b", "#6e9d9f", "#3f7d94"],
   };
-  // o primeiro passo que cabe na faixa: o detalhe começa dentro dela e nunca passa do fim dela
-  const passoDe = (b, passo) => Math.ceil(b / passo) * passo;
-  // a paisagem no chão (coordenadas do mundo): cores soltas e formas inteiras; a lagoa é um polígono de degraus.
-  // todo detalhe fica dentro da sua própria faixa (as tábuas, as estacas e a extensão da madeira também): nada
-  // invade a rua nem a calçada ao lado
-  function desenharPaisagem(g, formas, cor) {
-    if (!formas) return;
-    for (const f of formas) {
-      if (f.t === "lago") {
-        g.beginPath();
-        g.moveTo(f.pts[0][0], f.pts[0][1]);
-        for (let i = 1; i < f.pts.length; i++) g.lineTo(f.pts[i][0], f.pts[i][1]);
-        g.closePath();
-        g.fillStyle = LAGO; g.fill();
-        g.fillStyle = LAGO_CLARO;
-        for (const [a, b, c, d] of f.brilho) g.fillRect(a, b, c - a, d - b);
-      } else if (f.t === "margem") {
-        const [a, b, c, d] = f.r;
-        g.fillStyle = cor.pracaBorda; g.fillRect(a, b, c - a, d - b);
-        g.fillStyle = cor.praca;
-        for (let x = a + 2; x < c - 4; x += 10) g.fillRect(x, b + 1, Math.min(6, c - x), d - b - 2);
-      } else {
-        const [a, b, c, d] = f.r, w = c - a, h = d - b;
-        if (f.t === "canal") {
-          g.fillStyle = CANAL; g.fillRect(a, b, w, h);
-          g.fillStyle = CANAL_FUNDO; g.fillRect(a, b, 3, h);
-          g.fillStyle = CANAL_BRILHO;
-          for (let y = passoDe(b, 40); y < d; y += 40) g.fillRect(a + 9, y, 10, 1);
-        } else if (f.t === "ponte") {
-          g.fillStyle = MADEIRA; g.fillRect(a, b, w, h);
-          g.fillStyle = MADEIRA_CLARA; g.fillRect(a, b, w, 1);
-          g.fillStyle = MADEIRA_ESCURA;
-          for (let x = a; x < c; x += 6) g.fillRect(x, b, 1, h);   // as tábuas, dentro do tabuleiro
-          g.fillRect(a, b, w, 1); g.fillRect(a, d - 1, w, 1);
-          for (let x = a; x < c; x += 8) { g.fillRect(x, b, 2, 5); g.fillRect(x, d - 5, 2, 5); }
-        } else if (f.t === "agua") {
-          g.fillStyle = AGUA; g.fillRect(a, b, w, h);
-          g.fillStyle = AGUA_FUNDO; g.fillRect(c - 3, b, 3, h);
-          g.fillStyle = AGUA_BRILHO;
-          g.fillRect(a, b, 2, h);
-          for (let y = passoDe(b, 36); y < d; y += 36) g.fillRect(a + 10, y, 8, 1);
-        } else if (f.t === "cais") {
-          g.fillStyle = MADEIRA; g.fillRect(a, b, w, h);
-          g.fillStyle = MADEIRA_CLARA; g.fillRect(a, b, 1, h);
-          g.fillStyle = MADEIRA_ESCURA;
-          for (let y = passoDe(b, 8); y < d; y += 8) g.fillRect(a, y, w, 1);   // a junta, um filete dentro da faixa
-          for (let y = passoDe(b, 24); y < d; y += 24) g.fillRect(c, y, 2, Math.min(8, d - y));   // a estaca na beira
-        }
+  function traco(g, pontos, fechado = false) {
+    g.beginPath();
+    g.moveTo(pontos[0][0], pontos[0][1]);
+    for (let i = 1; i < pontos.length; i++) g.lineTo(pontos[i][0], pontos[i][1]);
+    if (fechado) g.closePath();
+  }
+  function poligono(g, pontos, cor) {
+    traco(g, pontos, true);
+    g.fillStyle = cor; g.fill();
+  }
+  function trecho(g, a, b) {
+    g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]);
+  }
+  function faixa(g, x, y, ux, uy, metade) {
+    g.moveTo(x - ux * metade, y - uy * metade); g.lineTo(x + ux * metade, y + uy * metade);
+  }
+
+  // O esboço e os ladrilhos compartilham a planta. Sombras, cercas e a granulação são acrescentadas no ladrilho.
+  function desenharMalha(g, p, cor, x0, y0, x1, y1) {
+    const m = p.malha;
+    g.save();
+    g.lineJoin = "round";
+    for (let i = 0; i < m.relevo.length; i++) poligono(g, m.relevo[i], i ? "#667b66" : "#455f62");
+    for (const q of p.quadras) {
+      poligono(g, q.pontos, q.piso === "praca" ? cor.praca : cor.concreto[0]);
+      g.save(); g.clip();
+      g.fillStyle = q.piso === "praca" ? cor.pracaJunta : cor.concretoJunta;
+      for (let y = floor(y0 / 8) * 8; y < y1; y += 8) {
+        g.fillRect(x0, y, x1 - x0, 1);
+        for (let x = floor(x0 / 12) * 12 + (y % 16 ? 6 : 0); x < x1; x += 12) g.fillRect(x, y, 1, 8);
       }
+      g.restore();
+      g.strokeStyle = cor.pracaBorda; g.lineWidth = 2; g.stroke();
     }
+    for (const a of m.agua) {
+      const paleta = AGUAS[a.tipo];
+      traco(g, a.pontos, true);
+      if (a.tipo === "lagoa") {
+        g.strokeStyle = "#78935f"; g.lineWidth = 18; g.stroke();
+        g.strokeStyle = "#b3b38a"; g.lineWidth = 8; g.stroke();
+      }
+      g.fillStyle = paleta[0]; g.fill();
+      g.save(); g.clip();
+      g.strokeStyle = paleta[2]; g.lineWidth = 14; g.stroke();
+      g.strokeStyle = paleta[1]; g.lineWidth = 3; g.stroke();
+      g.fillStyle = paleta[2];
+      for (let y = floor(y0 / 18) * 18; y < y1; y += 18) for (let x = floor(x0 / 34) * 34; x < x1; x += 34) {
+        const k = hash(x, y, 87), desvio = floor(k * 16);
+        if (k > 0.24) g.fillRect(x + desvio, y + floor(k * 6), 7 + floor(k * 11), 1);
+      }
+      if (m.pontes.length) {
+        g.beginPath();
+        for (const t of m.pontes) trecho(g, t.a, t.b);
+        g.strokeStyle = "#1c3a49"; g.lineWidth = m.calcada * 2 + 18; g.stroke();
+        g.strokeStyle = "#a89475"; g.lineWidth = m.calcada * 2 + 12; g.stroke();
+      }
+      g.restore();
+    }
+    for (const c of m.cais) {
+      poligono(g, c, "#a18560");
+      g.save(); g.clip();
+      g.fillStyle = "#806448";
+      for (let y = floor(y0 / 5) * 5; y < y1; y += 5) g.fillRect(x0, y, x1 - x0, 1);
+      g.restore();
+      g.strokeStyle = "#6d5b49"; g.lineWidth = 2; g.stroke();
+    }
+    g.lineCap = "round";
+    g.beginPath();
+    for (const [a, b] of m.caminhos) trecho(g, a, b);
+    for (const t of m.ruas) for (const [a, b] of t.lados) trecho(g, a, b);
+    g.lineWidth = 7; g.strokeStyle = cor.calcada; g.stroke();
+    g.beginPath();
+    for (const t of m.ruas) trecho(g, t.a, t.b);
+    g.lineWidth = m.calcada * 2 + 1; g.strokeStyle = cor.calcada; g.stroke();
+    g.lineWidth = m.largura * 2 + 2; g.strokeStyle = cor.meiofio; g.stroke();
+    g.lineWidth = m.largura * 2; g.strokeStyle = cor.asfalto[1]; g.stroke();
+
+    // O guarda-corpo termina na margem. As marcas usam o mesmo eixo e a mesma normal da travessia.
+    for (const a of m.agua) {
+      if (!m.pontes.length) break;
+      g.save();
+      traco(g, a.pontos, true); g.clip();
+      g.beginPath();
+      for (const t of m.pontes) for (const lado of [-1, 1]) {
+        const dx = t.n[0] * lado * (m.calcada + 2), dy = t.n[1] * lado * (m.calcada + 2);
+        g.moveTo(t.a[0] + dx, t.a[1] + dy); g.lineTo(t.b[0] + dx, t.b[1] + dy);
+      }
+      g.strokeStyle = "#eee0bd"; g.lineWidth = 2; g.stroke();
+      g.beginPath();
+      for (const t of m.pontes) for (let s = 6; s < t.L; s += 10) {
+        const x = t.a[0] + s * t.u[0], y = t.a[1] + s * t.u[1], d = m.calcada + 3;
+        faixa(g, x + t.n[0] * d, y + t.n[1] * d, t.n[0], t.n[1], 2);
+        faixa(g, x - t.n[0] * d, y - t.n[1] * d, t.n[0], t.n[1], 2);
+      }
+      g.strokeStyle = "#e9d6af"; g.lineWidth = 3; g.stroke();
+      g.restore();
+    }
+    g.lineCap = "butt";
+    g.beginPath();
+    for (const t of m.ruas) for (let s = 28; s < t.L - 26; s += 15) {
+      if (Math.abs(s - t.L / 2) < 12) continue;
+      faixa(g, t.a[0] + t.u[0] * s, t.a[1] + t.u[1] * s, t.u[0], t.u[1], 3.5);
+    }
+    g.strokeStyle = cor.faixa; g.lineWidth = 1; g.stroke();
+    g.beginPath();
+    for (const f of m.travessias) for (let s = -12; s <= 12; s += 4) {
+      faixa(g, f.centro[0] + f.n[0] * s, f.centro[1] + f.n[1] * s, f.u[0], f.u[1], 4);
+    }
+    g.strokeStyle = cor.zebra; g.lineWidth = 2; g.stroke();
+    g.restore();
   }
 
   // ruído pelo ponto do mundo: hash inteiro, e o de valor (bilinear e suavizado) em células de cw×ch
@@ -180,14 +214,14 @@ const CidadeChao = (() => {
   const beira = (o, y) => o.mar + round(2.5 * sin(y / 23) + 1.5 * sin(y / 9 + 1));
 
   function criar({ recorte, atlas }) {
-    let p = null, pecas = [], nome = s => s.peca, telas = new Map(), alfa = null, alfaW = 0, sombras = new Map(), onda = null, pais = null;
+    let p = null, pecas = [], nome = s => s.peca, telas = new Map(), alfa = null, alfaW = 0, sombras = new Map(), onda = null;
     const estado = { sombras: 0, ladrilhos: 0, refeitos: 0, novos: 0, faltam: 0, detalhes: 0, chave: "" };
     const prontos = [];   // os ladrilhos da vista neste quadro (reaproveitado)
     let xDe = s => s.x;   // o x em que a peça é desenhada (a fonte anda para o lado numa festa em praça estreita)
 
     // o planta nova (outra cidade): os ladrilhos velhos saem
-    function preparar(planta, lista, nomeDe, xDaPeca, id) {
-      p = planta; pecas = lista; nome = nomeDe; xDe = xDaPeca || xDe; pais = paisagemDe(id, planta); telas.clear();
+    function preparar(planta, lista, nomeDe, xDaPeca) {
+      p = planta; pecas = lista; nome = nomeDe; xDe = xDaPeca || xDe; telas.clear();
     }
 
     // o sol de agora em faixas (para não refazer o chão a cada minuto): direção x da sombra por altura e a força
@@ -358,7 +392,7 @@ const CidadeChao = (() => {
           ret(cor.cercaSombra, fx + 1, fim - lado, 1, lado); ret(cor.cercaSombra, fx + w, fim - lado, 1, lado);
         }
       }
-      desenharPaisagem(g, pais, cor);   // a paisagem da cidade, antes das marcas da rua
+      if (p.malha) return;
       if (o && x1 > o.mar) {   // as ondas do alto-mar, as mesmas do mapa (MapaArte.ladrilhoMar), só na parte funda
         if (!onda && window.MapaArte) onda = MapaArte.ladrilhoMar();
         if (onda) {
@@ -404,6 +438,16 @@ const CidadeChao = (() => {
     function sombrear(g, X0, Y0, s0) {
       if (!s0.forca) return 0;
       let n = 0;
+      if (p.malha) {
+        g.save();
+        g.beginPath(); g.rect(X0, Y0, T, T);
+        for (const a of p.malha.agua) {
+          g.moveTo(a.pontos[0][0], a.pontos[0][1]);
+          for (let i = 1; i < a.pontos.length; i++) g.lineTo(a.pontos[i][0], a.pontos[i][1]);
+          g.closePath();
+        }
+        g.clip("evenodd");
+      }
       g.globalAlpha = 0.34 * s0.forca;
       for (const s of pecas) {
         const nm = nome(s), r = nm && recorte(nm);
@@ -415,6 +459,7 @@ const CidadeChao = (() => {
         if (sm) { g.drawImage(sm.c, x0 - sm.esq, y0); n++; }
       }
       g.globalAlpha = 1;
+      if (p.malha) g.restore();
       return n;
     }
     // o ladrilho (tx, ty) pintado com a chave de agora, ou null se ainda não deu a vez dele (NOVOS por quadro)
@@ -430,8 +475,15 @@ const CidadeChao = (() => {
       if (l.chave !== chave && (l.chave === null || estado.refeitos < REFAZER)) {
         const g = l.c.getContext("2d"), X0 = tx * T, Y0 = ty * T;
         g.setTransform(1, 0, 0, 1, 0, 0);
-        pixels(g, X0, Y0, cor);
+        if (p.malha) {
+          g.fillStyle = cor.grama[1]; g.fillRect(0, 0, T, T);
+          for (let y = 1; y < T; y += 4) for (let x = 0; x < T; x += 5) {
+            const k = hash(X0 + x, Y0 + y, 78);
+            if (k > 0.6) { g.fillStyle = cor.grama[k > 0.87 ? 2 : 0]; g.fillRect(x, y, 3, 1); }
+          }
+        } else pixels(g, X0, Y0, cor);
         g.setTransform(1, 0, 0, 1, -X0, -Y0);
+        if (p.malha) desenharMalha(g, p, cor, X0, Y0, X0 + T, Y0 + T);
         desenhos(g, X0, Y0, cor);
         estado.sombras += sombrear(g, X0, Y0, s0);
         g.setTransform(1, 0, 0, 1, 0, 0);
@@ -494,9 +546,22 @@ const CidadeChao = (() => {
 
     // o chão da vista: ladrilhos (feitos ou refeitos aqui), o mar e, perto, os detalhes. ceu: Ceu.agora(); tipo: do Clima
     // antes do atlas (um instante, na primeira entrada): só a grama e as ruas lisas, sem pintar ladrilho nenhum
+    function detalhesMalha(ctx, vista, cor) {
+      let n = 0;
+      for (const f of p.malha.travessias) {
+        const x = round(f.centro[0] + 9 * f.u[0] + 12 * f.n[0]), y = round(f.centro[1] + 9 * f.u[1] + 12 * f.n[1]);
+        if (x < vista[0] || x > vista[2] || y < vista[1] || y > vista[3]) continue;
+        tampa(ctx, x, y);
+        ctx.fillStyle = cor.grelha; ctx.fillRect(x + 1, y + 1, 2, 1);
+        n++;
+      }
+      return n;
+    }
     function esboco(ctx, vista, cor) {
-      const { v, h } = p.ruas, x0 = floor(vista[0]), y0 = floor(vista[1]), w = ceil(vista[2] - vista[0]) + 1, hh = ceil(vista[3] - vista[1]) + 1;
+      const x0 = floor(vista[0]), y0 = floor(vista[1]), w = ceil(vista[2] - vista[0]) + 1, hh = ceil(vista[3] - vista[1]) + 1;
       ctx.fillStyle = cor.grama[1]; ctx.fillRect(x0, y0, w, hh);
+      if (p.malha) { desenharMalha(ctx, p, cor, x0, y0, x0 + w, y0 + hh); return; }
+      const { v, h } = p.ruas;
       ctx.fillStyle = cor.calcada;
       for (const x of v) ctx.fillRect(x - B, y0, 2 * B, hh);
       for (const y of h) ctx.fillRect(x0, y - B, p.orla ? p.orla.x - x0 : w, 2 * B);
@@ -507,7 +572,6 @@ const CidadeChao = (() => {
         ctx.fillStyle = ORLA.areia[0]; ctx.fillRect(p.orla.x, y0, p.orla.mar - p.orla.x, hh);
         ctx.fillStyle = MAR.raso; ctx.fillRect(p.orla.mar, y0, w, hh);
       }
-      desenharPaisagem(ctx, pais, cor);   // a paisagem da cidade, no esboço também
     }
     // o sol de agora e a chave dos ladrilhos, refeitos só quando algo muda (nada montado por quadro)
     let s0 = null, chave = { texto: "", tipo: null }, antes = -1;
@@ -544,7 +608,7 @@ const CidadeChao = (() => {
       for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++, i++) if (prontos[i]) { ctx.drawImage(prontos[i], tx * T, ty * T); n++; }
       estado.ladrilhos = n; estado.faltam = faltam;
       mar(ctx, vista, op.t);
-      estado.detalhes = op.perto ? detalhes(ctx, vista) : 0;
+      estado.detalhes = op.perto ? (p.malha ? detalhesMalha(ctx, vista, cor) : detalhes(ctx, vista)) : 0;
       estado.forca = s0.forca;
     }
 
@@ -557,6 +621,6 @@ const CidadeChao = (() => {
 
     return { preparar, desenhar, estado, sol, opaco };
   }
-  return { criar, T, hash, paisagem: paisagemDe };
+  return { criar, T, hash };
 })();
 window.CidadeChao = CidadeChao;

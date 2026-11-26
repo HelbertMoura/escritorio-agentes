@@ -1,5 +1,6 @@
 // Planta do nível Cidade (o chão fica em mundo_cidade_chao.js; o desenho e a vida da rua, em mundo_cidade.js). Tudo sai de
-// uma semente com o id da cidade e dos dados dela (porte, litoral e UF): o mesmo id dá sempre a mesma planta.
+// descritores de Recife, Manaus e Belo Horizonte ou uma semente com o id e os dados (porte, litoral e UF).
+// A descrição abaixo vale para a planta procedural.
 // - Ruas em grade reta, de dv em dv e de dh em dh. A câmera fica presa à caixa W×H, mas a grade segue até LONGE além
 //   dela, para que a 1x, em qualquer formato de tela, não sobre chão vazio fora das quadras.
 // - Quadra: calçada de C em volta e o miolo em duas filas. A quadra do meio é a do marco (o centro). Em volta dela, uma
@@ -47,7 +48,6 @@ const CidadePlanta = (() => {
     "lazer-1": "Campo de Futebol", "lazer-4": "Coreto", "lazer-3": "Lago da Praça", "praca-1": "Praça da Fonte",
     "lazer-5": "Feira Livre", "praia-3": "Farol", "cidade-recife": "Casario da Orla",
     "cidade-manaus": "Mercado Adolpho Lisboa", "cidade-bh-serra-curral": "Serra do Curral" };
-  const ARTE_CIDADE = { recife: "cidade-recife", manaus: "cidade-manaus", "belo-horizonte": "cidade-bh-serra-curral" };
   // nomes de rua de mentira, para as placas das esquinas (a partir de 2x)
   const RUAS = ["R. das Flores", "R. do Sol", "Av. Central", "R. dos Ipês", "R. da Matriz", "R. Nova", "Av. das Palmeiras",
     "R. do Comércio", "R. da Paz", "R. das Acácias", "R. do Rosário", "Av. da Saudade", "R. do Mercado", "R. da Esperança",
@@ -76,6 +76,7 @@ const CidadePlanta = (() => {
   // cidade: { porte, litoral, uf, marco, regiao } (o que faltar vale cidade média, sem praia, no Sudeste; a regiao, das
   // cidades de fora do Brasil, escolhe as árvores no lugar da UF)
   function planta(id, cidade = {}) {
+    if (Object.hasOwn(MALHAS, id)) return plantaUrbana(id, cidade, MALHAS[id]);
     const r = sorteio(String(id));
     const entre = (a, b) => a + Math.floor(r() * (b - a + 1));
     const um = l => l[Math.floor(r() * l.length)];
@@ -317,40 +318,293 @@ const CidadePlanta = (() => {
     ruas.v.forEach((x, i) => { nomeRua.v[x] = orla && x === v1 ? "Av. Beira-Mar" : nomes[i % nomes.length]; });
     ruas.h.forEach((y, i) => { nomeRua.h[y] = nomes[(i + ruas.v.length) % nomes.length]; });
 
-    // a arte própria de Recife, Manaus e Belo Horizonte ocupa um lote já sorteado, com a caixa do desenho dentro da
-    // vaga e da cidade; sem a arte no atlas, o desenho genérico da base continua (sem outra chamada)
-    const arte = ARTE_CIDADE[id];
-    if (arte) {
-      const predios = pecas.filter(s => /^predios-/.test(s.peca) && s.zona === "centro");
-      const largo = (s, e = 64, baixo = H - 10) => s.x >= e && s.x <= W - e && s.y >= 70 && s.y <= baixo;
-      let alvo = null;
-      if (id === "recife") {
-        // o casario herda o lote largo do Hospital ilustrativo (predios-10), o único seguro junto à orla nesta semente;
-        // não há casa genérica com a caixa inteira num lote da orla
-        alvo = predios.filter(s => s.r[2] <= v1 - E / 2 && largo(s)).sort((a, b) => b.x - a.x)[0]
-          || predios.filter(s => largo(s)).sort((a, b) => b.x - a.x)[0];
-      } else if (id === "manaus") {
-        // o próprio Mercado Municipal (predios-14) vira o Adolpho Lisboa, no lote visível e acima dos controles
-        alvo = predios.find(s => s.peca === "predios-14" && s.x >= 48 && s.x <= W - 48 && s.y >= 70 && s.y <= H + 20)
-          || predios.filter(s => !/^predios-(8|9|10|13|14)$/.test(s.peca) && s.x >= 48 && s.x <= W - 48
-            && s.y >= 70 && s.y <= H + 20).sort((a, b) => Math.abs(a.x - W / 2) - Math.abs(b.x - W / 2))[0];
-      } else {
-        // a serra usa o lote largo do predios-8, no alto e sem prédio na frente; a arte do atlas é reduzida a 96x36
-        alvo = predios.find(s => s.peca === "predios-8")
-          || predios.filter(s => largo(s, 48)).sort((a, b) => a.y - b.y)[0];
-      }
-      if (alvo) {
-        alvo.base = alvo.peca; alvo.peca = arte;
-        if (NOMES[arte] && !notaveis.includes(alvo)) notaveis.push(alvo);
-      }
-    }
-
     const cruzamentos = [[v0, h0], [v1, h0], [v0, h1], [v1, h1]];   // os quatro do meio, os únicos com carros nas duas ruas
     return { W, H, ruas, quadras, centro, casa, praca, sorvete, pecas, arranjo, pisos, cercas, notaveis, orla, porte, regiao,
              zonas: { centro: qc, parque: qParque, esporte: qEsporte }, carros, postes, cruzamentos, nomeRua,
              rede: { nos, viz, peso }, pedestres };
   }
 
-  return { planta, sorteio, W, H, E, C, NOMES, PORTES };
+  // Coordenadas da cena em pixels do mundo. O circuito usa os primeiros vértices na ordem declarada.
+  // Os demais trechos são ruas locais. Toda conexão entre ruas compartilha um vértice.
+  const MALHAS = {
+    recife: {
+      caixa: [0, 0, 640, 440], regiao: "NE", resumo: "duas margens do Capibaribe ligadas por pontes, com casario e Marco Zero junto ao cais",
+      nos: [[64, 112], [232, 112], [382, 112], [543, 112], [560, 173], [560, 296], [527, 348], [378, 348],
+        [231, 348], [68, 348], [42, 285], [42, 166], [237, 221], [386, 231], [67, 16], [224, 16]],
+      volta: 12, pontes: [1, 7], locais: [[1, 12, 8], [2, 13, 7], [0, 14, 15, 1]],
+      nomes: ["Rua da Aurora", "Ponte Maurício de Nassau", "Rua do Bom Jesus", "Rua do Apolo", "Av. Alfredo Lisboa",
+        "Av. Alfredo Lisboa", "Cais do Marco Zero", "Ponte Buarque de Macedo", "Rua do Sol", "Rua Nova", "Rua do Imperador", "Praça da República"],
+      nomesLocais: ["Cais José Mariano", "Rua da Moeda", "Rua da União"],
+      agua: [
+        { tipo: "canal", pontos: [[256, -900], [348, -900], [346, 67], [336, 150], [348, 228], [348, 275],
+          [335, 310], [332, 381], [346, 485], [347, 1450], [261, 1450], [265, 484], [269, 389],
+          [263, 307], [263, 256], [268, 205], [259, 153], [257, 71]] },
+        { tipo: "estuário", pontos: [[631, -900], [1600, -900], [1600, 1450], [630, 1450], [634, 430],
+          [606, 380], [607, 326], [616, 302], [616, 237], [624, 221], [624, 172], [613, 153], [613, 100], [631, 70]] },
+      ],
+      cais: [[[599, 170], [613, 170], [622, 181], [622, 220], [614, 236], [614, 299], [606, 321], [597, 318]]],
+      quadras: [
+        ["concreto", [[68, 139], [206, 137], [213, 201], [66, 201]]],
+        ["praca", [[66, 208], [210, 208], [210, 307], [75, 307], [66, 283]]],
+        ["praca", [[407, 137], [521, 137], [534, 177], [534, 286], [514, 325], [402, 325]]],
+        ["concreto", [[73, 372], [207, 372], [221, 429], [92, 429]]],
+        ["concreto", [[399, 372], [515, 372], [541, 424], [390, 424]]],
+      ],
+      centro: ["predios-2", 467, 250, [409, 135, 525, 253]],
+      tituloCentro: "Marco Zero · Recife Antigo",
+      casa: [156, 430, [120, 370, 192, 433]],
+      praca: [138, 285, [69, 211, 212, 291]],
+      lotes: [
+        ["casa-4", 103, 194, [76, 143, 132, 196]], ["casa-2", 173, 189, [140, 143, 208, 194]],
+        ["cidade-recife", 469, 317, [429, 258, 513, 321], "predios-6"],
+        ["arvore-7", 413, 312, [405, 293, 424, 317]],
+        ["arvore-3", 199, 312, [185, 298, 211, 317]], ["arvore-3", 91, 319, [85, 309, 108, 322]],
+        ["casa-3", 444, 420, [416, 374, 467, 424]], ["arvore-7", 507, 419, [490, 403, 525, 424]],
+        ["casa-1", 176, 88, [145, 38, 204, 90]], ["casa-5", 435, 79, [403, 18, 470, 86]],
+        ["casa-6", 114, 86, [89, 41, 142, 88]], ["casa-2", 514, 81, [483, 36, 544, 86]],
+        ["arvore-7", 550, 62, [545, 57, 556, 66]], ["arvore-3", 252, 68, [250, 64, 254, 73]],
+        ["canteiro-2", 409, 414, [390, 395, 415, 417]],
+        ["arvore-7", 590, 224, [584, 206, 603, 229]], ["arvore-3", 592, 267, [583, 252, 608, 274]],
+        ["banco-poste-1", 525, 278, [515, 271, 536, 281]], ["arvore-7", 589, 389, [574, 375, 601, 397]],
+      ],
+      acessos: [[0, -1, [147, 84]], [8, -1, [108, 377], [108, 438], [156, 438], [156, 430]],
+        [6, 1, [458, 323]], [10, 1, [74, 268]], [4, -1, [604, 236]], [4, 1, [525, 235]]],
+    },
+    manaus: {
+      caixa: [0, 0, 640, 466], regiao: "N", resumo: "o Teatro Amazonas e o Mercado Adolpho Lisboa ligados à orla e ao porto do Rio Negro",
+      nos: [[67, 114], [140, 88], [310, 94], [488, 117], [571, 164], [591, 225], [555, 315],
+        [471, 349], [319, 344], [167, 350], [64, 303], [39, 215], [290, 207], [343, 193], [142, -22], [491, -20]],
+      volta: 12, pontes: [], locais: [[2, 12, 8], [12, 13, 4], [1, 14, 15, 3]],
+      nomes: ["Rua 10 de Julho", "Rua José Clemente", "Rua Ramos Ferreira", "Rua Ferreira Pena", "Rua dos Andradas",
+        "Rua Marquês de Santa Cruz", "Av. Lourenço Braga", "Av. Lourenço Braga", "Rua dos Barés", "Rua da Instalação", "Rua Bernardo Ramos", "Rua Monsenhor Coutinho"],
+      nomesLocais: ["Rua Eduardo Ribeiro", "Rua Henrique Martins", "Rua Ferreira Pena"],
+      agua: [{ tipo: "rio", pontos: [[-900, 356], [19, 359], [110, 374], [193, 399], [330, 391], [469, 399],
+        [550, 379], [627, 340], [674, 317], [1600, 313], [1600, 1450], [-900, 1450]] }],
+      cais: [[[111, 360], [193, 380], [330, 374], [469, 381], [546, 360], [622, 323], [631, 340], [550, 381],
+        [470, 402], [330, 394], [193, 402], [107, 377]], [[352, 385], [437, 390], [444, 424], [357, 419]]],
+      quadras: [
+        ["praca", [[92, 128], [259, 128], [258, 216], [88, 216]]],
+        ["praca", [[77, 220], [247, 220], [259, 314], [165, 324], [86, 289]]],
+        ["concreto", [[315, 223], [465, 219], [554, 191], [563, 225], [535, 299], [466, 326], [340, 320]]],
+        ["concreto", [[332, 120], [480, 139], [539, 163], [361, 173]]],
+      ],
+      centro: ["predios-2", 182, 227, [124, 122, 241, 229]],
+      casa: [494, 285, [458, 219, 528, 289]],
+      praca: [186, 300, [117, 231, 255, 301]],
+      lotes: [
+        ["cidade-manaus", 402, 315, [353, 253, 452, 321], "predios-14"],
+        ["casa-3", 360, 59, [333, 11, 389, 65]],
+        ["casa-2", 424, 67, [394, 21, 455, 70]], ["arvore-3", 317, 62, [306, 48, 330, 65]],
+        ["casa-4", 194, 63, [166, 11, 223, 65]], ["casa-6", 262, 67, [237, 22, 288, 69]],
+        ["arvore-7", 525, 94, [514, 75, 539, 99]],
+        ["arvore-7", 103, 210, [87, 194, 116, 215]], ["arvore-3", 250, 210, [242, 196, 262, 215]],
+        ["arvore-3", 244, 311, [228, 304, 260, 318]], ["arvore-7", 81, 249, [77, 239, 90, 253]],
+        ["arvore-7", 341, 297, [332, 279, 351, 302]], ["arvore-3", 477, 319, [467, 305, 483, 320]],
+        ["arvore-1", 617, 282, [601, 266, 637, 291]], ["banco-poste-1", 303, 380, [281, 371, 323, 383]],
+        ["banco-poste-1", 493, 377, [484, 372, 503, 379]],
+      ],
+      acessos: [[1, 1, [182, 128]], [9, 1, [140, 285]], [7, 1, [416, 322]], [7, -1, [398, 385]],
+        [6, 1, [495, 302], [494, 285]]],
+    },
+    "belo-horizonte": {
+      caixa: [0, 0, 640, 440], regiao: "SE", resumo: "a Lagoa da Pampulha, a avenida da orla, a Igreja de São Francisco e a Serra do Curral",
+      nos: [[44, 133], [102, 96], [240, 89], [333, 115], [401, 166], [403, 240], [366, 301],
+        [306, 340], [161, 350], [75, 320], [37, 252], [482, 65], [605, 125], [603, 293], [554, 362], [436, 347]],
+      volta: 11, pontes: [], locais: [[4, 11, 12, 13, 14, 15, 6]],
+      nomes: Array(11).fill("Av. Otacílio Negrão de Lima"),
+      nomesLocais: ["Av. Santa Rosa"],
+      agua: [{ tipo: "lagoa", pontos: [[71, 151], [127, 129], [187, 124], [234, 117], [270, 135], [297, 132],
+        [354, 168], [375, 200], [365, 231], [339, 270], [300, 282], [283, 309], [221, 312], [180, 297],
+        [150, 311], [103, 294], [77, 264], [69, 228], [83, 200]] }],
+      cais: [],
+      relevo: [[[334, 82], [398, 54], [439, 59], [489, 35], [520, 46], [560, 32], [606, 53], [661, 64], [688, 92],
+        [643, 90], [595, 91], [547, 77], [479, 93], [421, 89], [383, 94]],
+      [[404, 82], [452, 73], [477, 54], [507, 65], [542, 50], [591, 66], [623, 62], [673, 83], [684, 99],
+        [632, 99], [585, 93], [545, 100], [494, 91], [464, 99]]],
+      quadras: [
+        ["praca", [[434, 179], [481, 131], [555, 147], [556, 239], [434, 239]]],
+        ["praca", [[426, 240], [564, 240], [564, 309], [531, 329], [453, 324], [414, 299]]],
+        ["concreto", [[184, 380], [303, 370], [333, 422], [163, 425]]],
+        ["concreto", [[426, 374], [513, 379], [521, 429], [407, 429]]],
+      ],
+      centro: ["predios-6", 509, 237, [458, 135, 560, 239]],
+      casa: [473, 434, [441, 377, 504, 436]],
+      praca: [495, 308, [426, 240, 564, 309]],
+      lotes: [
+        ["cidade-bh-serra-curral", 553, 49, [504, 11, 602, 51], "arvore-6"],
+        ["casa-4", 235, 425, [205, 372, 267, 429]], ["casa-3", 323, 416, [298, 369, 350, 421]],
+        ["casa-2", 119, 416, [88, 373, 151, 420]], ["arvore-4", 392, 402, [375, 381, 411, 407]],
+        ["arvore-2", 361, 365, [353, 360, 369, 369]], ["arvore-4", 279, 385, [268, 367, 291, 391]],
+        ["arvore-4", 435, 198, [424, 183, 451, 206]], ["arvore-2", 575, 192, [568, 177, 583, 197]],
+        ["arvore-1", 398, 107, [377, 96, 409, 111]], ["arvore-4", 151, 64, [132, 50, 173, 69]],
+        ["arvore-2", 630, 315, [623, 311, 637, 319]], ["arvore-1", 565, 400, [553, 386, 583, 407]],
+        ["arvore-1", 211, 321, [200, 317, 224, 322]], ["banco-poste-1", 368, 175, [363, 172, 373, 179]],
+      ],
+      acessos: [[4, -1, [449, 207], [449, 234], [472, 234]], [5, -1, [429, 278]],
+        [15, -1, [426, 388], [426, 436], [473, 439], [473, 434]], [7, -1, [227, 380]]],
+    },
+  };
+
+  const misturar = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  const delta = (a, b) => [b[0] - a[0], b[1] - a[1]];
+  const dist = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const soma = (p, u, d) => [p[0] + u[0] * d, p[1] + u[1] * d];
+  const produto = (a, b) => a[0] * b[0] + a[1] * b[1];
+  const normal = ([x, y]) => [-y, x];
+  const unitario = (a, b) => soma([0, 0], delta(a, b), 1 / dist(a, b));
+  const modulo = (a, m) => (a % m + m) % m;
+  const CALCADA = 20, PISTA = 16;
+  const chaveAresta = (a, b) => a * 1024 + b;
+  function noPoligono([x, y], pontos) {
+    let dentro = false;
+    for (let i = 0, j = pontos.length - 1; i < pontos.length; j = i++) {
+      const [a, b] = pontos[i], [c, d] = pontos[j];
+      if ((b > y) !== (d > y) && x < a + (y - b) * (c - a) / (d - b)) dentro = !dentro;
+    }
+    return dentro;
+  }
+  function aguaEm(m, ponto) { return m.agua.some(a => noPoligono(ponto, a.pontos)); }
+  // A projeção também delimita o tabuleiro e a superfície útil das pontes nas bordas do canal.
+  function ponteEm(m, ponto) {
+    return m.pontes.some(t => {
+      const v = delta(t.a, ponto), s = produto(v, t.u);
+      return s >= 0 && s <= t.L && Math.abs(produto(v, t.n)) <= CALCADA + 3;
+    });
+  }
+
+  function ruasDaMalha(d) {
+    const ruas = [], raios = d.nos.map(() => []);
+    function rua(i, j, nome, ponte) {
+      const a = d.nos[i], b = d.nos[j], u = unitario(a, b);
+      const t = { a, b, u, n: normal(u), L: dist(a, b), nome, ponte, lados: [[], []] };
+      ruas.push(t);
+      raios[i].push({ t, u, ini: true });
+      raios[j].push({ t, u: [-u[0], -u[1]], ini: false });
+    }
+    for (let i = 0; i < d.volta; i++) rua(i, (i + 1) % d.volta, d.nomes[i], d.pontes.includes(i));
+    d.locais.forEach((l, i) => l.slice(1).forEach((j, k) => rua(l[k], j, d.nomesLocais[i], false)));
+
+    // A cunha entre dois trechos é a interseção das linhas de calçada de cada rua.
+    // O mesmo ponto vira o fim de uma calçada e o começo da outra.
+    for (let i = 0; i < raios.length; i++) {
+      const lista = raios[i], p = d.nos[i];
+      lista.sort((a, b) => Math.atan2(a.u[1], a.u[0]) - Math.atan2(b.u[1], b.u[0]));
+      for (let k = 0; k < lista.length; k++) {
+        const a = lista[k], b = lista[(k + 1) % lista.length];
+        const n = normal(a.u), m = normal(b.u);
+        const q = soma(p, delta(m, n), CALCADA / (1 - produto(a.u, b.u)));
+        a.t.lados[a.ini ? 0 : 1][a.ini ? 0 : 1] = q;
+        b.t.lados[b.ini ? 1 : 0][b.ini ? 0 : 1] = q;
+      }
+    }
+    return ruas;
+  }
+
+  function calcadas(m, acessos) {
+    const nos = [], viz = [], ids = new Map(), travessias = [], faixaPorAresta = {}, caminhos = [], placas = [], postes = [], cordoes = [];
+    function no(p) {
+      if (!ids.has(p)) { ids.set(p, nos.length); nos.push(p); viz.push([]); }
+      return ids.get(p);
+    }
+    function ligar(a, b, faixa) {
+      const i = no(a), j = no(b);
+      if (i === j || dist(a, b) < 0.01) return;
+      viz[i].push(j); viz[j].push(i);
+      if (faixa) { faixaPorAresta[chaveAresta(i, j)] = faixa; faixaPorAresta[chaveAresta(j, i)] = faixa; }
+    }
+    m.ruas.forEach((t, i) => {
+      const centro = misturar(t.a, t.b, 0.5);
+      const cantos = [soma(centro, t.n, CALCADA), soma(centro, t.n, -CALCADA)];
+      const livre = !t.ponte && !aguaEm(m, centro) && t.lados.every(([a, b], k) =>
+        produto(delta(a, cantos[k]), t.u) > 12 && produto(delta(cantos[k], b), t.u) > 12);
+      t.lados.forEach(([a, b], k) => {
+        const x = cantos[k], ligacoes = acessos.filter(([j, lado]) => i === j && (lado === 1) === (k === 0));
+        if (livre || ligacoes.length) { ligar(a, x); ligar(x, b); }
+        else ligar(a, b);
+        for (const [, , ...pontos] of ligacoes) {
+          let inicio = x;
+          for (const fim of pontos) { ligar(inicio, fim); caminhos.push([inicio, fim]); inicio = fim; }
+        }
+      });
+      if (t.ponte) {
+        const [x, y] = t.lados[1][0];
+        placas.push({ x, y, nome: t.nome });
+      }
+      if (!livre) return;
+      const faixa = { centro, cantos, u: t.u, n: t.n, carros: i < m.volta };
+      travessias.push(faixa);
+      ligar(cantos[0], cantos[1], faixa);
+      if (t.L >= 80) {
+        placas.push({ x: cantos[0][0], y: cantos[0][1], nome: t.nome });
+        if (t.L >= 105) {
+          postes.push(...cantos);
+          cordoes.push([cantos[0][0], cantos[0][1], cantos[1][0], cantos[1][1]]);
+        }
+      }
+    });
+    return { nos, viz, peso: nos.map(() => 1), travessias, faixaPorAresta, caminhos, placas, postes, cordoes };
+  }
+
+  function circuito(ruas) {
+    const pontos = ruas.map((t, i) => {
+      const anterior = ruas[modulo(i - 1, ruas.length)];
+      const uniao = soma(t.n, anterior.n, 1);
+      return soma(t.a, uniao, 6 / (1 + produto(anterior.u, t.u)));
+    });
+    const pista = [];
+    for (let i = 0; i < pontos.length; i++) {
+      // Arredonda cada cotovelo da faixa. As retas entre as curvas continuam no eixo da faixa.
+      const a = pontos[i], b = pontos[modulo(i - 1, pontos.length)], c = pontos[(i + 1) % pontos.length];
+      const entrada = soma(a, unitario(a, b), 10), saida = soma(a, unitario(a, c), 10);
+      for (let k = 0; k <= 4; k++) {
+        const t = k / 4;
+        pista.push(misturar(misturar(entrada, a, t), misturar(a, saida, t), t));
+      }
+    }
+    let L = 0;
+    const trechos = pista.map((a, i) => {
+      const b = pista[(i + 1) % pista.length], u = unitario(a, b), inicio = L;
+      L += dist(a, b);
+      return { a, u, angulo: Math.atan2(u[1], u[0]), inicio, fim: L };
+    });
+    return { L, trechos };
+  }
+
+  function naPista(pista, s, alvo) {
+    let i = 0;
+    while (s >= pista.trechos[i].fim) i++;
+    const t = pista.trechos[i], d = s - t.inicio;
+    alvo.x = t.a[0] + t.u[0] * d; alvo.y = t.a[1] + t.u[1] * d; alvo.angulo = t.angulo;
+  }
+
+  function plantaUrbana(id, cidade, d) {
+    const ruas = ruasDaMalha(d);
+    const malha = { caixa: d.caixa, resumo: d.resumo, volta: d.volta, agua: d.agua, cais: d.cais,
+      relevo: d.relevo || [], ruas, pontes: ruas.filter(t => t.ponte), pista: circuito(ruas.slice(0, d.volta)), largura: PISTA, calcada: CALCADA };
+    const { caminhos, travessias, placas, postes, cordoes, ...rede } = calcadas(malha, d.acessos);
+    Object.assign(malha, { caminhos, travessias, placas, cordoes });
+    const centro = loteUrbano(d.centro, "centro"), praca = loteUrbano(["praca-1", ...d.praca], "parque");
+    const casa = { ...loteUrbano(["chale-2", ...d.casa], "casas"), arvore: d.regiao === "SE" ? "arvore-2" : "arvore-3" };
+    const pecas = [...d.lotes.map(l => loteUrbano(l, "centro")), praca];
+    const quadras = d.quadras.map(([piso, pontos]) => ({ piso, pontos }));
+    const r = sorteio(id + ":malha"), porte = PORTES[cidade.porte] ? cidade.porte : "grande", P = PORTES[porte];
+    const frota = [...Array(P.carros).fill("carro"), ...Array(P.bicis).fill("bici")];
+    const carros = frota.map((tipo, i) => {
+      const s = (i + 0.4) * malha.pista.L / frota.length;
+      return { s, v: tipo === "carro" ? 22 : 15, peca: tipo + "-" + (1 + Math.floor(r() * (tipo === "carro" ? 5 : 3))) };
+    });
+    const pedestres = Array.from({ length: P.pedestres[0] }, (_, i) => {
+      const de = Math.floor((i + r()) * rede.nos.length / P.pedestres[0]);
+      const para = rede.viz[de].find(j => !rede.faixaPorAresta[chaveAresta(de, j)]);
+      return { de, para, s: dist(rede.nos[de], rede.nos[para]) * r(), v: 9 + Math.round(r() * 4), semente: id + "#" + i };
+    });
+    return { W: d.caixa[2], H: d.caixa[3], malha, quadras, centro, casa, praca, pecas, pisos: [], tituloCentro: d.tituloCentro,
+      cercas: [{ r: casa.r, tipo: "sebe", porta: casa.x }],
+      notaveis: pecas.filter(s => NOMES[s.peca]), porte, regiao: d.regiao, carros, postes, rede, pedestres };
+  }
+
+  function loteUrbano([peca, x, y, r, base], zona) { return { peca, x, y, r, base, zona }; }
+
+  return { planta, sorteio, W, H, E, C, NOMES, PORTES, aguaEm, ponteEm, naPista, chaveAresta };
 })();
 window.CidadePlanta = CidadePlanta;

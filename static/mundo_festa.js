@@ -96,10 +96,13 @@ const MundoFesta = (() => {
       if (!f) return;
       const A = CidadePlanta.E / 2 + 1, cruz = p.cruzamentos;
       if (tem("bandeirinhas")) {
-        for (const [x, y] of cruz) for (const dy of [-A, A]) cordoes.push([x - A, y + dy, x + A, y + dy]);   // sobre a rua vertical
-        const xs = [...new Set(cruz.map(c => c[0]))].sort((a, b) => a - b), ys = [...new Set(cruz.map(c => c[1]))];
-        for (const y of ys) {   // em X ao longo da rua horizontal, de um cruzamento ao outro
-          cordoes.push([xs[0] + A, y - A, xs[1] - A, y + A], [xs[0] + A, y + A, xs[1] - A, y - A]);
+        if (p.malha) cordoes = p.malha.cordoes;
+        else {
+          for (const [x, y] of cruz) for (const dy of [-A, A]) cordoes.push([x - A, y + dy, x + A, y + dy]);   // sobre a rua vertical
+          const xs = [...new Set(cruz.map(c => c[0]))].sort((a, b) => a - b), ys = [...new Set(cruz.map(c => c[1]))];
+          for (const y of ys) {   // em X ao longo da rua horizontal, de um cruzamento ao outro
+            cordoes.push([xs[0] + A, y - A, xs[1] - A, y + A], [xs[0] + A, y + A, xs[1] - A, y - A]);
+          }
         }
         for (const c of cordoes) itens.push({ enfeite: "cordao", c, x: (c[0] + c[2]) / 2, y: Math.max(c[1], c[3]) });
       }
