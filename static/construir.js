@@ -1,13 +1,13 @@
 // Modo construção: editor da planta do escritório. Monta o prédio pelo mesmo Mapa.montarPredio da página
 // (o que se vê aqui é o que todos vão ver) com o rascunho do Planta.rascunho por cima, e grava com o Planta.salvar.
 // Pinta parede e piso por sala; move, espelha, tira e põe móveis de chão; desfaz e refaz; volta ao automático.
-// Celular: só o aviso. ?demo=1: exemplo próprio, sem /api e sem salvar.
+// ?demo=1: exemplo próprio, sem /api e sem salvar.
 "use strict";
 (() => {
   const $ = id => document.getElementById(id);
   const DEMO = new URLSearchParams(location.search).get("demo") === "1";
-  const SO_VER = matchMedia("(max-width: 699px), not (any-pointer: fine)");   // o avesso do NO_COMPUTADOR do personalizar.js
   const PASSO = 8;   // setas: 8 px (Shift: 1 px)
+  const SETAS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
   // saída pedida pelo editor (Recarregar do 409, sessão expirada): o rascunho já foi dado como perdido, sem o "Sair do site?"
   let saindo = false;
   const sair = url => { saindo = true; if (url) location.href = url; else location.reload(); };
@@ -15,7 +15,7 @@
   const tela = $("tela"), ctx = tela.getContext("2d"), palco = $("palco"), camada = $("camada");
   let config = null, atlas = null, grupos = null, rasc = null, predio = null;
   let fechadas = [], ignorados = [], pecas = new Map(), salas = new Map();   // id -> objeto; chave -> sala
-  let sel = null, salaSel = null, porNome = null, arrasto = null, salvando = false;
+  let sel = null, salaSel = null, colocacao = null, arrasto = null, salvando = false;
   let avisoSalvar = null;   // { tipo, texto, acao? } do último salvar
   let semRefazer = null;    // a planta depois de um "não coube": o refazer não volta a tentar o mesmo lugar
   const cam = { x: 0, y: 0, k: 1 };
@@ -52,7 +52,6 @@
   }
 
   async function iniciar() {
-    if (SO_VER.matches) return;   // celular ou sem mouse: só o aviso (CSS)
     let agentes = [];
     try {
       if (DEMO) ({ cfg: config, agentes } = demo());
@@ -276,6 +275,17 @@
   }
   function posicao(o) { const s = salas.get(o.salaChave); return { x: o.x + o.w / 2 - s.px, y: o.y + o.h - s.chao }; }
 
+  function moverUmPasso(o, seta, passo) {
+    const [dx, dy] = SETAS[seta], p = posicao(o);
+    moverPara(o.id, p.x + dx * passo, p.y + dy * passo);
+  }
+
+  function duplicar() {
+    const o = sel && pecas.get(sel);
+    if (podeDuplicar(o)) {
+      escolherPor({ nome: o.nome, espelho: podeEspelhar(o) && !!o.espelho, gatilho: $("duplicar") });
+    }
+  }
   function espelhar() {
     const o = sel && pecas.get(sel); if (!o || !podeEspelhar(o)) return;
     agir(rasc.espelhar(o.id), `Peça espelhada: ${nomePeca(o.nome)}.`);
@@ -291,14 +301,14 @@
   function devolver(id) { agir(rasc.limpar([id]), "Peça devolvida ao lugar automático."); }
 
   function por(s, x, y) {
-    if (!porNome || !s) return;
-    const nome = porNome;
-    const feito = rasc.por(nome, s.chave, Math.max(0, Math.round(x)), Math.max(0, Math.round(y)), false);
+    if (!colocacao || !s) return;
+    const { nome, espelho } = colocacao;
+    const feito = rasc.por(nome, s.chave, Math.max(0, Math.round(x)), Math.max(0, Math.round(y)), espelho);
     if (!agir(feito)) return;
     const id = `novo:${rasc.planta.novos.length - 1}`;
     if (naoCoube(id)) return;
     escolherPor(null);
-    selecionar(id, false);
+    selecionar(id, true);
     anunciar(`Peça posta em ${s.nome}: ${nomePeca(nome)}.`);
   }
   function porNaSala() { // sem arrastar: no meio do chão da sala escolhida
@@ -310,13 +320,14 @@
   function refazer() { if (rasc.planta !== semRefazer && rasc.refazer()) { avisoSalvar = avisoTemp = null; montar(); atualizar(); anunciar("Refeito."); } }
 
   const podeMover = o => !!o && !FIXOS.has(o.nome);
+  const podeDuplicar = o => !!o && Mapa.CATALOGO.has(o.nome) && !!Mapa.tamanho(atlas, o.nome);
   const podeEspelhar = o => !!o && !FIXOS.has(o.nome) && !SEM_ESPELHO.has(o.nome);
 
   function selecionar(id, focar) {
     sel = id && pecas.has(id) ? id : null;
     for (const b of camada.children) b.setAttribute("aria-pressed", String(b.dataset.id === sel));
     const o = sel && pecas.get(sel);
-    if (o) { salaSel = o.salaChave; $("sala").value = salaSel; marcarAmostras(); }
+    if (o) escolherSala(o.salaChave);
     if (o && focar) { const b = botaoDa(sel); if (b) b.focus({ preventScroll: true }); }
     atualizarPeca(); desenhar();
   }
@@ -357,10 +368,16 @@
 
   async function voltarAoAutomatico() {
     if (!(await confirmar())) return;
+    const foco = document.activeElement;
+    escolherPor(null);
     const feito = rasc.automatico();
-    if (feito === false && !rasc.mudou()) { anunciar("O escritório já está no automático."); return; }
+    if (feito === false && !rasc.mudou()) {
+      if (!focarSeVisivel(foco)) focarSeVisivel($("automatico"));
+      anunciar("O escritório já está no automático."); return;
+    }
     agir(feito, "Tudo voltou ao automático.");
-    sel = null; atualizarPeca();
+    selecionar(null);
+    if (!focarSeVisivel(foco)) focarSeVisivel($("automatico"));
     if (!DEMO && rasc.mudou()) await salvar();
   }
 
@@ -371,9 +388,12 @@
       try { config = await json("api/config"); planta = config.planta || Planta.vazia(); }
       catch (e) { avisar("erro", "Não deu para reler a planta salva agora. Tente de novo."); return; }
     }
+    const foco = document.activeElement;
+    escolherPor(null);
     rasc = Planta.rascunho(planta);
-    sel = null; avisoSalvar = null;
+    sel = null; avisoSalvar = avisoTemp = null;
     montar(); atualizar(); marcarAmostras();
+    if (!focarSeVisivel(foco)) focarSeVisivel($("painel"));
     anunciar("Rascunho descartado: voltou o que está salvo.");
   }
 
@@ -436,6 +456,8 @@
     if (o) {
       $("peca-nome").textContent = nomePeca(o.nome);
       $("peca-sala").textContent = `· ${nomeSala(o.salaChave)}${o.id.startsWith("novo:") ? " · peça nova" : ""}`;
+      $("duplicar").hidden = !podeDuplicar(o);
+      $("ajuste-fino").hidden = !podeMover(o);
       $("espelhar").disabled = !podeEspelhar(o); $("espelhar").setAttribute("aria-pressed", String(!!o.espelho));
       $("peca-nota").textContent = FIXOS.has(o.nome) ? "Esta peça fica presa ao lugar (tem animação nele): dá para tirar, mas não mover nem espelhar."
         : SEM_ESPELHO.has(o.nome) ? "Esta peça não espelha (ficaria errada ao contrário)." : "";
@@ -526,19 +548,37 @@
       mini.className = "mini"; mini.append(cv); rot.textContent = rotulo; b.dataset.rotulo = rotulo;
       const k = Math.min(40 / w, 40 / h, 2); cv.style.width = `${Math.round(w * k)}px`; cv.style.height = `${Math.round(h * k)}px`;
       b.append(mini, rot);
-      b.addEventListener("click", () => escolherPor(porNome === nome ? null : nome));
+      b.addEventListener("click", () => {
+        if (colocacao?.gatilho === b) cancelarPor();
+        else escolherPor({ nome, espelho: false, gatilho: b });
+      });
       raiz.append(b);
     }
     if (!raiz.childElementCount) raiz.closest(".bloco").hidden = true;
   }
-  function escolherPor(nome) {
-    porNome = nome;
+  function escolherPor(pedido) {
+    colocacao = pedido;
+    const nome = pedido?.nome;
     for (const b of $("catalogo").children) b.setAttribute("aria-pressed", String(b.dataset.nome === nome));
     palco.classList.toggle("pondo", !!nome);
-    $("por-aqui").hidden = !nome;
+    $("colocacao").hidden = !nome;
     const d = $("dica-por");
     d.hidden = !nome;
-    if (nome) { d.textContent = `Clique numa sala para pôr: ${nomePeca(nome)}. Esc cancela.`; anunciar(`Para pôr: ${nomePeca(nome)}. Clique numa sala do mapa ou use o botão "Pôr em ${nomeSala(salaSel)}".`); }
+    if (nome) { d.textContent = `Escolha um ponto para pôr: ${nomePeca(nome)}.`; anunciar(`Para pôr: ${nomePeca(nome)}. Escolha um ponto no mapa ou use o botão "Pôr em ${nomeSala(salaSel)}".`); $("por-aqui").focus(); }
+  }
+
+  function focarSeVisivel(el, preventScroll = true) {
+    if (!el?.isConnected || el === document.body || el.disabled || !el.getClientRects().length) return false;
+    el.focus({ preventScroll });
+    return document.activeElement === el;
+  }
+
+  function cancelarPor() {
+    if (!colocacao) return;
+    const { gatilho } = colocacao;
+    escolherPor(null);
+    if (!focarSeVisivel(gatilho, false)) focarSeVisivel($("sala"), false);
+    anunciar("Colocação cancelada.");
   }
 
   // ---------- ponteiro ------------------------------------------------------------------
@@ -547,7 +587,7 @@
   palco.addEventListener("pointerdown", e => {
     if (!predio || e.button !== 0) return;
     const p = paraMundo(e.clientX, e.clientY);
-    if (porNome) { // pondo peça: o clique escolhe o lugar (o pé da peça)
+    if (colocacao) { // pondo peça: o clique escolhe o lugar (o pé da peça)
       e.preventDefault();
       const s = salaEm(p);
       if (!s) { anunciar("Clique dentro de uma sala."); return; }
@@ -615,17 +655,17 @@
     const mod = e.ctrlKey || e.metaKey, tecla = e.key.toLowerCase();
     if (mod && tecla === "z") { e.preventDefault(); if (e.shiftKey) refazer(); else desfazer(); return; }
     if (mod && tecla === "y") { e.preventDefault(); refazer(); return; }
-    if (mod || e.altKey || digitando(document.activeElement)) return;
-    if (e.key === "Escape") { if (porNome) escolherPor(null); else if (sel) { selecionar(null); anunciar("Peça solta."); } return; }
+    if (mod || e.altKey) return;
+    if (e.key === "Escape" && colocacao) { e.preventDefault(); cancelarPor(); return; }
+    if (digitando(document.activeElement)) return;
+    if (e.key === "Escape") { if (sel) { selecionar(null); anunciar("Peça solta."); } return; }
     const o = sel && pecas.get(sel), naPeca = document.activeElement && document.activeElement.classList.contains("peca");
     if (o && (e.key === "Delete" || e.key === "Backspace")) { e.preventDefault(); tirar(); return; }
     if (o && tecla === "e") { e.preventDefault(); if (podeEspelhar(o)) espelhar(); else anunciar("Esta peça não espelha."); return; }
-    const setas = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
-    if (o && naPeca && Object.hasOwn(setas, e.key)) {
+    if (o && naPeca && Object.hasOwn(SETAS, e.key)) {
       e.preventDefault();
       if (!podeMover(o)) { anunciar("Esta peça fica presa ao lugar."); return; }
-      const [dx, dy] = setas[e.key], d = e.shiftKey ? 1 : PASSO, p = posicao(o);
-      moverPara(o.id, p.x + dx * d, p.y + dy * d);
+      moverUmPasso(o, e.key, e.shiftKey ? 1 : PASSO);
       return;
     }
     if (e.key === "+" || e.key === "=") zoom(1.25);
@@ -640,6 +680,12 @@
   $("descartar").addEventListener("click", descartar);
   $("automatico").addEventListener("click", voltarAoAutomatico);
   $("espelhar").addEventListener("click", espelhar);
+  $("duplicar").addEventListener("click", duplicar);
+  for (const b of $("ajuste-fino").querySelectorAll("[data-mover]")) b.addEventListener("click", () => {
+    const o = sel && pecas.get(sel);
+    if (podeMover(o)) moverUmPasso(o, b.dataset.mover, Number($("passo-movel").value));
+  });
+  $("cancelar-por").addEventListener("click", cancelarPor);
   $("tirar").addEventListener("click", tirar);
   $("por-aqui").addEventListener("click", porNaSala);
   $("zoom-mais").addEventListener("click", () => zoom(1.25));

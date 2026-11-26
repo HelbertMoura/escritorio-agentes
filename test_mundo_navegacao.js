@@ -54,7 +54,8 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
   const ctx = pincel;
   const canvas = elemento(); canvas.getContext = () => ctx;
   canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: tamanho[0], height: tamanho[1] });
-  const ids = ["mundo", "entrar", "mundo-estado", "mundo-alvos", "mundo-dica", "mundo-voltar", "mundo-mais", "mundo-menos"];
+  const ids = ["mundo", "entrar", "mundo-estado", "mundo-alvos", "mundo-dica", "mundo-voltar", "mundo-mais", "mundo-menos",
+    "mundo-vista", "mundo-cena", "mundo-ajuda"];
   const elementos = Object.fromEntries(ids.map(id => [id, id === "mundo" ? canvas : elemento()]));
   // os botões no canto de baixo à direita do canvas, como na página (Voltar, + e −)
   const botao = (dx, w) => () => ({ left: tamanho[0] - dx, top: tamanho[1] - 52, width: w, height: 40 });
@@ -63,6 +64,7 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
   elementos["mundo-menos"].getBoundingClientRect = botao(72, 48);
   const janela = elemento();
   janela.devicePixelRatio = tela[2];
+  janela.innerWidth = tela[0];
   janela.matchMedia = q => ({ matches: reduzido && q === "(prefers-reduced-motion: reduce)", addEventListener() {} });
   const documento = elemento();
   documento.hidden = false;
@@ -116,7 +118,7 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
   for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r));   // mundo.json e clima chegam
   let relogio = 0;
   const rodar = (n = 1) => { for (let i = 0; i < n; i++) { const f = quadros.shift(); if (!f) return; relogio += passo; f(relogio); } };
-  const redimensionar = (w, h) => { tamanho[0] = w; tamanho[1] = h; janela.disparar("resize"); };
+  const redimensionar = (w, h) => { tamanho[0] = w; tamanho[1] = h; janela.innerWidth = w; janela.disparar("resize"); };
   const M = contexto.window.Mundo;
   const ponteiro = (tipo, x, y) => canvas.disparar(tipo, { pointerId: 1, clientX: x, clientY: y, button: 0, isPrimary: true });
   const clicar = (x, y) => { ponteiro("pointerdown", x, y); ponteiro("pointerup", x, y); };
@@ -257,7 +259,7 @@ async function principal() {
     assert.ok(casas.length >= 10 && p.cercas.length >= casas.length, `${id}: ${casas.length} casas`);
     for (const c of p.cercas) assert.ok(c.tipo === "sebe" || c.tipo === "cerca", id);
     const MOBILIA = /^(banca-1|ponto-onibus-1|banco-poste-1|carrinho-1|rua-[123])$/;
-    const CONHECIDA = /^(predios-([1-9]|1[0-4])|casa-[1-6]|chale-[1-8]|arvore-[1-7]|canteiro-[12]|lazer-[1-6]|praia-[1-4]|praca-1|rua-4)$/;
+    const CONHECIDA = /^(predios-([1-9]|1[0-4])|casa-[1-6]|chale-[1-8]|arvore-[1-7]|canteiro-[12]|lazer-[1-6]|praia-[1-4]|praca-1|rua-4|cidade-(recife|manaus|bh-serra-curral))$/;
     assert.ok(itens.every(s => CONHECIDA.test(s.peca) || MOBILIA.test(s.peca)), `${id}: peça desconhecida`);
     assert.ok(de(MOBILIA).filter(naCaixa).length >= (cc.litoral ? 1 : 2), `${id}: mobiliário à vista`);
     predios[id] = de(/^predios-/).filter(naCaixa).length; totais[id] = de(/^predios-/).length;
@@ -321,6 +323,26 @@ async function principal() {
       const cruzes = [...new Set(p.cruzamentos.map(([x, y]) => (c.eixo === "h" ? x : y)))];
       assert.ok(cruzes.every(k => Math.abs(c.s - k) >= CP.E / 2 + 16), `${id}: carro começa no cruzamento ${c.s}`);
     }
+  }
+  // a arte própria de Recife, Manaus e Belo Horizonte ocupa um lote já sorteado, com a caixa do desenho dentro da
+  // vaga e da cidade; as outras cidades não mudam
+  const TAM_CIDADE = { "cidade-recife": [78, 55], "cidade-manaus": [90, 58], "cidade-bh-serra-curral": [96, 36] };
+  for (const [cid, arte] of [["recife", "cidade-recife"], ["manaus", "cidade-manaus"], ["belo-horizonte", "cidade-bh-serra-curral"]]) {
+    const pp = plantaDe(cid), s = pp.pecas.find(x => x.peca === arte), [aw, ah] = TAM_CIDADE[arte];
+    assert.ok(s && /^(predios-|casa-|chale-)/.test(s.base), `${cid}: ${arte} num lote de construção`);
+    assert.ok(pp.notaveis.includes(s), `${cid}: ${arte} nomeável`);
+    const box = [s.x - aw / 2, s.y - ah, s.x + aw / 2, s.y];
+    assert.ok(box[0] >= 0 && box[2] <= pp.W && box[1] >= 0 && box[3] <= pp.H + 20, `${cid}: caixa na cidade`);
+    assert.ok(s.r[0] <= box[0] && box[2] <= s.r[2] && s.r[1] <= box[1] && box[3] <= s.r[3], `${cid}: caixa dentro do lote`);
+    if (cid === "recife") {
+      assert.equal(s.base, "predios-10", "o casario ocupa o lote do Hospital ilustrativo (não há casa segura na orla)");
+      assert.ok(s.r[2] <= pp.orla.x, "recife: casario antes da orla");
+    }
+    if (cid === "manaus") assert.equal(s.base, "predios-14", "o Mercado Municipal vira o Adolpho Lisboa");
+    if (cid === "belo-horizonte") assert.equal(s.base, "predios-8", "a serra usa o lote largo do predios-8");
+  }
+  for (const cid of ["sao-paulo", "curitiba", "mateus-leme"]) {
+    assert.ok(!plantaDe(cid).pecas.some(x => x.base), `${cid}: sem arte de cidade`);
   }
   // o porte: a cidade pequena tem menos prédios (à vista e no todo) que as metrópoles; Mateus Leme é do interior, com a
   // Matriz e a praça (o Rio, com a praia num lado, mostra menos quadras a 1x: lá vale o todo)
@@ -830,6 +852,32 @@ async function principal() {
   ze.rodar(110);
   assert.equal(ze.elementos["mundo-estado"].textContent, daCapital, "o tempo da etiqueta da cidade não troca o status do Brasil");
 
+  // vista curta e hora/clima junto da cena: reaproveitam o nível e a cidade atuais; no celular a ajuda longa começa recolhida
+  const vv = await abrir("#globo");
+  await carregar(vv);
+  assert.equal(vv.elementos["mundo-vista"].textContent, "Globo");
+  assert.equal(vv.elementos["mundo-cena"].textContent, "12:00 · céu limpo");
+  assert.equal(vv.elementos["mundo-ajuda"].open, false, "no celular a ajuda vira o disclosure recolhido");
+  vv.elementos["mundo-ajuda"].open = true;   // a pessoa abriu: um resize de altura (barra do navegador) não pode reencolher
+  vv.redimensionar(640, 500);
+  assert.equal(vv.elementos["mundo-ajuda"].open, true, "resize de altura no mesmo breakpoint preserva a ajuda aberta");
+  vv.redimensionar(1024, 400);
+  assert.equal(vv.elementos["mundo-ajuda"].open, true, "no computador a ajuda fica aberta como antes");
+  vv.redimensionar(640, 400);
+  assert.equal(vv.elementos["mundo-ajuda"].open, false, "ao cruzar de volta para o celular, recolhe");
+  const vc = await abrir("#cidade=recife");
+  await carregar(vc);
+  assert.equal(vc.elementos["mundo-vista"].textContent, "Recife · PE");
+  assert.equal(vc.elementos["mundo-cena"].textContent, "12:00 · céu limpo · Recife");
+  assert.equal(vc.elementos["mundo-voltar"]["aria-label"], "Voltar para o Brasil");
+  vc.M.ir("bairro"); vc.rodar(30);
+  assert.equal(vc.M.nivel, "bairro");
+  assert.equal(vc.elementos["mundo-vista"].textContent, "Bairro");
+  assert.equal(vc.elementos["mundo-voltar"]["aria-label"], "Voltar para a cidade");
+  const vf = await abrir("#cidade=paris");
+  await carregar(vf);
+  assert.equal(vf.elementos["mundo-vista"].textContent, "Paris · França");
+  assert.equal(vf.elementos["mundo-voltar"]["aria-label"], "Voltar para o globo", "cidade estrangeira sobe ao globo");
 }
 module.exports = { abrir, espera, carregar, MUNDO, ATLAS, CLIMA, UFS_PERTO };
 if (require.main === module) principal().catch(e => { console.error(e); process.exitCode = 1; });

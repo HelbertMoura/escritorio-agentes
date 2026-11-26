@@ -34,8 +34,9 @@ const MundoBairro = (() => {
   }
   function dentro(p, x, y) { return x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h; }
 
-  // reduzido (prefers-reduced-motion): sem as partículas de chuva e neve e sem o clarão do raio; o céu fechado fica
-  function cena(destino, { reduzido = false } = {}) {
+  // reduzido (prefers-reduced-motion): sem as partículas de chuva e neve e sem o clarão do raio; o céu fechado fica.
+  // destaque: a setinha da porta da firma (some no modo TV, que não navega)
+  function cena(destino, { reduzido = false, destaque = true } = {}) {
     let ctx = null;
     const estado = {
       carro: { x: -30, v: 34 }, pessoas: [{ x: 60, v: 9, cor: "#d0453b", n: 3 }, { x: 250, v: -7, cor: "#3b7bd0", n: 10 }],
@@ -77,6 +78,16 @@ const MundoBairro = (() => {
       ctx.fillStyle = "#f0c8a0"; ctx.fillRect(x, CALCADA - 11, 3, 3);
       ctx.fillStyle = cor; ctx.fillRect(x - 1, CALCADA - 8, 5, 5);
       ctx.fillStyle = "#2b2b3a"; ctx.fillRect(x + (passo ? 0 : 1), CALCADA - 3, 1, 3); ctx.fillRect(x + (passo ? 3 : 2), CALCADA - 3, 1, 3);
+    }
+
+    // indicação pixelada da porta da firma: uma setinha que aponta para baixo, parada com movimento reduzido
+    function portaDestaque(t) {
+      const p = alvo, x = Math.round(p.x + p.w / 2), y0 = Math.round(p.y - 9 - (reduzido ? 0 : Math.floor((t / 420) % 2)));
+      ctx.fillStyle = "#1a1408";
+      ctx.fillRect(x - 4, y0 - 1, 9, 1); ctx.fillRect(x - 5, y0, 11, 1); ctx.fillRect(x - 4, y0 + 1, 9, 1);
+      ctx.fillRect(x - 3, y0 + 2, 7, 1); ctx.fillRect(x - 2, y0 + 3, 5, 1); ctx.fillRect(x - 1, y0 + 4, 3, 1); ctx.fillRect(x, y0 + 5, 1, 1);
+      ctx.fillStyle = "#f5b83d";
+      ctx.fillRect(x - 3, y0, 7, 1); ctx.fillRect(x - 2, y0 + 1, 5, 1); ctx.fillRect(x - 1, y0 + 2, 3, 1); ctx.fillRect(x, y0 + 3, 1, 1);
     }
 
     function quadro(c, dt, t) {
@@ -136,6 +147,7 @@ const MundoBairro = (() => {
           for (const x of POSTES) { ctx.beginPath(); ctx.arc(x, CALCADA - 41, 10, 0, Math.PI * 2); ctx.fill(); }
         }
       }
+      if (destaque) portaDestaque(t);
       // o bairro tem céu (o raio aparece nele); som só se a pessoa já ligou o som no escritório (mesma config)
       const som = window.Som && Som.ligado ? Som : null;
       if (!reduzido) Clima.desenhar(ctx, { W, H, predioRet: { x: -10, y: -10, w: 0, h: 0 }, ceu: true }, dt, t, som);

@@ -77,15 +77,45 @@ const Mundo = (() => {
     return c;
   }
 
+  // rótulos curtos da vista atual (o mesmo nível que o painel descreve por extenso), reaproveitados no celular
+  const NOME_NIVEL = { globo: "o globo", brasil: "o Brasil", cidade: "a cidade", bairro: "o bairro" };
+  function rotuloVista(n, c) {
+    if (n === "cidade") return c ? `${c.nome}${c.uf ? " · " + c.uf : ""}` : "Cidade";
+    return { globo: "Globo", brasil: "Brasil", cidade: "Cidade", bairro: "Bairro" }[n] || "Globo";
+  }
+  function rotuloVoltar(n, c) {   // a cidade estrangeira sobe direto ao globo, como o subir()
+    const acima = n === "cidade" && c && c.fora ? "globo" : ACIMA_NIVEL[n];
+    return acima ? `Voltar para ${NOME_NIVEL[acima]}` : "Voltar";
+  }
+  const ACIMA_NIVEL = { bairro: "cidade", cidade: "brasil", brasil: "globo" };
   const canvas = document.getElementById("mundo");
-  if (!canvas) return { Camera };
+  if (!canvas) return { Camera, rotuloVista, rotuloVoltar };
   const ctx = canvas.getContext("2d"), $ = id => document.getElementById(id);
   const estado = $("mundo-estado"), botaoEntrar = $("entrar"), voltar = $("mundo-voltar"), caixaAlvos = $("mundo-alvos"), dica = $("mundo-dica");
+  const vista = $("mundo-vista"), cena = $("mundo-cena"), ajuda = $("mundo-ajuda");
+  const mundoEl = document.querySelector ? document.querySelector(".mundo") : null;
+  const textoLongo = $("mundo-texto"), textoBairro = $("mundo-texto-bairro");
   const menos = $("mundo-menos");
   const reduzido = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const tv = new URLSearchParams(location.search).get("tv") === "1";   // passeio sozinho (passear), sem painel nem botões
   if (tv) document.querySelector(".mundo").classList.add("tv");
-  const ORDEM = ["globo", "brasil", "cidade", "bairro"], ACIMA = { bairro: "cidade", cidade: "brasil", brasil: "globo" };
+  const ORDEM = ["globo", "brasil", "cidade", "bairro"], ACIMA = ACIMA_NIVEL;
+  // a vista e o tempo junto da cena, o rótulo do Voltar e o enquadramento do bairro: tudo derivado do nível atual
+  function indicar() {
+    const c = atualCidade && mapa && mapa.porId.get(atualCidade);
+    if (vista) vista.textContent = rotuloVista(nome, c);
+    if (cena) cena.textContent = `${Ceu.agora().hora} · ${Clima.texto()}${c ? " · " + c.nome : ""}`;
+    if (voltar) voltar.setAttribute("aria-label", rotuloVoltar(nome, c));
+    if (mundoEl) mundoEl.classList.toggle("no-bairro", nome === "bairro");
+  }
+  // no computador a ajuda longa fica aberta como sempre; no celular ela começa recolhida em "Como explorar".
+  // Só age no primeiro cálculo e ao cruzar o breakpoint: um resize de altura não reencolhe o que a pessoa abriu.
+  let ajudaModo = null;
+  function sincronizarAjuda() {
+    if (!ajuda) return;
+    const estreita = window.innerWidth <= 760;
+    if (ajudaModo === null || ajudaModo !== estreita) { ajuda.open = !estreita; ajudaModo = estreita; }
+  }
   const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5], FUNDO = "#0b0d12";
 
   // o convite, se veio no link, sai da barra já e segue só pela porta do chalé
@@ -114,7 +144,7 @@ const Mundo = (() => {
   // o bairro de hoje, desenhado 1:1 num quadro de 320x180 e ampliado pela câmera (a 1x, na escala fracionária que enche
   // o palco, com uma pequena irregularidade de pixel; acima de 1x, em escala inteira)
   function nivelBairro() {
-    const cena = MundoBairro.cena(entrar, { reduzido }), camera = Camera([0, 0, MundoBairro.W, MundoBairro.H]), p = cena.porta;
+    const cena = MundoBairro.cena(entrar, { reduzido, destaque: !tv }), camera = Camera([0, 0, MundoBairro.W, MundoBairro.H]), p = cena.porta;
     const quadro = document.createElement("canvas"); quadro.width = MundoBairro.W; quadro.height = MundoBairro.H;
     const qctx = quadro.getContext("2d");
     const porta = { id: "porta", x: p.x + p.w / 2, y: p.y + p.h / 2, alto: 0, titulo: "Recepção",
@@ -171,13 +201,15 @@ const Mundo = (() => {
     if (nivel) nivel.sair();
     etiquetaAte = 0;   // o tempo da etiqueta de uma construção não passa para o nível seguinte
     nome = a.ir; nivel = niveis[nome]; atualCidade = a.cidade || null;
+    botaoEntrar.classList.toggle("destaque", nome === "bairro");   // no bairro, a entrada da firma é o caminho principal
+    if (textoLongo && textoBairro) { textoLongo.hidden = nome === "bairro"; textoBairro.hidden = nome !== "bairro"; }
     if (atualCidade) ultimaCidade = atualCidade;
     cobrir(nivel.camera.tamanho(W, H, dpr));
     nivel.entrar({ cidade: atualCidade, de: deCidade, nivel: deNivel });
     endereco(a, opcoes.substituir);
     voltar.disabled = !niveis[ACIMA[nome]];   // sem o nível de cima (o globo que não abriu), nada a subir
     menos.disabled = nome === "globo";        // o globo não se afasta: o − ficaria mudo
-    anunciado = null; rotular(); montarAlvos(); destacar(null); mostrar();
+    anunciado = null; rotular(); montarAlvos(); destacar(null); mostrar(); indicar();
   }
   // o rótulo do canvas; o da cidade vem dela (marco, chalé da casa) e é refeito quando a casa ou o atlas chegam
   const ROTULOS = {
@@ -230,18 +262,21 @@ const Mundo = (() => {
         : casa ? `O escritório fica em ${casa.nome}; Esc volta ${c.fora ? "ao globo" : "ao mapa"}.` : `Esc volta ${c.fora ? "ao globo" : "ao mapa"}.`);
     }
     else estado.textContent = `${hora} · ${Clima.texto()}${c ? " · " + c.nome : ""}`;
+    indicar();
   }
 
-  // botões invisíveis sobre as cidades (e a porta): Tab passa por eles, Enter escolhe, o foco mostra a dica
+  // botões invisíveis sobre as cidades (e a porta): Tab passa por eles, Enter escolhe, o foco mostra a dica.
+  // O alvo maior da porta é só no bairro da firma; nas outras vistas vale o de sempre.
+  const classeAlvo = a => "mundo-alvo" + (nome === "bairro" && a.id === "porta" ? " mundo-alvo-porta" : "");
   function montarAlvos() {
     const lista = nivel && nivel.alvos ? nivel.alvos() : [];
     if (botoes.length === lista.length && botoes.every(([, a], i) => a.id === lista[i].id)) {
-      botoes.forEach((b, i) => { b[1] = lista[i]; b[0].setAttribute("aria-label", lista[i].rotulo); });
+      botoes.forEach((b, i) => { b[1] = lista[i]; b[0].setAttribute("aria-label", lista[i].rotulo); b[0].className = classeAlvo(lista[i]); });
     } else {
       caixaAlvos.replaceChildren();
       botoes = lista.map(a => {
         const b = document.createElement("button"), par = [b, a];
-        b.type = "button"; b.className = "mundo-alvo"; b.setAttribute("aria-label", a.rotulo);
+        b.type = "button"; b.className = classeAlvo(a); b.setAttribute("aria-label", a.rotulo);
         b.addEventListener("click", () => {   // Enter: a ação do alvo, a etiqueta dele ou, por último, o clique no ponto
           if (trans) return;
           const a = par[1];
@@ -434,6 +469,8 @@ const Mundo = (() => {
   document.addEventListener("visibilitychange", () => { if (!document.hidden) { anterior = performance.now(); pedir(); } });
   window.addEventListener("hashchange", () => { if (nivel) { const a = ler(location.hash); ir(a.ir, a, { substituir: true }); } });
   if (window.ResizeObserver) new ResizeObserver(medir).observe(canvas); else window.addEventListener("resize", medir);
+  window.addEventListener("resize", sincronizarAjuda);
+  sincronizarAjuda();
   medir();
   pedir();
 
@@ -487,7 +524,7 @@ const Mundo = (() => {
     }, 500);
   }
 
-  return { ir: (alvo, params) => ir(alvo, params || {}), subir, Camera, niveis,
+  return { ir: (alvo, params) => ir(alvo, params || {}), subir, Camera, niveis, rotuloVista, rotuloVoltar,
            get nivel() { return nome; }, get camera() { return nivel ? nivel.camera : null; } };
 })();
 window.Mundo = Mundo;

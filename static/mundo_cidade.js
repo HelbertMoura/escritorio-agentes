@@ -44,7 +44,7 @@ const MundoCidade = (() => {
     const todas = Array.isArray(dados && dados.cidades) ? dados.cidades : [];
     const cidades = new Map(todas.filter(c => c && typeof c.id === "string").map(c => [c.id, c]));
     const info = id => cidades.get(id) || (mapa && mapa.porId.get(id)) || {};   // a média vem do mapa (porte, praia e UF)
-    let id = null, p = CidadePlanta.planta(""), carros = [], pedestres = [], pecas = [], postes = [], rua = Math.random;
+    let id = null, p = CidadePlanta.planta(""), carros = [], pedestres = [], pecas = [], pecasDesenhadas = [], postes = [], rua = Math.random;
     let atlas = null, quadros = {}, janelas = {}, pedido = false, escolhido = null, notaveis = [], rascunho = null, placaCasa = null;
     let placas = [];   // as plaquinhas de cada cruzamento (com os letreiros guardados), entram na ordem de profundidade
     const lista = [], vista = [0, 0, W, H], brilhos = new Map();
@@ -91,8 +91,10 @@ const MundoCidade = (() => {
     const portaPronta = () => ehCasa() && !!recorte(p.casa.peca);   // placa e porta só com o desenho do chalé
     const marco = () => info(id).marco;
     const temMarco = () => typeof marco() === "string" && !!recorte("marco-" + marco());
-    // o desenho de uma peça: a vaga da casa tem o chalé só na casa (fora dela, uma árvore); o centro, o marco
-    const nomeDe = s => s === p.casa ? (portaPronta() ? p.casa.peca : p.casa.arvore) : s === p.centro && temMarco() ? "marco-" + marco() : s.peca;
+    // o desenho de uma peça: a vaga da casa tem o chalé só na casa (fora dela, uma árvore); o centro, o marco; a arte
+    // de cidade só entra com o atlas novo (sem ela, o prédio genérico da base, sem outra chamada)
+    const nomeDe = s => s === p.casa ? (portaPronta() ? p.casa.peca : p.casa.arvore) : s === p.centro && temMarco() ? "marco-" + marco()
+      : s.base && !recorte(s.peca) ? s.base : s.peca;
     function caixaCasa() {   // o chalé e a placa em cima dele: a área da porta
       const [, , w, h] = recorte(p.casa.peca) || [0, 0, 60, 57];
       return [p.casa.x - w / 2, p.casa.y - h - PLACA_H - 1, w, h + PLACA_H + 1];
@@ -109,7 +111,10 @@ const MundoCidade = (() => {
     function montarNotaveis() {
       const l = [];
       if (temMarco()) l.push({ s: p.centro, nome: info(id).marco_nome || "Marco da cidade" });
-      for (const s of p.notaveis) if (s.x > -20 && s.x < W + 20 && s.y > -20 && s.y < H + 70) l.push({ s, nome: CidadePlanta.NOMES[s.peca] });
+      for (const s of p.notaveis) {
+        const nome = s.base && !recorte(s.peca) ? CidadePlanta.NOMES[s.base] : CidadePlanta.NOMES[s.peca];
+        if (nome && s.x > -20 && s.x < W + 20 && s.y > -20 && s.y < H + 70) l.push({ s, nome });
+      }
       notaveis = l.filter(n => recorte(nomeDe(n.s))).map((n, i) => ({ ...n, id: "notavel-" + i, maiusculo: n.nome.toUpperCase(), e: null, k: 0 }));
     }
     function alvoNotavel(n) {
@@ -126,8 +131,30 @@ const MundoCidade = (() => {
       }
       return achado;
     }
+    // a peça decorativa cuja caixa de atlas cai na água da paisagem (o quiosque no canal do Recife, o canteiro na
+    // beira do rio de Manaus) sai da lista de desenho: nenhuma posição nova, nenhum enfeite de pé na água. O farol, o
+    // píer, o marco, os alvos e os postes nunca saem, e sem atlas (ou sem paisagem) a lista fica como está
+    const DECOR = /^(praia-1|praia-2|arvore-|canteiro-|banca-|rua-|banco-poste|carrinho|ponto-onibus)/;
+    function listaRender() {
+      const formas = CidadeChao.paisagem(id, p);
+      const aguas = !formas ? [] : formas.filter(f => (f.t === "agua" || f.t === "canal") && f.r);
+      if (!atlas || !aguas.length) return pecas.slice();
+      return pecas.filter(s => {
+        const nome = nomeDe(s);
+        if (!DECOR.test(nome)) return true;
+        const r = recorte(nome);
+        if (!r) return true;   // sem o desenho no atlas, a peça fica (o fallback é sempre mostrar)
+        const x0 = s.x - r[2] / 2, y0 = s.y - r[3];
+        for (const f of aguas) {   // a caixa real da peça contra o retângulo de água (sem folga)
+          const [a, b, c, d] = f.r;
+          if (x0 + r[2] > a && x0 < c && y0 + r[3] > b && y0 < d) return false;
+        }
+        return true;
+      });
+    }
     function preparar() {   // o atlas chegou ou a cidade mudou: o chão e as notáveis
-      chao.preparar(p, pecas, s => (s.poste ? null : nomeDe(s)), s => (s === p.praca ? s.x + enfeites.desvio : s.x));
+      pecasDesenhadas = listaRender();   // a lista de render, separada: a planta fica como está
+      chao.preparar(p, pecasDesenhadas, s => (s.poste ? null : nomeDe(s)), s => (s === p.praca ? s.x + enfeites.desvio : s.x), id);
       montarNotaveis();
     }
     function escolher(n) {   // mostra a etiqueta da notável por 5 s e devolve o anúncio para o status
@@ -430,7 +457,7 @@ const MundoCidade = (() => {
         }
       }
       lista.length = 0;   // as peças na tela (os desenhos sobem até ~130 acima do pé), pela profundidade
-      for (let i = 0; i < pecas.length; i++) { const s = pecas[i]; if (naVista(s.x - 70, s.y - 130, s.x + 70, s.y + 4)) lista.push(s); }
+      for (let i = 0; i < pecasDesenhadas.length; i++) { const s = pecasDesenhadas[i]; if (naVista(s.x - 70, s.y - 130, s.x + 70, s.y + 4)) lista.push(s); }
       const itens = enfeites.itens;
       for (let i = 0; i < itens.length; i++) { const s = itens[i]; if (naVista(s.x - 120, s.y - 80, s.x + 120, s.y + 4)) lista.push(s); }
       if (atlas && vida.perto) for (let i = 0; i < placas.length; i++) {
@@ -539,7 +566,9 @@ const MundoCidade = (() => {
         if (params.nivel === "bairro" && ehCasa() && !reduzido) {   // voltando do bairro, a câmera sai de perto da casa
           camera.x = p.casa.x; camera.y = p.casa.y - 28; camera.z = 4; camera.zoomPara(1);
         } else { camera.x = W / 2; camera.y = H / 2; camera.z = camera.alvoZ = 1; }
-        camera.limitar();
+        // a caixa da vista: em Manaus a água escura do rio chega depois do fim do mundo (W), então a vista abre
+        // 24 px à direita para mostrar a faixa inteira; as outras cidades voltam para W
+        camera.limitar([0, 0, id === "manaus" ? W + 24 : W, H]);
         medirVista(); mover(0); carregar(); clima(); letreiros.pedir();
       },
       sair() { cidade.destaque = null; escolhido = null; },

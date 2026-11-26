@@ -1,18 +1,6 @@
 /* Modo construção: editor da planta (construir.html). Usa os tokens e botões do estilo.css. */
 body.construir { overflow: hidden; }
 
-/* ---------------- celular (ou sem mouse): só o aviso */
-.so-celular { display: none; min-height: 100vh; place-items: center; padding: 16px; }
-.cel-cartao { max-width: 360px; padding: 24px; border-radius: var(--r-cartao); background: var(--cartao); box-shadow: var(--cartao-sombra); text-align: center; }
-.cel-cartao h1 { margin: 0 0 8px; font-size: 20px; }
-.cel-cartao p { margin: 0 0 12px; }
-.cel-cartao .botao { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; margin-top: 8px; }
-@media (max-width: 699px), not (any-pointer: fine) {   /* o mesmo SO_VER do construir.js; avesso do NO_COMPUTADOR do personalizar.js */
-  body.construir { overflow: auto; }
-  .editor { display: none !important; }
-  .so-celular { display: grid; }
-}
-
 /* ---------------- casca do editor */
 .editor { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100vh; }
 .ed-topo { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--borda); background: var(--lateral); }
@@ -35,7 +23,7 @@ body.construir { overflow: hidden; }
 
 /* ---------------- palco: canvas + camada de peças focáveis (mesma câmera) */
 .palco-ed { position: relative; min-width: 0; min-height: 0; background: #0b0d11; }
-.palco-area { position: absolute; inset: 0; overflow: hidden; cursor: default; touch-action: none; }
+.palco-area { position: absolute; inset: 0; overflow: clip; cursor: default; touch-action: none; }
 .palco-area.pondo { cursor: crosshair; }
 .palco-area.arrastando, .palco-area.arrastando .peca { cursor: grabbing; }
 #tela { position: absolute; inset: 0; display: block; image-rendering: pixelated; }
@@ -66,6 +54,10 @@ body.construir { overflow: hidden; }
 .botao.largo { width: 100%; margin-top: 8px; }
 .botao.secundario:disabled:hover { background: transparent; }
 .dica { font-size: 12.5px; }
+.ajuste-fino { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin: 10px 0; }
+.ajuste-fino .campo { width: auto; padding-inline: 6px; min-height: 44px; }
+.ajuste-fino .ed-ic { width: 44px; height: 44px; }
+#duplicar, #colocacao .botao { min-height: 44px; }
 
 .tiradas { margin: 10px 0 0; padding: 0; list-style: none; }
 .tiradas li { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; border-top: 1px solid var(--linha); font-size: 13.5px; }
@@ -116,4 +108,16 @@ body.construir { overflow: hidden; }
 .dlg-ed p { margin: 0 0 12px; color: var(--texto2); }
 
 @media (max-width: 1100px) { .ed-corpo { grid-template-columns: minmax(0, 1fr) 300px; } .ed-titulo p { display: none; } }
+@media (max-width: 699px) {
+  body.construir { overflow: auto; }
+  .editor { height: auto; }
+  .ed-topo { flex-wrap: wrap; gap: 4px 12px; padding: 6px 12px; }
+  .ed-acoes { width: 100%; }
+  .ed-acoes .ed-ic, .ed-acoes .botao, .zoom .ed-ic { min-height: 44px; min-width: 44px; }
+  .ed-corpo { grid-template-columns: minmax(0, 1fr); grid-template-rows: clamp(245px, 38dvh, 420px) auto; }
+  .ed-painel { overflow: visible; border-left: 0; border-top: 1px solid var(--borda); }
+  .ed-status { position: static; }
+  .dica-teclado { display: none; }
+  .dica-por { width: max-content; max-width: calc(100% - 24px); white-space: normal; text-align: center; }
+}
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

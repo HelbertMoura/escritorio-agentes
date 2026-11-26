@@ -14,10 +14,10 @@
   <meta name="theme-color" content="#0f0f0e">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <link rel="stylesheet" href="estilo.css?v=141">
-  <link rel="stylesheet" href="chat_sala.css?v=141">
-  <link rel="stylesheet" href="reunioes.css?v=141">
-  <link rel="stylesheet" href="linha_tempo.css?v=141">
+  <link rel="stylesheet" href="estilo.css?v=147">
+  <link rel="stylesheet" href="chat_sala.css?v=147">
+  <link rel="stylesheet" href="reunioes.css?v=147">
+  <link rel="stylesheet" href="linha_tempo.css?v=147">
 </head>
 <body>
   <a class="pular" href="#principal">Ir para o conteúdo</a>
@@ -145,6 +145,11 @@
             </div>
             <span id="atualizado" class="oculto" role="status"></span>
           </div>
+          <button id="filtros-abrir" class="filtros-abrir" type="button" aria-expanded="false" aria-controls="estados" aria-label="Mostrar filtros. Filtro ativo: Todos">
+            <span class="filtros-abrir-rot">Filtros</span>
+            <span id="filtros-atual" class="filtros-abrir-atual">Todos</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+          </button>
           <div id="estados" class="estados" role="group" aria-label="Filtrar agentes por estado">
             <button type="button" data-filtro="todos" aria-pressed="true"><i class="led todos"></i><span>Todos</span><b class="n" data-n="todos">0</b></button>
             <button type="button" data-filtro="trab" aria-pressed="false"><i class="led trabalhando"></i><span>Trabalhando</span><b class="n" data-n="trab">0</b></button>
@@ -173,6 +178,13 @@
               <p class="greve-linha"><span class="greve-ic" aria-hidden="true">✊</span><span><strong id="greve-texto">Greve</strong> <span id="greve-motivo" class="greve-motivo"></span></span></p>
               <button id="greve-atender" class="botao so-admin" type="button" aria-describedby="greve-texto greve-motivo">Atender o pedido</button>
             </div>
+            <!-- o atalho da recepção (recepcao.js + app.js): ligado ao balcão no mapa, abre a lista recolhível de pendências -->
+            <button id="recepc" class="recepc" type="button" aria-expanded="false" aria-controls="recepc-painel" hidden><span class="recepc-ponto" aria-hidden="true"></span><span class="recepc-rot">Esperando você</span><span id="recepc-n" class="recepc-n" aria-hidden="true" hidden></span></button>
+            <section id="recepc-painel" class="recepc-painel" role="region" aria-labelledby="recepc-titulo" hidden>
+              <div class="recepc-topo"><h2 id="recepc-titulo">Esperando você</h2><button id="recepc-fechar" class="recepc-fechar" type="button" aria-label="Fechar a lista da recepção">×</button></div>
+              <div id="recepc-lista" class="recepc-lista"></div>
+              <a class="recepc-todos link-suave" href="#aprovacoes">Ver em Aprovações</a>
+            </section>
             <div class="controles" role="toolbar" aria-label="Câmera">
               <button id="zoom-menos" type="button" aria-label="Afastar">−</button>
               <span id="zoom-nivel" class="zoom-nivel" aria-hidden="true">1x</span>
@@ -186,6 +198,7 @@
                 <button id="modo-tv" type="button" aria-label="Modo TV" title="Modo TV: a câmera passeia sozinha e corre para as novidades"><span class="ic" data-icone="tv" aria-hidden="true"></span><span class="rotulo-menu" aria-hidden="true">Modo TV</span></button>
                 <button id="abrir-radio" type="button" aria-label="Rádio da firma" title="Rádio da firma: ligar, trocar de estação e mudar o volume"><span class="ic" data-icone="radio" aria-hidden="true"></span><span class="rotulo-menu" aria-hidden="true">Rádio da firma</span></button>
                 <button id="abrir-timelapse" type="button" aria-label="Time-lapse do dia" title="Time-lapse do dia"><span class="ic" data-icone="filme" aria-hidden="true"></span><span class="rotulo-menu" aria-hidden="true">Time-lapse do dia</span></button>
+                <button id="recepc-toggle" type="button" aria-pressed="true" aria-label="Esconder o &quot;Esperando você&quot; do mapa"><span class="ic" data-icone="sino" aria-hidden="true"></span><span class="rotulo-menu" aria-hidden="true">Esconder recepção</span></button>
               </div>
             </div>
             <!-- modo TV (tv.js): a faixa do telejornal e os dois botões; o cursor e os botões somem com o mouse parado -->
@@ -197,6 +210,8 @@
             <span class="dica-mapa" aria-hidden="true">Toque num agente</span>
             <div id="cartao-agente" class="cartao-agente" hidden></div>
             <div id="ficha" class="ficha" role="dialog" aria-labelledby="ficha-nome" hidden></div>
+            <!-- resumo compacto da sala (app.js): porta e placa no mapa, ou o botão da sala pelo teclado -->
+            <section id="resumo-sala" class="resumo-sala" role="dialog" aria-labelledby="resumo-sala-titulo" tabindex="-1" hidden></section>
             <section id="conversa" class="conversa" role="dialog" aria-labelledby="conversa-titulo" tabindex="-1" hidden></section>
             <p id="social-anuncio" class="oculto" role="status"></p>
             <!-- a sala onde estou tem link de reunião (reunioes.js): o atalho para a chamada, em outra aba -->
@@ -723,7 +738,7 @@
     </section>
     <section class="form-bv as-passo" data-passo="pronto" hidden>
       <p class="ajuda">Tudo isto muda depois em Personalizar, onde também ficam as datas comemorativas e o assistente.</p>
-      <p id="as-construcao" class="ajuda" hidden>No computador, o <a href="construir.html">Modo construção</a> pinta as salas e arruma os móveis.</p>
+      <p id="as-construcao" class="ajuda" hidden>Use o <a href="construir.html">Modo construção</a> para pintar as salas e arrumar os móveis.</p>
       <div class="acoes"><button id="as-fim" class="botao" type="button">Ir para o escritório</button></div>
     </section>
   </dialog>
@@ -827,36 +842,37 @@
       </div>
     </div>
   </dialog>
-  <script src="abertura.js?v=141"></script>
-  <script src="avatar.js?v=141"></script>
-  <script src="mapa.js?v=141"></script>
-  <script src="expediente.js?v=141"></script>
-  <script src="vida.js?v=141"></script>
-  <script src="apresentacao.js?v=141"></script>
-  <script src="sprites.js?v=141"></script>
-  <script src="ponte.js?v=141"></script>
-  <script src="zeladoria.js?v=141"></script>
-  <script src="som.js?v=141"></script>
-  <script src="radio.js?v=141"></script>
-  <script src="ceu.js?v=141"></script>
-  <script src="clima.js?v=141"></script>
-  <script src="festas.js?v=141"></script>
-  <script src="simular.js?v=141"></script>
-  <script src="efeitos.js?v=141"></script>
-  <script src="brincar.js?v=141"></script>
-  <script src="tv.js?v=141"></script>
-  <script src="jornal.js?v=141"></script>
-  <script src="novidades.js?v=141"></script>
-  <script src="timelapse.js?v=141"></script>
-  <script src="avisar.js?v=141"></script>
-  <script src="resposta_rapida.js?v=141"></script>
-  <script src="linha_tempo.js?v=141"></script>
-  <script src="reunioes.js?v=141"></script>
-  <script src="times_auto.js?v=141"></script>
-  <script src="app.js?v=141"></script>
-  <script src="personalizar.js?v=141"></script>
-  <script src="ajustes.js?v=141"></script>
-  <script src="assistente.js?v=141"></script>
-  <script src="chat_sala.js?v=141"></script>
+  <script src="abertura.js?v=147"></script>
+  <script src="avatar.js?v=147"></script>
+  <script src="mapa.js?v=147"></script>
+  <script src="expediente.js?v=147"></script>
+  <script src="vida.js?v=147"></script>
+  <script src="apresentacao.js?v=147"></script>
+  <script src="sprites.js?v=147"></script>
+  <script src="ponte.js?v=147"></script>
+  <script src="zeladoria.js?v=147"></script>
+  <script src="som.js?v=147"></script>
+  <script src="radio.js?v=147"></script>
+  <script src="ceu.js?v=147"></script>
+  <script src="clima.js?v=147"></script>
+  <script src="festas.js?v=147"></script>
+  <script src="simular.js?v=147"></script>
+  <script src="efeitos.js?v=147"></script>
+  <script src="brincar.js?v=147"></script>
+  <script src="tv.js?v=147"></script>
+  <script src="jornal.js?v=147"></script>
+  <script src="novidades.js?v=147"></script>
+  <script src="timelapse.js?v=147"></script>
+  <script src="avisar.js?v=147"></script>
+  <script src="resposta_rapida.js?v=147"></script>
+  <script src="linha_tempo.js?v=147"></script>
+  <script src="reunioes.js?v=147"></script>
+  <script src="times_auto.js?v=147"></script>
+  <script src="recepcao.js?v=147"></script>
+  <script src="app.js?v=147"></script>
+  <script src="personalizar.js?v=147"></script>
+  <script src="ajustes.js?v=147"></script>
+  <script src="assistente.js?v=147"></script>
+  <script src="chat_sala.js?v=147"></script>
 </body>
 </html>

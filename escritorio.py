@@ -198,6 +198,7 @@ ARQUIVOS = {  # estáticos servidos (lista fechada)
     "linha_tempo.js": "text/javascript; charset=utf-8", "linha_tempo.css": "text/css; charset=utf-8",
     "apresentacao.js": "text/javascript; charset=utf-8",
     "abertura.js": "text/javascript; charset=utf-8", "times_auto.js": "text/javascript; charset=utf-8",
+    "recepcao.js": "text/javascript; charset=utf-8",
     "manifest.webmanifest": "application/manifest+json", "icone-180.png": "image/png", "icone-192.png": "image/png",
     "icone-512.png": "image/png", "icone-mascara-512.png": "image/png",
 }

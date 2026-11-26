@@ -588,6 +588,8 @@ GENERICOS = ([f"predios-{i}" for i in range(1, 15)] + [f"chale-{i}" for i in ran
 # as peças das festas, ao lado da fonte da praça: entram quando a arte existe (sem ela, a festa fica só nos enfeites)
 OPCIONAIS = ["festa-arvore-natal", "festa-fogueira", "festa-barraca-junina", "festa-abobora", "festa-ovo-pascoa",
              "festa-carro-alegorico", "festa-palco-anonovo"]
+# a arte de cidade de Recife, Manaus e Belo Horizonte: opcional como as festas, mas no tamanho original (1x)
+ARTES_CIDADE = ["cidade-recife", "cidade-manaus", "cidade-bh-serra-curral"]
 # desenhadas pelo PixelLab grandes demais para a cidade: entram no atlas na metade (o navegador desenha 1:1)
 METADE = {"carro-1", "carro-2", "carro-3", "carro-4", "carro-5", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1",
           "rua-1", "rua-2", "rua-3", "rua-4", "canteiro-1", "canteiro-2", "praia-1", "praia-2", *OPCIONAIS}
@@ -597,8 +599,10 @@ MANCHAS = {"predios-11": (64, 64, 64)}
 SEM_AGUA = {"praia-4"}
 # em 3/4 (pixel nítido, ver tres_quartos): o coreto, menor que os marcos e maior que uma casa
 TRES_QUARTOS = {"lazer-4"}
+# a serra de BH entra no atlas reduzida por vizinho mais próximo para caber no lote largo (o original fica 128x48 no repo)
+DERIVADAS = {"cidade-bh-serra-curral": (96, 36)}
 # as construções com janelas (acesas à noite): até JANELAS_MAX por peça, só as pequenas e fora da base do desenho
-COM_JANELAS = ("chale-", "casa-", "predios-", "marco-")
+COM_JANELAS = ("chale-", "casa-", "predios-", "marco-", "cidade-recife", "cidade-manaus")
 JANELAS_MAX, JANELA_AREA = 48, 30
 ATLAS_LARGURA = 512
 MINI_MARCO, MINI_AVIAO = 32, 20   # pixels: o lado maior da miniatura do mapa, antes do contorno de 1 px
@@ -848,12 +852,16 @@ def montar_atlas(arte, cidades, saida):
             im = sem_mancha(im, MANCHAS[nome])
         if nome in SEM_AGUA:
             im = sem_agua(im)
-        return metade(im) if nome in METADE else tres_quartos(im) if nome in TRES_QUARTOS else im
+        im = metade(im) if nome in METADE else tres_quartos(im) if nome in TRES_QUARTOS else im
+        return im.resize(DERIVADAS[nome], Image.NEAREST) if nome in DERIVADAS else im
     for nome in GENERICOS:
         if not os.path.exists(os.path.join(arte, nome + ".png")):
             raise FileNotFoundError(f"atlas: falta a arte {nome}.png em {arte}")
         pecas[nome] = abrir(nome)
     for nome in OPCIONAIS:
+        if os.path.exists(os.path.join(arte, nome + ".png")):
+            pecas[nome] = abrir(nome)
+    for nome in ARTES_CIDADE:
         if os.path.exists(os.path.join(arte, nome + ".png")):
             pecas[nome] = abrir(nome)
     pecas.update(desenhados())

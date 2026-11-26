@@ -4,7 +4,7 @@
 
 /* lista de salas da lateral: o "Entrar" ao lado do botão da sala (link não vai dentro de botão) */
 .salas li:has(> .sala-entrar:not([hidden])) { display: flex; align-items: center; gap: 4px; }
-.salas li:has(> .sala-entrar:not([hidden])) > button { flex: 1; min-width: 0; }
+.salas li:has(> .sala-entrar:not([hidden])) > button:not(.sala-resumo) { flex: 1; min-width: 0; }
 .sala-entrar { flex: none; display: inline-flex; align-items: center; min-height: var(--ctl); padding: 0 10px; border-radius: var(--r-item);
   color: var(--verde-texto); font-size: 13px; font-weight: 700; text-decoration: none; border: 1px solid color-mix(in srgb, var(--verde) 40%, transparent); }
 .sala-entrar:hover { background: var(--verde-fundo); }

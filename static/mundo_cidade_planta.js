@@ -45,7 +45,9 @@ const CidadePlanta = (() => {
   // as construções que mostram o nome (clique, toque ou Tab); o marco usa o nome do ponto turístico
   const NOMES = { "predios-9": "Igreja", "predios-10": "Hospital", "predios-14": "Mercado Municipal", "predios-13": "Bombeiros",
     "lazer-1": "Campo de Futebol", "lazer-4": "Coreto", "lazer-3": "Lago da Praça", "praca-1": "Praça da Fonte",
-    "lazer-5": "Feira Livre", "praia-3": "Farol" };
+    "lazer-5": "Feira Livre", "praia-3": "Farol", "cidade-recife": "Casario da Orla",
+    "cidade-manaus": "Mercado Adolpho Lisboa", "cidade-bh-serra-curral": "Serra do Curral" };
+  const ARTE_CIDADE = { recife: "cidade-recife", manaus: "cidade-manaus", "belo-horizonte": "cidade-bh-serra-curral" };
   // nomes de rua de mentira, para as placas das esquinas (a partir de 2x)
   const RUAS = ["R. das Flores", "R. do Sol", "Av. Central", "R. dos Ipês", "R. da Matriz", "R. Nova", "Av. das Palmeiras",
     "R. do Comércio", "R. da Paz", "R. das Acácias", "R. do Rosário", "Av. da Saudade", "R. do Mercado", "R. da Esperança",
@@ -314,6 +316,34 @@ const CidadePlanta = (() => {
     const nomes = embaralhar(RUAS.slice()), nomeRua = { v: {}, h: {} };   // o nome de cada rua do meio, para as placas
     ruas.v.forEach((x, i) => { nomeRua.v[x] = orla && x === v1 ? "Av. Beira-Mar" : nomes[i % nomes.length]; });
     ruas.h.forEach((y, i) => { nomeRua.h[y] = nomes[(i + ruas.v.length) % nomes.length]; });
+
+    // a arte própria de Recife, Manaus e Belo Horizonte ocupa um lote já sorteado, com a caixa do desenho dentro da
+    // vaga e da cidade; sem a arte no atlas, o desenho genérico da base continua (sem outra chamada)
+    const arte = ARTE_CIDADE[id];
+    if (arte) {
+      const predios = pecas.filter(s => /^predios-/.test(s.peca) && s.zona === "centro");
+      const largo = (s, e = 64, baixo = H - 10) => s.x >= e && s.x <= W - e && s.y >= 70 && s.y <= baixo;
+      let alvo = null;
+      if (id === "recife") {
+        // o casario herda o lote largo do Hospital ilustrativo (predios-10), o único seguro junto à orla nesta semente;
+        // não há casa genérica com a caixa inteira num lote da orla
+        alvo = predios.filter(s => s.r[2] <= v1 - E / 2 && largo(s)).sort((a, b) => b.x - a.x)[0]
+          || predios.filter(s => largo(s)).sort((a, b) => b.x - a.x)[0];
+      } else if (id === "manaus") {
+        // o próprio Mercado Municipal (predios-14) vira o Adolpho Lisboa, no lote visível e acima dos controles
+        alvo = predios.find(s => s.peca === "predios-14" && s.x >= 48 && s.x <= W - 48 && s.y >= 70 && s.y <= H + 20)
+          || predios.filter(s => !/^predios-(8|9|10|13|14)$/.test(s.peca) && s.x >= 48 && s.x <= W - 48
+            && s.y >= 70 && s.y <= H + 20).sort((a, b) => Math.abs(a.x - W / 2) - Math.abs(b.x - W / 2))[0];
+      } else {
+        // a serra usa o lote largo do predios-8, no alto e sem prédio na frente; a arte do atlas é reduzida a 96x36
+        alvo = predios.find(s => s.peca === "predios-8")
+          || predios.filter(s => largo(s, 48)).sort((a, b) => a.y - b.y)[0];
+      }
+      if (alvo) {
+        alvo.base = alvo.peca; alvo.peca = arte;
+        if (NOMES[arte] && !notaveis.includes(alvo)) notaveis.push(alvo);
+      }
+    }
 
     const cruzamentos = [[v0, h0], [v1, h0], [v0, h1], [v1, h1]];   // os quatro do meio, os únicos com carros nas duas ruas
     return { W, H, ruas, quadras, centro, casa, praca, sorvete, pecas, arranjo, pisos, cercas, notaveis, orla, porte, regiao,

@@ -11,7 +11,7 @@ const ESTADOS = {
 const estadoDe = s => (Object.hasOwn(ESTADOS, s) ? ESTADOS[s] : { texto: "Trabalhando", classe: "trabalhando", balao: null, filtro: "trab" });
 
 const tela = document.getElementById("tela"), ctx = tela.getContext("2d");
-let config = null, atlas = null, predio = null, mundo = null, estado = null, assinatura = "", logoImg = null, festa = null, dtQuadro = 0;
+let config = null, atlas = null, predio = null, mundo = null, estado = null, estadoAndar = "", assinatura = "", logoImg = null, festa = null, dtQuadro = 0;
 let escala = 1, filtro = "todos", selecionado = null;
 const menosMovimento = matchMedia("(prefers-reduced-motion: reduce)");
 // câmera: centro (x,y) no mundo e k = pixels de tela por pixel do mundo; "alvo" anima até lá
@@ -61,7 +61,7 @@ async function iniciar() {
   irAoAgentePedido();
   irReuniaoPedida();
   ligarTV();
-  if (!souMembro() && !Andar.perfil(config).noSaguao) Assistente.talvez(config, () => estado);   // nome de exemplo ou sem conexão: o assistente (uma vez por sessão, e na volta do OAuth)
+  Assistente.talvez(() => config, () => estado);   // nome de exemplo ou sem conexão: o assistente (uma vez por sessão, e na volta do OAuth)
   setInterval(buscar, 10000);
   requestAnimationFrame(quadro);
 }
@@ -93,6 +93,7 @@ function aplicarPapel() {
   document.body.dataset.papel = souMembro() ? "membro" : "admin";
   document.body.toggleAttribute("data-predio", Andar.perfil(config).predio);
   document.body.toggleAttribute("data-saguao", Andar.perfil(config).noSaguao);
+  if (!recepcaoPermitida()) limparFilaRecepcao();   // saguão: o CSS esconde atalho, fila e toggle
   if (location.hash && !Andar.telaLiberada(location.hash.slice(1), config)) rota();   // abriu direto numa tela fechada a este perfil: o rota() manda para o mapa
 }
 
@@ -165,9 +166,11 @@ function montar(agentes) {
   cam.ajustada = false;
   enquadradoInicial = false;
   fecharFicha();
+  fecharResumoSala(false);
   ajustarEscala();
   montarSalas();
   Brincar.montar(predio);
+  montarCamadaSalas();
   return true;
 }
 
@@ -183,6 +186,7 @@ async function buscar() {
     const lido = Brincar.demo ? Brincar.estadoDemo() : await json(TV.invisivel || !aparecer ? "api/estado?invisivel=1" : "api/estado");   // a TV e quem desligou não contam como visitante
     if (andar !== Andar.atual) return;   // trocou de andar no meio do pedido: esta leitura é do andar de antes
     estado = lido;
+    estadoAndar = andar;   // só depois da leitura confirmada é que a recepção do andar novo pode aparecer
     modoDoServidor(estado.modo_resposta, pedido);
     Clima.definir(estado.clima);
     // "Olá de novo" na tela de entrada: só o nome de quem já entrou com sucesso (o servidor só manda usuario com sessão válida)
@@ -279,6 +283,240 @@ function enquadrar(s, ja) {
   moverCamera({ x: s.px + s.pw / 2, y: s.py + s.ph / 2 - 6, k: kInteiro }, ja);
 }
 function focarSala(s) { enquadrar(s); marcarSala(s); }
+
+// ---------- resumo compacto da sala ------------------------------------------------------
+// Porta e placa no mapa abrem um resumo da sala. O clique/toque usa o hit-test do canvas; o teclado e o leitor de tela
+// usam os botões invisíveis sobre a placa (o mesmo molde da camada dos objetos, brincar.js). Nada de dado novo: a
+// ocupação vem do mundo e da agenda que a tela já leu, e a fila é a mesma do atalho da recepção.
+let resumoAberto = null, resumoGatilho = null, resumoAssinatura = "", camadaSalas = null, ultimaCamSalas = "";
+const botoesSalas = new Map();
+const TIPO_DA_SALA = { recepcao: "Recepção", reuniao: "Reunião", cozinha: "Cozinha", lounge: "Sala comunal", banheiro: "Banheiro" };
+const FUNCAO_DO_TIME = { dev: "Desenvolvimento", marketing: "Marketing", vendas: "Vendas", produto: "Produto" };
+
+function montarCamadaSalas() {
+  const palco = $("palco"); if (!palco || !predio) return;
+  if (!camadaSalas) {
+    camadaSalas = document.createElement("div");
+    camadaSalas.className = "objetos-mapa salas-mapa";
+    camadaSalas.setAttribute("role", "group");
+    camadaSalas.setAttribute("aria-label", "Salas do escritório");
+    palco.append(camadaSalas);
+  }
+  botoesSalas.clear(); ultimaCamSalas = "";
+  const salas = [...predio.salas, ...predio.baixo];
+  camadaSalas.replaceChildren(...salas.map(s => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "obj-mapa sala-mapa"; b.hidden = true;
+    b.setAttribute("aria-label", `${s.nome}: abrir o resumo da sala`);
+    b.addEventListener("click", () => { if (resumoAberto === s) fecharResumoSala(true); else abrirResumoSala(s, b); });
+    botoesSalas.set(s, b);
+    return b;
+  }));
+}
+
+function posicionarCamadaSalas() {
+  if (!camadaSalas || !predio) return;
+  const modo = document.body.classList.contains("tv") || document.body.classList.contains("modo-foto")
+    || document.documentElement.classList.contains("apresentacao");
+  if (modo && resumoAberto) fecharResumoSala(false);
+  if (![...botoesSalas.keys()].every(s => s.placaRet)) {   // as placas ainda não foram desenhadas neste quadro
+    for (const b of botoesSalas.values()) if (!b.hidden) b.hidden = true;
+    ultimaCamSalas = ""; return;
+  }
+  const chaveCam = [cam.x, cam.y, cam.k, vw, vh, modo ? 1 : 0].join("|");
+  if (chaveCam === ultimaCamSalas) return;   // câmera parada: nenhuma leitura de layout nem escrita de estilo
+  ultimaCamSalas = chaveCam;
+  for (const [s, b] of botoesSalas) {
+    const r = s.placaRet;
+    if (modo || !r) { if (!b.hidden) b.hidden = true; continue; }
+    const x0 = (r.x - cam.x) * cam.k / dpr + vw / 2, y0 = (r.y - cam.y) * cam.k / dpr + vh / 2;
+    const x1 = (r.x + r.w - cam.x) * cam.k / dpr + vw / 2, y1 = (r.y + r.h - cam.y) * cam.k / dpr + vh / 2;
+    const w = Math.max(44, x1 - x0), h = Math.max(44, y1 - y0), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    const fora = cx < 0 || cy < 0 || cx > vw || cy > vh;
+    if (b.hidden !== fora) b.hidden = fora;
+    if (!fora) { b.style.transform = `translate(${Math.round(cx - w / 2)}px, ${Math.round(cy - h / 2)}px)`; b.style.width = `${Math.round(w)}px`; b.style.height = `${Math.round(h)}px`; }
+  }
+}
+
+function salaDaPortaEm(p) {
+  if (!predio) return null;
+  for (const q of predio.portas) {
+    if (!q.sala) continue;
+    const z = q.zona || (q.zona = zonaPorta(q));
+    if (p.x >= z.x - 3 && p.x <= z.x + z.w + 3 && p.y >= z.y - 3 && p.y <= z.y + z.h + 3) return q.sala;
+  }
+  return null;
+}
+
+function genteNaSala(s) {
+  if (!predio || !mundo || !s) return { equipe: [], terminais: [], visitas: [], total: 0 };
+  const dentro = (x, y) => x >= s.px && x <= s.px + s.pw && y >= s.py && y <= s.py + s.ph;
+  const vistos = new Set(), equipe = [], terminais = [], visitas = [];
+  const juntar = (lista, id, nome) => {
+    if (typeof id !== "string" || !id || vistos.has(id)) return;   // a mesma pessoa nunca conta duas vezes
+    vistos.add(id); lista.push({ id, nome: typeof nome === "string" && nome ? nome : "Alguém" });
+  };
+  for (const b of mundo.bonecos.values()) {
+    const v = b.lugar && b.lugar.vaga, m = b.lugar && b.lugar.mesa, d = b.destino && b.destino.vaga;
+    if ((v && v.sala === s) || (m && m.sala === s) || (d && d.sala === s) || (dentro(b.x, b.y) && !b.rota.length)) juntar(equipe, b.id, b.nome);
+  }
+  for (const k of (window.Sprites ? Vida.terminais() : [])) {
+    if (k.dentro) continue;
+    const d = k.destino && k.destino.vaga;
+    if ((d && d.sala === s) || dentro(k.x, k.y)) juntar(terminais, k.id, k.nome || "Terminal");
+  }
+  for (const p of Vida.pessoas()) if (dentro(p.x, p.y)) juntar(visitas, p.id, p.nome);
+  return { equipe, terminais, visitas, total: equipe.length + terminais.length + visitas.length };
+}
+
+// mesas com dono e alguém sentado de verdade (não quem só está a caminho, nem terminal nem visita)
+function mesasOcupadas(s) {
+  const mesas = (s.mesas || []).filter(m => m.handle);
+  if (!mesas.length || !mundo) return { total: 0, ocupadas: 0 };
+  const ocupadas = new Set();
+  for (const b of mundo.bonecos.values()) {
+    const l = b.lugar;
+    if (l && l.tipo === "mesa" && l.mesa && mesas.includes(l.mesa)) ocupadas.add(l.mesa);
+  }
+  return { total: mesas.length, ocupadas: ocupadas.size };
+}
+
+function tipoDaSala(s) {
+  if (TIPO_DA_SALA[s.tipo]) return TIPO_DA_SALA[s.tipo];
+  if (s.tipo === "mesas") return FUNCAO_DO_TIME[Mapa.funcaoDaSala(s)] || "Time";
+  return s.projeto ? "Projeto" : "Sala";
+}
+
+// assinatura do que o resumo mostra: dados, gente e agenda. O DOM só é refeito quando ela muda (nunca por quadro),
+// e os botões mantêm o foco pelo data-resumo-foco.
+function assinaturaResumoSala(s) {
+  const g = genteNaSala(s), mesas = s.tipo === "mesas" ? mesasOcupadas(s) : null;
+  const reuniao = !!(window.Vida && Vida.emReuniao(s.chave)), partes = [s.chave, tipoDaSala(s), reuniao ? 1 : 0, s.acesa ?? (s.luz >= 0.5)];
+  for (const lista of [g.equipe, g.terminais, g.visitas]) partes.push(lista.map(p => p.id + "~" + p.nome).join(","));
+  if (mesas) partes.push(mesas.ocupadas + "/" + mesas.total);
+  if (s.tipo === "recepcao" && recepcaoPermitida()) {
+    const sit = estadoDaLeitura(), lida = recepcaoDoAndarAtual() && sit === "pronto";
+    partes.push(recepcaoOculta ? "oculta" : "mostra", lida ? "lida" : sit, lida ? ($("recepc-n").textContent || "0") : "");
+  }
+  if (window.Reunioes && Reunioes.ligado(config)) {
+    const prox = Reunioes.proximaNaSala(s.chave);
+    partes.push(prox ? [prox.id, prox.inicio, prox.titulo || ""].join("~") : "sem");
+  }
+  return partes.join("|");
+}
+
+function atualizarResumoSala() {
+  const caixa = $("resumo-sala");
+  if (!caixa || caixa.hidden || !resumoAberto) return;
+  if (assinaturaResumoSala(resumoAberto) === resumoAssinatura) return;
+  renderResumoSala(true);
+}
+
+function abrirResumoSala(s, gatilho) {
+  const caixa = $("resumo-sala");
+  if (!caixa || !s || !predio || ![...predio.salas, ...predio.baixo].includes(s)) return;
+  if (document.body.classList.contains("tv") || document.body.classList.contains("modo-foto")
+    || document.documentElement.classList.contains("apresentacao")) return;
+  fecharFicha();
+  if (recepcaoUI && recepcaoUI.estaAberto()) recepcaoUI.fechar(false);   // fila e resumo não ficam abertos juntos
+  resumoAberto = s; resumoGatilho = gatilho || tela;
+  renderResumoSala(false);
+  caixa.hidden = false;
+  if (innerWidth <= 760) $("palco-cartao").scrollIntoView({ block: "start", behavior: menosMovimento.matches ? "auto" : "smooth" });
+  caixa.focus({ preventScroll: true });
+  focarSala(s);
+}
+
+function fecharResumoSala(foco) {
+  const caixa = $("resumo-sala"); if (!caixa) return;
+  const aberto = !caixa.hidden;
+  caixa.hidden = true; caixa.replaceChildren();
+  const alvo = resumoGatilho;
+  resumoAberto = null; resumoGatilho = null; resumoAssinatura = "";
+  if (!aberto) return;
+  if (!foco) return;
+  const visivel = el => !!(el && el.isConnected && !el.hidden && el.offsetParent !== null);
+  const voltar = () => {
+    if (alvo && alvo !== tela && visivel(alvo)) {
+      alvo.focus({ preventScroll: true });
+      if (document.activeElement === alvo || (document.activeElement && alvo.contains(document.activeElement))) return;
+    }
+    // a gaveta fechou (ou o gatilho saiu da tela): o foco não pode cair no body. Não reabre a gaveta: mapa ou menu.
+    const mapa = $("tela");
+    if (visivel(mapa)) { mapa.focus({ preventScroll: true }); if (document.activeElement === mapa) return; }
+    const menu = $("abrir-menu"); if (visivel(menu)) menu.focus({ preventScroll: true });
+  };
+  voltar();
+}
+
+function renderResumoSala(preservarFoco) {
+  const s = resumoAberto, caixa = $("resumo-sala");
+  if (!s || !caixa) return;
+  const foco = preservarFoco && caixa.contains(document.activeElement) ? document.activeElement : null;
+  const chaveFoco = foco && foco.dataset ? foco.dataset.resumoFoco || "" : "";
+  resumoAssinatura = assinaturaResumoSala(s);
+  const topo = elem("div", "resumo-topo"), nomes = elem("div"), h = elem("h2", null, s.nome);
+  h.id = "resumo-sala-titulo";
+  nomes.append(h, elem("p", "resumo-tipo", tipoDaSala(s)));
+  const x = elem("button", "fechar", "×"); x.type = "button"; x.setAttribute("aria-label", "Fechar o resumo da sala");
+  x.dataset.resumoFoco = "fechar";
+  x.addEventListener("click", () => fecharResumoSala(true));
+  topo.append(nomes, x);
+  const dl = elem("dl"), acoes = elem("div", "resumo-acoes");
+  const linha = (rot, ...conteudo) => { const dd = elem("dd"); dd.append(...conteudo); dl.append(elem("dt", null, rot), dd); };
+  const lista = (rot, gente) => { const ul = elem("ul", "resumo-gente"); for (const g of gente) ul.append(elem("li", null, g.nome)); linha(rot, ul); };
+  const gente = genteNaSala(s), reuniao = window.Vida && Vida.emReuniao(s.chave);
+  const acesa = s.acesa ?? (s.luz >= 0.5);
+  linha("Agora", document.createTextNode(reuniao ? "Em reunião" : acesa ? "Acesa" : "Apagada"),
+    document.createTextNode(` · ${gente.total} ${gente.total === 1 ? "pessoa" : "pessoas"} na sala`));
+  if (gente.equipe.length) lista("Na sala", gente.equipe);
+  else if (!gente.total) linha("Na sala", elem("p", "resumo-vazio", "Ninguém agora."));
+  if (gente.terminais.length) lista("Terminais", gente.terminais);
+  if (gente.visitas.length) lista("Visitas", gente.visitas);
+  if (s.tipo === "mesas") {
+    const mesas = mesasOcupadas(s);
+    if (mesas.total) linha("Mesas", document.createTextNode(`${mesas.ocupadas} de ${mesas.total} com alguém`));
+  }
+  if (s.tipo === "recepcao" && recepcaoPermitida()) {
+    const sit = estadoDaLeitura(), lida = recepcaoDoAndarAtual() && sit === "pronto";
+    const n = lida ? Number.parseInt($("recepc-n").textContent, 10) || 0 : null;
+    const vazio = TEXTO_LEITURA[sit] ? TEXTO_LEITURA[sit].vazio : "Sem leitura de pendências agora.";
+    linha("Fila", document.createTextNode(recepcaoOculta ? "Oculta neste navegador" : !lida ? vazio : n ? `${n} ${n === 1 ? "pendência" : "pendências"}` : "Nada esperando você agora"));
+    if (recepcaoOculta) {   // o atalho está oculto: ir a Aprovações não mexe na preferência nem no que o perfil libera
+      const abrir = elem("button", "botao", "Ver em Aprovações"); abrir.type = "button"; abrir.dataset.resumoFoco = "aprovacoes";
+      abrir.addEventListener("click", () => { fecharResumoSala(false); location.hash = "#aprovacoes"; });
+      acoes.append(abrir);
+    } else if (lida) {
+      const abrir = elem("button", "botao", n ? "Abrir a fila" : "Ver a recepção"); abrir.type = "button"; abrir.dataset.resumoFoco = "abrir";
+      abrir.addEventListener("click", () => { fecharResumoSala(false); if (!$("recepc").hidden) $("recepc").click(); });
+      acoes.append(abrir);
+    }
+    const ocultar = elem("button", "secundario", recepcaoOculta ? "Mostrar recepção" : "Esconder do mapa"); ocultar.type = "button";
+    ocultar.dataset.resumoFoco = "ocultar";
+    ocultar.addEventListener("click", () => { alternarRecepcao(); renderResumoSala(true); });   // o foco fica no próprio toggle
+    acoes.append(ocultar);
+  }
+  if (window.Reunioes && Reunioes.ligado(config)) {
+    if (reuniao) linha("Reunião", document.createTextNode("Acontecendo agora"));
+    const prox = Reunioes.proximaNaSala(s.chave);
+    if (prox) {
+      const quando = Reunioes.mesmoDia(new Date(), new Date(prox.inicio * 1000)) ? "hoje" : new Date(prox.inicio * 1000).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" });
+      linha("Próxima", document.createTextNode(`${prox.titulo || "Reunião"} · ${quando}, ${Reunioes.faixa(prox)}`));
+    } else linha("Próxima", elem("p", "resumo-vazio", "Nada na agenda de hoje."));
+    const entrar = Reunioes.entrar(s.chave, s.nome, "botao secundario"); if (!entrar.hidden) { entrar.dataset.resumoFoco = "entrar"; acoes.append(entrar); }
+  }
+  caixa.replaceChildren(topo, dl);
+  if (acoes.childElementCount) caixa.append(acoes);
+  if (chaveFoco) {   // a leitura mudou com o painel aberto: o foco continua no mesmo controle
+    const alvo = caixa.querySelector(`[data-resumo-foco="${chaveFoco}"]`);
+    if (alvo) alvo.focus({ preventScroll: true }); else caixa.focus({ preventScroll: true });
+  }
+}
+// Esc fecha o resumo e devolve o foco à placa/botão que o abriu (também com o foco no mapa, no gatilho ou no body)
+$("resumo-sala").addEventListener("keydown", ev => {
+  if (ev.key !== "Escape" || $("resumo-sala").hidden) return;
+  ev.preventDefault(); ev.stopPropagation(); fecharResumoSala(true);
+});
 function paraMundo(cx, cy) {
   const r = tela.getBoundingClientRect();
   const sx = (cx - r.left) * dpr, sy = (cy - r.top) * dpr;
@@ -318,7 +556,11 @@ function quadro(t) {
   }
   const dt = Math.min(0.1, (t - antes) / 1000); antes = t; dtQuadro = dt;
   if (predio && mundo) {
-    Vida.passo(mundo, dt);
+    const mostrarChegada = telaAtual === "escritorio" && !trocando && !luzDeVolta && !menosMovimento.matches
+      && !Brincar.demo && !CHEGADA_SIMULADA && !(estado && estado.social && estado.social.serio)
+      && !document.body.classList.contains("tv") && !document.body.classList.contains("modo-foto")
+      && !document.documentElement.classList.contains("apresentacao");
+    Vida.passo(mundo, dt, mostrarChegada);
     for (const e of mundo.eventos.splice(0)) Som.evento(e.nome || e, e);
     Som.teclado(Vida.digitando(mundo), t);
     Som.ambiente(true);
@@ -368,6 +610,7 @@ function desenharCena(t) {
   const ent = mundo.entrega;   // entrega da greve atendida (vida.js): o item no ponto e o entregador, na ordem da cena
   if (ent && ent.fase === "entregue") cena.push({ chave: ent.y, desenha: () => Efeitos.entrega(ctx, ent, t) });
   if (ent && ent.entregador) cena.push({ chave: ent.entregador.chave ?? ent.entregador.y + 0.5, desenha: () => desenharEntregador(ent, t) });
+  if (ent && ent.balcaoEm) cena.push({ chave: (ent.parada && ent.parada.y + 0.6) || ent.y, desenha: () => Efeitos.chegadaBalcao(ctx, ent) });
   if (ent && ent.entregador && ent.item === "pizza" && predio.entrada) { // a moto fica na calçada cinza, à direita do caminho da entrada, até o motoboy ir embora
     const mx = predio.entrada.x + 12, my = predio.entrada.calcadaY - 6;
     cena.push({ chave: my, desenha: () => Efeitos.moto(ctx, mx, my) });
@@ -384,7 +627,9 @@ function desenharCena(t) {
   for (const s of [...predio.salas, ...predio.baixo]) if (Vida.emReuniao(s.chave)) Mapa.desenharPlacaReuniao(ctx, s);   // a placa "em reunião" na porta (mapa.js)
   if (Z) naEscala(() => Z.ar(ctx, ta));   // moscas, a placa de interditado, a cafeteira quebrada, o brilho e as faíscas
   Clima.desenhar(ctx, predio, dtQuadro, t, Som.ligado ? Som : null);
+  desenharMarcasDeSala(ceu);   // antes do multiply da noite: a placa pertence à parede e recebe a luz da sala
   desenharLuzes(dt0(t), ceu);
+  desenharLuzesDasSalas(ceu);
   Efeitos.luzesNoite(ctx, ceu);
   Efeitos.festaAr(ctx, festa, t, dtQuadro, ceu);
   Efeitos.particulas(ctx, dtQuadro, mundo, t);
@@ -406,6 +651,8 @@ function desenharCena(t) {
   Brincar.desenhar(ctx);   // realce, reações dos objetos e a festa do Konami
   const rotulo = `${String(Math.round((cam.k / dpr) * 10) / 10).replace(".", ",")}x`;
   if (rotulo !== zoomMostrado) { zoomMostrado = rotulo; $("zoom-nivel").textContent = rotulo; }   // o zoom de agora na barra da câmera
+  posicionarRecepcao();   // o atalho acompanha o balcão sem mexer no desenho do mapa
+  posicionarCamadaSalas();   // os botões invisíveis das salas (teclado e leitor de tela) acompanham as placas
 }
 let zoomMostrado = "";
 
@@ -598,22 +845,41 @@ const banheiroEmUso = () => !!(predio.banheiro && (predio.banheiro.cabines.some(
 // salas vazias (dá para ler) e branco quente nas salas acesas, que ficam bem mais claras que o resto
 const NOITE = [78, 88, 150], SALA_APAGADA = [58, 64, 112], SALA_ACESA = [255, 234, 200];
 const tingir = (cor, n) => `rgb(${cor.map(v => Math.round(255 + (v - 255) * n)).join(",")})`;
+// portaria fechada: discreta, mas ainda legível; o expediente.js decide o aberto/fechado pela hora e pelo fuso do andar
+const PORTARIA_FECHADA = 0.22, LUZ_MINIMA = 0.5;
+// como o ceu.js: ?hora= só vale na faixa 0..24; lido uma vez, fora do laço (a URL não muda sem recarregar)
+const HORA_SIMULADA = (() => { try { const v = parseFloat(new URLSearchParams(location.search).get("hora")); return v >= 0 && v < 24; } catch (e) { return false; } })();
+let luzDeVolta = false;   // a aba voltou: o primeiro quadro mostra o estado final, sem refazer o fade do tempo parado
 function desenharLuzes(dt, ceu) {
   // sala acesa = trabalho de verdade: agente na mesa com tarefa, terminal ocupado parado nela, ou gente nas vagas da sala
   const ocupadas = new Set();
   for (const b of mundo.bonecos.values()) {
     if (b.lugar && b.lugar.tipo === "mesa" && b.trabalho) ocupadas.add(b.lugar.mesa.sala);
     if (b.lugar && b.lugar.tipo === "vaga") ocupadas.add(b.lugar.vaga.sala);
-    if (b.destino && b.destino.vaga) ocupadas.add(b.destino.vaga.sala);
-    if (b.destino && b.destino.mesa) ocupadas.add(b.destino.mesa.sala);
+    // Na chegada do turno, a reserva da vaga ainda não é ocupação. O fade começa quando os pés chegam.
+    if (!b.entradaEquipe && b.destino && b.destino.vaga) ocupadas.add(b.destino.vaga.sala);
+    if (!b.entradaEquipe && b.destino && b.destino.mesa) ocupadas.add(b.destino.mesa.sala);
   }
   for (const k of window.Sprites ? Vida.terminais() : []) if (!k.dentro && !k.rota.length && k.dado && k.dado.estado === "ocupado") { const s = salaEm(k); if (s) ocupadas.add(s); }
   const noite = ceu.escuro; // 0 = dia claro, 1 = noite
   const todas = [...predio.salas, ...predio.baixo];
+  // a portaria (a recepção) acende no expediente do andar e fica discreta fora dele; o trabalho real (mesas e banheiro)
+  // continua aceso, e o atalho "Esperando você" não depende da luz. Sem fade na carga, na troca de andar, na aba oculta,
+  // com movimento reduzido e na hora simulada (?hora): o estado atual aparece já no primeiro quadro.
+  const aberto = !Expediente.fora(ceu.h), banheiro = banheiroEmUso();
+  const semFade = menosMovimento.matches || document.hidden || luzDeVolta || HORA_SIMULADA;
   for (const s of todas) {
-    s.acesa = s.tipo === "recepcao" || ocupadas.has(s) || (s.tipo === "banheiro" && banheiroEmUso());
-    s.luz += ((s.acesa ? 1 : 0) - s.luz) * Math.min(1, dt * 2.5);   // acende e apaga num fade curto, sem piscar
+    const funcional = ocupadas.has(s) || (s.tipo === "banheiro" && banheiro);
+    const alvo = funcional ? 1 : s.tipo === "recepcao" ? (aberto ? 1 : PORTARIA_FECHADA) : 0;
+    if (!s.luzPronta) { s.luz = alvo; s.luzPronta = true; }   // carga inicial e troca de andar: nada de arrastar do 1
+    else if (semFade) s.luz = alvo;
+    else {
+      s.luz += (alvo - s.luz) * Math.min(1, dt * 2.5);   // acende e apaga num fade curto, sem piscar
+      if (Math.abs(alvo - s.luz) < 0.01) s.luz = alvo;   // chega no estado final e para de repetir o resto
+    }
+    s.acesa = s.luz >= LUZ_MINIMA;
   }
+  luzDeVolta = false;
   if (noite > 0.02) {
     const v = vistaMundo(), l = Math.min(0, v.l), t = Math.min(0, v.t), r = Math.max(predio.W, v.r), b = Math.max(predio.H, v.b);
     ctx.globalCompositeOperation = "multiply";
@@ -662,6 +928,69 @@ function desenharLuzes(dt, ceu) {
       brilho(Mapa.lampadaX(o.mesa) + 2.5, o.mesa.topo + 1, 20, `rgba(255,200,120,${noite * 0.5})`);
     ctx.globalCompositeOperation = "source-over";
   }
+}
+
+// O que está aceso dentro vaza para as janelas e para a fachada. Só o agregado de cada sala (s.luz, calculado em
+// desenharLuzes pelo trabalho real) atravessa a parede: nome, tarefa ou qualquer dado de gente fica dentro do app.
+function desenharLuzesDasSalas(ceu) {
+  const noite = ceu.escuro, aberto = !Expediente.fora(ceu.h), todas = [...predio.salas, ...predio.baixo];
+  const media = todas.length ? todas.reduce((t, s) => t + (s.luz || 0), 0) / todas.length : 0;
+  const f = predio.fachada;
+  // mapa.js já pré-calculou a coluna de cada janela (salas de cima, comuns e blocos extras): a média da coluna
+  // atravessa a parede sem identificar ninguém; coluna sem sala (entrada/corredor) usa a média geral
+  const luzDaFachada = (i) => {
+    const naColuna = f && f.colunas && f.colunas[i];
+    const lista = naColuna && naColuna.length ? naColuna : todas;
+    return lista.length ? lista.reduce((t, s) => t + (s.luz || 0), 0) / lista.length : media;
+  };
+  if (f) {
+    ctx.save();
+    for (let i = 0; i < f.janelas.length; i++) {
+      const j = f.janelas[i];
+      const forca = luzDaFachada(i) * (0.16 + 0.34 * noite) * (aberto ? 1 : 0.55);
+      if (forca < 0.012) continue;
+      ctx.globalCompositeOperation = noite > 0.35 ? "lighter" : "source-over";
+      ctx.fillStyle = `rgba(255,226,164,${forca})`; ctx.fillRect(j.x + 1, j.y + 1, j.w - 2, j.h - 2);
+    }
+    if (aberto) { // arandelas do expediente, no mesmo ritmo dos postes
+      ctx.globalCompositeOperation = "lighter";
+      for (const a of f.arandelas) { brilho(a.x, a.y + 2, 12, `rgba(255,214,140,${0.14 + 0.16 * noite})`); ctx.fillStyle = `rgba(255,240,190,${0.65 + 0.25 * noite})`; ctx.fillRect(a.x - 1, a.y - 1, 3, 2); }
+    }
+    ctx.restore();
+  }
+  ctx.save();   // janelas internas: o vidro ganha o calor da sala, de dia quase nada e de noite como as lâmpadas
+  for (const j of predio.janelas) {
+    const s = salaEm({ x: j.x + j.w / 2, y: j.y + j.h / 2 }); if (!s) continue;
+    const forca = Math.max((s.luz || 0) * (0.05 + 0.22 * noite), j.cozinha && aberto ? 0.18 : 0);
+    if (j.cozinha && aberto && noite < 0.75) {
+      brilho(j.x + j.w / 2, j.y + j.h - 2, 25, `rgba(255,218,150,${0.22 * (1 - noite)})`);
+    }
+    if (forca >= 0.012) { ctx.fillStyle = `rgba(255,226,170,${forca})`; ctx.fillRect(j.x + 1, j.y + 1, j.w - 2, j.h - 2); }
+  }
+  ctx.restore();
+}
+
+// Marcas funcionais pequenas, desenhadas por cima do prédio: a recepção ganha a placa do elevador no trecho livre da
+// parede do alto, entre o logo [110..146] e o relógio [179..194] (x = 156 no tema padrão). A preferência é o vão depois
+// do logo; se a config mudar a largura ou os quadros, procura o vão livre mais perto comparando o retângulo inteiro.
+// São só composição (sem colisão, sem editor) e reusam as cores do mapa; não inventam tarefa nem dado.
+function desenharMarcasDeSala(ceu) {
+  const s = predio.salas.find(r => r.tipo === "recepcao"); if (!s) return;
+  const w = 14, h = 12, y = s.py + 6, preferido = Math.round(s.px + s.pw - 52);
+  const sobre = (r, o) => o && r.x < o.x + o.w && r.x + r.w > o.x && r.y < o.y + o.h && r.y + r.h > o.y;
+  const ocupados = [...(predio.quadros || []), ...(predio.janelas || []), ...(predio.animados || []).filter(a => a.parede), s.placaLogo];
+  const livre = x => x >= s.px + 4 && x + w <= s.px + s.pw - 4 && !ocupados.some(o => sobre({ x, y, w, h }, o));
+  let x = preferido;
+  if (!livre(x)) {   // o tema ou a marca mudou: o vão livre mais próximo do preferido, sem cobrir logo, janela ou relógio
+    const achado = [0, -8, 8, -16, 16, -24, 24, -32, 32, -40, 40].map(d => preferido + d).find(livre);
+    if (achado !== undefined) x = achado;
+  }
+  const aberto = !Expediente.fora(ceu.h);
+  ctx.fillStyle = "#1b1a26"; ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+  ctx.fillStyle = "#3a3f4c"; ctx.fillRect(x, y, w, h); ctx.fillStyle = "#565d6e"; ctx.fillRect(x, y, w, 1);
+  ctx.fillStyle = "#cfd6e4"; // setas de subir e descer
+  for (const [dy, dir] of [[3, -1], [8, 1]]) for (let k = 0; k < 3; k++) ctx.fillRect(x + 3 + (dir < 0 ? k : 2 - k), y + dy + k, 7 - 2 * k, 1);
+  ctx.fillStyle = aberto ? "#6ee7a0" : "#f5c518"; ctx.fillRect(x + w - 4, y + h - 4, 2, 2);   // o andar em serviço
 }
 
 // onde fica a lâmpada em cada luminária solta (x, y a partir do canto do sprite; espelhada, o x vira)
@@ -1005,20 +1334,52 @@ function atualizarEstados() {
     if (alvo.textContent !== String(n[k])) alvo.textContent = n[k];
     b.classList.toggle("zero", !n[k] && k !== "todos");
   }
+  // no celular o resumo não repete "esperando você": o atalho da recepção e o sino do topo já mostram essa pendência.
+  const estreita = innerWidth <= 760;
   const partes = [[n.esp, "esperando você", "esperando você"], [n.trab, "trabalhando", "trabalhando"], [n.livres, "livre", "livres"], [n.fora, "fora", "fora"]]
-    .filter(([q], i) => q || i < 3).map(([q, um, varios]) => `${q} ${q === 1 ? um : varios}`);
+    .filter(([q], i) => (q || i < 3) && !(estreita && i === 0)).map(([q, um, varios]) => `${q} ${q === 1 ? um : varios}`);
   const sit = estadoDaLeitura(), txt = TEXTO_LEITURA[sit];
   const resumo = config && Andar.perfil(config).noSaguao ? "Saguão do prédio" : n.todos ? partes.join(" · ") : txt ? txt.titulo : "Nenhum agente nesta organização ainda";
   const r = $("resumo-esc");
   if (r.textContent !== resumo) r.textContent = resumo;
   if (r.dataset.estado !== sit) r.dataset.estado = sit;
+  atualizarFiltroAtual();
 }
 function filtrar(qual) {
   filtro = qual;
   document.querySelectorAll("[data-filtro]").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.filtro === filtro)));
+  atualizarFiltroAtual();
   if (estado) desenharPainel();
 }
 for (const b of document.querySelectorAll("[data-filtro]")) b.addEventListener("click", () => filtrar(filtro === b.dataset.filtro && filtro !== "todos" ? "todos" : b.dataset.filtro));   // clicar de novo desliga o filtro
+
+// No celular os filtros viram um disclosure compacto: a barra mostra o filtro ativo e o painel abre só quando a pessoa
+// quer. Os mesmos botões de #estados são usados, sem duplicar nada; no computador o botão some e a barra fica sempre à vista.
+const filtrosEstreitos = () => innerWidth <= 760;
+let filtrosAbertos = false, filtrosModo = null;
+const NOME_FILTRO = { todos: "Todos", trab: "Trabalhando", esp: "Esperando você", livres: "Livres", fora: "Fora" };
+function atualizarFiltroAtual() {
+  const atual = $("filtros-atual"), b = $("filtros-abrir");
+  if (!atual || !b) return null;
+  const botao = document.querySelector(`#estados [data-filtro="${filtro}"]`);
+  const n = botao && botao.querySelector(".n") ? botao.querySelector(".n").textContent : "";
+  const nome = NOME_FILTRO[filtro] || NOME_FILTRO.todos;
+  atual.textContent = n ? `${nome} · ${n}` : nome;
+  b.setAttribute("aria-label", `${filtrosAbertos ? "Ocultar" : "Mostrar"} filtros. Filtro ativo: ${nome}${n ? ` (${n})` : ""}`);
+  return nome;
+}
+function sincronizarFiltros() {
+  const b = $("filtros-abrir"), e = $("estados");
+  if (!b || !e) return;
+  const estreito = filtrosEstreitos(), cruzou = filtrosModo !== null && filtrosModo !== estreito;
+  filtrosModo = estreito;   // a preferência do disclosure sobrevive à rotação; só o breakpoint a redefine
+  b.hidden = !estreito;
+  e.hidden = estreito && !filtrosAbertos;
+  b.setAttribute("aria-expanded", String(estreito ? filtrosAbertos : true));
+  atualizarFiltroAtual();
+  if (cruzou) atualizarEstados();   // o resumo compacto depende da largura: refaz só ao cruzar o breakpoint
+}
+$("filtros-abrir").addEventListener("click", () => { filtrosAbertos = !filtrosAbertos; sincronizarFiltros(); });
 
 // ---------- painel: esperando você, agentes e pedidos ---------------------------------
 function desenharPainel() {
@@ -1027,7 +1388,13 @@ function desenharPainel() {
   const ags = estado.agentes || [], trs = estado.trabalhos || [];
   const nomeDe = id => (ags.find(a => a.id === id) || {}).nome || "Agente";
   const handleDe = id => (ags.find(a => a.id === id) || {}).handle;
-  const esperando = trs.filter(t => /^waiting_/.test(t.status)).sort((a, b) => Date.parse(desdeDe(a)) - Date.parse(desdeDe(b)));
+  const esperandoFonte = trs.filter(t => /^waiting_/.test(t.status)).sort((a, b) => Date.parse(desdeDe(a)) - Date.parse(desdeDe(b)));
+  const termPonte = terminaisDaPonte();
+  const espTFonte = termPonte.filter(d => situacaoTerminal(d) === "esp"), trabT = termPonte.filter(d => situacaoTerminal(d) === "trab");
+  // a deduplicação roda nos arrays já filtrados: o widget, as Aprovações e o atalho contam exatamente a mesma fila
+  const pend = window.Recepcao ? Recepcao.pendentes(esperandoFonte, espTFonte)
+    : { agentes: esperandoFonte, terminais: espTFonte, total: esperandoFonte.length + espTFonte.length };
+  const esperando = pend.agentes, espT = pend.terminais;
   const aprov = esperando.filter(t => t.status === "waiting_approval").length, perg = esperando.length - aprov;
   // sino da barra do celular: contador âmbar e o resumo no nome acessível
   const resumo = !esperando.length ? "" : aprov && perg ? `${esperando.length} esperando você` : aprov ? `${aprov} ${aprov === 1 ? "aprovação pendente" : "aprovações pendentes"}` : `${perg} ${perg === 1 ? "pergunta para você" : "perguntas para você"}`;
@@ -1039,7 +1406,7 @@ function desenharPainel() {
   // ficar na primeira dobra); a tela Aprovações mostra todos, completos
   // widgets embaixo do mapa: até 3 pedidos (a tela Aprovações mostra todos) e quem está trabalhando agora
   // os terminais da ponte local entram depois dos agentes (responder é no próprio terminal)
-  const espT = terminaisDaPonte().filter(d => situacaoTerminal(d) === "esp"), trabT = terminaisDaPonte().filter(d => situacaoTerminal(d) === "trab");
+  atualizarRecepcao(esperando, espT, sit);
   $("avisos").replaceChildren(...[...esperando.slice(0, 3).map(t => cartaoPedido(t, nomeDe(t.agente_id), handleDe(t.agente_id), true)),
     ...espT.slice(0, 3).map(d => linhaTerminal(d, true))].slice(0, 3));
   if (!esperando.length && !espT.length) $("avisos").append(elem("p", "widget-vazio" + carregando, txt ? txt.vazio : "Nada esperando você agora."));
@@ -1077,6 +1444,7 @@ function desenharPainel() {
   const salasTxt = `${nSalas} ${nSalas === 1 ? "sala" : "salas"}`;   // o saguão não tem agentes: só as salas
   $("org-resumo").textContent = Andar.perfil(config).noSaguao ? salasTxt : `${bs.length} ${bs.length === 1 ? "agente" : "agentes"} · ${salasTxt}`;
   atualizarEstados();
+  atualizarResumoSala();   // dados ou agenda mudaram: o resumo aberto acompanha sem refazer o DOM à toa
 }
 
 function cartaoPedido(t, nome, handle, compacto) {
@@ -1109,6 +1477,183 @@ function cartaoPedido(t, nome, handle, compacto) {
   c.append(mini(aparencia(handle)), corpo, acoes);
   metaPedido(meta);
   return c;
+}
+
+// ---------- recepção no mapa: o atalho "Esperando você" ligado ao balcão (recepcao.js) ----
+// Conta a mesma fila do widget (agentes esperando + terminais da ponte), sem pedido novo e sem somar outros andares.
+let recepcaoUI = null, recepcaoOculta = false, recepcaoAssinatura = "", recepcaoFora = false;
+let recepcaoAplicado = "", recepcaoMetricas = null;
+const CHAVE_RECEPC = "escritorio:recepcao";
+try { recepcaoOculta = localStorage.getItem(CHAVE_RECEPC) === "oculta"; } catch (e) { /* só nesta visita */ }
+
+const recepcaoEstreita = () => innerWidth <= 760;   // a decisão é da viewport; vw continua só na geometria do palco
+const recepcaoPermitida = () => !!config && !Andar.perfil(config).noSaguao;   // o saguão não tem Aprovações
+// entre Andar.definir e a primeira leitura do andar novo, a fila antiga não volta a aparecer (nem por ponte ou quadro)
+function recepcaoDoAndarAtual() { return !trocando && estadoAndar === Andar.atual; }
+function invalidarRecepcao() { recepcaoMetricas = null; recepcaoAplicado = ""; }
+// Some com o atalho e a fila de uma vez: troca de andar, saguão e perfil sem Aprovações não deixam fila antiga para trás.
+function limparFilaRecepcao() {
+  recepcaoAssinatura = ""; recepcaoFora = false;
+  if (recepcaoUI) recepcaoUI.fechar(false);
+  const b = $("recepc"), lista = $("recepc-lista"), n = $("recepc-n");
+  if (b) b.hidden = true;
+  if (lista) lista.replaceChildren();
+  if (n) { n.hidden = true; n.textContent = ""; }
+  invalidarRecepcao();
+}
+
+function aplicarRecepcaoToggle() {
+  const b = $("recepc"), t = $("recepc-toggle");
+  if (!b || !t) return;
+  t.setAttribute("aria-pressed", String(!recepcaoOculta));
+  const rot = t.querySelector(".rotulo-menu");
+  if (rot) rot.textContent = `${recepcaoOculta ? "Mostrar" : "Esconder"} recepção`;
+  t.setAttribute("aria-label", recepcaoOculta ? 'Mostrar o "Esperando você" no mapa' : 'Esconder o "Esperando você" do mapa');
+  if (recepcaoOculta && recepcaoUI && recepcaoUI.estaAberto()) recepcaoUI.fechar(false);
+  invalidarRecepcao();
+  posicionarRecepcao();
+}
+function alternarRecepcao() {
+  recepcaoOculta = !recepcaoOculta;
+  try { localStorage.setItem(CHAVE_RECEPC, recepcaoOculta ? "oculta" : "mostra"); } catch (e) { /* só nesta visita */ }
+  aplicarRecepcaoToggle();
+}
+// uma linha da fila com a chave do item: o foco volta para o mesmo pedido quando a leitura muda a lista
+function linhaDaRecepcao(el, chave) {
+  el.dataset.recepcKey = chave;
+  const alvo = el.matches && el.matches("button, a") ? el : (el.querySelector ? el.querySelector(".linha-ir") || el.querySelector("button") : null);
+  if (alvo && alvo !== el) alvo.dataset.recepcKey = chave;
+  return el;
+}
+function linhasDaRecepcao(esperando, espT) {
+  const ags = (estado && estado.agentes) || [];
+  const nomeDe = id => (ags.find(a => a.id === id) || {}).nome || "Agente", handleDe = id => (ags.find(a => a.id === id) || {}).handle;
+  return [
+    ...esperando.map(t => linhaDaRecepcao(cartaoPedido(t, nomeDe(t.agente_id), handleDe(t.agente_id), true), "a:" + (t.run_id || t.id || t.agente_id))),
+    ...espT.map(d => linhaDaRecepcao(linhaTerminal(d, true), "t:" + d.id)),
+  ];
+}
+// a assinatura inclui o andar e o que a linha mostra (estado, rótulo, link e as ações da ponte), sem relógio
+function assinaturaRecepcao(esperando, espT, sit) {
+  const ags = (estado && estado.agentes) || [];
+  const a = esperando.map(t => [t.run_id || t.id || t.agente_id, t.status, t.rotulo || "", t.url || "",
+    (ags.find(x => x.id === t.agente_id) || {}).nome || ""].join("~")).join(",");
+  const t = espT.map(d => {
+    const ps = window.Ponte && typeof Ponte.pendentes === "function" ? (Ponte.pendentes(d.id) || []) : [];
+    return [d.id, d.nome || "", d.provedor || "", d.estado || "", d.projeto || "", d.atividade || "",
+      ps.map(p => [p.id, p.tipo || "", p.enviando ? 1 : 0, p.completo ? 1 : 0, p.erro || ""].join(":")).join("+")].join("~");
+  }).join(",");
+  return [Andar.atual, esperando.length, espT.length, sit, a, t].join("|");
+}
+function montarRecepcao() {
+  if (recepcaoUI || !window.Recepcao) return;
+  const b = $("recepc"), p = $("recepc-painel");
+  if (!b || !p) return;
+  recepcaoUI = Recepcao.criar({ botao: b, painel: p, botaoFechar: $("recepc-fechar"),
+    aoAbrir: () => { fecharResumoSala(false); invalidarRecepcao(); posicionarRecepcao(); },   // fila e resumo não ficam abertos juntos
+    aoFechar: () => invalidarRecepcao() });
+  b.addEventListener("click", () => {
+    if (!recepcaoUI.estaAberto()) fecharResumoSala(false);
+    if (!recepcaoUI.estaAberto() && recepcaoFora) {   // atalho de reserva: a pessoa pediu, então reenquadra a recepção
+      const s = predio && predio.salas.find(x => x.tipo === "recepcao");
+      if (s) { irParaEscritorio(); moverCamera({ x: s.px + s.pw / 2, y: s.py + s.ph / 2, k: Math.max(cam.k, 3.2 * dpr) }); }
+    }
+    recepcaoUI.alternar();
+  });
+  // a origem da ficha é marcada antes do item abrir o cartão (captura). O Responder da pergunta conta; Permitir/Negar não.
+  p.addEventListener("click", ev => {
+    if (ev.target.closest(".linha-ir, .decisao-responder") && window.Recepcao) Recepcao.marcarFichaDaRecepcao();
+  }, true);
+  p.addEventListener("click", ev => {
+    if (ev.target.closest(".linha-ir, a, .decisao-responder")) recepcaoUI.fechar(false);
+  });
+  $("recepc-toggle").addEventListener("click", alternarRecepcao);
+  if (window.ResizeObserver) {   // mudou o tamanho dos controles, do atalho ou da lista: remede no próximo quadro
+    const ro = new ResizeObserver(invalidarRecepcao);
+    for (const el of [document.querySelector(".controles"), b, p]) if (el) ro.observe(el);
+  }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(invalidarRecepcao).catch(() => {});
+  aplicarRecepcaoToggle();
+}
+function atualizarRecepcao(esperando, espT, sit) {
+  const b = $("recepc");
+  if (!b) return;
+  if (!recepcaoDoAndarAtual()) { limparFilaRecepcao(); return; }   // trocando de andar: a fila antiga fica fora até a leitura nova
+  if (!recepcaoPermitida()) { limparFilaRecepcao(); return; }   // saguão: sem atalho, fila e toggle
+  const total = esperando.length + espT.length, n = $("recepc-n"), rotulo = total ? String(total) : "";
+  if (n.textContent !== rotulo) { n.textContent = rotulo; invalidarRecepcao(); }
+  if (n.hidden !== !total) { n.hidden = !total; invalidarRecepcao(); }
+  const pronto = sit === "pronto";
+  const resumo = total ? `${total} ${total === 1 ? "pendência" : "pendências"}` : pronto ? "nenhuma pendência" : "sem leitura agora";
+  const etiqueta = `Esperando você: ${resumo}. Abrir a lista`;
+  if (b.getAttribute("aria-label") !== etiqueta) { b.setAttribute("aria-label", etiqueta); b.title = `${resumo}. Abrir a lista`; }
+  const assinatura = assinaturaRecepcao(esperando, espT, sit);
+  if (assinatura === recepcaoAssinatura) return;
+  recepcaoAssinatura = assinatura;
+  const lista = $("recepc-lista");
+  const aberto = recepcaoUI && recepcaoUI.estaAberto();
+  const foco = aberto && document.activeElement && document.activeElement.closest ? document.activeElement.closest("[data-recepc-key]") : null;
+  const chave = foco ? foco.dataset.recepcKey : "";
+  const linhas = linhasDaRecepcao(esperando, espT);
+  lista.replaceChildren(...linhas);
+  if (!linhas.length) lista.append(elem("p", "widget-vazio" + (sit === "carregando" ? " carregando" : ""),
+    pronto ? "Nada esperando você agora." : (TEXTO_LEITURA[sit] ? TEXTO_LEITURA[sit].vazio : "Sem leitura de pendências agora.")));
+  invalidarRecepcao();
+  if (!aberto || !chave) return;
+  // a fila aberta acompanha a leitura: foco no mesmo pedido quando ele continua; se o alvo sumiu, fecha e volta ao gatilho
+  const mesmo = [...lista.querySelectorAll("[data-recepc-key]")].find(e => e.dataset.recepcKey === chave);
+  if (!mesmo) { recepcaoUI.fechar(true); return; }
+  const alvo = mesmo.matches && mesmo.matches("button, a") ? mesmo : (mesmo.querySelector(".linha-ir") || mesmo.querySelector("button"));
+  if (alvo) alvo.focus({ preventScroll: true });
+}
+// O chip segue o centro do balcão na câmera atual, preso ao mapa e desviando dos controles da câmera.
+function medirRecepcao() {
+  const b = $("recepc"), ctl = document.querySelector(".controles"), pr = $("palco").getBoundingClientRect();
+  let evitar = null;
+  if (ctl && !ctl.hidden) { const cr = ctl.getBoundingClientRect(); evitar = { x: cr.left - pr.left - 6, y: cr.top - pr.top - 6, w: cr.width + 12, h: cr.height + 12 }; }
+  const p = $("recepc-painel"), aberto = !!(recepcaoUI && recepcaoUI.estaAberto());
+  recepcaoMetricas = { vw, vh, bw: b.offsetWidth || 120, bh: b.offsetHeight || 30, evitar,
+    pw: aberto ? p.offsetWidth || 340 : 0, ph: aberto ? p.offsetHeight || 240 : 0 };
+}
+function posicionarRecepcao() {
+  const b = $("recepc");
+  if (!b) return;
+  const modoDeVer = document.body.classList.contains("tv") || document.body.classList.contains("modo-foto")
+    || document.documentElement.classList.contains("apresentacao");
+  const s = predio ? predio.salas.find(x => x.tipo === "recepcao") : null;
+  if (recepcaoOculta || !recepcaoDoAndarAtual() || !recepcaoPermitida() || !s || modoDeVer) {
+    if (recepcaoUI && recepcaoUI.estaAberto()) recepcaoUI.fechar(false);
+    if (recepcaoAplicado !== "oculto") {
+      if (!b.hidden) b.hidden = true;
+      b.classList.remove("recepc-fora");
+      recepcaoAplicado = "oculto";
+    }
+    return;
+  }
+  if (b.hidden) b.hidden = false;
+  if (!recepcaoMetricas || recepcaoMetricas.vw !== vw || recepcaoMetricas.vh !== vh) medirRecepcao();
+  const { bw, bh, evitar } = recepcaoMetricas;
+  const cx = (s.px + s.pw / 2 - cam.x) * cam.k / dpr + vw / 2;
+  const cy = (s.py + s.ph / 2 - cam.y) * cam.k / dpr + vh / 2;
+  // O balcão fora da vista (primeiro enquadramento em cima de quem espera, zoom no celular) não some: o atalho
+  // fica de reserva no canto livre (embaixo no desktop, em cima no celular), longe dos controles. Só o clique reenquadra.
+  recepcaoFora = cx < -48 || cx > vw + 48 || cy < -48 || cy > vh + 48;
+  const alvoX = recepcaoFora ? vw - bw - 12 : cx - bw / 2;
+  const alvoY = recepcaoFora ? (recepcaoEstreita() ? 12 : vh - bh - 12) : cy - bh - 10;
+  const pos = Recepcao.encaixar(alvoX, alvoY, bw, bh, { w: vw, h: vh }, evitar);
+  const aberto = !!(recepcaoUI && recepcaoUI.estaAberto());
+  const pp = aberto && !recepcaoEstreita()
+    ? Recepcao.encaixar(pos.x, pos.y - recepcaoMetricas.ph - 8, recepcaoMetricas.pw, recepcaoMetricas.ph, { w: vw, h: vh }, evitar)
+    : null;
+  const chave = [pos.x, pos.y, recepcaoFora ? 1 : 0, aberto ? 1 : 0, pp ? pp.x : "", pp ? pp.y : ""].join("|");
+  if (chave === recepcaoAplicado) return;   // mesmo lugar: nenhuma leitura de layout nem escrita
+  recepcaoAplicado = chave;
+  b.classList.toggle("recepc-fora", recepcaoFora);
+  b.style.left = pos.x + "px"; b.style.top = pos.y + "px";
+  const p = $("recepc-painel");
+  if (!p) return;
+  if (recepcaoEstreita()) { if (p.style.left) p.style.left = ""; if (p.style.top) p.style.top = ""; }
+  else if (pp) { p.style.left = pp.x + "px"; p.style.top = pp.y + "px"; }
 }
 
 // ---------- terminais deste computador (ponte.js): contam nos chips e entram nos widgets, de qualquer programa ----------
@@ -1185,7 +1730,7 @@ function blocoPergunta(d, p, compacto) {
   const resta = elem("span", "decisao-resta", restaDecisao(p.ate)); resta.dataset.ate = String(p.ate);
   item.append(oque, resta);
   if (compacto) {
-    const acoes = elem("div", "decisao-acoes"), b = elem("button", "botao decisao-sim", "Responder"); b.type = "button";
+    const acoes = elem("div", "decisao-acoes"), b = elem("button", "botao decisao-sim decisao-responder", "Responder"); b.type = "button";
     b.setAttribute("aria-label", `Responder ${d.nome}`);
     b.addEventListener("click", () => { irParaEscritorio(); abrirFichaTerminal(d.id); });
     acoes.append(b); item.append(acoes);
@@ -1231,7 +1776,12 @@ function montarSalas() {
     const ic = elem("span", "sala-ic", "#"); ic.setAttribute("aria-hidden", "true"); ic.style.color = clarear(corDaSala(s), 0.25);
     b.append(ic, elem("span", "sala-nome", s.nome), elem("span", "sala-n"));
     b.addEventListener("click", () => { irParaEscritorio(); fecharFicha(); focarSala(s); if (innerWidth <= 760) $("palco-cartao").scrollIntoView({ block: "start", behavior: menosMovimento.matches ? "auto" : "smooth" }); });
-    li.append(b, Reunioes.entrar(s.chave, s.nome)); return li;   // o "Entrar na reunião" da sala, ao lado (reunioes.js)
+    li.append(b, Reunioes.entrar(s.chave, s.nome));   // o "Entrar na reunião" da sala, ao lado (reunioes.js)
+    // o resumo também fica aqui: com o teclado ou a lista, a sala fora da janela do mapa não fica sem caminho
+    const resumo = elem("button", "sala-resumo", "resumo"); resumo.type = "button";
+    resumo.setAttribute("aria-label", `Resumo da sala ${s.nome}`);
+    resumo.addEventListener("click", () => { irParaEscritorio(); fecharFicha(); abrirResumoSala(s, resumo); });
+    li.append(resumo); return li;
   }));
   atualizarSalas();
 }
@@ -1270,7 +1820,11 @@ function focarAgente(b, { seguir: seg = false, foco = false } = {}) {
   desenharPainel();
 }
 function abrirFicha(b, foco) {
+  fecharResumoSala(false);
   fecharConversa(false);
+  // aberta por um item da recepção: no celular ela vira folha de 40dvh; as outras origens seguem como sempre
+  const daRecepcao = !!(window.Recepcao && Recepcao.consumirFichaDaRecepcao());
+  $("ficha").classList.toggle("ficha-recepc", daRecepcao);
   selecionado = b.id; assinaturaFicha = ""; fichaTerm = null;
   if (!amizades || amizades.id !== b.id) amizades = null;
   if (socialLigada() && !Brincar.demo) carregarAmizades(b.id);
@@ -1280,9 +1834,16 @@ function abrirFicha(b, foco) {
 }
 function fecharFicha() {
   const estava = !$("ficha").hidden || !$("conversa").hidden;
+  const daRecepcao = $("ficha").classList.contains("ficha-recepc");
   fecharConversa(false);
-  $("ficha").hidden = true; $("ficha").classList.remove("rolavel"); selecionado = null; seguir = null; fichaTerm = null;
+  $("ficha").hidden = true; $("ficha").classList.remove("rolavel", "ficha-recepc"); selecionado = null; seguir = null; fichaTerm = null;
   if (estava && estado) desenharPainel();
+  return daRecepcao;
+}
+// o × e o Esc da ficha aberta pela recepção devolvem o foco ao atalho; as outras origens não mudam
+function fecharFichaDoAtalho() {
+  const daRecepcao = fecharFicha(), b = $("recepc");
+  if (daRecepcao && b && !b.hidden) b.focus({ preventScroll: true });
 }
 function renderFicha() {
   if (fichaTerm) return renderFichaTerminal();
@@ -1298,16 +1859,21 @@ function renderFicha() {
   const topo = elem("div", "ficha-topo"), nomes = elem("div");
   const h = elem("h2", null, b.nome); h.id = "ficha-nome";
   nomes.append(h, elem("p", "funcao", b.funcao || salaDoAgente(b.handle)));
-  const x = elem("button", "fechar", "×"); x.type = "button"; x.setAttribute("aria-label", "Fechar o cartão"); x.addEventListener("click", fecharFicha);
+  const x = elem("button", "fechar", "×"); x.type = "button"; x.setAttribute("aria-label", "Fechar o cartão"); x.addEventListener("click", fecharFichaDoAtalho);
   topo.append(mini(b.ap), nomes, x);
-  const dl = elem("dl"), linha = (rot, ...conteudo) => { const dd = elem("dd"); dd.append(...conteudo); dl.append(elem("dt", null, rot), dd); };
+  // aberta pela recepção no celular, a ficha tem 40dvh: o resumo e as ações ficam em cima e os detalhes longos descem.
+  const recepc = f.classList.contains("ficha-recepc");
+  const dl = elem("dl"), detalhe = recepc ? elem("dl", "ficha-detalhe") : null;
+  const acrescentar = (destino, rot, conteudo) => { const dd = elem("dd"); dd.append(...conteudo); destino.append(elem("dt", null, rot), dd); };
+  const linha = (rot, ...conteudo) => acrescentar(dl, rot, conteudo);
+  const linhaDetalhe = detalhe ? (rot, ...conteudo) => acrescentar(detalhe, rot, conteudo) : linha;
   const chip = elem("span", `chip ${classeDe(b)}`, textoEstado(b));
   linha("Estado", chip, ...(extra ? [document.createTextNode(" "), elem("span", "chip hora-extra", "Hora extra")] : []),
     ...(t ? [document.createTextNode(" "), elem("span", "ficha-tempo suave", tempoNoEstado(t))] : []));
   if (t) linha("Fazendo", document.createTextNode(t.rotulo || "Tarefa sem descrição"));
   linha("Onde", document.createTextNode(ondeEsta(b)));
-  if (!Brincar.demo && !Andar.perfil(config).noSaguao) linha("Hoje", LinhaTempo.noCard(b.id));   // a linha do tempo (linha_tempo.js)
-  if (social && !Brincar.demo) linha("Amizades", secaoAmizades(b));   // a demonstração não tem amizades: nada vai ao servidor
+  if (!Brincar.demo && !Andar.perfil(config).noSaguao) linhaDetalhe("Hoje", LinhaTempo.noCard(b.id));   // a linha do tempo (linha_tempo.js)
+  if (social && !Brincar.demo) linhaDetalhe("Amizades", secaoAmizades(b));   // a demonstração não tem amizades: nada vai ao servidor
   const acoes = elem("div", "acoes");
   if (resp) { // uma caixa só: a resposta mora na página Conversas, e a ficha leva até ela
     const rb = elem("button", "botao", "Responder"); rb.type = "button"; rb.setAttribute("aria-label", `Responder ${b.nome} na página Conversas`);
@@ -1331,7 +1897,7 @@ function renderFicha() {
     if (motivo) { rg.disabled = true; rg.setAttribute("aria-describedby", "ficha-motivo"); const p = elem("p", "ficha-motivo", motivo); p.id = "ficha-motivo"; fim.push(p); }
     rg.addEventListener("click", () => abrirRingue(b, rg)); acoes.append(rg);
   }
-  f.replaceChildren(topo, dl, acoes, ...fim);
+  f.replaceChildren(topo, dl, acoes, ...fim, ...(detalhe && detalhe.childNodes.length ? [detalhe] : []));   // ações junto do resumo; detalhes depois
   requestAnimationFrame(marcarRolavel);
 }
 // o fade da base (o "tem mais embaixo") só quando o conteúdo passa da altura do cartão: sem ele, o último botão
@@ -1351,7 +1917,10 @@ const TEXTO_TERM = { ocupado: "Trabalhando", aprovacao: "Pede aprovação", erro
 const NECS_TERM = [["cafe", "Café"], ["social", "Conversa"], ["diversao", "Diversão"], ["fome", "Fome"], ["bexiga", "Banheiro"]];
 const horaMin = ms => new Date(ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 function abrirFichaTerminal(id) {
+  fecharResumoSala(false);
   fecharConversa(false);
+  const daRecepcao = !!(window.Recepcao && Recepcao.consumirFichaDaRecepcao());
+  $("ficha").classList.toggle("ficha-recepc", daRecepcao);
   selecionado = null; fichaTerm = id; assinaturaFicha = "";
   renderFicha();
   if (!fichaTerm) return;   // saiu do mapa entre o clique e agora
@@ -1372,9 +1941,13 @@ function renderFichaTerminal() {
   const topo = elem("div", "ficha-topo"), nomes = elem("div");
   const h = elem("h2", null, d.nome); h.id = "ficha-nome";
   nomes.append(h, elem("p", "funcao", [d.provedor, d.papel].filter(Boolean).join(" · ")));
-  const x = elem("button", "fechar", "×"); x.type = "button"; x.setAttribute("aria-label", "Fechar o cartão"); x.addEventListener("click", fecharFicha);
+  const x = elem("button", "fechar", "×"); x.type = "button"; x.setAttribute("aria-label", "Fechar o cartão"); x.addEventListener("click", fecharFichaDoAtalho);
   topo.append(miniTerminal(d, situacaoTerminal(d) === "esp"), nomes, x);
-  const dl = elem("dl"), linha = (rot, ...conteudo) => { const dd = elem("dd"); dd.append(...conteudo); dl.append(elem("dt", null, rot), dd); };
+  const recepc = f.classList.contains("ficha-recepc");
+  const dl = elem("dl"), detalhe = recepc ? elem("dl", "ficha-detalhe") : null;
+  const acrescentar = (destino, rot, conteudo) => { const dd = elem("dd"); dd.append(...conteudo); destino.append(elem("dt", null, rot), dd); };
+  const linha = (rot, ...conteudo) => acrescentar(dl, rot, conteudo);
+  const linhaDetalhe = detalhe ? (rot, ...conteudo) => acrescentar(detalhe, rot, conteudo) : linha;
   linha("Estado", elem("span", `chip ${CLASSE_TERM[d.estado] || "livre"}`, TEXTO_TERM[d.estado] || "Livre"), ...(d.gerente ? [document.createTextNode(" "), elem("span", "chip hora-extra", "Maestro")] : []));
   if (d.projeto) linha("Projeto", document.createTextNode(d.projeto));
   if (d.atividade) linha("Fazendo", document.createTextNode(d.atividade));
@@ -1391,25 +1964,28 @@ function renderFichaTerminal() {
       enc.style.width = `${nec[n]}%`; bar.append(enc);
       l.append(elem("span", null, rot), bar, elem("span", "amz-valor", String(nec[n]))); barras.append(l);
     }
-    linha("Necessidades", barras);
+    linhaDetalhe("Necessidades", barras);
   }
   const lista = (itens, vazio) => { if (!itens.length) return elem("span", "suave", vazio); const ul = elem("ul", "term-lista"); ul.append(...itens.map(t => elem("li", null, t))); return ul; };
-  linha("Amizades", lista(amz.map(a => `${a.nome} · ${a.valor}`), "Nenhuma ainda"));
-  linha("Hoje", lista(dia.map(e => `${horaMin(e.ts)} ${(TEXTO_TERM[e.estado] || "").toLowerCase()}${e.ferramenta ? ` · ${e.ferramenta}` : ""}`), "Nada ainda hoje"));
+  linhaDetalhe("Amizades", lista(amz.map(a => `${a.nome} · ${a.valor}`), "Nenhuma ainda"));
+  linhaDetalhe("Hoje", lista(dia.map(e => `${horaMin(e.ts)} ${(TEXTO_TERM[e.estado] || "").toLowerCase()}${e.ferramenta ? ` · ${e.ferramenta}` : ""}`), "Nada ainda hoje"));
   const acoes = elem("div", "acoes");
   const seg = elem("button", "botao fantasma seguir"); seg.type = "button"; seg.setAttribute("aria-pressed", String(seguir === sid));
   const ic = elem("span", "ic"); ic.append(iconeSvg("alvo")); seg.append(ic, document.createTextNode(seguir === sid ? "Seguindo" : "Seguir"));
   seg.addEventListener("click", () => { seguir = seguir === sid ? null : sid; renderFicha(); $("ficha").querySelector(".seguir").focus(); });
-  const fe = elem("button", "botao fantasma", "Fechar"); fe.type = "button"; fe.addEventListener("click", () => { fecharFicha(); focoNoMapa(); });
+  const fe = elem("button", "botao fantasma", "Fechar"); fe.type = "button";
+  fe.addEventListener("click", () => { const veio = $("ficha").classList.contains("ficha-recepc"); fecharFicha(); if (veio && !$("recepc").hidden) $("recepc").focus({ preventScroll: true }); else focoNoMapa(); });
   acoes.append(seg, fe);
   const decisao = blocoDecisao(d, false);
-  f.replaceChildren(topo, dl, decisao || elem("p", "term-ajuda", "Responder é no próprio terminal."), acoes);
+  f.replaceChildren(topo, dl, decisao || elem("p", "term-ajuda", "Responder é no próprio terminal."), acoes,
+    ...(detalhe && detalhe.childNodes.length ? [detalhe] : []));   // decisão e ações junto do resumo; o resto depois
   requestAnimationFrame(marcarRolavel);
 }
 
 // ---------- vida social na ficha (contrato S, fatia 1): amizades pelo GET /api/social e "Mandar pro ringue" pelo POST
 // /api/social/briga. É diversão: some sem o bloco social (servidor antigo), no modo sério, na demonstração e na Simulação.
 const naSimulacao = () => ["data", "hora", "clima"].some(k => new URLSearchParams(location.search).has(k));
+const CHEGADA_SIMULADA = naSimulacao();
 const socialLigada = () => !!estado && !!estado.social && typeof estado.social === "object" && estado.social.serio !== true && !naSimulacao();
 const nomeAgente = id => { const b = boneco(id); return b ? b.nome : (((estado && estado.agentes) || []).find(a => a.id === id) || {}).nome || "Agente"; };
 let amizades = null, pedidoAmizades = 0, cenaVista = null, releitura = 0, releituraPlacar = 0, ringueDe = null, ringueOrigem = null;   // amizades: { id, d, erro, lida, v } da ficha aberta
@@ -1905,7 +2481,7 @@ async function carregarConvPagina(it) {
 }
 // a aba voltou a ficar visível: se o item aberto mudou enquanto ela estava escondida, relê agora
 // a aba voltou (o navegador segura o setInterval de aba escondida): relê já, e um pedido respondido em outro aparelho sai
-document.addEventListener("visibilitychange", () => { if (!document.hidden) buscar(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { luzDeVolta = true; buscar(); } });
 
 // ---------- resposta pela página Conversas (fase R) -------------------------------------
 // O modo resposta vive no servidor (1 h renovada a cada envio, teto de 8 h, só nesta sessão do navegador): o navegador só
@@ -2508,9 +3084,12 @@ tela.addEventListener("pointerup", ev => {
   const pessoa = pessoaEm(p, ev.pointerType === "touch" ? 16 : 12);
   if (pessoa) { abrirEquipe(true, pessoa.ref); return; }   // a pessoa da equipe: a lista abre nela (ir até, acenar)
   const s = [...predio.salas, ...predio.baixo].find(r => r.placaRet && p.x >= r.placaRet.x && p.x <= r.placaRet.x + r.placaRet.w + 20 && p.y >= r.placaRet.y && p.y <= r.placaRet.y + r.placaRet.h);
-  if (s) { focarSala(s); return; }
+  if (s) { abrirResumoSala(s, tela); return; }
   if (Brincar.tocar(p, ev.pointerType)) return;   // objeto do mapa (TV, café, sino…)
+  const daPorta = salaDaPortaEm(p);
+  if (daPorta) { abrirResumoSala(daPorta, tela); return; }   // a porta também abre o resumo, sem roubar o móvel da frente
   fecharFicha();
+  fecharResumoSala(false);
   Vida.irAte(mundo, p);   // o chão: o meu boneco anda até lá (na TV e com "Aparecer" desligado não há boneco)
 });
 // cartão rápido ao passar o mouse (no toque, a ficha faz esse papel)
@@ -2518,7 +3097,7 @@ tela.addEventListener("pointermove", ev => {
   const card = $("cartao-agente");
   if (ev.pointerType !== "mouse" || !mundo || (arrasto && arrasto.moveu)) { card.hidden = true; return; }
   const p = paraMundo(ev.clientX, ev.clientY);
-  const perto = seloEm(p) || agenteEm(p, 11), npc = !perto && window.Zeladoria && Zeladoria.npcEm(p), objeto = npc || Brincar.sobre(p) || muralEm(p) || pessoaEm(p, 11) || terminalEm(p);
+  const perto = seloEm(p) || agenteEm(p, 11), npc = !perto && window.Zeladoria && Zeladoria.npcEm(p), objeto = npc || Brincar.sobre(p) || muralEm(p) || pessoaEm(p, 11) || terminalEm(p) || salaDaPortaEm(p);
   tela.style.cursor = perto || objeto ? "pointer" : "";
   if (npc) cartaoNpc(npc, ev.clientX, ev.clientY); else mostrarCartao(perto, ev.clientX, ev.clientY);
 });
@@ -2607,7 +3186,15 @@ document.addEventListener("keydown", ev => {
     if (gavetaAberta()) { fecharGaveta(true); return; }
     if (!$("conversa").hidden) { fecharConversa(true); return; }
     if (!$("v-conversas").hidden && convAberta && celularConv()) { fecharConvPagina(); return; }
-    if (!$("ficha").hidden) { fecharFicha(); tela.focus(); return; }
+    if (!$("resumo-sala").hidden) {   // o foco pode estar no mapa, no gatilho ou no body: o resumo fecha do mesmo jeito
+      const foco = document.activeElement, campo = foco && /INPUT|SELECT|TEXTAREA/.test(foco.tagName);
+      if (!campo && !document.querySelector("dialog[open]")) { fecharResumoSala(true); return; }
+    }
+    if (recepcaoUI && recepcaoUI.estaAberto()) {
+      const foco = document.activeElement, campo = foco && /INPUT|SELECT|TEXTAREA/.test(foco.tagName);
+      if (!campo && (foco === $("recepc") || foco === tela || foco === document.body)) { recepcaoUI.fechar(true); return; }
+    }
+    if (!$("ficha").hidden) { const daRecepcao = $("ficha").classList.contains("ficha-recepc"); fecharFicha(); (daRecepcao && !$("recepc").hidden ? $("recepc") : tela).focus(); return; }
     if (TV.ligada) { TV.desligar(); return; }
     if ($("palco-cartao").classList.contains("cheio")) { telaCheia(false); return; }
   }
@@ -2629,6 +3216,7 @@ $("aparecer").addEventListener("change", () => {
 });
 // as pessoas da equipe no mapa (vida.js); a TV e quem desligou "Aparecer" leem sem marcar presença. Na prévia não há conta
 addEventListener("aovivo", mostrarOlhando);   // a cada leitura das pessoas do andar
+addEventListener("aovivo", atualizarResumoSala);   // gente, terminais e agenda novas: o resumo aberto acompanha
 function ligarAoVivo() { if (!Brincar.demo && !config.previa) Vida.aoVivo({ invisivel: () => TV.invisivel || !aparecer }); }
 // os outros vêm das pessoas deste andar no mapa (vida.js); antes da 1ª leitura e na prévia, do /api/estado.
 // O texto é o botão que abre a lista de quem está no andar
@@ -2983,6 +3571,8 @@ function voltarAoPrincipal() { trocarAndar(Andar.PRINCIPAL, `Esse andar não est
 
 // zera o que era do andar de antes: ficha, conversa aberta, eventos e pedidos deduzidos, social e greve
 function reiniciarAndar() {
+  limparFilaRecepcao();   // a fila do andar de antes não sobrevive à troca
+  fecharResumoSala(false);   // e o resumo da sala também não
   Vida.aoVivo(null);   // as pessoas e o seq são do andar de antes
   assinatura = ""; selecionado = null;
   eventosLocais = []; statusAnterior = null; vistosEvento.clear();
@@ -3000,6 +3590,8 @@ async function trocarAndar(id, aviso) {
   if (id === anterior) { mostrarElevador(); return; }
   trocando = true;
   Andar.definir(id);
+  limparFilaRecepcao();   // a fila antiga some já na troca, sem esperar a leitura do andar novo
+  fecharResumoSala(false);   // o resumo da sala do andar de antes também
   try {
     const c = await json("api/config");   // com o andar novo; falhando, nada do andar de antes é mexido
     reiniciarAndar();
@@ -3017,6 +3609,8 @@ async function trocarAndar(id, aviso) {
     trocando = false;
     if (id === Andar.PRINCIPAL) { falhou = true; mostrarConexao(); atualizarEstados(); setTimeout(() => location.reload(), 10000); return; }   // como a carga inicial
     Andar.definir(anterior); mostrarElevador();
+    if (estado && estadoAndar === Andar.atual) desenharPainel();   // a fila do andar de antes volta com a leitura que já estava na tela
+    invalidarRecepcao(); posicionarRecepcao();
     anunciarAndar(e instanceof AndarInvalido ? "Esse andar não está mais disponível." : "Não deu para ir para esse andar agora. Tente de novo.");
     if (e instanceof AndarInvalido) recarregarAndares();
   }
@@ -3140,8 +3734,9 @@ Novidades.iniciar();
 pintarIcones(document);
 window.addEventListener("hashchange", () => { const id = Andar.doHash(location.hash); if (id && id !== Andar.atual) trocarAndar(id); });
 window.addEventListener("hashchange", rota);
-window.addEventListener("resize", () => { medirFaixa(); ajustarEscala(); marcarRolavel(); });
+window.addEventListener("resize", () => { medirFaixa(); ajustarEscala(); marcarRolavel(); invalidarRecepcao(); sincronizarFiltros(); });
 rota();
+sincronizarFiltros();
 // a abertura do Firmópolis (abertura.js): uma vez por sessão, por cima do carregamento; a TV liga direto
 if (window.Abertura && new URLSearchParams(location.search).get("tv") !== "1") Abertura.tocar();
 iniciar().catch(() => { falhou = true; mostrarConexao(); atualizarEstados(); setTimeout(() => location.reload(), 10000); });
@@ -3150,6 +3745,7 @@ async function abrirAviso(a) {
   if (a.andar !== Andar.atual) await trocarAndar(a.andar);
   if (a.andar === Andar.atual && a.canal && window.ChatSala && ChatSala.abrirCanal) ChatSala.abrirCanal(a.canal);   // a troca falhou: fica onde está
 }
+montarRecepcao();   // o atalho da recepção já existe no HTML; só liga os eventos e aplica a preferência
 // PWA (ícone na tela de início): o sw.js não guarda nada; sem ele (http fora do localhost, servidor antigo), o app abre igual
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
