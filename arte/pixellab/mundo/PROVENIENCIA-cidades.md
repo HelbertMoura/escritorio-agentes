@@ -23,3 +23,28 @@ o alfa ficou binário (0/255). O manifesto completo da rodada, com prompts e fol
 - Manaus: substitui o Mercado Municipal (`predios-14`), que vira o Mercado Adolpho Lisboa; o Hospital permanece.
 - Belo Horizonte: usa o lote largo do `predios-8` (53, 81) e entra no atlas reduzido por vizinho mais próximo a
   96×36 (o original de 128×48 fica no repositório).
+
+## Recife · recortes da cena integral (26/11/2026)
+
+Niobe gerou a cena em PixelLab Pro, `POST /v2/generate-image-v2`, semente
+`20261126`, usando o guia da malha e uma captura do jogo sem a interface.
+O job `15ab011e-04b6-494f-bd2e-898e893dd9ef` consumiu **25 gerações da
+assinatura** (36 → 11), com **US$ 0,00 debitado**. O encaixe usou as imagens
+já entregues e custou **0 gerações adicionais**.
+
+O original `recife-pixellab-01-632x424.png` está em
+`/tmp/firmopolis-pixellab-recife/raw/`. Seu SHA-256 é
+`63dd8988030d4ea21198d938284f95b64a3e36881bd465c34dd1a77ad430cad2`.
+Os recortes usam coordenadas do bruto, em pixels, com borda direita e
+inferior exclusivas. Ambos entram no atlas em resolução nativa.
+
+| Arquivo | Caixa no bruto | Ajuste e uso |
+|---|---|---|
+| `recife-frente.png` | `(406, 99, 527, 161)` | Máscara binária pelo contorno dos telhados e a base das cinco fachadas. Encaixe na quadra oeste, sombra existente e vidros marcados nos cinco imóveis. Reserva `casa-4`. |
+| `recife-pedra.png` | `(440, 168, 480, 178)` | Amostra de lajes. Repetição no piso das quadras, praças e cais, recortada pela planta. Juntas desenhadas são a reserva. |
+
+Canal, pontes e faixas continuam usando a malha navegável. A sobreposição
+da Niobe em `/tmp/firmopolis-pixellab-recife/prova/prova-encaixe-sobreposicao-640x440.png`
+registra o deslocamento do traçado no bruto e a invasão de algumas faixas
+por fachadas. O acabamento do pátio do chalé, canteiros e entrada do passeio
+foi desenhado sobre os polígonos da malha, junto dos acessos existentes.

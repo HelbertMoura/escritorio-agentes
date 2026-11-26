@@ -26,6 +26,12 @@ const CidadeChao = (() => {
     concreto: ["#c9c1ae", "#ada592"], concretoJunta: "#bcb4a1", quintal: "#8fca6c", caminho: "#c7b89c", caminhoJunta: "#a99a7e", terra: "#a98a5e",
     sebe: "#2f6a2c", sebeClara: "#4d8f40", cerca: "#e8e1cd", cercaSombra: "#7f7a6c", bueiro: "#202026", grelha: "#5c5c66",
   };
+  const RECIFE = { ...DIA,
+    grama: ["#648456", "#6b8a5c", "#739262"], quintal: "#78965c",
+    asfalto: ["#3d3944", "#423d49", "#48424e"], meiofio: "#9b8d78", calcada: "#cbbf9f",
+    praca: "#d4c7a9", pracaJunta: "#b7a383", pracaBorda: "#a69579",
+    concreto: ["#c6b89c", "#ab9b81"], concretoJunta: "#ae9c81", caminho: "#baa17d",
+  };
   const NEVE = { ...DIA, grama: ["#dfe7ef", "#e6edf4", "#eef3f8"], tufo: "#c9d4df", tufoClaro: "#f8fbfd", calcada: "#d6dde7",
     junta: "#c8d0db", meiofio: "#9aa3b0", praca: "#dfe5ee", pracaJunta: "#d0d8e3", concreto: ["#d8dee6", "#bfc7d1"],
     concretoJunta: "#cdd4dd", quintal: "#ffffff", remendo: "#41434c",
@@ -58,22 +64,49 @@ const CidadeChao = (() => {
     g.moveTo(x - ux * metade, y - uy * metade); g.lineTo(x + ux * metade, y + uy * metade);
   }
 
+  function lajes(g, pedra, pontos, x0, y0, x1, y1) {
+    const xs = pontos.map(p => p[0]), ys = pontos.map(p => p[1]);
+    const xmin = max(x0, min(...xs)), xmax = min(x1, max(...xs));
+    const ymin = max(y0, min(...ys)), ymax = min(y1, max(...ys));
+    if (xmin >= xmax || ymin >= ymax) return;
+    const { imagem, quadro } = pedra;
+    const [u, v, w, h] = quadro;
+    g.globalAlpha = 0.58;
+    for (let y = floor(ymin / h) * h; y < ymax; y += h) {
+      const deslocamento = ((y / h) & 1) * (w / 2);
+      for (let x = floor((xmin - deslocamento) / w) * w + deslocamento; x < xmax; x += w) {
+        g.drawImage(imagem, u, v, w, h, x, y, w, h);
+      }
+    }
+    g.globalAlpha = 1;
+  }
+
   // O esboço e os ladrilhos compartilham a planta. Sombras, cercas e a granulação são acrescentadas no ladrilho.
-  function desenharMalha(g, p, cor, x0, y0, x1, y1) {
+  function desenharMalha(g, p, cor, x0, y0, x1, y1, pedra) {
     const m = p.malha;
     g.save();
     g.lineJoin = "round";
     for (let i = 0; i < m.relevo.length; i++) poligono(g, m.relevo[i], i ? "#667b66" : "#455f62");
     for (const q of p.quadras) {
-      poligono(g, q.pontos, q.piso === "praca" ? cor.praca : cor.concreto[0]);
+      const jardim = q.piso === "jardim", praca = q.piso === "praca";
+      const passeio = q.piso === "passeio";
+      poligono(g, q.pontos, jardim ? cor.quintal : praca ? cor.praca : passeio ? cor.caminho : cor.concreto[0]);
       g.save(); g.clip();
-      g.fillStyle = q.piso === "praca" ? cor.pracaJunta : cor.concretoJunta;
-      for (let y = floor(y0 / 8) * 8; y < y1; y += 8) {
-        g.fillRect(x0, y, x1 - x0, 1);
-        for (let x = floor(x0 / 12) * 12 + (y % 16 ? 6 : 0); x < x1; x += 12) g.fillRect(x, y, 1, 8);
+      if (jardim) {
+        g.fillStyle = cor.grama[0];
+        for (let y = floor(y0 / 6) * 6; y < y1; y += 6) for (let x = floor(x0 / 7) * 7; x < x1; x += 7) {
+          if (hash(x, y, 91) > 0.45) g.fillRect(x, y, 3, 1);
+        }
+      } else if (pedra) lajes(g, pedra, q.pontos, x0, y0, x1, y1);
+      else {
+        g.fillStyle = praca ? cor.pracaJunta : cor.concretoJunta;
+        for (let y = floor(y0 / 8) * 8; y < y1; y += 8) {
+          g.fillRect(x0, y, x1 - x0, 1);
+          for (let x = floor(x0 / 12) * 12 + (y % 16 ? 6 : 0); x < x1; x += 12) g.fillRect(x, y, 1, 8);
+        }
       }
       g.restore();
-      g.strokeStyle = cor.pracaBorda; g.lineWidth = 2; g.stroke();
+      if (!passeio) { g.strokeStyle = cor.pracaBorda; g.lineWidth = 2; g.stroke(); }
     }
     for (const a of m.agua) {
       const paleta = AGUAS[a.tipo];
@@ -100,12 +133,15 @@ const CidadeChao = (() => {
       g.restore();
     }
     for (const c of m.cais) {
-      poligono(g, c, "#a18560");
+      poligono(g, c, m.pedra ? cor.concreto[1] : "#a18560");
       g.save(); g.clip();
-      g.fillStyle = "#806448";
-      for (let y = floor(y0 / 5) * 5; y < y1; y += 5) g.fillRect(x0, y, x1 - x0, 1);
+      if (pedra) lajes(g, pedra, c, x0, y0, x1, y1);
+      else {
+        g.fillStyle = m.pedra ? cor.concretoJunta : "#806448";
+        for (let y = floor(y0 / 5) * 5; y < y1; y += 5) g.fillRect(x0, y, x1 - x0, 1);
+      }
       g.restore();
-      g.strokeStyle = "#6d5b49"; g.lineWidth = 2; g.stroke();
+      g.strokeStyle = m.pedra ? cor.meiofio : "#6d5b49"; g.lineWidth = 2; g.stroke();
     }
     g.lineCap = "round";
     g.beginPath();
@@ -483,7 +519,11 @@ const CidadeChao = (() => {
           }
         } else pixels(g, X0, Y0, cor);
         g.setTransform(1, 0, 0, 1, -X0, -Y0);
-        if (p.malha) desenharMalha(g, p, cor, X0, Y0, X0 + T, Y0 + T);
+        if (p.malha) {
+          const quadro = cor === RECIFE && recorte(p.malha.pedra);
+          const pedra = quadro && quadro[2] > 0 && quadro[3] > 0 ? { imagem: atlas(), quadro } : null;
+          desenharMalha(g, p, cor, X0, Y0, X0 + T, Y0 + T, pedra);
+        }
         desenhos(g, X0, Y0, cor);
         estado.sombras += sombrear(g, X0, Y0, s0);
         g.setTransform(1, 0, 0, 1, 0, 0);
@@ -587,7 +627,7 @@ const CidadeChao = (() => {
     }
     function desenhar(ctx, vista, op) {
       if (!p) return;
-      const cor = op.neve ? NEVE : DIA;
+      const cor = op.neve ? NEVE : p.malha?.pedra ? RECIFE : DIA;
       if (!atlas()) { esboco(ctx, vista, cor); estado.forca = estado.detalhes = estado.novos = 0; estado.faltam = 1; return; }
       const k = chaveDe(op.neve, op.ceu, op.tipo, op.casa, op.desvio || 0);
       if (k !== estado.chave) { estado.chave = k; estado.sombras = 0; }

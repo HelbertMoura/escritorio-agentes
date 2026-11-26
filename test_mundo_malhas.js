@@ -117,6 +117,23 @@ function geometria(cidade) {
     assert.ok(!faixaPorAresta[CP.chaveAresta(a.de, a.para)], `${id}: pedestre nasce fora da faixa`);
   }
   assert.ok(nos.some(([x, y]) => x === p.casa.x && y === p.casa.y), `${id}: calçada chega ao chalé`);
+  if (id === "recife") {
+    assert.ok(ATLAS.quadros[m.pedra], "a pedra de Recife existe no atlas");
+    for (const { pontos } of p.quadras) for (const [x, y] of pontos) {
+      assert.ok(loteContem(m.caixa, [x, y, x, y]), `quadra no enquadramento em ${x},${y}`);
+    }
+    for (const { peca, r } of lotes) assert.ok(loteContem(m.caixa, r), `${peca} no enquadramento`);
+    const frente = p.pecas.find(s => s.peca === "recife-frente");
+    assert.ok(frente && ATLAS.quadros[frente.base], "frente contínua com reserva no atlas");
+    for (const nome of [frente.peca, frente.base]) {
+      const [, , w, h] = ATLAS.quadros[nome];
+      const r = [frente.x - w / 2, frente.y - h, frente.x + w / 2, frente.y];
+      assert.ok(loteContem(frente.r, r), `${nome} cabe inteiro na quadra`);
+      for (const caminho of m.caminhos) trecho(...caminho, ([x, y]) => {
+        assert.ok(!loteContem(r, [x, y, x, y]), `${nome} deixa livres os acessos da malha`);
+      });
+    }
+  }
   if (id === "manaus") {
     assert.ok(m.cais.length >= 2 && m.agua[0].tipo === "rio");
     for (const [x, y] of [[182, 128], [416, 322], [398, 385]]) {
