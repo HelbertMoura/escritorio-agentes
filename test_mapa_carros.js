@@ -45,7 +45,7 @@ assert.equal(deBaixo.map(c => c.nome).sort().join(","), "carro3,carro4", "a van 
 
 // ---------- o desenho: o que sai na tela (uma caixa por veículo, na ordem da lista)
 const desenhados = [];
-const ctxDesenho = { fillStyle: "", fillRect() {}, drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh) { desenhados.push({ x: dx, y: dy, w: dw, h: dh }); } };
+const ctxDesenho = { fillStyle: "", fillRect() {}, drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh) { desenhados.push({ x: dx, y: dy, w: dw, h: dh, sx, sy }); } };
 c.Efeitos.iniciar(predio, { json: ATLAS, img: {} }, { empresa: "X" }, null);
 const rua = (dt, t) => { desenhados.length = 0; c.Efeitos.exterior(ctxDesenho, dt, t, { escuro: 0 }); return desenhados.slice(); };
 // o desenho de cada veículo é a caixa da sua faixa: as rodas assentam no asfalto e o teto não sobe até a calçada
@@ -71,11 +71,31 @@ assert.equal(caixas.length, 4, "quatro veículos desenhados");
 caixas.forEach((caixa, i) => assentado(caixa, carros[i].faixa));
 confereFolga(caixas, carros);
 for (let i = 0; i < carros.length; i++) assert.equal(caixas[i].w, ESCALA[carros[i].nome][0], `${carros[i].nome}: o tamanho do desenho`);
-for (const car of carros) {
-  assert.ok(car.farol, `${car.nome}: tem farol`);
-  const naFrente = car.faixa ? car.farol.x <= car.x + 2 : car.farol.x >= car.x + ESCALA[car.nome][0] - 2;
-  assert.ok(naFrente, `${car.nome}: o farol na frente`);
+// O atlas usa a frente para leste no recorte base e para oeste no _esq.
+for (const faixa of [0, 1]) {
+  for (const car of carros) {
+    const viajante = { ...car, faixa };
+    const cena = { ...predio, objetos: [], externos: { ...ext, carros: [viajante], postes: [] } };
+    c.Efeitos.iniciar(cena, { json: ATLAS, img: {} }, {}, null);
+    const dir = faixa === 1 ? -1 : 1;
+    const x0 = viajante.x, [sprite] = rua(0.05, 0);
+    assert.equal(Math.sign(viajante.x - x0), dir, car.nome);
+    assert.deepEqual([sprite.sx, sprite.sy], ATLAS.sprites[car.nome + (faixa ? "_esq" : "")].slice(0, 2));
+    const x = dir > 0 ? viajante.x + sprite.w : viajante.x;
+    assert.equal(viajante.farol.x, x, car.nome);
+    assert.equal(viajante.farol.dir, dir, car.nome);
+    if (car.nome === "carro1") assert.equal(viajante.farol.y - sprite.y, 8, "farol à altura do farol pintado do hatch");
+    const fachos = [], pincel = {
+      createLinearGradient(...p) { fachos.push(p); return { addColorStop() {} }; },
+      beginPath() {}, moveTo() {}, lineTo() {}, closePath() {}, fill() {},
+    };
+    c.Efeitos.luzesNoite(pincel, { escuro: 0 });
+    assert.equal(fachos.length, 0, "de dia o farol não projeta facho");
+    c.Efeitos.luzesNoite(pincel, { escuro: 1 });
+    assert.deepEqual(fachos, [[x, 0, x + dir * 46, 0]], "facho noturno segue o sentido da viagem");
+  }
 }
+c.Efeitos.iniciar(predio, { json: ATLAS, img: {} }, { empresa: "X" }, null);
 
 // dois minutos de rua: os carros saem da tela e voltam, e nunca se cobrem
 for (let i = 1; i <= 2400; i++) {

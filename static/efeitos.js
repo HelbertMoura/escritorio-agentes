@@ -30,7 +30,7 @@ const Efeitos = (() => {
   // ---------------- rua
   // a base de cada faixa (onde as rodas assentam no asfalto): a de cima é a do prédio (vai para a esquerda) e a de
   // baixo é a mais próxima (vai para a direita). O farol fica na altura do veículo (a moto tem a luz no guidão).
-  const FAROL = { carro1: 0.30, carro2: 0.30, carro3: 0.30, carro4: 0.58 };
+  const FAROL = { carro1: 0.43, carro2: 0.30, carro3: 0.30, carro4: 0.58 };
   // o carro que volta para fora da tela entra longe do outro da mesma faixa: nunca em cima dele
   function entra(car, e, lado) {
     const s = tam(car.nome) || [0, 0, 40, 14], w = s[2], folga = e.folga || 120;

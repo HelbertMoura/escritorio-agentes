@@ -363,9 +363,9 @@ def main():
         if rodape:
             im = im.crop((0, 0, im.width, im.height - rodape))
         pecas[nome] = im.resize((w, h), Image.NEAREST)
-    # hatch, táxi e van foram gerados virados para a esquerda (lanterna traseira à direita):
-    # todos os veículos ficam virados para a direita; a moto já nasceu assim
-    for n in ("carro1", "carro2", "carro3"):
+    # O hatch de bairro/carro e a moto já têm a frente à direita. Vire só o táxi e a van
+    # para que os recortes base apontem todos para a direita.
+    for n in ("carro2", "carro3"):
         if n in pecas:
             pecas[n] = pecas[n].transpose(Image.FLIP_LEFT_RIGHT)
     for n in ("carro1", "carro2", "carro3", "carro4"):  # versão andando para a esquerda
