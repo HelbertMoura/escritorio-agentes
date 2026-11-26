@@ -82,3 +82,20 @@ PNG indexado sem perda (RGBA igual ao do bruto).
 | Cidade | Arquivo de origem | SHA-256 do bruto | Data |
 |---|---|---|---|
 | `recife` | `recife-pixellab-01-632x424.png` | `63dd8988030d4ea21198d938284f95b64a3e36881bd465c34dd1a77ad430cad2` | 26/11/2026 |
+| `manaus` | `manaus-pixen-600x436-retry.png` | `ec71224d11447a2bb72f6fb4e2866eb924d05d0599b7b3ac5571578fdef32d74` | 26/11/2026 |
+| `belo-horizonte` | `belo-horizonte-pixen-616x424.png` | `7bcee6130ce51529ab30c2eda67fff359138d325dc1674693ae6112e79040af3` | 26/11/2026 |
+| `salvador` | `salvador-pixen-576x400-retry.png` | `75e3a22612b830e74b1dc8ecbc6bb84aa6a77088bc0a0d713f4d35a996056bdc` | 26/11/2026 |
+| `mateus-leme` | `mateus-leme-pixen-576x400.png` | `339378138c03c9079e75345263e20568b9076ae55296eae73093f30172a8b53b` | 26/11/2026 |
+
+Piloto (26/11/2026): Manaus, Belo Horizonte, Salvador e Mateus Leme, autoria pelo Opus com `montar_cenas.py`.
+Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`, escolhidos pelo `trabalho/escolhas.json` (Manaus e
+Salvador são as novas tentativas; BH e Mateus Leme, a 1ª).
+
+- **Manaus, retoque de pixel antes do `importar`:** três carros desenhados nas faixas por onde passa a pista foram
+  cobertos com um trecho limpo da mesma faixa, deslocado ao longo da rua (nenhuma cor nova; 74 cores antes e depois):
+  `[181,196,192,217]` com a fonte 30 px abaixo, `[181,263,192,286]` com a fonte 30 px acima e `[206,319,228,331]` com
+  a fonte 30 px à direita (borda direita e inferior exclusivas). Bruto original
+  `manaus-pixen-600x436-retry.png` (SHA-256 `ae6d827feeee026c1f24da92992c0bb82fefb26f77c8974a2750ec05c3fd924f`);
+  o retocado, com o mesmo nome em `firmopolis-pixellab-cenas/retoque/raw/`, é o da linha acima (`ec71224d…`). O
+  script é `retoque/retocar.py`.
+- BH, Salvador e Mateus Leme entram sem retoque: a pista passa só por trechos de faixa sem carro desenhado.

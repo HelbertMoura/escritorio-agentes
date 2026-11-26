@@ -201,7 +201,10 @@ async function doManifesto(id) {
 
 // (c) nada de cena no globo, no Brasil ou em cidade sem cena; na cidade com cena, um JSON e um PNG, os do manifesto
 async function preguicosa() {
-  for (const hash of ["#globo", "#brasil", "#cidade=manaus"]) {
+  // a cidade sem cena sai do mundo.json (a 1ª fora do manifesto), para não quebrar a cada lote de cenas
+  const mundo = JSON.parse(readFileSync("static/mundo/mundo.json", "utf8"));
+  const semCena = [...mundo.cidades, ...mundo.exterior, ...mundo.niveis.brasil.medias].map(c => c.id).find(id => !Object.hasOwn(MANIFESTO, id));
+  for (const hash of ["#globo", "#brasil", "#cidade=" + semCena]) {
     const m = await abrir(hash, { reduzido: true });
     await carregar(m);
     assert.deepEqual(todos(m), [], hash);
