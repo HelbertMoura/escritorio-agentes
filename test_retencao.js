@@ -6,14 +6,14 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 
 const TELA = new Proxy(function () {}, { get: () => TELA, apply: () => TELA, set: () => true });
-function elemento(id = "") {
+function elemento(id = "", quitar = () => {}) {
   const e = {
     id, hidden: false, textContent: "", value: "", className: "", disabled: false, checked: false, type: "", href: "", name: "",
     dataset: {}, style: {}, attrs: {}, filhos: [], antes: [], depois: [], ouvintes: {},
     addEventListener(t, f) { (e.ouvintes[t] ||= []).push(f); },
     setAttribute(k, v) { e.attrs[k] = String(v); }, getAttribute: k => e.attrs[k] ?? null, removeAttribute(k) { delete e.attrs[k]; },
     replaceChildren(...f) { e.filhos = f; }, append(...f) { e.filhos.push(...f); }, prepend(...f) { e.filhos.unshift(...f); },
-    before(...f) { e.antes.push(...f); }, after(...f) { e.depois.push(...f); }, replaceWith() {}, focus() {}, select() {},
+    before(...f) { e.antes.push(...f); }, after(...f) { e.depois.push(...f); }, replaceWith() {}, remove: quitar, focus() {}, select() {},
     closest: () => elemento(), querySelector: () => elemento(), querySelectorAll: () => [], getContext: () => TELA,
     classList: { toggle() {}, add() {}, remove() {} },
   };
@@ -24,7 +24,7 @@ const todos = (e, saida = []) => { for (const f of e.filhos || []) if (f && type
 function carregar(config) {
   const ids = new Map(), envios = [];
   const document = {
-    getElementById: id => { if (!ids.has(id)) ids.set(id, elemento(id)); return ids.get(id); },
+    getElementById: id => { if (!ids.has(id)) ids.set(id, elemento(id, () => ids.delete(id))); return ids.get(id); },
     createElement: () => elemento(), querySelector: () => null, querySelectorAll: () => [], body: elemento("body"),
   };
   const fetch = async (url, op = {}) => {
