@@ -457,6 +457,8 @@ const Vida = (() => {
   }
 
   function irPara(m, b, para) {
+    if (m.chegadaAte && b.lugar && b.lugar.tipo === "fora" && para.tipo !== "fora") b.entradaEquipe = "rua";
+    else if (b.entradaEquipe) b.entradaEquipe = null;
     b.rota = caminho(m, b.lugar, para);
     soltarVaga(b);
     if (b.parceiro) { const o = m.bonecos.get(b.parceiro); if (o && o.parceiro === b.id) o.parceiro = null; b.parceiro = null; }
@@ -606,10 +608,27 @@ const Vida = (() => {
   }
 
   // --- passo de simulação ----------------------------------------------------------------
-  function passo(m, dt) {
+  const CHEGADA_EQUIPE_SEG = 35;
+
+  function passo(m, dt, mostrarChegada = false) {
     const agora = performance.now() / 1000, ceu = Ceu.agora();
+    // Só um turno que abriu enquanto este mesmo mapa estava visível arma a cena.
+    const acompanhando = mostrarChegada && !document.hidden;
+    const continuo = acompanhando && agora - m.quadroChegada < 1;
+    const estavaFora = m.fora;
+    m.quadroChegada = acompanhando ? agora : undefined;
     m.fora = foraDoExpediente(ceu.h); m.noite = ceu.escuro; m.mo = momento();   // lidos uma vez por quadro
+    if (!continuo || m.fora || agora >= m.chegadaAte) m.chegadaAte = 0;
+    if (continuo && estavaFora === true && !m.fora) {
+      m.chegadaAte = agora + CHEGADA_EQUIPE_SEG;
+      m.proxSaudacaoEquipe = agora;
+    }
     for (const b of m.lista) {
+      if (!m.chegadaAte) {
+        if (b.saudacaoEntrada && b.ate === b.saudacaoEntrada) b.fala = null;
+        if (b.saudacaoEntrada) b.saudacaoEntrada = 0;
+        if (b.entradaEquipe) b.entradaEquipe = null;
+      }
       if (b.fala && agora > b.ate) b.fala = null;
       if (b.responde && agora >= b.responde.em) {
         if (!b.rota.length) {
@@ -619,8 +638,18 @@ const Vida = (() => {
         }
         b.responde = null;
       }
-      if (b.rota.length) { andar(m, b, dt, agora); if (!b.rota.length) chegar(m, b, agora); }
-      else if (b.lugar) decidir(m, b, dt, agora);
+      if (b.rota.length) {
+        andar(m, b, dt, agora);
+        if (b.entradaEquipe === "rua" && b.x >= m.predio.entrada.x && b.y === m.predio.corredorY) {
+          b.entradaEquipe = "recepcao";
+          if (agora >= m.proxSaudacaoEquipe) {
+            m.proxSaudacaoEquipe = agora + 2.5;
+            if (!b.fala) { falar(b, sorteia(FRASES.chegada), 2.5); b.saudacaoEntrada = b.ate; }
+            if (window.Zeladoria && Zeladoria.chegada) Zeladoria.chegada(m, b.x);
+          }
+        }
+        if (!b.rota.length) chegar(m, b, agora);
+      } else if (b.lugar) decidir(m, b, dt, agora);
       posar(m, b, agora);
     }
     duplas(m, dt, agora);
@@ -665,7 +694,7 @@ const Vida = (() => {
     if (alvo === "mesa") { if (l.tipo !== "mesa") irPara(m, b, { tipo: "mesa", mesa: b.mesa }); return; }
     if (alvo === "reuniao") { if (!(l.vaga && l.vaga.tipo === "reuniao") && agora > (b.espera || 0)) irReuniao(m, b, agora); return; }
     if (l.tipo === "fora") {
-      if (Math.random() < dt * 0.2) { const v = vagaLivre(m, b); if (v) { irPara(m, b, { tipo: "vaga", vaga: v }); b.chegou = true; } }
+      if (Math.random() < dt * 0.2) { const v = vagaLivre(m, b); if (v) { irPara(m, b, { tipo: "vaga", vaga: v }); b.chegou = !b.entradaEquipe; } }
       return;
     }
     // lutador de uma briga ainda não chamada: quem parou fica, até o outro parar e o gongo tocar (o trabalho real já passou acima)
@@ -735,6 +764,7 @@ const Vida = (() => {
 
   function chegar(m, b, agora) {
     const d = b.destino; b.destino = null;
+    if (b.entradaEquipe) b.entradaEquipe = null;
     b.lugar = d; b.desde = agora; b.fica = entre(25, 70); b.pressa = 0;
     if (b.irRoda && !b.trabalho) { const v = b.irRoda; b.irRoda = null; if (b.grupo && b.grupo.vagas.get(b.id) === v) { irPara(m, b, { tipo: "vaga", vaga: v }); return; } }   // chamado para a roda no caminho
     if (b.chegou && d.tipo !== "fora") { falar(b, sorteia(FRASES.chegada), 3); b.aceno = agora + 1.5; b.chegou = false; }

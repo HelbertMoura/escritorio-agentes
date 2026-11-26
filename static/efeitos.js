@@ -371,12 +371,19 @@ const Efeitos = (() => {
     c.drawImage(anel[aceso] || (anel[aceso] = desenharAnel(aceso)), o.x, o.y);
   }
   function bancada(c, o) { // bancada da cozinha: armários brancos, tampo de granito escuro, pia, cooktop com forno e micro-ondas
-    const { x, y, w } = o;
-    px(c, x, y + 28, w, 2, "#4a4a55"); px(c, x, y + 13, w, 15, "#eef0f2");
-    for (let i = 0; i < w; i += 16) { px(c, x + i, y + 13, 1, 15, "#b8bcc6"); px(c, x + i + 12, y + 17, 1, 4, "#8a909c"); }
-    px(c, x, y + 13, w, 1, "rgba(0,0,0,.2)");
-    px(c, x, y + 2, w, 10, "#2e2e36"); px(c, x, y + 2, w, 1, "#45454f"); px(c, x, y + 12, w, 1, "#5b5b68");
-    for (let i = 1; i < w; i += 3) px(c, x + i, y + 3 + ((i * 5) % 8), 1, 1, "#6b6b78");   // granito
+    const { x, y, w } = o, frente = o.retorno ? 25 : 13, fy = y + frente;
+    px(c, x, fy + 15, w, 2, "#4a4a55"); px(c, x, fy, w, 15, "#eef0f2");
+    for (let i = 0; i < w; i += 16) {
+      px(c, x + i, fy, 1, 15, "#b8bcc6");
+      if (i + 12 < w) px(c, x + i + 12, fy + 4, 1, 4, "#8a909c");
+    }
+    px(c, x, fy, w, 1, "rgba(0,0,0,.2)");
+    px(c, x, y + 2, w, frente - 3, "#2e2e36");
+    if (o.retorno) px(c, x, y, 1, frente, "#5b5b68");
+    else px(c, x, y + 2, w, 1, "#45454f");
+    px(c, x, fy - 1, w, 1, "#5b5b68");
+    for (let i = 1; i < w; i += 3) px(c, x + i, y + 3 + ((i * 5) % (frente - 5)), 1, 1, "#6b6b78");
+    if (o.retorno) return;
     const sx = x + o.pia;   // pia
     px(c, sx, y + 4, 16, 7, "#8a94a4"); px(c, sx + 1, y + 5, 14, 5, "#b8c0cc"); px(c, sx + 2, y + 6, 12, 1, "#9aa3b2"); px(c, sx + 7, y + 8, 2, 1, "#6b7484");
     px(c, sx + 7, y + 1, 2, 4, "#c9ced8"); px(c, sx + 7, y + 1, 1, 1, "#ffffff");

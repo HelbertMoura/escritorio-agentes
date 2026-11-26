@@ -631,7 +631,11 @@ function montar(atlas, config, grupos, planta) {
 
   const objetos = [], animados = [], vagas = [], janelas = [], portas = [];
   let estiloAtual = 0;
-  const janela = (cx, base, w = 26, h = 22) => janelas.push({ x: Math.round(cx - w / 2), y: Math.round(base - h), w, h, estilo: estiloAtual });
+  const janela = (cx, base, w = 26, h = 22) => {
+    const j = { x: Math.round(cx - w / 2), y: Math.round(base - h), w, h, estilo: estiloAtual };
+    janelas.push(j);
+    return j;
+  };
   const pegadas = [];   // pegada no chão (parte de baixo) de cada móvel, para não encavalar
   const sobre = (r, p) => r.x < p.x + p.w && r.x + r.w > p.x && r.y < p.y + p.h && r.y + r.h > p.y;
   const colide = r => pegadas.some(p => sobre(r, p));
@@ -889,15 +893,18 @@ function montar(atlas, config, grupos, planta) {
       }
     }
   }
-  // Cozinha de verdade: bancada contínua na parede (geladeira na ponta, pia sob a janela, cooktop com coifa e
+  // Cozinha: bancada em L (geladeira na ponta, pia sob a janela, cooktop com coifa e
   // micro-ondas no tampo) e o balcão do café no fim; mesas de refeição alinhadas no meio, com a frente do café livre
   // para a roda (vida.js); filtro, recicláveis e máquinas de venda no canto de baixo (montados depois da sala comunal)
+  let retornoBancada;
   {
     const s = cozinha, chao = s.chao, L = s.px, base = chao + 22;
     obj(tem("geladeira2") ? "geladeira2" : "geladeira", L + 16, chao + 14);
     const b = { nome: "bancada", x: L + 29, y: base - 30, w: 96, h: 30, dx: 0, chave: base, pia: 18, fogao: 52 };
     objetos.push(b); pegadas.push({ x: b.x, y: base - 12, w: b.w, h: 12 });
-    janela(b.x + b.pia + 8, chao - 18, 26, 22); paredeOcupada.push({ x: b.x + b.pia - 7, w: 30, y: chao - 40 });
+    retornoBancada = { nome: "bancada", retorno: true, x: b.x + b.w - 24, y: b.y + 12, w: 24, h: 42, chave: base + 24 };
+    janela(b.x + b.pia + 8, chao - 18).cozinha = true;
+    paredeOcupada.push({ x: b.x + b.pia - 7, w: 30, y: chao - 40 });
     { // coifa de inox sobre o cooktop
       const hx = b.x + b.fogao + 10;
       pintaPx(c, hx - 3, chao - 46, 6, 24, "#b8bec8"); pintaPx(c, hx - 3, chao - 46, 1, 24, "#d9dde4");
@@ -1288,6 +1295,9 @@ function montar(atlas, config, grupos, planta) {
     });
   }
   if (planta) aplicarPlanta();
+  // O trecho novo cede o espaço a móveis já aceitos pela planta do andar.
+  const rBancada = { x: retornoBancada.x, y: retornoBancada.chave - 24, w: retornoBancada.w, h: 24 };
+  if (!colide(rBancada)) { pegadas.push(rBancada); objetos.push(retornoBancada); }
   for (const v of vagas) if (v.sala && v.sala.faixa) v.via = v.sala.faixa;
   const tapada = (j, x) => objetos.some(o => o.nome && o.chave >= 0 && o.y + o.h > j.y + j.h && x < o.x + o.w && x + j.w > o.x && j.y < o.y + o.h && j.y + j.h > o.y);
   for (let i = janelas.length - 1; i >= 0; i--) {

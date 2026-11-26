@@ -61,7 +61,7 @@ async function iniciar() {
   irAoAgentePedido();
   irReuniaoPedida();
   ligarTV();
-  if (!souMembro() && !Andar.perfil(config).noSaguao) Assistente.talvez(config, () => estado);   // nome de exemplo ou sem conexão: o assistente (uma vez por sessão, e na volta do OAuth)
+  Assistente.talvez(() => config, () => estado);   // nome de exemplo ou sem conexão: o assistente (uma vez por sessão, e na volta do OAuth)
   setInterval(buscar, 10000);
   requestAnimationFrame(quadro);
 }
@@ -556,7 +556,11 @@ function quadro(t) {
   }
   const dt = Math.min(0.1, (t - antes) / 1000); antes = t; dtQuadro = dt;
   if (predio && mundo) {
-    Vida.passo(mundo, dt);
+    const mostrarChegada = telaAtual === "escritorio" && !trocando && !luzDeVolta && !menosMovimento.matches
+      && !Brincar.demo && !CHEGADA_SIMULADA && !(estado && estado.social && estado.social.serio)
+      && !document.body.classList.contains("tv") && !document.body.classList.contains("modo-foto")
+      && !document.documentElement.classList.contains("apresentacao");
+    Vida.passo(mundo, dt, mostrarChegada);
     for (const e of mundo.eventos.splice(0)) Som.evento(e.nome || e, e);
     Som.teclado(Vida.digitando(mundo), t);
     Som.ambiente(true);
@@ -852,8 +856,9 @@ function desenharLuzes(dt, ceu) {
   for (const b of mundo.bonecos.values()) {
     if (b.lugar && b.lugar.tipo === "mesa" && b.trabalho) ocupadas.add(b.lugar.mesa.sala);
     if (b.lugar && b.lugar.tipo === "vaga") ocupadas.add(b.lugar.vaga.sala);
-    if (b.destino && b.destino.vaga) ocupadas.add(b.destino.vaga.sala);
-    if (b.destino && b.destino.mesa) ocupadas.add(b.destino.mesa.sala);
+    // Na chegada do turno, a reserva da vaga ainda não é ocupação. O fade começa quando os pés chegam.
+    if (!b.entradaEquipe && b.destino && b.destino.vaga) ocupadas.add(b.destino.vaga.sala);
+    if (!b.entradaEquipe && b.destino && b.destino.mesa) ocupadas.add(b.destino.mesa.sala);
   }
   for (const k of window.Sprites ? Vida.terminais() : []) if (!k.dentro && !k.rota.length && k.dado && k.dado.estado === "ocupado") { const s = salaEm(k); if (s) ocupadas.add(s); }
   const noite = ceu.escuro; // 0 = dia claro, 1 = noite
@@ -956,7 +961,10 @@ function desenharLuzesDasSalas(ceu) {
   ctx.save();   // janelas internas: o vidro ganha o calor da sala, de dia quase nada e de noite como as lâmpadas
   for (const j of predio.janelas) {
     const s = salaEm({ x: j.x + j.w / 2, y: j.y + j.h / 2 }); if (!s) continue;
-    const forca = (s.luz || 0) * (0.05 + 0.22 * noite);
+    const forca = Math.max((s.luz || 0) * (0.05 + 0.22 * noite), j.cozinha && aberto ? 0.18 : 0);
+    if (j.cozinha && aberto && noite < 0.75) {
+      brilho(j.x + j.w / 2, j.y + j.h - 2, 25, `rgba(255,218,150,${0.22 * (1 - noite)})`);
+    }
     if (forca >= 0.012) { ctx.fillStyle = `rgba(255,226,170,${forca})`; ctx.fillRect(j.x + 1, j.y + 1, j.w - 2, j.h - 2); }
   }
   ctx.restore();
@@ -1977,6 +1985,7 @@ function renderFichaTerminal() {
 // ---------- vida social na ficha (contrato S, fatia 1): amizades pelo GET /api/social e "Mandar pro ringue" pelo POST
 // /api/social/briga. É diversão: some sem o bloco social (servidor antigo), no modo sério, na demonstração e na Simulação.
 const naSimulacao = () => ["data", "hora", "clima"].some(k => new URLSearchParams(location.search).has(k));
+const CHEGADA_SIMULADA = naSimulacao();
 const socialLigada = () => !!estado && !!estado.social && typeof estado.social === "object" && estado.social.serio !== true && !naSimulacao();
 const nomeAgente = id => { const b = boneco(id); return b ? b.nome : (((estado && estado.agentes) || []).find(a => a.id === id) || {}).nome || "Agente"; };
 let amizades = null, pedidoAmizades = 0, cenaVista = null, releitura = 0, releituraPlacar = 0, ringueDe = null, ringueOrigem = null;   // amizades: { id, d, erro, lida, v } da ficha aberta

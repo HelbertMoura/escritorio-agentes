@@ -9,7 +9,7 @@ const Assistente = (() => {
   const PASSOS = [["conectar", "Conecte ao agentes.chat"], ["cidade", "Onde fica o escritório?"], ["marca", "Como se chama a sua empresa?"],
     ["times", "Organizar em times?"], ["pronto", "Pronto!"]];
   const RETOMAR = "escritorio:assistente", VISTO = "escritorio:assistente-visto";
-  let cfg = null, lerEstado = () => null, passo = "conectar", recarregar = false, montado = false, vigia = 0, corEscolhida = null;
+  let cfg = null, lerConfig = () => null, lerEstado = () => null, passo = "conectar", recarregar = false, montado = false, vigia = 0, corEscolhida = null;
   let irPara = "";   // para onde a página vai ao fechar ("Montar os times" ou "Ir para o escritório")
 
   const guardar = (k, v) => { try { if (v == null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, v); } catch (e) { /* sem armazenamento */ } };
@@ -54,7 +54,11 @@ const Assistente = (() => {
       const n = agentes();
       $("as-times-texto").textContent = `Hoje são ${n} ${n === 1 ? "agente" : "agentes"}. Sem times, todos sentam juntos na sala “Novos”; com times, cada um ganha uma sala com a própria cor e o ícone na placa. Os times se montam em Personalizar.`;
     },
-    pronto() { $("as-construcao").hidden = !matchMedia("(min-width: 901px) and (pointer: fine)").matches; },   // o Modo construção é de computador
+    pronto() {
+      const aviso = $("as-construcao"), atual = lerConfig();
+      aviso.hidden = !atual || !Andar.perfil(atual).admin;
+      if (!aviso.hidden) aviso.querySelector("a").href = "construir.html" + (Andar.atual === Andar.PRINCIPAL ? "" : `#andar=${Andar.atual}`);
+    },
   };
 
   function ir(k) {
@@ -122,12 +126,12 @@ const Assistente = (() => {
       else $("principal").focus({ preventScroll: true });
       irPara = "";
     });
-    $("abrir-assistente").addEventListener("click", () => abrir("conectar"));
   }
 
   function abrir(k) {
+    cfg = lerConfig();
     const d = $("assistente");
-    if (!cfg || !d.showModal || (window.Brincar && Brincar.demo)) return;
+    if (!cfg || !Andar.perfil(cfg).admin || !d.showModal || (window.Brincar && Brincar.demo)) return;
     montar();
     if (!d.open) d.showModal();
     ir(PASSOS.some(([p]) => p === k) ? k : "conectar");
@@ -135,9 +139,12 @@ const Assistente = (() => {
 
   // depois da primeira leitura (app.js): na volta do OAuth retoma o passo guardado; senão, uma vez por sessão,
   // se o nome ainda é o de exemplo ou se não há conexão
-  function talvez(c, estadoFn) {
+  function talvez(configFn, estadoFn) {
+    lerConfig = configFn; lerEstado = estadoFn;
+    const c = lerConfig();
     if (!c || (window.Brincar && Brincar.demo)) return;
-    cfg = c; lerEstado = estadoFn;
+    const perfil = Andar.perfil(c);
+    if (!perfil.admin || perfil.noSaguao) return;
     montar();
     const volta = ler(RETOMAR);
     if (volta) {   // a volta do OAuth sem conexão (recusou, ou a autorização falhou) retoma no Conectar, que mostra o estado e o "Reconectar"
@@ -150,6 +157,7 @@ const Assistente = (() => {
     // toa a cada sessão (só porque a empresa ainda se chama "Minha empresa"). O nome troca no Personalizar.
     if (["sem_conexao", "recusada"].includes(conexao())) { guardar(VISTO, "1"); abrir("conectar"); }
   }
+  $("abrir-assistente").addEventListener("click", () => abrir("conectar"));
   return { talvez, abrir };
 })();
 window.Assistente = Assistente;

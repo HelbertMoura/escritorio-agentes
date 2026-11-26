@@ -6,21 +6,11 @@
   <meta name="robots" content="noindex, nofollow">
   <title>Modo construção · Firmópolis</title>
   <link rel="icon" href="logo.png">
-  <link rel="stylesheet" href="estilo.css?v=106">
-  <link rel="stylesheet" href="construir.css?v=106">
+  <link rel="stylesheet" href="estilo.css?v=107">
+  <link rel="stylesheet" href="construir.css?v=107">
 </head>
 <body class="construir">
   <a class="pular" href="#painel">Ir para as ferramentas</a>
-
-  <!-- celular (ou sem mouse): só ver; o editor pede um computador -->
-  <main id="so-celular" class="so-celular">
-    <div class="cel-cartao">
-      <h1>Modo construção</h1>
-      <p>Para arrumar o escritório, abra num computador.</p>
-      <p class="suave">No celular dá para ver o escritório como ele ficou.</p>
-      <a class="botao" href="./" data-voltar>Voltar ao escritório</a>
-    </div>
-  </main>
 
   <div id="editor" class="editor">
     <header class="ed-topo">
@@ -75,16 +65,32 @@
         <section class="bloco" aria-labelledby="t-peca">
           <h2 id="t-peca" class="olho">Peça</h2>
           <div id="sem-peca">
-            <p class="suave">Clique num móvel do mapa (ou use Tab e Enter) para mexer nele.</p>
+            <p class="suave">Selecione um móvel no mapa para editar.</p>
           </div>
           <div id="com-peca" hidden>
             <p class="peca-nome"><strong id="peca-nome"></strong> <span id="peca-sala" class="suave"></span></p>
             <p id="peca-nota" class="suave"></p>
             <div class="linha-bt">
               <button id="espelhar" class="botao secundario" type="button" aria-keyshortcuts="E">Espelhar <kbd aria-hidden="true">E</kbd></button>
+              <button id="duplicar" class="botao secundario" type="button" hidden>Duplicar</button>
               <button id="tirar" class="botao secundario" type="button" aria-keyshortcuts="Delete">Tirar <kbd aria-hidden="true">Del</kbd></button>
             </div>
-            <p class="suave dica">Arraste ou use as setas: 8 px por vez (Shift: 1 px). Esc solta a peça.</p>
+            <div id="ajuste-fino" class="ajuste-fino" role="group" aria-label="Ajuste fino da posição" hidden>
+              <label for="passo-movel">Passo</label>
+              <select id="passo-movel" class="campo">
+                <option value="8">8 px</option>
+                <option value="1">1 px</option>
+              </select>
+              <button class="ed-ic" type="button" data-mover="ArrowLeft" aria-label="Mover para a esquerda">←</button>
+              <button class="ed-ic" type="button" data-mover="ArrowUp" aria-label="Mover para cima">↑</button>
+              <button class="ed-ic" type="button" data-mover="ArrowDown" aria-label="Mover para baixo">↓</button>
+              <button class="ed-ic" type="button" data-mover="ArrowRight" aria-label="Mover para a direita">→</button>
+            </div>
+            <p class="suave dica dica-teclado">Arraste ou use as setas: 8 px por vez (Shift: 1 px). Esc solta a peça.</p>
+          </div>
+          <div id="colocacao" class="linha-bt" hidden>
+            <button id="por-aqui" class="botao secundario" type="button">Pôr na sala escolhida</button>
+            <button id="cancelar-por" class="botao fantasma" type="button">Cancelar colocação</button>
           </div>
         </section>
 
@@ -104,9 +110,8 @@
 
         <section class="bloco" aria-labelledby="t-por">
           <h2 id="t-por" class="olho">Pôr peça <span class="selo-enfeite">enfeite</span></h2>
-          <p class="suave">Escolha a peça e clique numa sala. Peças novas são só enfeite: ninguém senta nelas.</p>
+          <p class="suave">Escolha a peça e selecione um ponto no mapa ou use o botão “Pôr”. Peças novas são só enfeite: ninguém senta nelas.</p>
           <div id="catalogo" class="catalogo" role="group" aria-label="Catálogo de peças"></div>
-          <button id="por-aqui" class="botao secundario largo" type="button" hidden>Pôr na sala escolhida</button>
         </section>
 
         <section class="bloco" aria-labelledby="t-auto">
@@ -128,12 +133,12 @@
 
   <div id="anuncio" class="oculto" aria-live="polite"></div>
 
-  <script src="mapa.js?v=106"></script>
-  <script src="expediente.js?v=106"></script>
-  <script src="ceu.js?v=106"></script>
-  <script src="clima.js?v=106"></script>
-  <script src="efeitos.js?v=106"></script>
-  <script src="planta.js?v=106"></script>
-  <script src="construir.js?v=106"></script>
+  <script src="mapa.js?v=107"></script>
+  <script src="expediente.js?v=107"></script>
+  <script src="ceu.js?v=107"></script>
+  <script src="clima.js?v=107"></script>
+  <script src="efeitos.js?v=107"></script>
+  <script src="planta.js?v=107"></script>
+  <script src="construir.js?v=107"></script>
 </body>
 </html>
