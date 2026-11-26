@@ -721,7 +721,7 @@ const CidadePlanta = (() => {
       "fonte fora da praça");
     const pontos = lista(d.pontos, 1, 6, "pontos").map(v => {
       const s = lugar(v, "ponto");
-      exigir(typeof v.nome === "string" && v.nome.length >= 1 && v.nome.length <= 40, "ponto.nome");
+      exigir(typeof v.nome === "string" && v.nome.length <= 40 && TEXTO_CENA.test(v.nome), "ponto.nome");
       return { s, nome: v.nome };
     });
 
@@ -758,22 +758,22 @@ const CidadePlanta = (() => {
     });
     let L = 0;
     const trechos = via.map((a, i) => {
-      const b = via[(i + 1) % via.length], u = unitario(a, b), inicio = L;
-      L += dist(a, b);
+      const b = via[(i + 1) % via.length], comprimento = dist(a, b), u = unitario(a, b), inicio = L;
+      exigir(comprimento > 0, "pista: trecho sem comprimento");
+      L += comprimento;
       return { a, u, angulo: Math.atan2(u[1], u[0]), inicio, fim: L };
     });
-    exigir(L > 0, "pista sem comprimento");
     const carros = lista(d.carros, 0, 6, "carros").map(v => {
       const { s, v: velocidade, peca, tamanho } = objeto(v, "carro");
-      exigir(numero(s, 0, L) && s < L && numero(velocidade, 0, Number.MAX_VALUE), "carro: posição ou velocidade");
+      exigir(numero(s, 0, L) && s < L && numero(velocidade, 0, 40), "carro: posição ou velocidade");
       exigir(typeof peca === "string" && VEICULO_CENA.test(peca), "carro.peca");
-      exigir(Array.isArray(tamanho) && tamanho.length === 2 && tamanho.every(n => inteiro(n, 1, W)), "carro.tamanho");
+      exigir(Array.isArray(tamanho) && tamanho.length === 2 && tamanho.every(n => inteiro(n, 1, 32)), "carro.tamanho");
       return { s, v: velocidade, peca, tamanho: [...tamanho] };
     });
     const pedestres = lista(d.pedestres, 0, 8, "pedestres").map((v, i) => {
       const { de, para, s, v: velocidade } = objeto(v, "pedestre");
       exigir(inteiro(de, 0, nos.length - 1) && viz[de].includes(para), "pedestre fora de uma calçada");
-      exigir(numero(s, 0, dist(nos[de], nos[para])) && numero(velocidade, 0, Number.MAX_VALUE), "pedestre: posição ou velocidade");
+      exigir(numero(s, 0, dist(nos[de], nos[para])) && numero(velocidade, 0, 30), "pedestre: posição ou velocidade");
       return { de, para, s, v: velocidade, semente: id + ":calcada" + (i ? "#" + i : "") };
     });
 
@@ -790,7 +790,7 @@ const CidadePlanta = (() => {
       return { frente, pes, transparente };
     });
     exigir(area <= 30000, "oclusões grandes demais");
-    const cordoes = lista(d.cordoes, 0, Infinity, "cordoes").map(v => {
+    const cordoes = lista(d.cordoes, 0, 16, "cordoes").map(v => {
       lista(v, 4, 4, "cordão");
       return [...ponto([v[0], v[1]], "cordão"), ...ponto([v[2], v[3]], "cordão")];
     });

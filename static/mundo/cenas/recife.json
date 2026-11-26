@@ -34,5 +34,11 @@
     { "frente": [258, 326, 356, 334], "pes": [258, 312, 356, 326], "transparente": [] }
   ],
   "cordoes": [[431, 184, 511, 184]],
-  "luzes": []
+  "luzes": [],
+  "superficies": {
+    "calcada": ["d7d0b6", "c7b89c", "c6b48c", "ad8a6d", "ada592", "9f8883"],
+    "faixa": [],
+    "ponte": ["a98a5e", "886d51", "7a4b35", "baadae", "897568", "746157", "0c1419", "060f18", "60686f"],
+    "asfalto": ["3b2a5e"]
+  }
 }

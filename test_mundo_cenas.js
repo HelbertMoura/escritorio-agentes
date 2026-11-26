@@ -46,6 +46,10 @@ function esquema() {
   assert.deepEqual(copia(p.pedestres.map(a => a.semente)), ["recife:calcada", "recife:calcada#1"]);
   assert.deepEqual(copia(p.cena.luzes), d.luzes);
   assert.equal(p.cena.oclusoes[0].transparente[0], 0x3b2a5e);
+  // os tetos valem inclusive
+  d.cordoes = Array(16).fill(d.cordoes[0]);
+  d.carros[0].tamanho = [32, 32]; d.carros[0].v = 40; d.pedestres[0].v = 30;
+  d.pontos[0].nome = "a".repeat(40);
   const antes = JSON.stringify(d);
   CP.cena(d);
   assert.equal(JSON.stringify(d), antes, "a planta não mexe nos dados guardados");
@@ -116,6 +120,15 @@ function invalidas() {
     "luz grande": d => { d.luzes = [[10, 10, 17, 0.5]]; },
     "luz forte": d => { d.luzes = [[10, 10, 8, 0.7]]; },
     "luz fora": d => { d.luzes = [[10, 425, 8, 0.5]]; },
+    "nome com marcação": d => { d.pontos[0].nome = "<b>"; },
+    "nome com controle": d => { d.pontos[0].nome = "Marco\tZero"; },
+    "cordões demais": d => { d.cordoes = Array(17).fill(d.cordoes[0]); },
+    "carro largo demais": d => { d.carros[0].tamanho = [33, 4]; },
+    "carro alto demais": d => { d.carros[0].tamanho = [8, 33]; },
+    "carro rápido demais": d => { d.carros[0].v = 40.5; },
+    "pedestre rápido demais": d => { d.pedestres[0].v = 30.5; },
+    "pista com ponto repetido": d => { d.pista.splice(1, 0, d.pista[0]); },
+    "pista fechada à mão": d => { d.pista.push(d.pista[0]); },
   };
   for (const [nome, estragar] of Object.entries(casos)) {
     const d = copia(RECIFE), r = estragar(d);

@@ -1,6 +1,6 @@
 "use strict";
 // gerado por ferramentas/montar_cenas.py indice: não editar
 const CidadeCenas = Object.freeze({
-  "recife": Object.freeze({ v: "63dd8988030d", png: "sha256-Y92JiAMNTqIRmNk4KE+Vtko+Nogb1GXDTdGnetQwytI=", json: "sha256-kXgEaN0IBL/lrlM2695yLIwSXvcjCEyj0OlutouaHOQ=" }),
+  "recife": Object.freeze({ v: "547704662e6f", png: "sha256-VHcEZi5vBhzzjC/tkLxRkaZLGB9YyjmQ54anzbZAVME=", json: "sha256-xcVI5YYHLFspC3IcqkBwRFDADut9C/4rmMNKCx9R+Vs=" }),
 });
 window.CidadeCenas = CidadeCenas;
