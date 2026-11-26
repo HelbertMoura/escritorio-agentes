@@ -32,6 +32,14 @@ const CidadeChao = (() => {
     praca: "#d4c7a9", pracaJunta: "#b7a383", pracaBorda: "#a69579",
     concreto: ["#c6b89c", "#ab9b81"], concretoJunta: "#ae9c81", caminho: "#baa17d",
   };
+  const ACABAMENTOS = {
+    porto: { ...DIA, grama: ["#567e51", "#608958", "#6b935e"], quintal: "#759254",
+      praca: "#d3c1a1", pracaJunta: "#bba888", pracaBorda: "#a59879",
+      concreto: ["#c4b79d", "#b3a185"], concretoJunta: "#b4a68c", calcada: "#c8bda5", caminho: "#baa382" },
+    pampulha: { ...DIA, grama: ["#557b57", "#60865c", "#6b9063"], quintal: "#819e65",
+      praca: "#d0c7ad", pracaJunta: "#bdb198", pracaBorda: "#a69c7d",
+      concreto: ["#c3bba2", "#a99f88"], concretoJunta: "#b1a78d", calcada: "#c7bda3", caminho: "#b7ac8c" },
+  };
   const NEVE = { ...DIA, grama: ["#dfe7ef", "#e6edf4", "#eef3f8"], tufo: "#c9d4df", tufoClaro: "#f8fbfd", calcada: "#d6dde7",
     junta: "#c8d0db", meiofio: "#9aa3b0", praca: "#dfe5ee", pracaJunta: "#d0d8e3", concreto: ["#d8dee6", "#bfc7d1"],
     concretoJunta: "#cdd4dd", quintal: "#ffffff", remendo: "#41434c",
@@ -86,7 +94,7 @@ const CidadeChao = (() => {
     const m = p.malha;
     g.save();
     g.lineJoin = "round";
-    for (let i = 0; i < m.relevo.length; i++) poligono(g, m.relevo[i], i ? "#667b66" : "#455f62");
+    for (let i = 0; i < m.relevo.length; i++) poligono(g, m.relevo[i], i ? "#547765" : "#6d8a6c");
     for (const q of p.quadras) {
       const jardim = q.piso === "jardim", praca = q.piso === "praca";
       const passeio = q.piso === "passeio";
@@ -112,8 +120,10 @@ const CidadeChao = (() => {
       const paleta = AGUAS[a.tipo];
       traco(g, a.pontos, true);
       if (a.tipo === "lagoa") {
-        g.strokeStyle = "#78935f"; g.lineWidth = 18; g.stroke();
-        g.strokeStyle = "#b3b38a"; g.lineWidth = 8; g.stroke();
+        // Só a metade seca da faixa aparece. A água e a avenida são pintadas sobre o bordo.
+        g.strokeStyle = cor.pracaBorda; g.lineWidth = 34; g.stroke();
+        g.strokeStyle = cor.praca; g.lineWidth = 30; g.stroke();
+        g.strokeStyle = cor.quintal; g.lineWidth = 8; g.stroke();
       }
       g.fillStyle = paleta[0]; g.fill();
       g.save(); g.clip();
@@ -132,13 +142,21 @@ const CidadeChao = (() => {
       }
       g.restore();
     }
-    for (const c of m.cais) {
-      poligono(g, c, m.pedra ? cor.concreto[1] : "#a18560");
+    for (const [i, c] of m.cais.entries()) {
+      const porto = m.acabamento === "porto", esplanada = porto && i === 0;
+      poligono(g, c, esplanada || m.pedra ? cor.concreto[1] : "#a18560");
       g.save(); g.clip();
       if (pedra) lajes(g, pedra, c, x0, y0, x1, y1);
       else {
-        g.fillStyle = m.pedra ? cor.concretoJunta : "#806448";
-        for (let y = floor(y0 / 5) * 5; y < y1; y += 5) g.fillRect(x0, y, x1 - x0, 1);
+        g.fillStyle = esplanada || m.pedra ? cor.concretoJunta : "#806448";
+        const altura = esplanada ? 7 : 5;
+        for (let y = floor(y0 / altura) * altura; y < y1; y += altura) {
+          g.fillRect(x0, y, x1 - x0, 1);
+          if (esplanada) for (let x = floor(x0 / 15) * 15 + (y % 14 ? 7 : 0); x < x1; x += 15) g.fillRect(x, y, 1, altura);
+        }
+      }
+      if (porto) {
+        g.strokeStyle = esplanada ? cor.calcada : "#c2a47b"; g.lineWidth = 5; g.stroke();
       }
       g.restore();
       g.strokeStyle = m.pedra ? cor.meiofio : "#6d5b49"; g.lineWidth = 2; g.stroke();
@@ -627,7 +645,7 @@ const CidadeChao = (() => {
     }
     function desenhar(ctx, vista, op) {
       if (!p) return;
-      const cor = op.neve ? NEVE : p.malha?.pedra ? RECIFE : DIA;
+      const cor = op.neve ? NEVE : p.malha?.pedra ? RECIFE : ACABAMENTOS[p.malha?.acabamento] || DIA;
       if (!atlas()) { esboco(ctx, vista, cor); estado.forca = estado.detalhes = estado.novos = 0; estado.faltam = 1; return; }
       const k = chaveDe(op.neve, op.ceu, op.tipo, op.casa, op.desvio || 0);
       if (k !== estado.chave) { estado.chave = k; estado.sombras = 0; }
