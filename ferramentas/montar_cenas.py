@@ -589,7 +589,7 @@ def revisar(cidade, saida, raiz=RAIZ):
         tracejado(g, o["pes"], (0, 90, 255))
     magenta, (fw, fh) = (255, 0, 255), praca["fonte"]
     caixa(praca["r"], magenta)
-    caixa([praca["x"] - fw / 2, praca["y"] - fh / 2, praca["x"] + fw / 2, praca["y"] + fh / 2], magenta)
+    caixa([praca["x"] - fw / 2, praca["y"] - fh, praca["x"] + fw / 2, praca["y"]], magenta)   # apoiada no pé, como no A7
     for x0, y0, x1, y1 in d["cordoes"]:
         g.line([em_3x((x0, y0)), em_3x((x1, y1))], fill=magenta)
     for x, y, r, _ in d["luzes"]:

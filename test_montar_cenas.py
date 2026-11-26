@@ -306,6 +306,16 @@ class Validacao(unittest.TestCase):
                 mc.paleta("manaus", dentro, raiz)
 
 
+    def test_revisar_desenha_a_fonte_apoiada_no_pe(self):
+        """A praça sintética: x 410, y 290, fonte 20x14. Na coluna do meio, só o topo (y - h) e a base (y) da caixa."""
+        raiz = self.raiz()
+        with tempfile.TemporaryDirectory() as saida:
+            mc.revisar("manaus", saida, raiz)
+            with Image.open(os.path.join(saida, "manaus-revisao.png")) as im:
+                im = im.convert("RGB")
+                magentas = [y for y in range(260 * 3 + 1, 300 * 3) if im.getpixel((410 * 3, y)) == (255, 0, 255)]
+        self.assertEqual(magentas, [(290 - 14) * 3, 290 * 3])
+
     def test_paleta_so_precisa_do_png(self):
         raiz = self.raiz()
         with tempfile.TemporaryDirectory() as saida:
