@@ -1,0 +1,222 @@
+{
+ "versao": 1,
+ "id": "natal",
+ "W": 576,
+ "H": 400,
+ "texto": {
+  "cena": "Natal em pixel art, com o Forte dos Reis Magos em forma de estrela, o casario e a praia de mar azul",
+  "vida": "Dois pedestres nas calçadas da portaria, com travessia na rua do forte, e um carro na rua de baixo",
+  "portaria": "na loja de portão largo, no quarteirão em frente ao forte"
+ },
+ "portaria": {
+  "x": 270,
+  "y": 339,
+  "r": [
+   260,
+   314,
+   280,
+   339
+  ],
+  "placa": [
+   270,
+   318
+  ],
+  "farol": [
+   270,
+   328
+  ]
+ },
+ "praca": {
+  "x": 133,
+  "y": 116,
+  "r": [
+   78,
+   84,
+   188,
+   124
+  ],
+  "fonte": [
+   22,
+   15
+  ]
+ },
+ "pontos": [
+  {
+   "x": 367,
+   "y": 290,
+   "r": [
+    300,
+    160,
+    440,
+    295
+   ],
+   "nome": "Forte dos Reis Magos"
+  },
+  {
+   "x": 520,
+   "y": 300,
+   "r": [
+    450,
+    0,
+    576,
+    400
+   ],
+   "nome": "Praia do Forte"
+  }
+ ],
+ "calcadas": {
+  "nos": [
+   [
+    240,
+    339
+   ],
+   [
+    270,
+    339
+   ],
+   [
+    310,
+    339
+   ],
+   [
+    344,
+    342
+   ],
+   [
+    396,
+    342
+   ],
+   [
+    420,
+    340
+   ],
+   [
+    445,
+    340
+   ]
+  ],
+  "arestas": null,
+  "travessias": [
+   3
+  ],
+  "pontes": []
+ },
+ "pista": [
+  [
+   439.5,
+   349
+  ],
+  [
+   350.5,
+   349
+  ],
+  [
+   346,
+   353.5
+  ],
+  [
+   350.5,
+   358
+  ],
+  [
+   439.5,
+   358
+  ],
+  [
+   444,
+   353.5
+  ]
+ ],
+ "carros": [
+  {
+   "s": 0,
+   "v": 17,
+   "peca": "carro-2",
+   "tamanho": [
+    8,
+    4
+   ]
+  }
+ ],
+ "pedestres": [
+  {
+   "de": 0,
+   "para": 1,
+   "s": 12,
+   "v": 15
+  },
+  {
+   "de": 4,
+   "para": 5,
+   "s": 20,
+   "v": 16
+  }
+ ],
+ "oclusoes": [],
+ "cordoes": [
+  [
+   82,
+   120,
+   184,
+   120
+  ]
+ ],
+ "luzes": [
+  [
+   195,
+   33,
+   10,
+   0.45
+  ],
+  [
+   241,
+   276,
+   10,
+   0.45
+  ],
+  [
+   352,
+   330,
+   10,
+   0.45
+  ],
+  [
+   384,
+   330,
+   10,
+   0.45
+  ],
+  [
+   158,
+   115,
+   10,
+   0.45
+  ]
+ ],
+ "superficies": {
+  "calcada": [
+   "bfa183",
+   "dcbb8c",
+   "af947d",
+   "c4a37e",
+   "cbad8a",
+   "b99a7d",
+   "907061",
+   "7f655b"
+  ],
+  "faixa": [
+   "9b7e6f",
+   "a78971"
+  ],
+  "ponte": [],
+  "asfalto": [
+   "422d44",
+   "674343",
+   "775046",
+   "45354b",
+   "58485c",
+   "1e142f",
+   "3b293f"
+  ]
+ }
+}
