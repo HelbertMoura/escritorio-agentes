@@ -2,6 +2,7 @@
 // no escritório: enfeites, chapéu dos agentes, falas e fogos. Vale a primeira data própria (Personalizar,
 // /api/config "festas") que cobre o dia; sem nenhuma, a festa do calendário que não foi desligada.
 // ?data=2026-12-25 simula outra data.
+// O mundo público usa naCidade(): a festa pela data local de cada cidade, com as regionais por cima das nacionais.
 "use strict";
 
 const Festas = (() => {
@@ -69,10 +70,12 @@ const Festas = (() => {
     return null;
   }
 
-  function hoje() {
+  // o dia no fuso dado (o escritório usa Brasília); ?data= vale igual em qualquer fuso
+  const BRASILIA = "America/Sao_Paulo";
+  function hoje(fuso = BRASILIA, agora = new Date()) {
     const sim = new URLSearchParams(location.search).get("data");
     if (sim && /^\d{4}-\d{2}-\d{2}$/.test(sim)) { const [y, m, d] = sim.split("-").map(Number); return { y, m, d }; }
-    const p = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()).split("-").map(Number);
+    const p = new Intl.DateTimeFormat("en-CA", { timeZone: fuso, year: "numeric", month: "2-digit", day: "2-digit" }).format(agora).split("-").map(Number);
     return { y: p[0], m: p[1], d: p[2] };
   }
 
@@ -110,6 +113,49 @@ const Festas = (() => {
     return k;
   }
 
+  // Festa por cidade (mundo público). As UFs fora de Brasília (as demais, e as desconhecidas, usam o fuso dela)
+  const FUSO_UF = { AC: "America/Rio_Branco", AM: "America/Manaus", RR: "America/Boa_Vista", RO: "America/Porto_Velho",
+                    MT: "America/Cuiaba", MS: "America/Campo_Grande" };
+  // As festas regionais (LOCAIS) e as de cada cidade de fora (EXTERIOR[id].festas) são objetos como os de FESTAS, com
+  // chave, janela(ano) -> [início, fim] em ms UTC (dias inteiros locais) ou null, e base: a chave do catálogo que, desligada
+  // na instalação, leva a festa junto, ou null (sempre ligada). As de LOCAIS têm também as cidades (ids do mundo.json).
+  // Cidade de fora com a lista vazia segue o calendário daqui; com festas próprias, só elas e as universais.
+  const LOCAIS = [];
+  const exterior = (fuso, neve = false) => ({ fuso, neve, festas: [] });
+  const EXTERIOR = {
+    lisboa: exterior("Europe/Lisbon"), luanda: exterior("Africa/Luanda"), maputo: exterior("Africa/Maputo"),
+    "buenos-aires": exterior("America/Argentina/Buenos_Aires"), montevideu: exterior("America/Montevideo"),
+    santiago: exterior("America/Santiago"), "cidade-do-mexico": exterior("America/Mexico_City"),
+    "nova-york": exterior("America/New_York", true), londres: exterior("Europe/London", true),
+    paris: exterior("Europe/Paris", true), madri: exterior("Europe/Madrid"), toquio: exterior("Asia/Tokyo"),
+  };
+  const UNIVERSAIS = new Set(["natal", "anonovo", "programador"]);
+  // o n-ésimo domingo do mês e o último fim de semana (sexta a domingo) dele, em ms UTC
+  const diaDaSemana = ms => new Date(ms).getUTCDay();
+  function nDomingo(ano, mes, n) {
+    const primeiro = utc(ano, mes, 1);
+    return primeiro + ((7 - diaDaSemana(primeiro)) % 7 + 7 * (n - 1)) * DIA;
+  }
+  function fimDeSemana(ano, mes) {
+    const ultimo = utc(ano, mes + 1, 0), domingo = ultimo - diaDaSemana(ultimo) * DIA;
+    return [domingo - 2 * DIA, domingo];
+  }
+  // a festa da cidade { id, uf } no instante `agora`, pela data local: regional > calendário nacional > universal
+  function naCidade({ id, uf }, agora = new Date()) {
+    const fora = Object.hasOwn(EXTERIOR, id) ? EXTERIOR[id] : null;
+    const { y, m, d } = hoje(fora ? fora.fuso : (Object.hasOwn(FUSO_UF, uf) ? FUSO_UF[uf] : BRASILIA), agora);
+    const dt = utc(y, m, d);
+    const regional = (fora ? fora.festas : LOCAIS.filter(f => f.cidades.includes(id))).find(f => {
+      const j = (f.base === null || !desligadas.has(f.base)) && f.janela(y);
+      return j && entre(dt, j[0], j[1]);
+    });
+    if (regional) { const { cidades, janela, base, ...f } = regional; return f; }
+    const k = chave(y, m, d);
+    if (!k || desligadas.has(k) || (fora && fora.festas.length && !UNIVERSAIS.has(k))) return null;
+    const f = { chave: k, ...FESTAS[k] };
+    return fora && fora.neve && k === "natal" ? { ...f, neve: true, enfeites: [...f.enfeites, "neve"] } : f;
+  }
+
   // Um dia de cada festa do calendário no ano: [{ chave, nome, data: "AAAA-MM-DD" }] na ordem do FESTAS.
   // Parte do dia típico (25/12, 24/06 de São João, 31/10...) e procura o mais perto que o chave() reconhece:
   // assim uma festa que cai dentro de outra (o Ano Novo Chinês de 2026 no Carnaval) sai num dia em que ela vale.
@@ -141,7 +187,7 @@ const Festas = (() => {
     return r;
   }
 
-  return { ativa, pascoa, lista, embutidas, temas, tema, configurar };
+  return { ativa, naCidade, pascoa, nDomingo, fimDeSemana, lista, embutidas, temas, tema, configurar, FUSO_UF, EXTERIOR, LOCAIS };
 })();
 
 window.Festas = Festas;

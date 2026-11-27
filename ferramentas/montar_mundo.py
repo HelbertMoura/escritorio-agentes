@@ -15,6 +15,7 @@ import os
 import re
 import string
 import sys
+import zlib
 from collections import Counter, deque
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -471,16 +472,67 @@ def versao(pixels, dados):
     return int(hashlib.sha256(pixels + json.dumps(dados, sort_keys=True).encode()).hexdigest()[:8], 16)
 
 
+def sem_filtro(linhas, passo, bpp):
+    """As linhas de um PNG (um byte de filtro e `passo` bytes cada) de volta aos bytes dos pixels; `bpp`: bytes por
+    pixel (1 quando o pixel ocupa menos)."""
+    if len(linhas) % (passo + 1):
+        raise ValueError("PNG corrompido")
+    saida, antes = bytearray(), bytes(passo)
+    for i in range(0, len(linhas), passo + 1):
+        f, linha = linhas[i], bytearray(linhas[i + 1:i + passo + 1])
+        if f > 4:
+            raise ValueError("PNG corrompido")
+        if f:
+            for x in range(passo):
+                a, c = (linha[x - bpp], antes[x - bpp]) if x >= bpp else (0, 0)
+                b = antes[x]
+                if f == 4:   # Paeth: o vizinho mais perto de a + b - c (no empate, a, depois b)
+                    pa, pb, pc = abs(b - c), abs(a - c), abs(a + b - c - c)
+                    previsto = a if pa <= pb and pa <= pc else b if pb <= pc else c
+                else:
+                    previsto = a if f == 1 else b if f == 2 else (a + b) // 2
+                linha[x] = (linha[x] + previsto) & 255
+        saida += linha
+        antes = linha
+    return bytes(saida)
+
+
+def conteudo_png(dados):
+    """O conteúdo de um PNG sem a compressão nem os filtros de linha: os blocos (cabeçalho, paleta...) e os bytes dos
+    pixels. O fluxo zlib e os filtros mudam de um Pillow para outro (o do Ubuntu filtra o PNG de paleta, o do pip não)
+    sem mudar um pixel; o conteúdo, não. Só a biblioteca padrão (os testes rodam sem o Pillow)."""
+    if dados[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError("não é PNG")
+    blocos, idat, i = b"", b"", 8
+    while i < len(dados):
+        n = int.from_bytes(dados[i:i + 4], "big")
+        tipo, corpo = dados[i + 4:i + 8], dados[i + 8:i + 8 + n]
+        if len(corpo) != n or zlib.crc32(tipo + corpo) != int.from_bytes(dados[i + 8 + n:i + 12 + n], "big"):
+            raise ValueError("PNG corrompido")
+        if tipo == b"IDAT":
+            idat += corpo
+        else:
+            blocos += len(corpo).to_bytes(4, "big") + tipo + corpo
+        i += 12 + n
+    largura = int.from_bytes(dados[16:20], "big")   # o IHDR é sempre o primeiro bloco
+    bits, cor, entrelace = dados[24], dados[25], dados[28]
+    if entrelace:
+        raise ValueError("PNG entrelaçado")
+    por_pixel = bits * {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[cor]
+    return blocos + b"IDAT" + sem_filtro(zlib.decompress(idat), (largura * por_pixel + 7) // 8, max(1, por_pixel // 8))
+
+
 def versao_dos_arquivos(saida, dados):
-    """A versão do mundo: os bytes dos arquivos gravados em `saida` (os PNG levam a paleta deles, então trocar uma cor
-    muda a versão mesmo com os mesmos índices), em ordem fixa, e os dados do mundo.json (sem a versão)."""
+    """A versão do mundo: o conteúdo dos arquivos gravados em `saida` (os PNG levam a paleta deles, então trocar uma cor
+    muda a versão mesmo com os mesmos índices; sem a compressão nem os filtros, que mudam de uma máquina para outra), em
+    ordem fixa, e os dados do mundo.json (sem a versão)."""
     nomes = ["terra.png", "brasil.png", os.path.join("perto", "ufs.json")]
     for pasta in ("perto", "perto4x"):
         nomes += sorted(os.path.join(pasta, n) for n in os.listdir(os.path.join(saida, pasta)) if n.endswith(".png"))
     conteudo = b""
     for n in nomes:
         with open(os.path.join(saida, n), "rb") as f:
-            conteudo += f.read()
+            conteudo += conteudo_png(f.read()) if n.endswith(".png") else f.read()
     return versao(conteudo, dados)
 
 
@@ -588,6 +640,10 @@ GENERICOS = ([f"predios-{i}" for i in range(1, 15)] + [f"chale-{i}" for i in ran
 # as peças das festas, ao lado da fonte da praça: entram quando a arte existe (sem ela, a festa fica só nos enfeites)
 OPCIONAIS = ["festa-arvore-natal", "festa-fogueira", "festa-barraca-junina", "festa-abobora", "festa-ovo-pascoa",
              "festa-carro-alegorico", "festa-palco-anonovo"]
+# as peças de chão das festas novas, desenhadas no Aseprite em arte/festas (fonte .aseprite e .png ao lado), no tamanho
+# original (1x); cada uma entra com a sua linha de proveniência. Sem o PNG, fica de fora, como as OPCIONAIS
+FESTAS_1X = []
+PASTA_FESTAS = os.path.join(RAIZ, "arte", "festas")
 # a arte de cidade de Recife, Manaus e Belo Horizonte: opcional como as festas, mas no tamanho original (1x)
 ARTES_CIDADE = ["cidade-recife", "cidade-manaus", "cidade-bh-serra-curral", "recife-frente", "recife-pedra"]
 # desenhadas pelo PixelLab grandes demais para a cidade: entram no atlas na metade (o navegador desenha 1:1)
@@ -855,8 +911,8 @@ def montar_atlas(arte, cidades, saida):
     from PIL import Image
     pecas = {}
 
-    def abrir(nome):
-        im = Image.open(os.path.join(arte, nome + ".png")).convert("RGBA")
+    def abrir(nome, pasta=arte):
+        im = Image.open(os.path.join(pasta, nome + ".png")).convert("RGBA")
         im = im.crop(im.getchannel("A").getbbox())
         if nome in MANCHAS:
             im = sem_mancha(im, MANCHAS[nome])
@@ -871,6 +927,9 @@ def montar_atlas(arte, cidades, saida):
     for nome in OPCIONAIS:
         if os.path.exists(os.path.join(arte, nome + ".png")):
             pecas[nome] = abrir(nome)
+    for nome in FESTAS_1X:
+        if os.path.exists(os.path.join(PASTA_FESTAS, nome + ".png")):
+            pecas[nome] = abrir(nome, PASTA_FESTAS)
     for nome in ARTES_CIDADE:
         if os.path.exists(os.path.join(arte, nome + ".png")):
             pecas[nome] = abrir(nome)

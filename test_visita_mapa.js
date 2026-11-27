@@ -41,7 +41,9 @@ async function principal() {
   const antes = transformacoes.length;
   elementos["ver-sala"].acao();
   assert.ok(transformacoes.length > antes);
-  assert.equal(transformacoes[antes + 1][0], 3.2);
+  // a sala de reunião (200x100) em escala inteira: o canvas toma o formato dela (sem tarja), uns 1280 px de largura
+  assert.deepEqual(transformacoes[antes], [6, 0, 0, 6, -120, -120]);
+  assert.equal(elementos.cena.width, 1200); assert.equal(elementos.cena.height, 600);
   elementos.sair.acao();
   assert.equal(elementos["ver-sala"].disabled, true);
 }

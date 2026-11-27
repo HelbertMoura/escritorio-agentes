@@ -1,4 +1,6 @@
-// O chão do nível Cidade (a planta vem de mundo_cidade_planta.js; as peças e a vida da rua, de mundo_cidade.js):
+// O chão do nível Cidade na planta de reserva (a planta vem de mundo_cidade_planta.js; as peças e a vida da rua, de
+// mundo_cidade.js). Com a cena integral (mundo/cenas/<id>.png), o PNG é o chão e nada daqui se pinta; este chão é o da
+// cidade sem cena e o de antes de a cena chegar (ou quando ela não passa no integrity):
 // - grama com manchas de tom e tufos (ruído pelo ponto do mundo, sem ladrilho repetido), asfalto com grão, calçada com
 //   meio-fio e juntas, o piso de praça (marco e feira), o concreto das filas de prédios, os caminhos do parque, a cerca ou
 //   a sebe de cada lote e o caminho de pedra até a porta, a faixa do meio, as faixas de pedestre, bueiros e setas;
@@ -6,8 +8,9 @@
 //   espuma na beira);
 // - a sombra de cada peça no chão, para o lado oposto ao sol: mais longa no fim da tarde, mais fraca com céu fechado e
 //   nenhuma à noite. A sombra é o desenho da peça projetado coluna a coluna a partir do pé dela, lido do atlas uma vez.
-// - a paisagem de cada cidade (o id local manda): o canal da orla do Recife, com as pontes de madeira, a água escura e o
-//   cais de Manaus e a lagoa da praça central de Belo Horizonte, poucos polígonos pintados no chão antes das peças da rua;
+// - a malha urbana das cidades que têm uma (MALHAS, em mundo_cidade_planta.js: Recife, Manaus e Belo Horizonte): as
+//   quadras e os pisos, o relevo, a água (canal, estuário, rio ou lagoa) com as pontes, o cais e as ruas da própria
+//   malha, no lugar da grade sorteada (e sem as ondas do alto-mar);
 // Tudo o que não anda é pintado uma vez em ladrilhos de T×T px do mundo, guardados (e refeitos quando o sol muda de
 // faixa, a neve chega ou a casa aparece); por quadro, só se copiam os ladrilhos da vista. A partir de 2x (perto), por
 // cima: tampas de bueiro, as linhas do estacionamento e flores nos lotes.

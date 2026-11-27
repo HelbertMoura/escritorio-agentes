@@ -1,6 +1,7 @@
 import ast
 import collections
 import contextlib
+import glob
 import datetime
 import hashlib
 import io
@@ -2991,6 +2992,20 @@ class Docker(unittest.TestCase):
         compilados = {os.path.basename(p) for linha in linhas if "py_compile" in linha for p in linha.split() if p.endswith(".py")}
         self.assertEqual((instalados, compilados), (esperados, esperados))
 
+    def test_instalador_leva_todo_estatico_servido(self):
+        # a instalação nova sai completa: todo estático da lista fechada (as cenas, o mapa e os azulejos de perto
+        # inclusive) que existe no repositório casa com algum padrão que o instalar.sh copia para /opt/escritorio/static
+        raiz = os.path.dirname(os.path.abspath(e.__file__))
+        with open(os.path.join(raiz, "instalar.sh"), encoding="utf-8") as f:
+            linhas = f.read().replace("\\\n", " ").splitlines()
+        padroes = {p.strip('";') for linha in linhas if linha.startswith(("install ", "for f in "))
+                   for p in linha.split() if p.startswith("static/")}
+        copiados = {os.path.relpath(c, os.path.join(raiz, "static")).replace(os.sep, "/")
+                    for p in padroes for c in glob.glob(os.path.join(raiz, p)) if os.path.isfile(c)}
+        servidos = {n for n in e.ARQUIVOS if os.path.isfile(os.path.join(raiz, "static", n))}
+        self.assertTrue({"mundo/brasil.png", "mundo/perto/ufs.json", "mundo/cenas/recife.png"} <= servidos)
+        self.assertEqual(servidos - copiados, set())
+
     def test_changelog_vai_junto_para_a_pagina_novidades(self):
         # o /api/novidades lê o CHANGELOG.pt-BR.md ao lado do escritorio.py: fora da imagem ou do instalar.sh, a página fica vazia
         raiz = os.path.dirname(os.path.abspath(e.__file__))
@@ -3578,8 +3593,10 @@ class Previa(unittest.TestCase):
     def parar(self, p, tmp):
         if p.poll() is None:
             p.send_signal(signal.CTRL_BREAK_EVENT if os.name == "nt" else signal.SIGTERM)
-            p.communicate(timeout=15)
+            _, erro = p.communicate(timeout=15)
             self.assertEqual(os.listdir(tmp), [])   # a prévia apagou a própria pasta ao sair
+            # e saiu limpa: sem o abort da finalização com uma thread no meio de um print ("_enter_buffered_busy")
+            self.assertEqual((p.returncode, "Fatal Python error" in erro), (0, False), erro[-2000:])
 
     def test_previa_le_conversa_pela_thread_e_pelo_canal(self):
         pasta = tempfile.mkdtemp(prefix="escritorio-previa-teste-")
@@ -3620,6 +3637,28 @@ class Previa(unittest.TestCase):
                            env={**os.environ, "TEMP": tmp, "TMP": tmp, "TMPDIR": tmp})
         self.assertEqual((r.returncode, os.listdir(tmp)), (1, []))
         self.assertIn("--visitantes", r.stderr)
+
+    def test_previa_sai_com_erro_quando_o_servidor_quebra(self):
+        # o os._exit do fim não pode engolir a exceção; o Ctrl+C segue saindo com 0 (o SIGTERM, o parar() confere)
+        quebrar = ("import builtins, runpy, socketserver, sys\n"
+                   "erro, previa = getattr(builtins, sys.argv.pop(1)), sys.argv.pop(1)\n"
+                   "def quebrar(*a, **k): raise erro('quebrou de propósito')\n"
+                   "socketserver.BaseServer.serve_forever = quebrar\n"
+                   "runpy.run_path(previa, run_name='__main__')\n")
+        previa = os.path.join("ferramentas", "previa.py")
+        for erro, codigo in (("RuntimeError", 1), ("KeyboardInterrupt", 0)):
+            with socket.socket() as s:
+                s.bind(("127.0.0.1", 0))
+                porta = s.getsockname()[1]
+            tmp = tempfile.mkdtemp(prefix="escritorio-previa-teste-tmp-")
+            self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+            r = subprocess.run([sys.executable, "-B", "-c", quebrar, erro, previa,
+                                os.path.join("ferramentas", "previa.exemplo.json")], cwd=self.RAIZ, capture_output=True,
+                               text=True, encoding="utf-8", timeout=60,
+                               env={**os.environ, "PREVIA_PORTA": str(porta), "PYTHONUTF8": "1", "TEMP": tmp, "TMP": tmp,
+                                    "TMPDIR": tmp})
+            self.assertEqual((r.returncode, os.listdir(tmp)), (codigo, []), (erro, r.stderr[-2000:]))
+            self.assertEqual("quebrou de propósito" in r.stderr, codigo == 1, (erro, r.stderr[-2000:]))
 
     def test_previa_com_push_falso(self):
         """--push: a chave sai, o endpoint da lista é aceito (o de fora, não) e um pedido novo do arquivo vira aviso."""

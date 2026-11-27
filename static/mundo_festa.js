@@ -7,8 +7,11 @@
 // - poste e telhado: logo depois do poste (guirlanda, lanterna, coração, balões, máscara) e do chalé (o pisca no
 //   contorno do telhado, lido da arte);
 // - luzes: à noite, por cima do escuro, o brilho do pisca (piscando), da fogueira e das lanternas;
-// - ar: fogos à noite, confete, serpentina e morcegos.
-// Com movimento reduzido: nada de fogos, confete nem serpentina, o pisca aceso e parado e os morcegos parados.
+// - aereos: os vãos e contornos que a cena integral traz no campo festa (bandeirinhas, fitas e pisca por cima da arte);
+// - ar: fogos à noite (no céu da cena, quando ela o traz e ele está na tela), confete, serpentina, neve e morcegos.
+// A cena com palco leva para ele a peça grande da festa. A neve só cai na cena com o campo festa, e só em flocos: a neve
+// assentada pelas cores de calçada pintava também fachadas e telhados com a mesma cor (piloto de Nova York, R11).
+// Com movimento reduzido: nada de fogos, confete, serpentina nem flocos, o pisca aceso e parado e os morcegos parados.
 // O estado do último quadro (o que foi desenhado) fica em `estado`.
 "use strict";
 const MundoFesta = (() => {
@@ -31,37 +34,62 @@ const MundoFesta = (() => {
     fogueira: ["..y..", ".yoy.", ".oOo.", "omOmo", "mm.mm"],
     abobora: ["..g..", ".ooo.", "oyoyo", "ooooo", ".ooo."],
     diwali: ["..y....y..", "..o....o..", "aaaaa.bbbb", ".aaa...bb."],
+    velas: [".y...y...", ".o.y.o.y.", ".w.o.w.o.", ".w.w.w.w.", "aaaaaaaaa"],
+    flores: [".a...b..", "aya.byb.", ".a.c.b..", ".gcycg..", "..gcgg.."],
   };
   const NOS_POSTES = ["guirlanda", "lanternas", "coracoes", "baloes", "mascara"];
   // o enfeite da praça e a arte do PixelLab que o substitui; as peças a mais de algumas festas
   const NA_PRACA = { arvore_natal: "festa-arvore-natal", presentes: null, champanhe: null, ovos: "festa-ovo-pascoa",
-                     coelho: null, fogueira: "festa-fogueira", abobora: "festa-abobora", diwali: null };
+                     coelho: null, fogueira: "festa-fogueira", abobora: "festa-abobora", diwali: null, velas: null, flores: null };
   const EXTRAS = { junina: ["festa-barraca-junina"], carnaval: ["festa-carro-alegorico"], anonovo: ["festa-palco-anonovo"] };
   const BRILHA = { fogueira: [255, 150, 60], lanternas: [255, 90, 70], abobora: [255, 140, 40], diwali: [255, 190, 90],
-                   arvore_natal: [255, 220, 150] };
-  const CORDAO = "#4b4453", APAGADA = "#3a3442";
+                   arvore_natal: [255, 220, 150], velas: [255, 180, 80] };
+  const CORDAO = "#4b4453", APAGADA = "#3a3442", NEVE = "#f8fafc";
+  const FLOCOS = 80, BRILHOS = 300;   // tetos por quadro
 
   function rgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
 
+  // onde os fogos estouram, [x0, y0, x1, y1]: no céu da cena quando ele cruza a vista (só a parte na tela, e não uma
+  // lasca na borda); senão, na faixa de cima da vista. No celular a vista é um recorte e o céu pode ficar fora dele
+  function estouro(ceu, [vx0, vy0, vx1, vy1]) {
+    if (ceu) {
+      const x0 = Math.max(ceu[0], vx0), y0 = Math.max(ceu[1], vy0), x1 = Math.min(ceu[2], vx1), y1 = Math.min(ceu[3], vy1);
+      if (x1 - x0 >= 24 && y1 - y0 >= 12) return [x0, y0, x1, y1];
+    }
+    const h = vy1 - vy0;
+    return [vx0 + 30, vy0 + 16, vx1 - 30, vy0 + 16 + h * 0.4];
+  }
+  // o centro da câmera da cena integral em dia de festa, numa vista de largura x altura do mundo: a praça e o palco
+  // juntos quando cabem; senão, a praça (a fonte, com o pisca e as peças da festa em volta)
+  function enquadrar(p, largura, altura) {
+    const [fw, fh] = p.praca.fonte, fonte = [p.praca.x - fw / 2, p.praca.y - fh, p.praca.x + fw / 2, p.praca.y];
+    const palco = p.cena && p.cena.festa && p.cena.festa.palco, r = palco && palco.r;
+    const u = r ? [Math.min(fonte[0], r[0]), Math.min(fonte[1], r[1]), Math.max(fonte[2], r[2]), Math.max(fonte[3], r[3])] : fonte;
+    const c = u[2] - u[0] <= largura && u[3] - u[1] <= altura ? u : fonte;
+    return [(c[0] + c[2]) / 2, (c[1] + c[3]) / 2];
+  }
+
   function criar({ reduzido, alto, recorte, atlas }) {
-    const telas = new Map(), contornos = new Map();
+    const telas = new Map(), contornos = new Map(), cabos = new Map();   // sprites das formas, telhados e vãos
     let chave = "", festa = null, cordoes = [], itens = [], anel = [], noPoste = null, desvio = 0, fonteR = null;
-    let fogos = [], confete = [], fitas = [], espera = 0, postes = [], rgbs = [];
+    let fogos = [], confete = [], fitas = [], flocos = [], espera = 0, postes = [], rgbs = [];
+    let ancoras = null, vaos = [], contornosCena = [], vistaAtual = null;   // o campo festa da cena e o que se pendura nele
     // reaproveitados a cada quadro (nada alocado por lâmpada): as lâmpadas acesas em trios (x, y, índice da cor), as
     // formas e as peças desenhadas
-    const luzes = [], desenhadas = new Set(), pecas = [];
+    const luzes = [], desenhadas = new Set(), pecas = [], noPalco = [];
+    const caixa = s => {
+      const r = recorte(s.peca), x = Math.round(s.x - r[2] / 2), y = Math.round(s.y - r[3]);
+      return [s.peca, x, y, x + r[2], y + r[3]];
+    };
     // o que o último quadro desenhou; formas, peças e a caixa da fonte só são montadas quando alguém lê
     const estado = { chave: null, cordoes: 0, bandeirinhas: 0, luzes: 0, acesas: 0, piscando: false, fogos: 0, confete: 0,
-                     serpentina: 0, morcegos: 0,
+                     serpentina: 0, morcegos: 0, fios: 0, contornos: 0, fitas: 0, neve: false, flocos: 0,
                      get formas() { return [...desenhadas]; },
-                     get pecas() {
-                       return pecas.map(s => {
-                         const r = recorte(s.peca), x = Math.round(s.x - r[2] / 2), y = Math.round(s.y - r[3]);
-                         return [s.peca, x, y, x + r[2], y + r[3]];
-                       });
-                     },
+                     get pecas() { return pecas.map(caixa); },
+                     get palco() { return noPalco.map(caixa); },
                      get fonte() { return fonteR && fonteR.slice(); } };
     const tem = e => !!festa && festa.enfeites.includes(e);
+    const neve = () => !!ancoras && tem("neve");   // os flocos só na cena com o campo festa
     const cor = i => festa.cores[i % festa.cores.length];
 
     function sprite(nome) {   // a forma pintada uma vez nas cores da festa e depois só copiada
@@ -90,12 +118,17 @@ const MundoFesta = (() => {
     function preparar(f, p, id) {
       const k = f ? `${id}|${f.chave}|${!!recorte(p.praca.peca)}${p.cena ? "|" + !!atlas() : ""}` : "";
       if (k === chave) return;
-      chave = k; festa = f; cordoes = []; itens = []; anel = []; fogos = []; confete = []; fitas = []; desvio = 0; fonteR = null;
+      chave = k; festa = f; cabos.clear(); cordoes = []; itens = []; anel = []; fogos = []; confete = []; fitas = []; flocos = []; desvio = 0; fonteR = null;
+      ancoras = (f && p.cena && p.cena.festa) || null; vaos = []; contornosCena = [];
       rgbs = f ? f.cores.map(rgb) : [];   // o RGB de cada cor da festa, uma vez (o brilho guarda o sprite pela cor, não pelo array)
       noPoste = f ? NOS_POSTES.find(tem) || null : null;
       if (!f) return;
       const A = CidadePlanta.E / 2 + 1, cruz = p.cruzamentos;
-      if (tem("bandeirinhas")) {
+      // os cordões levam bandeirinhas e fitas; na cena com o campo festa, levam também o pisca
+      const pendurado = tem("bandeirinhas") || tem("fitas");
+      if (ancoras && (pendurado || tem("pisca"))) vaos = ancoras.fios;
+      if (ancoras && tem("pisca")) contornosCena = ancoras.contornos;
+      if (pendurado || (ancoras && tem("pisca"))) {
         if (p.malha) cordoes = p.malha.cordoes;
         else {
           for (const [x, y] of cruz) for (const dy of [-A, A]) cordoes.push([x - A, y + dy, x + A, y + dy]);   // sobre a rua vertical
@@ -110,10 +143,8 @@ const MundoFesta = (() => {
       if (tem("pisca")) {   // o pisca no chão, contornando a frente e os lados do círculo da praça (atrás ficam os bancos)
         const [largura, altura] = ancoraPraca(p);
         const rx = largura / 2 + 3, ry = p.cena ? altura / 2 + 2 : rx * 0.64, cy = p.praca.y - ry + 1;
-        const n = Math.round(Math.PI * (rx + ry) / 3.5);
-        for (let i = 0; i < n; i++) {
-          const a = i / n * Math.PI * 2;
-          if (Math.sin(a) > -0.3) anel.push([Math.round(p.praca.x + desvio + Math.cos(a) * rx), Math.round(cy + Math.sin(a) * ry)]);
+        for (const [co, si] of CidadePlanta.anelDaPraca([largura, altura], ry)) {
+          anel.push([Math.round(p.praca.x + desvio + co * rx), Math.round(cy + si * ry)]);
         }
       }
     }
@@ -125,17 +156,36 @@ const MundoFesta = (() => {
       const fonte = recorte(p.praca.peca);
       return p.praca.fonte || (fonte ? fonte.slice(2) : [90, 68]);
     }
+    // a peça grande da festa no palco da cena: a mais larga que cabe entre as peças a mais (EXTRAS e as da festa) ou,
+    // sem nenhuma, entre as da praça. A que não cabe fica na praça
+    function palco() {
+      const lugar = ancoras && ancoras.palco, extras = [...(EXTRAS[festa.chave] || []), ...(festa.pecas || [])];
+      if (!lugar) return null;
+      const { x, y, r } = lugar, cabe = n => {
+        const q = recorte(n);
+        return q && x - q[2] / 2 >= r[0] && x + q[2] / 2 <= r[2] && y - q[3] >= r[1] && y <= r[3];
+      };
+      const candidatas = extras.length ? extras : festa.enfeites.map(e => NA_PRACA[e]).filter(Boolean);
+      const nome = candidatas.filter(cabe).sort((a, b) => recorte(b)[2] - recorte(a)[2])[0];
+      if (!nome) return null;
+      const enfeite = Object.keys(NA_PRACA).find(e => NA_PRACA[e] === nome);
+      itens.push({ enfeite: "praca", palco: true, peca: nome, w: recorte(nome)[2], brilha: BRILHA[enfeite], x, y });
+      return nome;
+    }
     function praca(p) {
-      const lista = [], M = 2;
+      const lista = [], M = 2, fora = palco();
       const arteQueCabe = nome => {
         const r = recorte(nome);
         return r && (!p.cena || p.praca.y - r[3] >= p.praca.r[1]) ? r : null;
       };
-      for (const e of festa.enfeites) if (e in NA_PRACA) {
+      for (const e of festa.enfeites) if (e in NA_PRACA && !(fora && NA_PRACA[e] === fora)) {
         const arte = NA_PRACA[e] && arteQueCabe(NA_PRACA[e]), forma = { forma: e, w: FORMAS[e][0].length, brilha: BRILHA[e] };
         lista.push(arte ? { peca: NA_PRACA[e], w: arte[2], brilha: BRILHA[e], reserva: forma } : forma);
       }
-      for (const n of EXTRAS[festa.chave] || []) { const arte = arteQueCabe(n); if (arte) lista.push({ peca: n, w: arte[2] }); }
+      for (const n of [...(EXTRAS[festa.chave] || []), ...(festa.pecas || [])]) {
+        const arte = n !== fora && arteQueCabe(n);
+        if (arte) lista.push({ peca: n, w: arte[2] });
+      }
       lista.sort((a, b) => b.w - a.w);
       const [largura, altura] = ancoraPraca(p), meia = Math.ceil(largura / 2), [x0, , x1] = p.praca.r;
       const esq = p.praca.x - meia - M - (x0 + M), dir = x1 - M - (p.praca.x + meia + M), maior = lista.length ? lista[0].w : 0;
@@ -161,29 +211,63 @@ const MundoFesta = (() => {
       }
     }
 
-    // um cordão: a linha caída entre o alto de dois postes e as bandeirinhas penduradas, nas cores da festa
-    function cordao(ctx, [ax, ay, bx, by]) {
-      const L = Math.hypot(bx - ax, by - ay), caida = Math.min(8, 2 + L * 0.05), n = Math.ceil(L);
-      const ponto = u => [Math.round(ax + (bx - ax) * u), Math.round(ay - alto + (by - ay) * u + caida * 4 * u * (1 - u))];
-      ctx.fillStyle = CORDAO;
-      for (let i = 0; i <= n; i++) { const [x, y] = ponto(i / n); ctx.fillRect(x, y, 1, 1); }
-      const q = Math.max(2, Math.floor(L / 6));
+    const naVista = (x, y) => x >= vistaAtual[0] - 1 && x <= vistaAtual[2] && y >= vistaAtual[1] - 1 && y <= vistaAtual[3];
+    // um vão: a linha caída entre dois pontos (`sobe`: a altura deles acima do chão, a dos postes nos cordões e 0 nos
+    // fios, que já saem do alto), com as bandeirinhas e as fitas da festa, pintada uma vez por vão e festa e depois só
+    // copiada; o pisca (na cena com o campo festa) vai por cima a cada quadro
+    function cabo([ax, ay, bx, by], sobe) {
+      const k = `${ax},${ay},${bx},${by},${sobe}`;
+      let c = cabos.get(k);
+      if (c) return c;
+      const L = Math.hypot(bx - ax, by - ay), caida = Math.min(8, 2 + L * 0.05), n = Math.ceil(L), q = Math.max(2, Math.floor(L / 6));
+      const ponto = u => [Math.round(ax + (bx - ax) * u), Math.round(ay - sobe + (by - ay) * u + caida * 4 * u * (1 - u))];
+      const rets = [];
+      for (let i = 0; i <= n; i++) rets.push([...ponto(i / n), 1, 1, CORDAO]);
+      let bandeirinhas = 0, fitas = 0;
       for (let i = 1; i < q; i++) {
-        const [x, y] = ponto(i / q);
-        ctx.fillStyle = cor(i);
-        ctx.fillRect(x - 2, y + 1, 5, 1); ctx.fillRect(x - 1, y + 2, 3, 1); ctx.fillRect(x, y + 3, 1, 1);
-        estado.bandeirinhas++;
+        const [x, y] = ponto(i / q), f = cor(i);
+        if (tem("bandeirinhas")) { rets.push([x - 2, y + 1, 5, 1, f], [x - 1, y + 2, 3, 1, f], [x, y + 3, 1, 1, f]); bandeirinhas++; }
+        if (tem("fitas")) { rets.push([x + 1, y + 1, 1, 4 + i % 3, f]); fitas++; }   // fitinhas de comprimentos alternados
       }
-      estado.cordoes++;
+      const x0 = Math.min(...rets.map(r => r[0])), y0 = Math.min(...rets.map(r => r[1]));
+      const tela = document.createElement("canvas");
+      tela.width = Math.max(...rets.map(r => r[0] + r[2])) - x0; tela.height = Math.max(...rets.map(r => r[1] + r[3])) - y0;
+      const g = tela.getContext("2d");
+      for (const [x, y, w, h, f] of rets) { g.fillStyle = f; g.fillRect(x - x0, y - y0, w, h); }
+      c = { tela, x: x0, y: y0, L, ponto, bandeirinhas, fitas };
+      cabos.set(k, c);
+      return c;
     }
-    function desenhar(ctx, s) {   // um item da ordem de profundidade
-      if (s.enfeite === "cordao") return cordao(ctx, s.c);
+    function vao(ctx, v, sobe, escuro, t) {
+      const c = cabo(v, sobe);
+      ctx.drawImage(c.tela, c.x, c.y);
+      estado.bandeirinhas += c.bandeirinhas; estado.fitas += c.fitas;
+      if (ancoras && tem("pisca")) for (let i = 0; i <= Math.floor(c.L / 4); i++) lampadaEm(ctx, ...c.ponto(i * 4 / c.L), i, escuro, t);
+    }
+    function desenhar(ctx, s, escuro, t) {   // um item da ordem de profundidade
+      if (s.enfeite === "cordao") { estado.cordoes++; return vao(ctx, s.c, alto, escuro, t); }
       if (s.forma) return forma(ctx, s.forma, s.x, s.y);
       const r = recorte(s.peca);
       if (!r) return;
       const x = Math.round(s.x - r[2] / 2), y = Math.round(s.y - r[3]);
       ctx.drawImage(atlas(), r[0], r[1], r[2], r[3], x, y, r[2], r[3]);
-      pecas.push(s);
+      (s.palco ? noPalco : pecas).push(s);
+    }
+    // os fios e os contornos da cena, por cima das peças (estão no alto): o pisca nos contornos a cada 3 px do caminho
+    function aereos(ctx, escuro, t) {
+      for (const f of vaos) { vao(ctx, f, 0, escuro, t); estado.fios++; }
+      for (const pontos of contornosCena) {
+        let resto = 0, i = 0;
+        for (let k = 1; k < pontos.length; k++) {
+          const [ax, ay] = pontos[k - 1], [bx, by] = pontos[k], L = Math.hypot(bx - ax, by - ay);
+          for (; resto <= L; resto += 3, i++) {
+            const u = L ? resto / L : 0;
+            lampadaEm(ctx, Math.round(ax + (bx - ax) * u), Math.round(ay + (by - ay) * u), i, escuro, t);
+          }
+          resto -= L;
+        }
+        estado.contornos++;
+      }
     }
     function poste(ctx, s) {   // o enfeite pendurado no alto do poste
       if (!noPoste) return;
@@ -196,6 +280,10 @@ const MundoFesta = (() => {
       estado.luzes++;
       if (noite && acesa) { estado.acesas++; luzes.push(x, y, i % festa.cores.length); }
       return acesa ? cor(i) : APAGADA;
+    }
+    function lampadaEm(ctx, x, y, i, escuro, t) {   // a lâmpada dos vãos e contornos: só a que está na vista
+      if (!naVista(x, y)) return;
+      ctx.fillStyle = lampada(x, y, i, escuro, t); ctx.fillRect(x, y, 1, 1);
     }
     function chao(ctx, escuro, t) {
       for (let i = 0; i < anel.length; i++) {
@@ -240,21 +328,23 @@ const MundoFesta = (() => {
       ctx.globalCompositeOperation = "lighter";
       for (let j = 0; j < luzes.length; j += 3) {
         const x = luzes[j], y = luzes[j + 1], c = luzes[j + 2];
-        brilho(ctx, x + 0.5, y + 0.5, 4, 0.5 * escuro, rgbs[c]); ctx.fillStyle = festa.cores[c]; ctx.fillRect(x, y, 1, 1);
+        if (j < BRILHOS * 3) brilho(ctx, x + 0.5, y + 0.5, 4, 0.5 * escuro, rgbs[c]);
+        ctx.fillStyle = festa.cores[c]; ctx.fillRect(x, y, 1, 1);
       }
       for (const s of itens) if (s.brilha && s.x > vista[0] - 40 && s.x < vista[2] + 40) brilho(ctx, s.x, s.y - 6, 18, 0.55 * escuro, s.brilha);
       if (noPoste === "lanternas") for (const s of postes) brilho(ctx, s.x + 0.5, s.y - alto + 5, 8, 0.6 * escuro, BRILHA.lanternas);
       ctx.globalCompositeOperation = "source-over";
     }
 
-    // no ar, sobre a parte da cidade que está na tela: fogos (à noite), confete, serpentina e morcegos
+    // no ar, sobre a parte da cidade que está na tela: fogos (à noite), confete, serpentina, neve e morcegos
     function ar(ctx, dt, t, vista, escuro, brilho) {
       if (!festa) return;
       const [vx0, vy0, vx1, vy1] = vista, w = vx1 - vx0, h = vy1 - vy0, rnd = Math.random;
       if (tem("fogos") && escuro > 0.4 && !reduzido) {
         if ((espera -= dt) <= 0 && fogos.length < 5) {
-          const y = vy0 + 16 + rnd() * h * 0.4, i = Math.floor(rnd() * 3);
-          fogos.push({ x: vx0 + 30 + rnd() * (w - 60), y, y0: y + 60 + rnd() * 30, k: 0, cor: cor(i), cor2: cor(i + 1), rgb: rgbs[i % rgbs.length],
+          const [ex0, ey0, ex1, ey1] = estouro(ancoras && ancoras.ceu, vista), i = Math.floor(rnd() * 3);
+          const y = ey0 + rnd() * (ey1 - ey0);
+          fogos.push({ x: ex0 + rnd() * (ex1 - ex0), y, y0: y + 60 + rnd() * 30, k: 0, cor: cor(i), cor2: cor(i + 1), rgb: rgbs[i % rgbs.length],
                        fase: rnd() * 6, alcance: 20 + rnd() * 12 });
           espera = 0.5 + rnd() * 0.9;
         }
@@ -303,6 +393,18 @@ const MundoFesta = (() => {
         for (let i = 0; i < 7; i++) ctx.fillRect(Math.round(q.x + Math.sin(i * 1.3 + q.f + t / 400) * 1.6), Math.round(q.y) + i, 1, 1);
       }
       estado.confete = confete.length; estado.serpentina = fitas.length;
+      if (neve() && !reduzido) {   // flocos caindo devagar, os primeiros já espalhados pela vista
+        for (let i = flocos.length ? 1 : FLOCOS / 2; i > 0 && flocos.length < FLOCOS; i--) {
+          flocos.push({ x: vx0 + rnd() * w, y: vy0 + (flocos.length < FLOCOS / 2 ? rnd() * h : -2), v: 6 + rnd() * 6, f: rnd() * 6 });
+        }
+        ctx.fillStyle = NEVE;
+        for (const q of flocos) {
+          q.y += q.v * dt; q.x += Math.sin(t / 900 + q.f) * 3 * dt;
+          ctx.fillRect(Math.round(q.x), Math.round(q.y), 1, 1);
+        }
+        flocos = flocos.filter(q => q.y < vy1 + 2);
+      } else flocos.length = 0;
+      estado.flocos = flocos.length;
       estado.morcegos = 0;
       if (tem("morcegos") && escuro > 0.3) for (let i = 0; i < 5; i++) {   // morcegos cruzando a noite
         const tt = reduzido ? 0 : t, x = Math.round(vx0 - 10 + ((tt / 45 + i * 157) % (w + 20)));
@@ -315,19 +417,20 @@ const MundoFesta = (() => {
     }
 
     // o começo de cada quadro: zera o que foi desenhado; o fim: guarda o estado
-    function comecar(f, p, id, ps) {
+    function comecar(f, p, id, ps, vista) {
       preparar(f, p, id);
-      postes = ps;
-      luzes.length = 0; desenhadas.clear(); pecas.length = 0;
+      postes = ps; vistaAtual = vista;
+      luzes.length = 0; desenhadas.clear(); pecas.length = 0; noPalco.length = 0;
       estado.chave = festa ? festa.chave : null;
-      estado.cordoes = estado.bandeirinhas = estado.luzes = estado.acesas = 0;
+      estado.neve = neve();
+      estado.cordoes = estado.bandeirinhas = estado.luzes = estado.acesas = estado.fios = estado.contornos = estado.fitas = 0;
     }
     function terminar(escuro) { estado.piscando = !!festa && tem("pisca") && escuro > 0.05 && !reduzido; }
 
     // desvio: quanto a fonte da praça anda para a direita nesta festa (0 sem festa ou com espaço de sobra)
-    return { comecar, terminar, chao, desenhar, poste, telhado, noite, ar, estado,
+    return { comecar, terminar, chao, desenhar, aereos, poste, telhado, noite, ar, estado,
              get itens() { return itens; }, get festa() { return festa; }, get desvio() { return desvio; } };
   }
-  return { criar };
+  return { criar, estouro, enquadrar };
 })();
 window.MundoFesta = MundoFesta;

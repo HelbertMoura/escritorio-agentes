@@ -14,7 +14,13 @@ body { margin: 0; background: var(--noite); color: var(--texto); font: 16px/1.5 
 .voltar { color: inherit; }
 h1 { margin: 28px 0 10px; color: var(--creme); font: 400 clamp(28px, 3.6vw, 44px)/1.15 var(--fonte-pixel); text-wrap: balance; }
 .ambiente p { max-width: 40ch; }
-canvas { display: block; width: min(100%, 640px); height: auto; margin-top: 32px; image-rendering: pixelated; background: #d7d6c9; outline: 6px solid #3f3f4d; }
+canvas { display: block; width: min(100%, 640px); height: auto; margin-top: 32px; image-rendering: pixelated; background: #1c1c22; outline: 6px solid #3f3f4d; }
+/* estado vazio da Conversa: a recepcionista acenando (16x16 em 4x), o título e a dica, no meio do espaço da lista */
+.conversa-vazia { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 180px; padding: 24px 0; text-align: center; }
+.conversa-vazia[hidden] { display: none; }
+.conversa-vazia canvas { width: 64px; height: 64px; margin: 0 0 8px; outline: 0; background: none; }
+.conversa-vazia p { margin: 0; }
+.conversa-vazia-titulo { color: var(--creme); font: 400 15px/1.4 var(--fonte-pixel); }
 .conversa { display: flex; flex-direction: column; min-height: 100vh; padding: clamp(24px, 4vw, 48px); background: var(--grafite); border-left: 4px solid var(--linha); }
 h2 { margin: 0; color: var(--creme); font: 400 22px/1.25 var(--fonte-pixel); }
 #estado, .nota { color: var(--suave); font-size: 14px; }
@@ -88,8 +94,12 @@ select { display: block; width: 100%; min-height: 44px; border: 2px solid var(--
   /* o mapa vem primeiro (DOM e tela na mesma ordem) e ocupa a primeira dobra; a ajuda longa desce recolhida */
   .mundo { display: block; }
   .mundo:not(.tv) .mundo-cena-topo { display: flex; }
-  .mundo-painel { padding: 16px; border-right: 0; border-top: 4px solid var(--linha); border-bottom: 0; }
-  .mundo-painel h1 { margin: 8px 0 4px; font-size: 26px; }
+  /* folha de baixo: encosta no mapa com um puxador de pixel; a ação principal vem logo depois do estado */
+  .mundo-painel { position: relative; z-index: 4; margin-top: -8px; padding: 22px 16px max(16px, env(safe-area-inset-bottom)); border-right: 0;
+    border-top: 4px solid var(--linha); border-bottom: 0; box-shadow: 0 -6px 0 rgba(0, 0, 0, .35); }
+  .mundo-painel::before { content: ""; position: absolute; left: 50%; top: 8px; width: 40px; height: 4px; margin-left: -20px; background: var(--linha); }
+  .mundo-painel .marca { display: none; }
+  .mundo-painel h1 { margin: 0 0 4px; font-size: 22px; }
   .mundo-painel p { margin: 6px 0; font-size: 15px; }
   .mundo-ajuda > summary { display: flex; align-items: center; min-height: 44px; padding: 0 12px; border: 1px solid var(--linha);
     background: var(--grafite-2); color: var(--creme); font-weight: 600; font-size: 15px; cursor: pointer; list-style: none; }
@@ -97,16 +107,10 @@ select { display: block; width: 100%; min-height: 44px; border: 2px solid var(--
   .mundo-ajuda > summary::after { content: "▾"; margin-left: auto; color: var(--suave); }
   .mundo-ajuda[open] > summary::after { content: "▴"; }
   .mundo-teclas { display: none; }
-  .mundo-painel #entrar { min-height: 44px; margin-top: 4px; }
+  .mundo-painel #entrar { width: 100%; min-height: 52px; margin-top: 4px; }
   #mundo-estado { min-height: 0; }
-  .mundo-palco { height: min(130vw, 75svh); }
-  /* No bairro normal o canvas mantém 16:9 e os controles descem para uma faixa em fluxo logo abaixo: não cobrem a rua
-     nem encostam no alvo da porta. A arte não é dimensionada pela barra; a TV segue em tela cheia. */
-  .mundo.no-bairro:not(.tv) .mundo-palco { display: flex; flex-direction: column; height: auto; }
-  .mundo.no-bairro:not(.tv) .mundo-palco canvas { position: relative; inset: auto; width: 100%; height: auto; aspect-ratio: 16 / 9; }
-  .mundo.no-bairro:not(.tv) .mundo-controles { position: static; justify-content: flex-end; min-height: 56px;
-    padding: 4px max(10px, env(safe-area-inset-right)) 4px max(10px, env(safe-area-inset-left));
-    background: #0b0d12; border-top: 1px solid var(--linha); }
+  /* a cena ocupa uns 70% da tela, em escala inteira e sem tarja (mundo.js: Camera inteira); a folha vem embaixo */
+  .mundo-palco { height: 70vh; height: 70svh; }
   .mundo-controles { right: max(10px, env(safe-area-inset-right)); bottom: max(10px, env(safe-area-inset-bottom)); }
 }
 @media (max-width: 700px) { .layout { display: block; } .conversa { min-height: 60vh; } }
