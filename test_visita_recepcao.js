@@ -7,6 +7,7 @@ async function principal() {
   const ids = ["estado", "mensagens", "mensagens-vazio", "caracteres-restantes", "formulario", "texto", "sair", "cena", "mapa-estado", "ver-sala", "ver-escritorio"];
   const transforms = [], requisicoes = [], retangulos = [], preenchimentos = [], textos = [], recortes = [];
   const ctx = { clearRect() {}, drawImage() {}, save() {}, restore() {}, beginPath() {}, clip() { recortes.push(true); },
+    fillRect() {}, measureText: t => ({ width: t.length * 5 }),
     rect(...v) { retangulos.push(v); }, fill(regra) { preenchimentos.push(regra); }, fillText(texto, x, y) { textos.push([texto, x, y]); },
     setTransform(...v) { transforms.push(v); } };
   const elementos = Object.fromEntries(ids.map(id => [id, {
@@ -40,12 +41,17 @@ async function principal() {
   assert.equal(elementos["ver-sala"].disabled, true);
   assert.match(elementos["mapa-estado"].textContent, /Recepção pública/);
   assert.match(elementos["mapa-estado"].textContent, /apagadas exigem convite/);
-  // prédio inteiro em escala 1, sem recorte; tudo fora da recepção fica coberto
-  assert.deepEqual(transforms[1], [1, 0, 0, 1, 0, 0]);
+  // prédio inteiro em escala inteira (640 px de mundo, 2x), com o canvas no formato dele, sem recorte; tudo fora da
+  // recepção fica coberto
+  assert.deepEqual(transforms[0], [2, 0, 0, 2, 0, 0]);
+  assert.equal(elementos.cena.width, 1280); assert.equal(elementos.cena.height, 720);
   assert.deepEqual(recortes, []);
   assert.deepEqual(retangulos, [[0, 0, 640, 360], [20, 20, 200, 100]]);
   assert.deepEqual(preenchimentos, ["evenodd"]);
-  assert.deepEqual(textos, [["Com convite", 350, 70], ["Com convite", 120, 250]]);
+  // a placa "COM CONVITE" no meio de cada sala apagada (lounge e reunião), com o texto dentro da sala
+  assert.deepEqual(textos.map(t => t[0]), ["COM CONVITE", "COM CONVITE"]);
+  for (const [[, x, y], s] of textos.map((t, i) => [t, i ? { px: 20, py: 200, pw: 200, ph: 100 } : { px: 300, py: 20, pw: 100, ph: 100 }]))
+    assert.ok(x > s.px && x < s.px + s.pw && Math.abs(y - (s.py + s.ph / 2)) <= 1, `placa fora da sala (${x}, ${y})`);
   assert.deepEqual(requisicoes.map(([url]) => url).sort(), ["/api/visitas/recepcao", "/tema/atlas.json"].sort());
 }
 principal().catch(e => { console.error(e); process.exitCode = 1; });

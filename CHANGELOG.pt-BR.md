@@ -6,6 +6,12 @@ As mudanças que importam neste projeto ficam aqui, da mais nova para a mais ant
 
 ## Não lançado
 
+### Alterado
+- **HUD do mapa em quatro cantos:** o selo da hora e o "! Esperando você N" ficam em cima à esquerda, a câmera em cima à direita, a Simulação vira uma faixa índigo dentro do mapa (embaixo à esquerda, sem cobrir listas nem filtros) e a dica mostra as teclas no computador. Tudo com o mesmo relevo de 3 px e Pixeloid. O "Esperando você" some com a fila vazia e não segue mais o balcão. No celular, a câmera vira um dock de 44 px embaixo, com a Simulação logo acima.
+- **Noite do escritório com luz própria:** penumbra índigo leve nas salas, luz em 3 degraus duros (abajures, telas, fliperamas, máquina de bebidas, cozinha e teto), cerca de 70% das janelas da fachada acesas (sorteio fixo no dia) com reflexo na calçada e chuva em riscos de pixel, desenhada depois da noite. Com movimento reduzido, a chuva fica parada.
+- **Mundo em cena cheia:** o bairro sempre em escala inteira (4x no computador, 3x no celular), sem tarja, com o céu esticado e o recorte na porta da firma. No celular, a cidade também vira cena cheia em escala inteira, aberta no marco, e o painel vira uma folha de baixo com a ação principal de 52 px e a ajuda recolhida.
+- **Visita:** o mapa sem tarja bege (o canvas toma o formato da área, em escala inteira), placa de pixel com cadeado em "Com convite" e estado vazio desenhado na Conversa, com a recepcionista acenando.
+
 ### Corrigido
 - **Dica do mapa na tela pequena:** a dica de um ponto perto da borda (no mapa, na cidade ou na cena) agora fica dentro da tela, a 8 px da borda.
 - **Conferência das cenas:** a pista aceita faixa de pedestre (com pelo menos 70% do eixo no asfalto ou na ponte), cada cor entra em uma só classe de superfície, uma oclusão listrada não esconde mais uma calçada traçada fora da arte, o JSON editado sem `indice` reprova e a fonte da festa precisa caber na praça (ajuste em Belo Horizonte e Mateus Leme). O `sugerir` passa a limpar ruído e respeitar o teto de nós, e o `importar` registra retoques na proveniência.

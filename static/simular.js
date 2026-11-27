@@ -126,7 +126,8 @@ const Simular = (() => {
       el("button", { type: "button", classe: "sim-ajustar", texto: "Ajustar", onclick: () => abrir() }),
       el("button", { type: "button", classe: "sim-real", "aria-label": "Voltar ao real", onclick: () => irPara({}) },
         el("span", { classe: "sim-longo", texto: "Voltar ao real" }), el("span", { classe: "sim-curto", texto: "Real" })));
-    document.body.append(aviso);
+    const palco = document.getElementById("palco");   // no escritório, a faixa é do próprio mapa (estilo.css: .palco .sim-aviso)
+    if (palco) { aviso.classList.add("sim-no-mapa"); palco.append(aviso); } else document.body.append(aviso);
   }
 
   // --- painel ----------------------------------------------------------------------------------

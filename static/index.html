@@ -172,14 +172,17 @@
           <section id="faixa-ausencia" class="faixa-ausencia" aria-live="polite" hidden></section>
           <div id="palco" class="palco">
             <canvas id="tela" tabindex="0" aria-label="Mapa do escritório. Arraste para mover, use a roda ou a pinça para dar zoom e toque num agente para ver o que ele está fazendo."></canvas>
-            <!-- selo curto: hora, ícone do tempo e temperatura; o clique (ou o title) mostra a cidade e o tempo por extenso -->
-            <button id="selo-vivo" class="selo-vivo" type="button" aria-expanded="false"><span id="ao-vivo" class="ao-vivo" aria-hidden="true"></span><span id="relogio" class="relogio"></span><span id="selo-icone" class="selo-icone" aria-hidden="true"></span><span id="selo-temp" class="relogio"></span><span id="selo-mais" class="selo-mais" hidden></span></button>
+            <!-- HUD do mapa, canto de cima à esquerda: o selo da hora e, só com pendência, o "! Esperando você N" (recepcao.js + app.js) -->
+            <div class="hud-se">
+              <!-- selo curto: hora, ícone do tempo e temperatura; o clique (ou o title) mostra a cidade e o tempo por extenso -->
+              <button id="selo-vivo" class="selo-vivo" type="button" aria-expanded="false"><span id="ao-vivo" class="ao-vivo" aria-hidden="true"></span><span id="relogio" class="relogio"></span><span id="selo-icone" class="selo-icone" aria-hidden="true"></span><span id="selo-temp" class="relogio"></span><span id="selo-mais" class="selo-mais" hidden></span></button>
+              <!-- o atalho da recepção: só com pendência, abre a lista recolhível -->
+              <button id="recepc" class="recepc" type="button" aria-expanded="false" aria-controls="recepc-painel" hidden><span class="recepc-ponto" aria-hidden="true">!</span><span class="recepc-rot">Esperando você</span><span id="recepc-n" class="recepc-n" aria-hidden="true" hidden></span></button>
+            </div>
             <div id="aviso-greve" class="aviso-greve" hidden>
               <p class="greve-linha"><span class="greve-ic" aria-hidden="true">✊</span><span><strong id="greve-texto">Greve</strong> <span id="greve-motivo" class="greve-motivo"></span></span></p>
               <button id="greve-atender" class="botao so-admin" type="button" aria-describedby="greve-texto greve-motivo">Atender o pedido</button>
             </div>
-            <!-- o atalho da recepção (recepcao.js + app.js): ligado ao balcão no mapa, abre a lista recolhível de pendências -->
-            <button id="recepc" class="recepc" type="button" aria-expanded="false" aria-controls="recepc-painel" hidden><span class="recepc-ponto" aria-hidden="true"></span><span class="recepc-rot">Esperando você</span><span id="recepc-n" class="recepc-n" aria-hidden="true" hidden></span></button>
             <section id="recepc-painel" class="recepc-painel" role="region" aria-labelledby="recepc-titulo" hidden>
               <div class="recepc-topo"><h2 id="recepc-titulo">Esperando você</h2><button id="recepc-fechar" class="recepc-fechar" type="button" aria-label="Fechar a lista da recepção">×</button></div>
               <div id="recepc-lista" class="recepc-lista"></div>
@@ -207,7 +210,7 @@
               <button id="tv-cheia" class="tv-bt" type="button" hidden>Tela cheia</button>
               <button id="tv-sair" class="tv-bt" type="button">Sair do modo TV</button>
             </div>
-            <span class="dica-mapa" aria-hidden="true">Toque num agente</span>
+            <span class="dica-mapa" aria-hidden="true"><span class="dica-toque">Toque num agente</span><span class="dica-mouse"><kbd>clique</kbd> num agente <kbd>roda</kbd> zoom <kbd>arraste</kbd> mover</span></span>
             <div id="cartao-agente" class="cartao-agente" hidden></div>
             <div id="ficha" class="ficha" role="dialog" aria-labelledby="ficha-nome" hidden></div>
             <!-- resumo compacto da sala (app.js): porta e placa no mapa, ou o botão da sala pelo teclado -->

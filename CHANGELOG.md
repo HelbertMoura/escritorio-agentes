@@ -6,6 +6,12 @@ All notable changes to this project are listed here, newest first. The format fo
 
 ## Unreleased
 
+### Changed
+- **Map HUD in four corners:** the time badge and "! Waiting for you N" sit top left, the camera top right, the Simulation becomes an indigo strip inside the map (bottom left, no longer covering lists or filters) and the hint shows the keys on desktop. All share the same 3 px bevel and Pixeloid. "Waiting for you" hides when the queue is empty and no longer follows the front desk. On phones the camera becomes a 44 px dock at the bottom, with the Simulation right above it.
+- **Office night with its own light:** a light indigo dimness in the rooms, light in 3 hard steps (desk lamps, screens, arcades, drinks machine, kitchen and ceiling), about 70% of the facade windows lit (a fixed daily draw) with a reflection on the sidewalk, and rain in pixel streaks drawn after the night. With reduced motion, the rain stands still.
+- **World in full scene:** the neighbourhood always at an integer scale (4x on desktop, 3x on phones), with no letterbox, an extended sky and the crop on the office door. On phones the city also fills the screen at an integer scale, opening on the landmark, and the panel becomes a bottom sheet with a 52 px main action and the help collapsed.
+- **Visit:** the map without the beige bands (the canvas takes the area's shape, at an integer scale), a pixel sign with a padlock on "By invitation" and a drawn empty state in the Conversation panel, with the receptionist waving.
+
 ### Fixed
 - **Map tooltip on small screens:** the tooltip of a point near the edge (map, city or scene) now stays on screen, 8 px from the edge.
 - **Scene checks:** the car loop accepts crosswalk pixels (with at least 70% of its centre line on asphalt or bridge), each colour belongs to a single surface class, a striped occlusion no longer hides a sidewalk traced off the art, a JSON edited without `indice` fails, and the festival fountain must fit inside the square (adjusted in Belo Horizonte and Mateus Leme). `sugerir` now removes noise and respects the node cap, and `importar` records retouches in the provenance file.

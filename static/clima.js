@@ -39,6 +39,7 @@ const Clima = (() => {
   function balanco(fase) {
     return -vento * 2.5 + Math.sin(giro + fase) * (0.8 + vento * 1.6);
   }
+  const calmo = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   function chove() { return ["chuva", "garoa", "tempestade"].includes(tipo()); }
   function texto(curto) { // curto: só a temperatura (relógio do celular)
     if (curto) return atual.temperatura != null ? `${Math.round(atual.temperatura)}°C` : "";
@@ -65,22 +66,25 @@ const Clima = (() => {
       ctx.restore();
     }
     if (chove()) {
-      // chuva leve, de fundo: poucas gotas e traço fraco, para não disputar o olho com o "!" e o "?" do mapa
-      const alvo = k === "garoa" ? 60 : k === "tempestade" ? 260 : 150, vel = k === "garoa" ? 160 : 300;
+      // chuva de pixel, lá fora: riscos claros mas finos, que não disputam o olho com o "!" e o "?" do mapa
+      const alvo = k === "garoa" ? 90 : k === "tempestade" ? 380 : 240, vel = k === "garoa" ? 160 : 300;
       while (gotas.length < alvo) gotas.push({ x: Math.random() * W, y: Math.random() * H, v: vel * (0.8 + Math.random() * 0.4) });
       gotas.length = Math.min(gotas.length, alvo);
       ctx.save(); clipFora(ctx, p);
       ctx.fillStyle = "rgba(30,40,70,.1)"; ctx.fillRect(0, 0, W, H);                 // chão molhado
-      // o traço tem pelo menos 1 px na tela: com o mapa afastado (escala < 1), a chuva sumia
-      const tr = ctx.getTransform && ctx.getTransform(), escala = tr && tr.a > 0 ? tr.a : 1;
-      ctx.strokeStyle = "rgba(190,210,255,.28)"; ctx.lineWidth = Math.max(1, 1 / escala); ctx.beginPath();
+      // riscos de pixel de 1x4 (4 pixels inteiros do mundo, que deitam em degraus com o vento); com o mapa afastado (escala < 1), pelo menos 1 px na tela.
+      // Com movimento reduzido, a chuva fica parada no lugar (nem cai nem respinga).
+      const tr = ctx.getTransform && ctx.getTransform(), escala = tr && tr.a > 0 ? tr.a : 1, px = Math.max(1, 1 / escala);
+      const parada = calmo(), passo = parada ? 0 : dt;
+      ctx.fillStyle = "rgba(200,220,255,.5)"; ctx.beginPath();
       const inclina = 0.18 + vento * 0.8;   // a chuva deita com o vento
       for (const g of gotas) {
-        g.y += g.v * dt; g.x -= g.v * dt * inclina;
+        g.y += g.v * passo; g.x -= g.v * passo * inclina;
         if (g.y > H || g.x < 0) { if (fora(p, g.x, g.y) && Math.random() < 0.15) respingos.push({ x: g.x, y: Math.min(g.y, H - 2), v: 0 }); g.y = -4; g.x = Math.random() * (W + 40 + inclina * H); }
-        ctx.moveTo(g.x, g.y); ctx.lineTo(g.x + 1.5 + (inclina - 0.18) * 5, g.y - 5);
+        const x = Math.round(g.x), y = Math.round(g.y);
+        for (let k = 0; k < 4; k++) ctx.rect(x + Math.round(k * inclina) * px, y - (k + 1) * px, px, px);   // o risco deita em degraus
       }
-      ctx.stroke();
+      ctx.fill();
       for (const r of respingos) { r.v += dt; ctx.fillStyle = `rgba(200,220,255,${0.35 - r.v})`; ctx.fillRect(r.x - 1 - r.v * 6, r.y, 1, 1); ctx.fillRect(r.x + 1 + r.v * 6, r.y, 1, 1); }
       respingos = respingos.filter(r => r.v < 0.3);
       ctx.restore();

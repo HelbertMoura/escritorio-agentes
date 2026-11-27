@@ -47,6 +47,9 @@
     var(--pixel) 100%, var(--pixel) calc(100% - var(--pixel)), 0 calc(100% - var(--pixel)));
   --relevo: inset -3px -3px 0 var(--destaque-escuro), inset 3px 3px 0 var(--destaque-claro);
   --relevo-neutro: inset -3px -3px 0 #111116, inset 3px 3px 0 var(--borda-forte);
+  --hud: rgba(16, 16, 21, .92);                       /* fundo das peças do HUD do mapa */
+  --relevo-ambar: inset -3px -3px 0 #9b6e1e, inset 3px 3px 0 #f6cf86;
+  --relevo-indigo: inset -3px -3px 0 #1d2652, inset 3px 3px 0 var(--indigo-claro);
   --cartao-sombra: inset 0 0 0 2px var(--borda), inset 0 -6px 0 #17171d;
   --afundado: inset 3px 3px 0 rgba(0, 0, 0, .45);      /* item escolhido parece pressionado */
   --sombra-dura: 6px 6px 0 rgba(0, 0, 0, .45);
@@ -280,9 +283,12 @@ h2 { font-size: 15px; margin: 0; font-weight: 600; }
 #tela { display: block; image-rendering: pixelated; touch-action: none; cursor: grab; }
 #tela:focus-visible { outline-offset: -3px; }
 .palco-cartao { margin-bottom: 16px; }
+/* HUD do mapa: quatro cantos fixos com o mesmo relevo de 3 px e Pixeloid. Em cima à esquerda, o selo e o "!" da fila;
+   em cima à direita, a câmera; embaixo à esquerda, a Simulação (simular.js); embaixo à direita, a dica de controle. */
+.hud-se { position: absolute; left: 12px; top: 12px; z-index: 4; display: flex; gap: 4px; align-items: stretch; max-width: calc(100% - 340px); min-width: 0; }
 /* selo do mapa: uma pílula curta (hora, ícone do tempo e temperatura); o clique abre a cidade e o tempo por extenso */
-.selo-vivo { position: absolute; left: 14px; top: 14px; z-index: 3; margin: 0; display: inline-flex; align-items: center; gap: 7px; min-height: 28px; padding: 0 10px; border-radius: 0;
-  max-width: max(160px, calc(100% - 330px)); background: rgba(20, 20, 26, .9); border: 2px solid var(--borda-forte); color: var(--texto); cursor: pointer; text-align: left; }
+.selo-vivo { margin: 0; display: inline-flex; align-items: center; gap: 7px; min-height: 36px; min-width: 0; padding: 0 12px; border: 0; border-radius: 0;
+  background: var(--hud); box-shadow: var(--relevo-neutro); color: var(--texto); cursor: pointer; text-align: left; }
 .selo-vivo:hover { background: rgba(32, 32, 40, .96); }
 .selo-vivo:focus-visible { outline: 2px solid var(--destaque); outline-offset: 2px; }
 .selo-vivo .ao-vivo { flex: none; width: 7px; height: 7px; border-radius: 0; animation: none; }   /* no mapa, só o "!" e o "?" pulsam */
@@ -291,7 +297,7 @@ h2 { font-size: 15px; margin: 0; font-weight: 600; }
 .selo-icone { flex: none; color: #ffd36b; font: 15px/1 system-ui, "Segoe UI Symbol", sans-serif; }
 .selo-icone:empty { display: none; }
 .selo-vivo[aria-expanded="true"] .relogio, .selo-vivo[aria-expanded="true"] .selo-icone { display: none; }
-.controles { position: absolute; top: 12px; right: 12px; display: flex; gap: 2px; padding: 3px; border-radius: var(--r-botao); background: rgba(20, 20, 26, .94); border: 2px solid var(--borda-forte); }
+.controles { position: absolute; top: 12px; right: 12px; z-index: 4; display: flex; gap: 2px; padding: 3px; border-radius: var(--r-botao); background: var(--hud); box-shadow: var(--relevo-neutro); }
 .controles button { min-height: max(32px, var(--ctl)); min-width: max(32px, var(--ctl)); padding: 0 10px; border: 0; border-radius: 0; background: transparent; color: var(--texto);
   font-weight: 600; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; transition: background var(--rapido); }
 .controles button:hover { background: rgba(255, 255, 255, .1); }
@@ -307,13 +313,15 @@ h2 { font-size: 15px; margin: 0; font-weight: 600; }
 .controles .controles-menu button { justify-content: flex-start; gap: 10px; width: 100%; padding: 0 12px; }
 
 /* atalho da recepção no mapa (app.js + recepcao.js): o chip âmbar ligado ao balcão, e a lista recolhível */
-.recepc { position: absolute; z-index: 4; display: inline-flex; align-items: center; gap: 7px; min-height: max(30px, var(--ctl)); max-width: calc(100% - 16px);
-  padding: 0 10px; border: 1px solid color-mix(in srgb, var(--ambar) 60%, transparent); border-radius: var(--r-botao); background: rgba(28, 28, 34, .94);
-  color: var(--creme); font: 600 12.5px/1 Figtree, system-ui, sans-serif; white-space: nowrap; box-shadow: var(--sombra-dura); transition: background var(--rapido); }
-.recepc:hover { background: var(--cartao2); }
-.recepc-ponto { flex: none; width: 8px; height: 8px; background: var(--ambar); box-shadow: 0 0 0 2px var(--ambar-fundo); }
-.recepc-n { flex: none; display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 0; background: var(--ambar); color: var(--ambar-sobre); font: 700 11px/1 Figtree, system-ui, sans-serif; font-variant-numeric: tabular-nums; }
-.recepc-painel { position: absolute; z-index: 6; width: min(340px, calc(100% - 16px)); max-height: min(60%, 420px); display: flex; flex-direction: column;
+/* o "!" da fila: forma (o "!") + texto + número, nunca só a cor; some com a fila vazia (app.js: posicionarRecepcao) */
+.recepc { flex: none; display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 6px 0 10px; border: 0; border-radius: 0;
+  background: var(--ambar); box-shadow: var(--relevo-ambar); color: var(--ambar-sobre); font: 400 12px/1 var(--fonte-pixel); letter-spacing: .3px; white-space: nowrap; }
+.recepc[hidden] { display: none; }
+.recepc:hover { background: #e8b65e; }
+.recepc:active { box-shadow: var(--afundado); }
+.recepc-ponto { flex: none; font: 400 14px/1 var(--fonte-pixel); }
+.recepc-n { flex: none; display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 0; background: var(--ambar-sobre); color: var(--ambar); font: 400 12px/1 var(--fonte-pixel); font-variant-numeric: tabular-nums; }
+.recepc-painel { position: absolute; left: 12px; top: 56px; z-index: 6; width: min(340px, calc(100% - 24px)); max-height: min(60%, 420px); display: flex; flex-direction: column;
   background: var(--cartao); border: 2px solid var(--borda-forte); border-radius: var(--r-cartao); box-shadow: var(--sombra-dura); }
 .recepc-topo { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 8px 6px 12px; border-bottom: 1px solid var(--borda); }
 .recepc-topo h2 { margin: 0; color: var(--creme); font: 400 13px/1.3 var(--fonte-pixel); }
@@ -329,16 +337,28 @@ body.tv .recepc, body.tv .recepc-painel, body.modo-foto .recepc, body.modo-foto 
 html.apresentacao #recepc, html.apresentacao #recepc-painel, body.tv .resumo-sala, body.modo-foto .resumo-sala,
 html.apresentacao #resumo-sala { display: none !important; }
 @media (max-width: 760px) {
-  .recepc { min-height: 44px; font-size: 12px; }
   /* a lista vira folha embaixo, sobrando o mapa: 40dvh no máximo e rolagem por dentro */
-  .recepc-painel { left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right));
+  .recepc-painel { top: auto; left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right));
     bottom: max(8px, env(safe-area-inset-bottom)); width: auto; max-height: 40dvh; }
   .recepc-topo { position: sticky; top: 0; background: var(--cartao); }
 }
 .rotulo-menu { font-size: 13.5px; font-weight: 600; white-space: nowrap; }
 .so-celular { display: none; }
-.dica-mapa { position: absolute; right: 14px; bottom: 14px; z-index: 3; height: 28px; padding: 0 11px; border-radius: 0; background: rgba(20, 20, 26, .94); border: 2px solid var(--borda-forte);
-  display: inline-flex; align-items: center; font-size: 12.5px; font-weight: 600; color: var(--texto2); pointer-events: none; }
+.dica-mapa { position: absolute; right: 12px; bottom: 12px; z-index: 3; min-height: 32px; padding: 0 10px; border-radius: 0; background: var(--hud); box-shadow: var(--relevo-neutro);
+  display: inline-flex; align-items: center; font-size: 12.5px; font-weight: 600; color: var(--suave); pointer-events: none; }
+.dica-mapa kbd { margin: 0 6px 0 0; padding: 1px 5px; border: 2px solid var(--borda-forte); color: var(--creme); font: 400 11px/1.2 var(--fonte-pixel); }
+.dica-mapa kbd:not(:first-child) { margin-left: 8px; }
+.dica-mouse { display: none; }
+@media (hover: hover) and (pointer: fine) { .dica-toque { display: none; } .dica-mouse { display: inline; } }
+/* a Simulação (simular.js) vira faixa índigo do próprio mapa, embaixo à esquerda: não cobre listas nem filtros */
+.palco .sim-aviso { position: absolute; left: 12px; right: auto; bottom: 12px; transform: none; z-index: 4; max-width: calc(100% - 24px); gap: 4px; padding: 3px 3px 3px 12px;
+  border: 0; background: var(--indigo-escuro); box-shadow: var(--relevo-indigo); color: var(--creme); font: 400 12px/1.3 var(--fonte-pixel); letter-spacing: .3px; }
+.palco .sim-aviso p { padding-right: 6px; }
+.palco .sim-aviso button { min-height: 32px; padding: 0 10px; font: 400 12px/1 var(--fonte-pixel); letter-spacing: .3px; }
+.palco .sim-aviso .sim-ajustar { border: 0; background: var(--indigo); box-shadow: var(--relevo-indigo); color: var(--creme); }
+.palco .sim-aviso .sim-real { box-shadow: var(--relevo); }
+.palco .sim-aviso button:active { box-shadow: var(--afundado); }
+.palco .sim-aviso button:focus-visible { outline: 2px solid var(--creme); outline-offset: 2px; }
 .dica-mapa[hidden] { display: none; }
 .faixa-erro { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 6px 8px 6px 14px; min-height: 52px;
   background: #3b1212; border-bottom: 1px solid #7f1d1d; color: var(--erro-texto); font-size: 14px; font-weight: 600; animation: surgir var(--medio); }
@@ -1196,12 +1216,19 @@ body.demo [data-rota="personalizar"] { display: none; }
   .filtros-abrir-atual { margin-left: auto; color: var(--creme); font-weight: 700; }
   .cartao { border-radius: 0; }
   /* a câmera numa barra baixa no canto de baixo à esquerda: não cobre a borda direita do mapa nem o topo */
-  .controles { top: auto; bottom: 8px; left: 8px; right: auto; gap: 0; padding: 0; border-radius: 0; border: 1px solid rgba(255,255,255,.18); background: rgba(15,15,17,.84); }
+  /* dock da câmera embaixo, na largura do mapa, com alvos de 44 px; a Simulação logo acima dele */
+  .controles { top: auto; bottom: 8px; left: 8px; right: 8px; gap: 0; padding: 3px; border-radius: 0; }
+  .controles > button, .controles > .zoom-nivel { flex: 1 1 0; }
   .controles > button { border: 0; border-radius: 0; background: transparent; padding: 0; min-width: 44px; min-height: 44px; box-shadow: none; backdrop-filter: none; }
-  .controles > button + button { border-left: 1px solid rgba(255,255,255,.12); }
+  .controles > * + * { border-left: 2px solid #111116; }
+  .palco .sim-aviso { left: 8px; right: 8px; bottom: 62px; max-width: none; }
+  .palco .sim-aviso button { min-height: 44px; }
+  .hud-se { left: 8px; top: 8px; right: 8px; max-width: none; justify-content: space-between; }
+  .recepc { min-height: 44px; padding: 0 4px 0 12px; }
+  .recepc-rot { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .controles .rotulo-ver { display: none; }
   .zoom-nivel { min-width: 28px; }
-  .controles-menu { top: auto; bottom: calc(100% + 6px); left: -1px; right: auto; }
+  .controles-menu { top: auto; bottom: calc(100% + 6px); left: auto; right: 0; }
   .controles .controles-menu button { min-height: 44px; }
   /* o mapa logo abaixo do título; filtros, "Só você está olhando" e "Aparecer" vêm depois dele */
   #v-escritorio:not([hidden]) { display: flex; flex-direction: column; }
@@ -1215,7 +1242,6 @@ body.demo [data-rota="personalizar"] { display: none; }
   #equipe { order: 5; }
   #atualizado { order: 5; }
   #v-escritorio > .widgets, #v-escritorio > .agora { order: 6; }
-  .selo-vivo { left: 10px; top: 10px; max-width: calc(100% - 20px); }
   .aviso-greve { left: 8px; right: 8px; bottom: 62px; max-width: none; gap: 8px; padding: 6px 6px 6px 10px; }   /* tela cheia: acima da barra da câmera (embaixo à esquerda) */
   .greve-linha { font-size: 13px; }
   .dica-mapa { display: none; }
@@ -1250,8 +1276,8 @@ body.demo [data-rota="personalizar"] { display: none; }
 /* modo foto: a faixa "Simulação" (simular.js) sairia em cima da barra do modo foto; some enquanto ele está aberto */
 body.modo-foto .sim-aviso { display: none; }
 /* com a simulação ativa, a faixa dela (fixa embaixo, simular.js) não cobre o fim da página nem o rodapé */
-body:has(.sim-aviso) main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
-@media (max-width: 760px) { body:has(.sim-aviso) main { padding-bottom: calc(148px + env(safe-area-inset-bottom)); } }   /* no celular a faixa quebra em 2 linhas (~114 px) */
+body:has(.sim-aviso:not(.sim-no-mapa)) main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+@media (max-width: 760px) { body:has(.sim-aviso:not(.sim-no-mapa)) main { padding-bottom: calc(148px + env(safe-area-inset-bottom)); } }   /* no celular a faixa quebra em 2 linhas (~114 px) */
 /* boas-vindas (nome de exemplo): diálogo modal do personalizar.js */
 .boas-vindas { width: min(480px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); padding: 0; border: 2px solid var(--borda-forte); border-radius: var(--r-cartao);
   background: var(--cartao); color: var(--texto); box-shadow: var(--sombra-dura); overflow: auto; }
