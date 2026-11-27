@@ -8,6 +8,9 @@
 // Arrastar gira o globo; um clique ou zoom sobre o Brasil desce ao nível Brasil (um zoom fora dele gira o globo até o
 // Brasil e então desce). Com movimento reduzido o globo não gira sozinho (fica no centro inicial e só gira à mão), e
 // nuvens, estrelas, luzes e seta ficam paradas, sem estrela cadente.
+// Nas datas comemorativas, tudo por cima da passada: um marcador em cada cidade em festa (festaEm(id)) e, pela festa de
+// Brasília (festa()), o trenó do Natal diante da lua, os fogos sobre as cidades à noite e a lua laranja com morcegos no
+// Halloween. Com movimento reduzido, marcadores, trenó e morcegos parados e nenhum fogo.
 "use strict";
 const Globo = (() => {
   const B = 288, C = B / 2, R = 136, VAO = 26, GIRO = 6, LAT0 = -15, LON0 = -50, TW = 720, TH = 360;
@@ -39,6 +42,9 @@ const Globo = (() => {
   const SETA = ["...kkkkk...", "...klask...", "...klask...", "...klask...", "kkkklaskkkk", ".klaaaaask.", "..klaaask..",
     "...klask...", "....kak....", ".....k....."];
   const CORES_SETA = { k: "#2a2217", a: "#f5c84d", l: "#fff1b0", s: "#c9962e" };
+  // o trenó do Natal (11x4, indo para a esquerda): r nariz e arreio, m renas e esquis, y o saco
+  const TRENO = ["r..m....y..", ".mm..mm.yyr", ".mm..mm.rrr", "m..mm..mmmm"], CORES_TRENO = { r: "#e11d48", m: "#7a4a24", y: "#facc15" };
+  const LARANJA = "#f97316";
   // o brilho em volta da luz de uma cidade: [dx, dy, força]
   const HALO = [1, 0, 0.42, -1, 0, 0.42, 0, 1, 0.42, 0, -1, 0.42];
   const HALO_GRANDE = [1, 0, 0.62, -1, 0, 0.62, 0, 1, 0.62, 0, -1, 0.62, 1, 1, 0.34, -1, 1, 0.34, 1, -1, 0.34, -1, -1, 0.34,
@@ -200,7 +206,7 @@ const Globo = (() => {
     return disco;
   }
 
-  function criar({ dados, Camera, reduzido }) {
+  function criar({ dados, Camera, reduzido, festa = () => null, festaEm = () => null }) {
     // ?hora= é a hora de Brasília (UTC−3), parada, de hoje ou do dia de ?data=AAAA-MM-DD (o sol e a fase da lua); com
     // ?data= sozinho, vale esse dia com a hora de agora, andando
     const busca = new URLSearchParams(location.search), simulada = parseFloat(busca.get("hora"));
@@ -454,10 +460,11 @@ const Globo = (() => {
     let luaTela = null, luaChave = -1;
     const CRATERAS = [[-0.42, 0.42, 0.2], [0.42, 0.36, 0.16], [0.5, -0.4, 0.13], [-0.1, 0.62, 0.12], [0.08, -0.62, 0.11]];
     const MARES = [[-0.2, -0.2, 0.38, 0.28], [0.26, -0.12, 0.22, 0.3], [-0.42, 0.06, 0.18, 0.2]];
-    function desenharLua(data) {
+    function desenharLua(data, tinta) {
       const idade = ((((data.getTime() / 86400000 + 2440587.5 - 2451550.1) / 29.530588853) % 1) + 1) % 1, passo = Math.round(idade * 48) % 48;
-      if (luaTela && luaChave === passo) return luaTela;
-      luaChave = passo;
+      const nova = passo + "|" + (tinta || "");
+      if (luaTela && luaChave === nova) return luaTela;
+      luaChave = nova;
       luaTela = luaTela || document.createElement("canvas"); luaTela.width = luaTela.height = 29;
       const g = luaTela.getContext("2d"), a = passo / 48 * 2 * Math.PI, lx = -Math.sin(a), lz = -Math.cos(a);
       if (!g) return luaTela;
@@ -478,6 +485,10 @@ const Globo = (() => {
           if (r2 > 0.86 && !cr) cor = mare ? "#a5a196" : "#d2ccbd";
         } else cor = r2 > 0.9 ? "rgba(170,185,225,0.13)" : "rgba(150,165,205,0.07)";   // a luz da Terra: quase transparente
         g.fillStyle = cor; g.fillRect(x, y, 1, 1);
+      }
+      if (tinta) {   // a cor por cima só do que a lua já pintou
+        g.globalCompositeOperation = "source-atop"; g.globalAlpha = 0.6; g.fillStyle = tinta; g.fillRect(0, 0, 29, 29);
+        g.globalCompositeOperation = "source-over"; g.globalAlpha = 1;
       }
       return luaTela;
     }
@@ -508,6 +519,66 @@ const Globo = (() => {
         ctx.fillStyle = noite || pulso ? "#ffe9a8" : "#f5b83d"; ctx.fillRect(x - 1, y - 1, 3, 3);
         ctx.fillStyle = "#fffaf0"; ctx.fillRect(x - 1, y - 1, 1, 1);
       }
+    }
+
+    // a festa por cima do globo: os marcadores das cidades e o destaque do tema de Brasília
+    const doGlobo = [...(Array.isArray(dados.cidades) ? dados.cidades : []), ...exterior]
+      .filter(c => c && typeof c.id === "string" && Number.isFinite(c.lat) && Number.isFinite(c.lon));
+    const enfeites = { marcadores: 0, estouros: 0, treno: null, morcegos: 0, get lua() { return luaChave; } };
+    let estouros = [], espera = 0;
+    function marcadores(ctx, t) {
+      enfeites.marcadores = 0;
+      for (const c of doGlobo) {
+        const f = festaEm(c.id), p = f && deFrente(c);
+        if (!p) continue;
+        ctx.fillStyle = f.cores[reduzido ? 0 : Math.floor(t / 600) % f.cores.length];
+        ctx.fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, 3, 3);
+        enfeites.marcadores++;
+      }
+    }
+    function treno(ctx, t) {   // cruza diante da lua em 8 s a cada 40 s; parado ao lado dela com movimento reduzido
+      const u = reduzido ? null : (t % 40000) / 8000;
+      enfeites.treno = null;
+      if (u !== null && u >= 1) return;
+      const x0 = reduzido ? LUA[0] - 28 : Math.round(LUA[0] + 22 - u * 50), y0 = LUA[1] - (reduzido ? 2 : Math.round(2 + Math.sin(u * Math.PI) * 4));
+      TRENO.forEach((linha, y) => {
+        for (let x = 0; x < linha.length; x++) if (linha[x] !== ".") { ctx.fillStyle = CORES_TRENO[linha[x]]; ctx.fillRect(x0 + x, y0 + y, 1, 1); }
+      });
+      enfeites.treno = [x0, y0];
+    }
+    function morcegos(ctx, t) {   // três cruzando a lua
+      const tt = reduzido ? 0 : t;
+      ctx.fillStyle = "#1b1426";
+      for (let i = 0; i < 3; i++) {
+        const x = Math.round(LUA[0] - 20 + ((tt / 90 + i * 14) % 40)), y = Math.round(LUA[1] - 8 + i * 7 + Math.sin(tt / 520 + i * 2) * 2);
+        const asa = reduzido ? 0 : Math.floor(tt / 130 + i) % 2;
+        ctx.fillRect(x, y, 2, 2); ctx.fillRect(x - 3, y - asa, 3, 1); ctx.fillRect(x + 2, y - asa, 3, 1);
+        enfeites.morcegos++;
+      }
+    }
+    function fogos(ctx, dt) {   // até 4 estouros de 9 px (no máximo 2 começam por segundo) sobre as cidades à noite
+      if (reduzido) return;
+      if ((espera -= dt) <= 0 && estouros.length < 4) {
+        const noite = doGlobo.filter(c => { const f = festaEm(c.id); return f && f.enfeites.includes("fogos") && luzDe(c.lat, c.lon) < 0 && deFrente(c); });
+        if (noite.length) {
+          const c = noite[Math.floor(Math.random() * noite.length)], cores = festaEm(c.id).cores;
+          estouros.push({ c, k: 0, cor: cores[Math.floor(Math.random() * cores.length)] });
+          espera = 0.5 + Math.random() * 0.5;
+        }
+      }
+      for (const e of estouros) {
+        e.k += dt;
+        const p = deFrente(e.c);
+        if (!p || e.k >= 1) continue;
+        const r = 4 * (1 - Math.exp(-e.k * 4));
+        ctx.globalAlpha = 1 - e.k; ctx.fillStyle = e.cor;
+        for (let i = 0; i < 24; i++) {
+          const a = i / 24 * Math.PI * 2, q = r * (i % 2 ? 0.6 : 1);
+          ctx.fillRect(Math.round(p.x + Math.cos(a) * q), Math.round(p.y + Math.sin(a) * q), 1, 1);
+        }
+        ctx.globalAlpha = 1;
+      }
+      estouros = estouros.filter(e => e.k < 1);
     }
 
     const nivel = {
@@ -545,7 +616,8 @@ const Globo = (() => {
         ctx.drawImage(ceu(cam), 0, 0);
         if (!reduzido) { cintilar(ctx, cam, t); cadente(ctx, cam, t); }
         ctx.setTransform(P, 0, 0, P, ox, oy);
-        ctx.drawImage(desenharLua(data), LUA[0] - 14, LUA[1] - 14);
+        const hoje = festa(), tema = hoje && hoje.chave;
+        ctx.drawImage(desenharLua(data, tema === "halloween" ? LARANJA : null), LUA[0] - 14, LUA[1] - 14);
         // a passada pixel a pixel sai a ~30 Hz (a 6°/s o globo anda uns 14 px por segundo; se ela passar de 12 ms, a 15 Hz),
         // a cada quadro no arraste e no giro até o Brasil, e só quando algo muda com movimento reduzido; céu, lua e seta
         // seguem a cada quadro
@@ -561,6 +633,12 @@ const Globo = (() => {
         ctx.drawImage(tela, 0, 0);
 
         pontos(ctx, t);
+        marcadores(ctx, t);
+        enfeites.treno = null; enfeites.morcegos = 0;
+        if (tema === "natal") treno(ctx, t);
+        if (tema === "halloween") morcegos(ctx, t);
+        if (hoje && hoje.enfeites.includes("fogos")) fogos(ctx, dt); else estouros = [];
+        enfeites.estouros = estouros.length;
         if (!voo && visao(-11, -51) > 0.35) {   // a seta, ao norte do Brasil, apontando para ele (sem cobrir o país)
           const alvo = projetar(5.6, -59, lon0, lat0, R), pulo = reduzido ? 0 : Math.sin(t / 320) > 0 ? 1 : 0;
           const x0 = Math.round(alvo.x) - 5, y0 = Math.round(alvo.y) - SETA.length - pulo;
@@ -604,6 +682,7 @@ const Globo = (() => {
       },
       alvos() { return [alvoDoBrasil(C, C), ...exterior.map(alvoDeFora)]; },
       get rotacao() { return { lon: lon0, lat: lat0 }; },
+      get enfeites() { return enfeites; },
     };
     function alvoDoBrasil(x, y) {
       return { id: "brasil", x, y, alto: 12, titulo: "Brasil", texto: "Descer ao mapa do Brasil",

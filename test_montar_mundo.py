@@ -339,6 +339,21 @@ class Montagem(unittest.TestCase):
         with open(os.path.join(pasta, "atlas.json"), encoding="utf-8") as f:
             return json.load(f)
 
+    def test_festas_1x(self):
+        """As peças de arte/festas (FESTAS_1X) entram no atlas no tamanho original; sem o PNG, ficam de fora."""
+        base = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, base, True)
+        montar = ("import json, os, sys\nsys.path.insert(0, sys.argv[1])\nimport montar_mundo as mm\nfrom PIL import Image\n"
+                  "mm.PASTA_FESTAS, mm.FESTAS_1X = sys.argv[4], ['festa-teste', 'festa-sem-arte']\n"
+                  "Image.new('RGBA', (17, 21), (200, 30, 30, 255)).save(os.path.join(sys.argv[4], 'festa-teste.png'))\n"
+                  "mm.montar_atlas(sys.argv[2], mm.ler(sys.argv[3]) + mm.exterior(os.path.dirname(sys.argv[3])), sys.argv[4])")
+        subprocess.run([sys.executable, "-B", "-c", montar, os.path.join(RAIZ, "ferramentas"), ARTE, CIDADES, base],
+                       check=True, capture_output=True, timeout=120)
+        with open(os.path.join(base, "atlas.json"), encoding="utf-8") as f:
+            quadros = json.load(f)["quadros"]
+        self.assertEqual(quadros["festa-teste"][2:], [17, 21])
+        self.assertNotIn("festa-sem-arte", quadros)
+
     def test_atlas_deterministico(self):
         """O atlas sai igual a cada montagem, com as peças pedidas, cada uma dentro da imagem e sem sobrepor outra."""
         pasta = tempfile.mkdtemp()

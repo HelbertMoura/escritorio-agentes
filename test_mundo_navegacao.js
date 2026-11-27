@@ -81,7 +81,7 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
     },
     performance: { now: () => 0 }, requestAnimationFrame: f => quadros.push(f),
     console: { error: (...a) => (contexto.erros ||= []).push(a.map(String).join(" ")), warn() {}, log() {} },
-    setInterval(f, ms) { intervalos.push(ms); }, clearInterval() {}, setTimeout, Math, Promise, JSON, URLSearchParams,
+    setInterval(f, ms) { intervalos.push(ms); (contexto.repeticoes ||= []).push([ms, f]); }, clearInterval() {}, setTimeout, Math, Promise, JSON, URLSearchParams,
     // as imagens só carregam (ou falham) quando o teste pede (carregar, falhar)
     Image: class {
       constructor() { this.complete = false; this.naturalWidth = 0; this.ouvintes = {}; (contexto.imagens ||= []).push(this); }
@@ -148,13 +148,13 @@ async function chegarAtlas(m) {
   for (const img of m.contexto.imagens || []) if (String(img.src).startsWith("/mundo/atlas.png")) img.carregar();
   m.rodar(2);
 }
-// a festa do dia na cena de uma cidade (com o atlas): algo desenhado, e a fonte e cada peça dentro da praça.
+// a festa do dia na cena de uma cidade (com o atlas): algo desenhado (na praça, nos cordões ou no palco), e a fonte e cada peça dentro da praça.
 // Devolve se alguma arte do atlas apareceu e se alguma forma por código apareceu
 function festaNaPraca(c, onde) {
   const e = c.enfeites, [x0, y0, x1, y1] = c.planta.praca.r;
   const dentro = r => r[0] >= x0 && r[1] >= y0 && r[2] <= x1 && r[3] <= y1;
   assert.ok(e.chave, `${onde}: a festa do dia`);
-  assert.ok(e.formas.length + e.pecas.length + e.cordoes > 0, `${onde}: algo desenhado`);
+  assert.ok(e.formas.length + e.pecas.length + e.cordoes + e.palco.length > 0, `${onde}: algo desenhado (na praça, nos cordões ou no palco)`);
   assert.ok(e.fonte && dentro(e.fonte), `${onde}: fonte ${e.fonte} na praça`);
   for (const s of e.pecas) assert.ok(dentro(s.slice(1)), `${onde}: ${s[0]} na praça`);
   return { pecas: e.pecas.length > 0, formas: e.formas.length > 0 };
