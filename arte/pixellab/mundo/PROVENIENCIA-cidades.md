@@ -136,6 +136,14 @@ PNG indexado sem perda (RGBA igual ao do bruto).
 | `foz-do-iguacu` | `foz-do-iguacu-pixen-576x400.png` | `cd56055c157dc2619e1063fbfec98e642d4fae4026fdfa30a61cacf767cc73f7` | 26/11/2026 |
 | `campina-grande` | `campina-grande-pixen-576x400.png` | `7ded52ab2cc4222cee19a80db2df84d7816629cece0120d3b042f5aac68c8caf` | 26/11/2026 |
 | `ipatinga` | `ipatinga-pixen-576x400.png` | `4209bc5972770d2b82c07ef1cc7e2d92b1290979ae9969cc8d3802e6b59c4e9f` | 26/11/2026 |
+| `petrolina` | `petrolina-pixen-576x400.png` | `f2cf0eae1cd6aed2babf1022d301c3ea8c1faf15b89b72b5ea824fc7d87541ca` | 27/11/2026 |
+| `uberaba` | `uberaba-pixen-576x400.png` | `4637058351472d45d6dd2e230cd9a5e3e2d41d08f1aecd9fbd6abf95e9eb6179` | 27/11/2026 |
+| `cascavel` | `cascavel-pixen-576x400.png` | `113b53e232b8e0d84f1085e5a7f0fe5acaab14af103bb210f96351690af14ed3` | 27/11/2026 |
+| `governador-valadares` | `governador-valadares-pixen-576x400.png` | `2d0a6c25d0bdf381bde07b1b48f9abf1dc7d8979d922a7aa6eece469e4604300` | 27/11/2026 |
+| `santa-maria` | `santa-maria-pixen-576x400.png` | `9ec7c8070222651e1359fa99fd66819276d6994e9aee69550ccde415fa97e634` | 27/11/2026 |
+| `caruaru` | `caruaru-pixen-576x400.png` | `bdc5af6fca5be633b1e7303d679f8607e2f69c8763865d5c85ead3f39dfb044f` | 27/11/2026 |
+| `ilheus` | `ilheus-pixen-576x400.png` | `0b7bbad384cd1dec8a6ef549fc9d3959045a91bec722786dbe7d06acd1014b83` | 27/11/2026 |
+| `santarem` | `santarem-pixen-576x400.png` | `4101f4b502df2d15798edc1bf84f4aa68fe1add9e09c4b090c27b878827b65a3` | 27/11/2026 |
 
 Lote 5 (26/11/2026): Sorocaba, Ribeirão Preto, Londrina, Jundiaí, Feira de Santana, Juiz de Fora, Volta Redonda, Foz do
 Iguaçu, Campina Grande e Ipatinga, autoria pelo Opus com `montar_cenas.py`. Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`,
