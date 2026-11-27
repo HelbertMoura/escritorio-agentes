@@ -1,0 +1,203 @@
+{
+  "versao": 1,
+  "id": "sao-jose-dos-campos",
+  "W": 576,
+  "H": 400,
+  "texto": {
+    "cena": "São José dos Campos em pixel art, com o centro de prédios em quadras, os parques com lago, o banhado do rio Paraíba e os morros verdes",
+    "vida": "Dois pedestres no adro do prédio da portaria e um carro na avenida a oeste",
+    "portaria": "na entrada do prédio de pórtico de frente para o parque do lago"
+  },
+  "portaria": {
+    "x": 375,
+    "y": 164,
+    "r": [
+      367,
+      140,
+      383,
+      164
+    ],
+    "placa": [
+      375,
+      144
+    ],
+    "farol": [
+      375,
+      154
+    ]
+  },
+  "praca": {
+    "x": 127,
+    "y": 215,
+    "r": [
+      90,
+      180,
+      164,
+      218
+    ],
+    "fonte": [
+      2,
+      2
+    ]
+  },
+  "pontos": [
+    {
+      "x": 375,
+      "y": 236,
+      "r": [
+        320,
+        175,
+        430,
+        240
+      ],
+      "nome": "Parque do lago"
+    },
+    {
+      "x": 122,
+      "y": 178,
+      "r": [
+        90,
+        125,
+        155,
+        178
+      ],
+      "nome": "Lago do parque"
+    },
+    {
+      "x": 90,
+      "y": 40,
+      "r": [
+        0,
+        0,
+        210,
+        95
+      ],
+      "nome": "Rio Paraíba do Sul"
+    }
+  ],
+  "calcadas": {
+    "nos": [
+      [
+        352,
+        164
+      ],
+      [
+        375,
+        164
+      ],
+      [
+        394,
+        164
+      ],
+      [
+        374,
+        171
+      ]
+    ],
+    "arestas": [
+      [
+        0,
+        1
+      ],
+      [
+        1,
+        2
+      ],
+      [
+        1,
+        3
+      ]
+    ],
+    "travessias": [],
+    "pontes": []
+  },
+  "pista": [
+    [
+      170,
+      287
+    ],
+    [
+      170,
+      352
+    ],
+    [
+      174.5,
+      356
+    ],
+    [
+      179,
+      352
+    ],
+    [
+      179,
+      287
+    ],
+    [
+      174.5,
+      283
+    ]
+  ],
+  "carros": [
+    {
+      "s": 0,
+      "v": 16,
+      "peca": "carro-2",
+      "tamanho": [
+        8,
+        4
+      ]
+    }
+  ],
+  "pedestres": [
+    {
+      "de": 0,
+      "para": 1,
+      "s": 8,
+      "v": 15
+    },
+    {
+      "de": 1,
+      "para": 2,
+      "s": 10,
+      "v": 16
+    }
+  ],
+  "oclusoes": [],
+  "cordoes": [
+    [
+      92,
+      215,
+      162,
+      215
+    ]
+  ],
+  "luzes": [],
+  "superficies": {
+    "calcada": [
+      "786564",
+      "866b61",
+      "6e636a",
+      "857872",
+      "c8b090",
+      "8e7c70",
+      "978475",
+      "a28970",
+      "675b66",
+      "574a59",
+      "3f252d"
+    ],
+    "faixa": [
+      "a6a491"
+    ],
+    "ponte": [],
+    "asfalto": [
+      "513541",
+      "2f1b2b",
+      "4b3242",
+      "492e42",
+      "462c40",
+      "37202d",
+      "28162a"
+    ]
+  }
+}
