@@ -1,0 +1,179 @@
+{
+ "versao": 1,
+ "id": "jundiai",
+ "W": 576,
+ "H": 400,
+ "texto": {
+  "cena": "Jundiaí em pixel art, com a Catedral de Nossa Senhora do Desterro e suas cúpulas, os vinhedos da serra ao norte e os sobrados do centro",
+  "vida": "Dois pedestres na calçada dos sobrados e um carro na rua da catedral",
+  "portaria": "na porta do sobrado de telhado vermelho"
+ },
+ "portaria": {
+  "x": 220,
+  "y": 210,
+  "r": [
+   212,
+   186,
+   228,
+   210
+  ],
+  "placa": [
+   220,
+   190
+  ],
+  "farol": [
+   220,
+   200
+  ]
+ },
+ "praca": {
+  "x": 351,
+  "y": 306,
+  "r": [
+   349,
+   271,
+   387,
+   312
+  ],
+  "fonte": [
+   0,
+   10
+  ]
+ },
+ "pontos": [
+  {
+   "x": 368,
+   "y": 270,
+   "r": [
+    325,
+    90,
+    415,
+    270
+   ],
+   "nome": "Catedral do Desterro · Jundiaí"
+  }
+ ],
+ "calcadas": {
+  "nos": [
+   [
+    186,
+    211
+   ],
+   [
+    220,
+    210
+   ],
+   [
+    256,
+    211
+   ]
+  ],
+  "arestas": null,
+  "travessias": [],
+  "pontes": []
+ },
+ "carros": [
+  {
+   "s": 0,
+   "v": 14,
+   "peca": "carro-3",
+   "tamanho": [
+    8,
+    4
+   ]
+  }
+ ],
+ "pedestres": [
+  {
+   "de": 0,
+   "para": 1,
+   "s": 6,
+   "v": 14
+  },
+  {
+   "de": 1,
+   "para": 2,
+   "s": 6,
+   "v": 15
+  }
+ ],
+ "luzes": [
+  [
+   174,
+   197,
+   10,
+   0.45
+  ],
+  [
+   267,
+   197,
+   10,
+   0.45
+  ]
+ ],
+ "superficies": {
+  "calcada": [
+   "513a51",
+   "574056",
+   "4c354c",
+   "342136",
+   "422b3e",
+   "dbb484",
+   "684d60",
+   "d4ac7d",
+   "ac815c"
+  ],
+  "faixa": [],
+  "ponte": [],
+  "asfalto": [
+   "41314a",
+   "1c152b",
+   "d0b08e",
+   "332739"
+  ]
+ },
+ "pista": [
+  [
+   279,
+   200
+  ],
+  [
+   279,
+   252
+  ],
+  [
+   281,
+   254.5
+  ],
+  [
+   284.0,
+   255.5
+  ],
+  [
+   287,
+   254.5
+  ],
+  [
+   289,
+   252
+  ],
+  [
+   289,
+   200
+  ],
+  [
+   287,
+   197.5
+  ],
+  [
+   284.0,
+   196.5
+  ],
+  [
+   281,
+   197.5
+  ]
+ ],
+ "oclusoes": [],
+ "cordoes": []
+}

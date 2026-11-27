@@ -1,0 +1,213 @@
+{
+  "versao": 1,
+  "id": "governador-valadares",
+  "W": 576,
+  "H": 400,
+  "texto": {
+    "cena": "Governador Valadares em pixel art, com o Pico do Ibituruna, o Rio Doce e o parque da margem, as palmeiras e as quadras de telhado de barro",
+    "vida": "Dois pedestres na calçada do prédio de quatro andares e um carro na rua do meio",
+    "portaria": "na porta do prédio bege entre as duas palmeiras"
+  },
+  "portaria": {
+    "x": 220,
+    "y": 214,
+    "r": [
+      212,
+      190,
+      228,
+      214
+    ],
+    "placa": [
+      220,
+      194
+    ],
+    "farol": [
+      220,
+      204
+    ]
+  },
+  "praca": {
+    "x": 487,
+    "y": 236,
+    "r": [
+      470,
+      214,
+      505,
+      237
+    ],
+    "fonte": [
+      2,
+      2
+    ]
+  },
+  "pontos": [
+    {
+      "x": 367,
+      "y": 80,
+      "r": [
+        305,
+        0,
+        430,
+        80
+      ],
+      "nome": "Pico do Ibituruna"
+    },
+    {
+      "x": 487,
+      "y": 236,
+      "r": [
+        470,
+        214,
+        505,
+        237
+      ],
+      "nome": "Cruzamento da Festa"
+    }
+  ],
+  "calcadas": {
+    "nos": [
+      [
+        206,
+        215
+      ],
+      [
+        220,
+        214
+      ],
+      [
+        234,
+        215
+      ]
+    ],
+    "arestas": null,
+    "travessias": [],
+    "pontes": []
+  },
+  "pista": [
+    [
+      272,
+      232
+    ],
+    [
+      308,
+      232
+    ],
+    [
+      310.5,
+      231
+    ],
+    [
+      312,
+      229
+    ],
+    [
+      312.5,
+      228
+    ],
+    [
+      312,
+      226
+    ],
+    [
+      310.5,
+      225
+    ],
+    [
+      308,
+      224
+    ],
+    [
+      272,
+      224
+    ],
+    [
+      269.5,
+      225
+    ],
+    [
+      268,
+      226
+    ],
+    [
+      267.5,
+      228
+    ],
+    [
+      268,
+      229
+    ],
+    [
+      269.5,
+      231
+    ]
+  ],
+  "carros": [
+    {
+      "s": 0,
+      "v": 14,
+      "peca": "carro-4",
+      "tamanho": [
+        8,
+        4
+      ]
+    }
+  ],
+  "pedestres": [
+    {
+      "de": 0,
+      "para": 1,
+      "s": 3,
+      "v": 12
+    },
+    {
+      "de": 1,
+      "para": 2,
+      "s": 6,
+      "v": 15
+    }
+  ],
+  "oclusoes": [],
+  "cordoes": [
+    [
+      478,
+      249,
+      497,
+      249
+    ]
+  ],
+  "luzes": [
+    [
+      287,
+      245,
+      10,
+      0.45
+    ]
+  ],
+  "superficies": {
+    "calcada": [
+      "cfb284",
+      "78564c",
+      "c5ab82",
+      "896753",
+      "dabd89",
+      "7e5c47",
+      "a08164",
+      "6f4f48",
+      "957862",
+      "694a44",
+      "b19876",
+      "634542",
+      "655253"
+    ],
+    "faixa": [],
+    "ponte": [],
+    "asfalto": [
+      "483245",
+      "573e43",
+      "513a44",
+      "4d3645",
+      "4a3547",
+      "5d4141"
+    ]
+  }
+}
