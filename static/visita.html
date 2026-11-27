@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
   <meta name="referrer" content="no-referrer">
+  <link rel="icon" href="/icone-192.png">
   <title>Visita ao escritório</title>
-  <link rel="stylesheet" href="/visita.css?v=8">
+  <link rel="stylesheet" href="/visita.css?v=9">
 </head>
 <body>
   <main class="layout">
@@ -23,7 +24,11 @@
       <h2 id="titulo-conversa">Conversa</h2>
       <p id="estado" role="status">Conectando…</p>
       <p id="aviso-agente" class="aviso" hidden></p>
-      <p id="mensagens-vazio" class="nota" hidden>Ainda não há mensagens.</p>
+      <div id="mensagens-vazio" class="conversa-vazia" hidden>
+        <canvas id="recepcionista-aceno" width="16" height="16" aria-hidden="true"></canvas>
+        <p class="conversa-vazia-titulo">Ainda não há mensagens.</p>
+        <p class="nota">Escreva abaixo para falar com a recepção.</p>
+      </div>
       <ol id="mensagens" aria-label="Mensagens" aria-live="polite"></ol>
       <form id="formulario">
         <label for="texto">Sua mensagem</label>
@@ -35,7 +40,7 @@
       <button id="sair" class="secundario" type="button">Sair da sala</button>
     </section>
   </main>
-  <script src="/mapa.js?v=8"></script>
-  <script src="/visita.js?v=8"></script>
+  <script src="/mapa.js?v=9"></script>
+  <script src="/visita.js?v=9"></script>
 </body>
 </html>

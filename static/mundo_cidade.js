@@ -44,7 +44,7 @@ const MundoCidade = (() => {
   const hash = (a, b, c) => CidadeChao.hash(Math.round(a), Math.round(b), c);
 
   function criar({ dados, Camera, reduzido, mapa, clima, avisar, festa }) {
-    const camera = Camera([0, 0, W, H]);
+    const camera = Camera([0, 0, W, H], { inteira: "cobrir" });   // no celular, cena cheia em escala inteira
     camera.teto = () => Math.min(camera.W / QUADRA[0], camera.H / QUADRA[1]) / camera.base;
     const todas = Array.isArray(dados && dados.cidades) ? dados.cidades : [];
     const cidades = new Map(todas.filter(c => c && typeof c.id === "string").map(c => [c.id, c]));
@@ -720,7 +720,7 @@ const MundoCidade = (() => {
         montar(atual ? CidadePlanta.cena(atual.dados) : CidadePlanta.planta(id, info(id)));
         if (params.nivel === "bairro" && ehCasa() && !reduzido) {   // voltando do bairro, a câmera sai de perto da casa
           camera.x = p.casa.x; camera.y = p.casa.y - (p.cena ? 12 : 28); camera.z = 4; camera.zoomPara(1);
-        } else { camera.x = p.W / 2; camera.y = p.H / 2; camera.z = camera.alvoZ = 1; }
+        } else { camera.x = p.centro ? p.centro.x : p.W / 2; camera.y = p.centro ? p.centro.y : p.H / 2; camera.z = camera.alvoZ = 1; }   // o recorte abre no marco
         camera.limitar(p.malha ? p.malha.caixa : [0, 0, W, H]);
         medirVista(); mover(0); carregar(); clima(); letreiros.pedir();
         carregarCena(id);

@@ -14,6 +14,10 @@ const Mundo = (() => {
   // dobro da resolução cair em pixel inteiro) até o teto, e no teto pode ser fracionária (com múltiplo, não: o teto
   // desce ao múltiplo de baixo). A origem cai sempre em pixel inteiro. O nível pode baixar o teto com camera.teto() (o z
   // máximo agora; a cidade: o que ainda mostra uma quadra inteira); camera.maximo() diz o teto valendo.
+  // Cena cheia (opcoes.inteira), sem tarja e sempre em pixel inteiro: "cobrir" (a cidade) usa, na tela em retrato (o
+  // celular, onde a cena virava uma faixa no meio do vazio), a menor escala inteira que cobre a tela toda; em paisagem a
+  // cidade segue inteira a 1x, como antes. "ceu" (o bairro) usa uns 85% da altura da tela em escala inteira (e pelo menos
+  // a largura toda) e estica a caixa para cima até o topo da tela, onde o nível pinta o céu.
   function Camera(caixa, opcoes = {}) {
     const MIN = 1, MAX = opcoes.max || 4, M = opcoes.multiplo || 1;
     const teto = () => {
@@ -35,8 +39,13 @@ const Mundo = (() => {
       // prende o zoom (1x a 4x) e o centro, para a vista não sair da caixa; maior que a caixa, a vista fica no meio
       limitar(nova) {
         if (nova) c.caixa = nova;
-        const [x0, y0, x1, y1] = c.caixa;
-        c.base = Math.max(0.05, Math.min(c.W / (x1 - x0), c.H / (y1 - y0)));   // a 1x a caixa cabe inteira, na maior escala
+        const [x0, y0c, x1, y1] = c.caixa, w = x1 - x0, h = y1 - y0c;
+        let y0 = y0c;
+        if (opcoes.inteira === "cobrir" && c.H > c.W) c.base = Math.max(1, Math.ceil(Math.max(c.W / w, c.H / h) - 1e-6));
+        else if (opcoes.inteira === "ceu") {
+          c.base = Math.max(1, Math.ceil(c.W / w - 1e-6), Math.round(c.H / h * 0.85));
+          y0 = Math.min(y0c, y1 - c.H / c.base);   // o céu que sobra em cima entra na caixa: nada de tarja
+        } else c.base = Math.max(0.05, Math.min(c.W / w, c.H / h));   // a 1x a caixa cabe inteira, na maior escala
         c.z = prender(Number.isFinite(c.z) ? c.z : 1); c.alvoZ = prender(Number.isFinite(c.alvoZ) ? c.alvoZ : 1);
         const mw = c.W / 2 / c.P, mh = c.H / 2 / c.P;
         c.x = mw * 2 >= x1 - x0 || !Number.isFinite(c.x) ? (x0 + x1) / 2 : Math.min(x1 - mw, Math.max(x0 + mw, c.x));
@@ -143,18 +152,23 @@ const Mundo = (() => {
   const hojeE = () => (festa ? ` Hoje é ${festa.nome}.` : "");
   const niveis = { bairro: nivelBairro() }, toques = new Map();
 
-  // o bairro de hoje, desenhado 1:1 num quadro de 320x180 e ampliado pela câmera (a 1x, na escala fracionária que enche
-  // o palco, com uma pequena irregularidade de pixel; acima de 1x, em escala inteira)
+  // o bairro de hoje, desenhado 1:1 num quadro de 320x180 e ampliado pela câmera sempre em escala inteira; o céu
+  // que sobra em cima da tela é a cor do topo da cena, esticada
   function nivelBairro() {
-    const cena = MundoBairro.cena(entrar, { reduzido, destaque: !tv }), camera = Camera([0, 0, MundoBairro.W, MundoBairro.H]), p = cena.porta;
+    const cena = MundoBairro.cena(entrar, { reduzido, destaque: !tv }), p = cena.porta;
+    const camera = Camera([0, 0, MundoBairro.W, MundoBairro.H], { inteira: "ceu" });
     const quadro = document.createElement("canvas"); quadro.width = MundoBairro.W; quadro.height = MundoBairro.H;
     const qctx = quadro.getContext("2d");
     const porta = { id: "porta", x: p.x + p.w / 2, y: p.y + p.h / 2, alto: 0, titulo: "Recepção",
       texto: convite ? "Entrar com convite" : "Entrar na recepção", rotulo: "Porta do chalé com a placa: entrar na recepção" };
     return {
       nome: "bairro", camera,
-      entrar() { climaDaCidade(); }, sair() {},
-      quadro(c, dt, t) { qctx.imageSmoothingEnabled = false; cena.quadro(qctx, dt, t); c.drawImage(quadro, 0, 0); },
+      // entra com o recorte na porta da firma e o chão encostado embaixo
+      entrar() { climaDaCidade(); camera.x = porta.x; camera.y = MundoBairro.H; camera.limitar(); }, sair() {},
+      quadro(c, dt, t) {
+        qctx.imageSmoothingEnabled = false; cena.quadro(qctx, dt, t); c.drawImage(quadro, 0, 0);
+        c.fillStyle = cena.corDoTopo(); c.fillRect(-MundoBairro.W, -4 * MundoBairro.H, 3 * MundoBairro.W, 4 * MundoBairro.H);   // o céu esticado
+      },
       clique(x, y) { cena.clique(x, y); return null; },
       sobre(x, y) { return cena.sobre(x, y) ? porta : null; },
       alvos() { return [porta]; },

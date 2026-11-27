@@ -32,14 +32,16 @@ function rodar(Clima, segundos, p = PREDIO, som = null, ctx = tela().ctx) {
   return t;
 }
 
-// inclinação média dos traços de chuva desenhados no último quadro
+// inclinação média dos riscos de chuva do último quadro: cada risco são 4 pixels (rect 1x1) de baixo para cima,
+// e o deslocamento do primeiro ao último diz quanto ele deita
 function inclinacao(Clima) {
   const { ctx, chamadas } = tela();
   Clima.desenhar(ctx, PREDIO, 0.05, 99999, null);
-  const mov = chamadas.filter(c => c[0] === "moveTo"), lin = chamadas.filter(c => c[0] === "lineTo");
+  const px = chamadas.filter(c => c[0] === "rect" && c[3] === 1 && c[4] === 1);
+  assert.equal(px.length % 4, 0, "riscos de 4 pixels");
   let soma = 0;
-  for (let i = 0; i < Math.min(mov.length, lin.length); i++) soma += lin[i][1] - mov[i][1];
-  return soma / Math.min(mov.length, lin.length);
+  for (let i = 0; i < px.length; i += 4) soma += px[i + 3][1] - px[i][1];
+  return (soma / (px.length / 4)) * 3;   // na escala do traço antigo (5 px de altura)
 }
 
 // calmo e limpo: sem vento, as árvores só respiram (como antes, até 0,8 px)
@@ -154,8 +156,8 @@ function inclinacao(Clima) {
   rodar(longe.Clima, 20, { ...PREDIO, ceu: true }, { chuva() {}, trovao: f => fracos.push(f) }, t2.ctx);
   for (const [f, ms] of longe.timers) { assert.ok(ms > 2000, `longe demora (${ms})`); f(); }
   for (const f of fracos) assert.ok(f < 0.5, `trovão longe é fraco (${f})`);
-  assert.equal(t2.chamadas.filter(c => c[0] === "stroke").length, 20 * 20, "raio longe: só o clarão (um traço por quadro, o da chuva)");
-  assert.ok(chamadas.filter(c => c[0] === "stroke").length > 20 * 20, "raio perto: traços a mais no céu");
+  assert.equal(t2.chamadas.filter(c => c[0] === "stroke").length, 0, "raio longe: só o clarão (a chuva é de pixel, sem traço)");
+  assert.ok(chamadas.filter(c => c[0] === "stroke").length > 0, "raio perto: traços no céu");
 }
 
 // no escritório (sem céu) o raio não é riscado no chão; ele aparece pela janela
@@ -173,7 +175,7 @@ function inclinacao(Clima) {
     }
   }
   assert.ok(viu, "o raio aparece na janela");
-  assert.equal(chamadas.filter(c => c[0] === "stroke").length, quadros, "um traço por quadro: só o da chuva");
+  assert.equal(chamadas.filter(c => c[0] === "stroke").length, 0, "nenhum traço no chão (a chuva é de pixel)");
 }
 
 // ventania leva folhas (fillRect fora da chuva); sem vento, nenhuma
@@ -188,4 +190,18 @@ function inclinacao(Clima) {
   };
   assert.equal(contaFolhas(0), 0);
   assert.ok(contaFolhas(60) >= 5);
+}
+
+// movimento reduzido: a chuva fica parada (os mesmos pixels quadro a quadro), em riscos de 4 pixels inteiros
+{
+  const contexto = { location: { search: "" }, URLSearchParams, window: {}, Math, setTimeout: () => {},
+    matchMedia: q => ({ matches: q.includes("reduce") }) };
+  vm.runInNewContext(FONTE, contexto);
+  const Clima = contexto.window.Clima;
+  Clima.definir({ tipo: "chuva", vento: 0 });
+  const quadro = () => { const { ctx, chamadas } = tela(); Clima.desenhar(ctx, PREDIO, 0.05, 1000, null); return chamadas.filter(c => c[0] === "rect" && c[3] === 1 && c[4] === 1); };
+  const a = quadro(), b = quadro();
+  assert.ok(a.length >= 4 && a.length % 4 === 0, "a chuva aparece parada");
+  assert.deepEqual(b, a, "com movimento reduzido a chuva não cai");
+  assert.ok(a.every(c => Number.isInteger(c[1]) && Number.isInteger(c[2]) && c[3] === 1 && c[4] === 1), "pixel inteiro, 1x1");
 }
