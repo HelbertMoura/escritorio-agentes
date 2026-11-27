@@ -15,6 +15,6 @@ const CidadeCenas = Object.freeze({
   "rio-branco": Object.freeze({ v: "f4db0a3dec40", png: "sha256-9NsKPexAgEsTz8l5zy3lT+i0hPvxyqs8t+W/9h7MrQU=", json: "sha256-rVOg0im17ViHnfS7tO8lWkoWrXsFC5291DU1wUt7YQU=" }),
   "salvador": Object.freeze({ v: "6bee87f5283e", png: "sha256-a+6H9Sg+Z9wY7O/N0vTMPiBaqWCZuqwsV7P4bEdEJ8c=", json: "sha256-CyXry+23Ezl99E/NYUmiaLpMQZyH+pHulGJCymQSVEk=" }),
   "sao-luis": Object.freeze({ v: "a900a9bfeac0", png: "sha256-qQCpv+rAT6+KHl/cKeL7gzOKzdGwW+TGCSDpYLWNwFE=", json: "sha256-HFCnQbTiPJpd1BEsCSYWhOR/w9b8WiBciezfWpJYsOc=" }),
-  "vitoria": Object.freeze({ v: "649f9d1f3103", png: "sha256-ZJ+dHzEDKuKEUy2WT5hihIvDGmJp+gnzUNG2oV8cwU8=", json: "sha256-KZuqc+uMDMLU14uTUrQ/NGUMSzvnxgCDIpDwfUypskQ=" }),
+  "vitoria": Object.freeze({ v: "649f9d1f3103", png: "sha256-ZJ+dHzEDKuKEUy2WT5hihIvDGmJp+gnzUNG2oV8cwU8=", json: "sha256-JCLiRUA6sd28JgfQ4l5xjmalZ58f32aEt7nZDEZKyS8=" }),
 });
 window.CidadeCenas = CidadeCenas;
