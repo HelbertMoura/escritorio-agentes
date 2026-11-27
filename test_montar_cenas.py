@@ -52,24 +52,38 @@ def ids():
 
 
 class Disco(unittest.TestCase):
-    def congeladas(self, ext):
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_dados", f"cenas_{ext}_congeladas.txt")) as f:
-            return {nome: soma for soma, nome in (linha.split() for linha in f)}
+    def somas(self, arquivo):
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_dados", arquivo), encoding="utf-8") as f:
+            return {nome: soma for soma, nome in (linha.split() for linha in f if not linha.startswith("#"))}
 
     def test_arte_congelada(self):
         """Os 90 PNG de 2934b5c: a festa é camada por cima, e troca de arte aparece no diff deste arquivo."""
-        esperado = self.congeladas("png")
+        esperado = self.somas("cenas_png_congeladas.txt")
         self.assertEqual(len(esperado), 90)
         self.assertEqual({n: hashlib.sha256(ler(PASTA, n)).hexdigest() for n in nomes() if n.endswith(".png")}, esperado)
 
     def test_cena_sem_festa_nao_muda(self):
         """O JSON que não ganhou o campo festa é byte a byte o de 2934b5c."""
-        esperado = self.congeladas("json")
+        esperado = self.somas("cenas_json_congeladas.txt")
         self.assertEqual(sorted(esperado), [n for n in nomes() if n.endswith(".json")])
         for nome, soma in esperado.items():
             dados = ler(PASTA, nome)
             if "festa" not in json.loads(dados):
                 self.assertEqual(hashlib.sha256(dados).hexdigest(), soma, nome)
+
+    def test_cena_fora_da_festa_nao_muda(self):
+        """Nas 90 cenas, com ou sem o campo festa, o resto do JSON é o congelado (exceções comentadas no arquivo)."""
+        esperado = self.somas("cenas_json_sem_festa.txt")
+        self.assertEqual(len(esperado), 90)
+        achado = {}
+        for nome in nomes():
+            if nome.endswith(".json"):
+                cena = json.loads(ler(PASTA, nome))
+                cena.pop("festa", None)
+                achado[nome] = hashlib.sha256(json.dumps(cena, sort_keys=True).encode()).hexdigest()
+        self.assertEqual(sorted(achado), sorted(esperado))
+        for nome, soma in esperado.items():
+            self.assertEqual(achado[nome], soma, nome)
 
     def test_pares_de_cidades_do_mundo(self):
         mundo = json.loads(ler(e.ESTATICO, "mundo", "mundo.json"))

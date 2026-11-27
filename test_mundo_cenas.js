@@ -218,6 +218,17 @@ async function festaNasAncoras() {
   const subidas = ano.m.contexto.retangulos.filter(r => r[2] === 1 && r[3] === 2 && r[4] === "#ffe9a8");
   assert.ok(subidas.length > 0, "fogos no céu");
   assert.ok(subidas.every(([x]) => x >= FESTA.ceu[0] && x <= FESTA.ceu[2]), "fogos fora do céu");
+  // a troca de festa na mesma sessão (24/12 → 31/12, na resposta seguinte do clima): os vãos guardados são pintados de novo
+  const troca = await noPais("recife", "2026-12-24", { quadros: 4 });
+  const linha = () => troca.m.contexto.retangulos.filter(r => r[2] === 1 && r[3] === 1 && r[4] === "#4b4453").length;
+  troca.m.contexto.retangulos = []; troca.m.rodar(4);
+  assert.equal(linha(), 0, "na mesma festa, os vãos só são copiados");
+  troca.m.contexto.location.search = "?data=2026-12-31";
+  troca.m.contexto.repeticoes.find(([ms]) => ms === 15 * 60 * 1000)[1]();
+  for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r));
+  troca.m.rodar(4);
+  assert.equal(troca.m.M.niveis.cidade.enfeites.chave, "anonovo");
+  assert.ok(linha() > 0, "a festa nova limpa o cache cabos");
   // o palco pequeno demais para a peça: ela volta para a praça
   const pequeno = { ...dados("recife"), festa: { palco: { x: 140, y: 400, r: [135, 390, 145, 405] } } };
   const volta = await noPais("recife", "2026-12-25", { d: pequeno, quadros: 4 });

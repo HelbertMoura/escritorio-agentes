@@ -81,7 +81,7 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
     },
     performance: { now: () => 0 }, requestAnimationFrame: f => quadros.push(f),
     console: { error: (...a) => (contexto.erros ||= []).push(a.map(String).join(" ")), warn() {}, log() {} },
-    setInterval(f, ms) { intervalos.push(ms); }, clearInterval() {}, setTimeout, Math, Promise, JSON, URLSearchParams,
+    setInterval(f, ms) { intervalos.push(ms); (contexto.repeticoes ||= []).push([ms, f]); }, clearInterval() {}, setTimeout, Math, Promise, JSON, URLSearchParams,
     // as imagens só carregam (ou falham) quando o teste pede (carregar, falhar)
     Image: class {
       constructor() { this.complete = false; this.naturalWidth = 0; this.ouvintes = {}; (contexto.imagens ||= []).push(this); }
