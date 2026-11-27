@@ -1,0 +1,31 @@
+{
+  "versao": 1,
+  "id": "nova-york",
+  "W": 576,
+  "H": 400,
+  "texto": {
+    "cena": "Nova York em pixel art, com o Empire State, os prédios de tijolo com caixas-d'água, um parque de Manhattan e a Estátua da Liberdade",
+    "vida": "Dois pedestres na calçada da portaria e um carro na avenida a oeste",
+    "portaria": "na porta em arco do prédio de tijolos, ao lado do Empire State"
+  },
+  "portaria": {"x": 351, "y": 239, "r": [341, 215, 361, 239], "placa": [351, 219], "farol": [351, 229]},
+  "praca": {"x": 376, "y": 153, "r": [336, 104, 417, 160], "fonte": [10, 10]},
+  "pontos": [
+    {"x": 288, "y": 300, "r": [262, 85, 316, 305], "nome": "Empire State Building"},
+    {"x": 376, "y": 160, "r": [334, 102, 419, 160], "nome": "Parque de Manhattan"},
+    {"x": 560, "y": 70, "r": [520, 0, 576, 75], "nome": "Estátua da Liberdade"}
+  ],
+  "calcadas": {"nos": [[372, 239], [351, 239], [331, 239]], "arestas": null, "travessias": [], "pontes": []},
+  "pista": [[171, 243], [171, 326], [172, 328], [173, 326], [173, 243], [172, 241]],
+  "carros": [{"s": 0, "v": 16, "peca": "carro-3", "tamanho": [8, 4]}],
+  "pedestres": [{"de": 0, "para": 1, "s": 8, "v": 15}, {"de": 1, "para": 2, "s": 12, "v": 16}],
+  "oclusoes": [],
+  "cordoes": [[338, 154, 414, 154]],
+  "luzes": [],
+  "superficies": {
+    "calcada": ["b9a079", "bfa77f", "ac8c64", "9e7f5e", "8c7259", "b79567", "81654e", "d2ba82", "cbac73", "c2a16e"],
+    "faixa": [],
+    "ponte": [],
+    "asfalto": ["2a1a2e", "2b1b31", "564457", "523f53", "49344c", "4d394e", "513f41"]
+  }
+}

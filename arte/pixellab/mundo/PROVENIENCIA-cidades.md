@@ -86,6 +86,16 @@ PNG indexado sem perda (RGBA igual ao do bruto).
 | `belo-horizonte` | `belo-horizonte-pixen-616x424.png` | `7bcee6130ce51529ab30c2eda67fff359138d325dc1674693ae6112e79040af3` | 26/11/2026 |
 | `salvador` | `salvador-pixen-576x400-retry.png` | `75e3a22612b830e74b1dc8ecbc6bb84aa6a77088bc0a0d713f4d35a996056bdc` | 26/11/2026 |
 | `mateus-leme` | `mateus-leme-pixen-576x400.png` | `339378138c03c9079e75345263e20568b9076ae55296eae73093f30172a8b53b` | 26/11/2026 |
+| `rio-branco` | `rio-branco-pixen-576x400.png` | `83c1cd5c20edaee97216181537211fe4ad832aeef5260ea2ffd46f80f63e80b3` | 26/11/2026 |
+| `maceio` | `maceio-pixen-576x400.png` | `71e3a7f490bf7b9671df4a2701e625c29fded0fe6858c77c27d4628485c5518b` | 26/11/2026 |
+| `macapa` | `macapa-pixen-576x400.png` | `ddd9d59f7ac45f5ed384d6fbc764f91263ab7389cf1a1ee5d053a881c0aed86a` | 26/11/2026 |
+| `fortaleza` | `fortaleza-pixen-576x400.png` | `39d6b159dcdc5f97af51d15d159755a1b2ea7e748017911060efe11e5fdc7c0d` | 26/11/2026 |
+| `brasilia` | `brasilia-pixen-576x400.png` | `a61e754460f5ac0c9581ce1994351189cc2ae90588a6283da676eee58f4ca31b` | 26/11/2026 |
+| `vitoria` | `vitoria-pixen-576x400.png` | `6c581d17b34c33b8ba9a6f88c80d2319cd2ebce59e9ef00317248e35e4d458d8` | 26/11/2026 |
+| `goiania` | `goiania-pixen-576x400.png` | `01704f377729f8e97fe5c85e4e62ce8e38c61610982ea991b7912a1512f5939b` | 26/11/2026 |
+| `sao-luis` | `sao-luis-pixen-576x400.png` | `e301def308e3921e8af9d158e511c54bdd9572479a4c6c5780a6680a1134351c` | 26/11/2026 |
+| `cuiaba` | `cuiaba-pixen-576x400.png` | `1d6f923cb9c68e2e53e69c3670854b7796487f9379671c430805d4b8292010bd` | 26/11/2026 |
+| `campo-grande` | `campo-grande-pixen-576x400.png` | `9f8846422d5363c23d5bcac48a072807f5db47a0c0c25b9fda5d01260861b9ae` | 26/11/2026 |
 | `sao-paulo` | `sao-paulo-pixen-576x400.png` | `810cdf158d56dffee53b8ad0410cb721608f02edc0c90dbb0becab84af6ab9a7` | 26/11/2026 |
 | `aracaju` | `aracaju-pixen-576x400.png` | `cfbcb59af8c5a5fc90e649f8d5e89e56595e95725ef4c17de2f79f3344667c47` | 26/11/2026 |
 | `palmas` | `palmas-pixen-576x400.png` | `25943ecdf544aab9995387d8a9bd448af4a03c1c2ab6546a8d137325b23856cb` | 26/11/2026 |
@@ -106,6 +116,16 @@ PNG indexado sem perda (RGBA igual ao do bruto).
 | `porto-velho` | `porto-velho-pixen-576x400.png` | `3e5578c6bcb681faf0f239cee95e15c1a8ec0791da6febd320bef39741f7bf39` | 26/11/2026 |
 | `boa-vista` | `boa-vista-pixen-576x400.png` | `c03f380f9c17219b7dd02bceb14ee720247b5c9abde4952955701b356ccc0d56` | 26/11/2026 |
 | `florianopolis` | `florianopolis-pixen-576x400.png` | `4e91e6cb5f6d7017158f1af18bf5cbda18fff79cbdb73a28f7a980fc230046ba` | 26/11/2026 |
+| `nova-york` | `nova-york-pixen-576x400.png` | `b6afaf1dd3436d98befeb2a374cc0aaef6eba21990778f9a15db62cb70bb1eb4` | 26/11/2026 |
+| `londres` | `londres-pixen-576x400-retry.png` | `7eb8dc02065d3c922d861a562505dbe544b8b53d8543aa5cc861c6b5f901f2f7` | 26/11/2026 |
+| `paris` | `paris-pixen-576x400.png` | `df1a972ccb7e9caf05c35aa820e55bf958ee2adb6c65c29de3efccb053eec1a2` | 26/11/2026 |
+| `madri` | `madri-pixen-576x400.png` | `d64b9b6a4eddf809f64c8a49a54a308c58f14a1525351bdefa1c4a002935a93f` | 26/11/2026 |
+| `toquio` | `toquio-pixen-576x400.png` | `adf9e04ef81c5abee244798be55185f4803c291a392883fb1911fd4566056138` | 26/11/2026 |
+| `campinas` | `campinas-pixen-576x400.png` | `fdfaad29a4af0c4f2cfaaa4e2cae74ee51193e0e44b8a25c7fa1580a0e3432cc` | 26/11/2026 |
+| `santos` | `santos-pixen-576x400.png` | `bd245773ed66a949b61190e0761d50dbe391d06bfde08148d1a9951909de99a3` | 26/11/2026 |
+| `joinville` | `joinville-pixen-576x400.png` | `faabc4c96f620bb25876b5c4ce18243bfbe313e08f4d13db35a6354b18c273ae` | 26/11/2026 |
+| `sao-jose-dos-campos` | `sao-jose-dos-campos-pixen-576x400.png` | `54e9adcf9cab25dcd99d3d107031eeb969e8a26ae4847f703042be1b9c0f9ced` | 26/11/2026 |
+| `uberlandia` | `uberlandia-pixen-576x400.png` | `be608eb47b524d4ff1e3ba5007d2094b6ad7f57a965a8f552479daf6a34baa7e` | 26/11/2026 |
 | `sorocaba` | `sorocaba-pixen-576x400.png` | `fbd08c643b881209df8e0dfd1d0fb2eb1cedf0c8263b774ae6ab342cd3e3b30d` | 26/11/2026 |
 | `ribeirao-preto` | `ribeirao-preto-pixen-576x400.png` | `a61c2a7ef8bad4aafca15fc16275ba2f5d279d36a29d753ec553d3b55585204b` | 26/11/2026 |
 | `londrina` | `londrina-pixen-576x400.png` | `f828c27384563de19de7dcdc598bb17a34ec31c50071e00205ebaf1e066e643d` | 26/11/2026 |
@@ -120,6 +140,10 @@ PNG indexado sem perda (RGBA igual ao do bruto).
 Lote 5 (26/11/2026): Sorocaba, Ribeirão Preto, Londrina, Jundiaí, Feira de Santana, Juiz de Fora, Volta Redonda, Foz do
 Iguaçu, Campina Grande e Ipatinga, autoria pelo Opus com `montar_cenas.py`. Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`,
 1ª tentativa (nenhuma tem entrada no `escolhas.json`), sem retoque de pixel.
+
+Lote 4 (26/11/2026): Nova York, Londres, Paris, Madri, Tóquio, Campinas, Santos, Joinville, São José dos Campos e
+Uberlândia, autoria pelo Opus com `montar_cenas.py`. Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`, 1ª tentativa
+(Londres: o retry, pelo `escolhas.json`), sem retoque de pixel.
 
 Lote 2 (26/11/2026): Belém, João Pessoa, Curitiba, Teresina, Rio de Janeiro, Natal, Porto Alegre, Porto Velho, Boa Vista e
 Florianópolis, autoria pelo Opus com `montar_cenas.py`. Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`, 1ª tentativa

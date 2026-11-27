@@ -1,0 +1,227 @@
+{
+  "versao": 1,
+  "id": "toquio",
+  "W": 576,
+  "H": 400,
+  "texto": {
+    "cena": "Tóquio em pixel art, com o pagode e o torii vermelho de um templo, as cerejeiras em flor, as casas de telhado de cerâmica e o rio",
+    "vida": "Dois pedestres no calçamento em frente ao templo e um carro na rua da margem do rio",
+    "portaria": "na porta da casa de madeira ao lado do templo"
+  },
+  "portaria": {
+    "x": 277,
+    "y": 279,
+    "r": [
+      269,
+      255,
+      285,
+      279
+    ],
+    "placa": [
+      277,
+      259
+    ],
+    "farol": [
+      277,
+      269
+    ]
+  },
+  "praca": {
+    "x": 370,
+    "y": 278,
+    "r": [
+      302,
+      216,
+      441,
+      284
+    ],
+    "fonte": [
+      56,
+      12
+    ]
+  },
+  "pontos": [
+    {
+      "x": 370,
+      "y": 214,
+      "r": [
+        330,
+        50,
+        415,
+        215
+      ],
+      "nome": "Pagode do templo"
+    },
+    {
+      "x": 370,
+      "y": 279,
+      "r": [
+        342,
+        240,
+        398,
+        279
+      ],
+      "nome": "Torii"
+    },
+    {
+      "x": 560,
+      "y": 200,
+      "r": [
+        548,
+        0,
+        576,
+        400
+      ],
+      "nome": "Rio Sumida"
+    }
+  ],
+  "calcadas": {
+    "nos": [
+      [
+        256,
+        279
+      ],
+      [
+        277,
+        279
+      ],
+      [
+        300,
+        279
+      ],
+      [
+        316,
+        279
+      ]
+    ],
+    "arestas": null,
+    "travessias": [],
+    "pontes": []
+  },
+  "pista": [
+    [
+      500,
+      97
+    ],
+    [
+      500,
+      149
+    ],
+    [
+      504,
+      152
+    ],
+    [
+      508,
+      149
+    ],
+    [
+      508,
+      97
+    ],
+    [
+      504,
+      94
+    ]
+  ],
+  "carros": [
+    {
+      "s": 0,
+      "v": 16,
+      "peca": "carro-1",
+      "tamanho": [
+        8,
+        4
+      ]
+    }
+  ],
+  "pedestres": [
+    {
+      "de": 0,
+      "para": 1,
+      "s": 8,
+      "v": 15
+    },
+    {
+      "de": 2,
+      "para": 3,
+      "s": 6,
+      "v": 16
+    }
+  ],
+  "oclusoes": [],
+  "cordoes": [
+    [
+      304,
+      278,
+      340,
+      278
+    ],
+    [
+      400,
+      278,
+      439,
+      278
+    ]
+  ],
+  "luzes": [
+    [
+      122,
+      78,
+      10,
+      0.45
+    ],
+    [
+      154,
+      76,
+      10,
+      0.45
+    ],
+    [
+      50,
+      73,
+      10,
+      0.45
+    ],
+    [
+      21,
+      175,
+      10,
+      0.45
+    ],
+    [
+      47,
+      261,
+      10,
+      0.45
+    ],
+    [
+      110,
+      262,
+      10,
+      0.45
+    ]
+  ],
+  "superficies": {
+    "calcada": [
+      "b69d81",
+      "baa284",
+      "c0a789",
+      "cbb69c",
+      "8d6a60",
+      "764f4c",
+      "805c57",
+      "937966",
+      "a38a78",
+      "a27861"
+    ],
+    "faixa": [],
+    "ponte": [],
+    "asfalto": [
+      "423449",
+      "45354a",
+      "674248",
+      "5e3d48"
+    ]
+  }
+}
