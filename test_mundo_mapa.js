@@ -600,15 +600,19 @@ async function arranjoSemPuxarNemCruzar() {
       assert.ok(!corta(guias[i].s, guias[j].s), `${tela}: as linhas de ${guias[i].id} e ${guias[j].id} se cruzam`);
     }
   }
-  // o atlas chega depois do clima: os botões se refazem no lugar novo do ícone
+  // o atlas chega depois do clima: os botões se refazem no lugar novo do ícone, sempre inteiros dentro do palco de 640x400
+  // (34 px da borda): o foco num alvo da beira ou fora da vista não rola a página; a câmera é que vai até ele
   const a = await abrir("#brasil", { passo: 50 });
   a.rodar(3);
   await carregar(a);
   a.rodar(3);
-  const cam = a.M.camera, alvos = a.M.niveis.brasil.alvos();
+  const cam = a.M.camera, alvos = a.M.niveis.brasil.alvos(), prender = (v, min, max) => Math.min(Math.max(v, min), max);
+  let presos = 0;
   a.elementos["mundo-alvos"].filhos.forEach((b, i) => {
-    const [x, y] = cam.tela(alvos[i].x, alvos[i].y);
-    assert.equal(b.style.transform, `translate(${x}px, ${y - alvos[i].alto / 2}px)`, alvos[i].id);
+    const [x, y] = cam.tela(alvos[i].x, alvos[i].y), px = prender(x, 34, 606), py = prender(y - alvos[i].alto / 2, 34, 366);
+    assert.equal(b.style.transform, `translate(${px}px, ${py}px)`, alvos[i].id);
+    presos += px !== x || py !== y - alvos[i].alto / 2;
   });
+  assert.ok(presos > 0, "algum alvo na beira, preso à borda do palco");
 }
 principal().catch(e => { console.error(e); process.exitCode = 1; });

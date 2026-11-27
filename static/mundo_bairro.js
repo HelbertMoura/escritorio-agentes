@@ -163,7 +163,17 @@ const MundoBairro = (() => {
       }
       return false;
     }
-    return { quadro, clique, sobre: (x, y) => dentro(alvo, x, y), porta: alvo };
+    // a cor da primeira linha do céu (o topo do degradê, o céu carregado e o escuro da noite), para esticar o céu acima
+    function corDoTopo() {
+      const ceu = Ceu.agora(), fechado = { nublado: 0.18, neblina: 0.25, garoa: 0.3, chuva: 0.4, tempestade: 0.6, neve: 0.3 }[Clima.tipo()] || 0;
+      const sobre = (c, cor, a) => c.map((v, i) => v + (cor[i] - v) * a);
+      let c = (ceu.cima.match(/\d+/g) || [0, 0, 0]).slice(0, 3).map(Number);   // ceu.cima vem em "rgb(r,g,b)"
+      if (fechado) c = sobre(c, [62, 68, 86], fechado);
+      if (ceu.escuro > 0) c = sobre(c, [10, 14, 40], ceu.escuro * 0.45);
+      if (!reduzido && ["garoa", "chuva", "tempestade"].includes(Clima.tipo())) c = sobre(c, [30, 40, 70], 0.1);   // depois, o chão molhado do Clima.desenhar pinta o quadro todo
+      return `rgb(${c.map(Math.round).join(",")})`;
+    }
+    return { quadro, clique, sobre: (x, y) => dentro(alvo, x, y), porta: alvo, corDoTopo };
   }
 
   function criar(canvas, destino) {

@@ -81,7 +81,7 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
     },
     performance: { now: () => 0 }, requestAnimationFrame: f => quadros.push(f),
     console: { error: (...a) => (contexto.erros ||= []).push(a.map(String).join(" ")), warn() {}, log() {} },
-    setInterval(f, ms) { intervalos.push(ms); }, clearInterval() {}, setTimeout, Math, Promise, JSON, URLSearchParams,
+    setInterval(f, ms) { intervalos.push(ms); (contexto.repeticoes ||= []).push([ms, f]); }, clearInterval() {}, setTimeout, Math, Promise, JSON, URLSearchParams,
     // as imagens só carregam (ou falham) quando o teste pede (carregar, falhar)
     Image: class {
       constructor() { this.complete = false; this.naturalWidth = 0; this.ouvintes = {}; (contexto.imagens ||= []).push(this); }
@@ -148,13 +148,13 @@ async function chegarAtlas(m) {
   for (const img of m.contexto.imagens || []) if (String(img.src).startsWith("/mundo/atlas.png")) img.carregar();
   m.rodar(2);
 }
-// a festa do dia na cena de uma cidade (com o atlas): algo desenhado, e a fonte e cada peça dentro da praça.
+// a festa do dia na cena de uma cidade (com o atlas): algo desenhado (na praça, nos cordões ou no palco), e a fonte e cada peça dentro da praça.
 // Devolve se alguma arte do atlas apareceu e se alguma forma por código apareceu
 function festaNaPraca(c, onde) {
   const e = c.enfeites, [x0, y0, x1, y1] = c.planta.praca.r;
   const dentro = r => r[0] >= x0 && r[1] >= y0 && r[2] <= x1 && r[3] <= y1;
   assert.ok(e.chave, `${onde}: a festa do dia`);
-  assert.ok(e.formas.length + e.pecas.length + e.cordoes > 0, `${onde}: algo desenhado`);
+  assert.ok(e.formas.length + e.pecas.length + e.cordoes + e.palco.length > 0, `${onde}: algo desenhado (na praça, nos cordões ou no palco)`);
   assert.ok(e.fonte && dentro(e.fonte), `${onde}: fonte ${e.fonte} na praça`);
   for (const s of e.pecas) assert.ok(dentro(s.slice(1)), `${onde}: ${s[0]} na praça`);
   return { pecas: e.pecas.length > 0, formas: e.formas.length > 0 };
@@ -781,9 +781,10 @@ async function principal() {
   }
 
   // celular (390x507 de CSS, dpr 3): uma pinça que volta ao tamanho de partida para em z = 1, a base exata (sem arredondar
-  // para a escala inteira acima dela, que cortaria o mapa ou os chalés); a cidade também entra em z = 1
+  // para a escala inteira acima dela, que cortaria o mapa); a cidade também entra em z = 1. O bairro e a cidade são cena
+  // cheia (Camera inteira): o bairro em escala inteira (85% da altura: 1521 / 180 · 0,85 ≈ 7), cortado nos lados
   const CEL = [390, 507, 3];
-  for (const [hash, base] of [["#brasil", 2.925], ["#bairro", 1170 / 320]]) {
+  for (const [hash, base] of [["#brasil", 2.925], ["#bairro", 7]]) {
     const p = await abrir(hash, { tela: CEL });
     assert.ok(Math.abs(p.M.camera.base - base) < 1e-9, `${hash}: base ${p.M.camera.base}`);
     p.toque("pointerdown", 1, 100, 250); p.toque("pointerdown", 2, 300, 250);
@@ -792,12 +793,13 @@ async function principal() {
     p.rodar(60);
     const c = p.M.camera;
     assert.equal(c.z, 1, `${hash}: a pinça termina em z = 1`); assert.equal(c.alvoZ, 1);
-    assert.ok(c.x - c.W / 2 / c.P <= c.caixa[0] + 1e-9 && c.x + c.W / 2 / c.P >= c.caixa[2] - 1e-9, `${hash}: a largura inteira cabe`);
+    if (hash === "#brasil") assert.ok(c.x - c.W / 2 / c.P <= c.caixa[0] + 1e-9 && c.x + c.W / 2 / c.P >= c.caixa[2] - 1e-9, `${hash}: a largura inteira cabe`);
+    else assert.ok(Number.isInteger(c.P) && c.x - c.W / 2 / c.P >= c.caixa[0] - 1e-9 && c.x + c.W / 2 / c.P <= c.caixa[2] + 1e-9, `${hash}: pixel inteiro, sem tarja nos lados`);
   }
   const pc = await abrir("#cidade=recife", { tela: CEL });
   pc.rodar(30);
   const [, , cw, ch] = pc.M.camera.caixa;
-  assert.ok(Math.abs(pc.M.camera.base - Math.min(1170 / cw, 1521 / ch)) < 1e-9, "cidade: base " + pc.M.camera.base);
+  assert.equal(pc.M.camera.base, Math.ceil(Math.max(1170 / cw, 1521 / ch)), "cidade no celular: a menor escala inteira que cobre a tela");
   assert.equal(pc.M.camera.z, 1, "cidade entra em z = 1"); assert.equal(pc.M.camera.alvoZ, 1);
 
   // aba escondida: nenhum quadro novo; de volta, um só

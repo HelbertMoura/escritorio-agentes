@@ -14,6 +14,10 @@ const Mundo = (() => {
   // dobro da resolução cair em pixel inteiro) até o teto, e no teto pode ser fracionária (com múltiplo, não: o teto
   // desce ao múltiplo de baixo). A origem cai sempre em pixel inteiro. O nível pode baixar o teto com camera.teto() (o z
   // máximo agora; a cidade: o que ainda mostra uma quadra inteira); camera.maximo() diz o teto valendo.
+  // Cena cheia (opcoes.inteira), sem tarja e sempre em pixel inteiro: "cobrir" (a cidade) usa, na tela em retrato (o
+  // celular, onde a cena virava uma faixa no meio do vazio), a menor escala inteira que cobre a tela toda; em paisagem a
+  // cidade segue inteira a 1x, como antes. "ceu" (o bairro) usa uns 85% da altura da tela em escala inteira (e pelo menos
+  // a largura toda) e estica a caixa para cima até o topo da tela, onde o nível pinta o céu.
   function Camera(caixa, opcoes = {}) {
     const MIN = 1, MAX = opcoes.max || 4, M = opcoes.multiplo || 1;
     const teto = () => {
@@ -35,8 +39,13 @@ const Mundo = (() => {
       // prende o zoom (1x a 4x) e o centro, para a vista não sair da caixa; maior que a caixa, a vista fica no meio
       limitar(nova) {
         if (nova) c.caixa = nova;
-        const [x0, y0, x1, y1] = c.caixa;
-        c.base = Math.max(0.05, Math.min(c.W / (x1 - x0), c.H / (y1 - y0)));   // a 1x a caixa cabe inteira, na maior escala
+        const [x0, y0c, x1, y1] = c.caixa, w = x1 - x0, h = y1 - y0c;
+        let y0 = y0c;
+        if (opcoes.inteira === "cobrir" && c.H > c.W) c.base = Math.max(1, Math.ceil(Math.max(c.W / w, c.H / h) - 1e-6));
+        else if (opcoes.inteira === "ceu") {
+          c.base = Math.max(1, Math.ceil(c.W / w - 1e-6), Math.round(c.H / h * 0.85));
+          y0 = Math.min(y0c, y1 - c.H / c.base);   // o céu que sobra em cima entra na caixa: nada de tarja
+        } else c.base = Math.max(0.05, Math.min(c.W / w, c.H / h));   // a 1x a caixa cabe inteira, na maior escala
         c.z = prender(Number.isFinite(c.z) ? c.z : 1); c.alvoZ = prender(Number.isFinite(c.alvoZ) ? c.alvoZ : 1);
         const mw = c.W / 2 / c.P, mh = c.H / 2 / c.P;
         c.x = mw * 2 >= x1 - x0 || !Number.isFinite(c.x) ? (x0 + x1) / 2 : Math.min(x1 - mw, Math.max(x0 + mw, c.x));
@@ -128,32 +137,48 @@ const Mundo = (() => {
 
   let W = 0, H = 0, dpr = 1, mapa = null, nome = null, nivel = null, atualCidade = null, ultimaCidade = null, trans = null;
   const MARGEM = 8;   // a folga da dica até a borda do palco, em px CSS
+  const BORDA_ALVO = 34;   // metade do maior botão de alvo (a porta, 56 px) com o anel do foco (3 + 2 px) e folga
   let botoes = [], chaveAlvos = "", dicaAlvo = null, anterior = performance.now(), pedido_ = false, gesto = null, roda = 0;
   let toque = null;   // o último toque solto (tempo e ponto): o segundo, logo depois e perto, aproxima no ponto
   // a festa do dia (festas.js): só depois da resposta do clima, que traz as festas desligadas (antes dela, nada de
-  // enfeite). Só o calendário embutido: as datas próprias da empresa nunca chegam à página pública
-  let festa = null, restoChuva = 0;
+  // enfeite). Só o calendário embutido: as datas próprias da empresa nunca chegam à página pública. O mapa e o globo
+  // usam a de Brasília; cada cidade, a dela (data local e regionais), calculada uma vez até a resposta seguinte
+  let festa = null, festas = null, restoChuva = 0;
   function definirFesta(resp) {
     if (!window.Festas) return;
     const d = resp && Array.isArray(resp.festas_desligadas) ? resp.festas_desligadas : [];
     Festas.configurar({ desligadas: d.filter(k => typeof k === "string") });
     festa = Festas.ativa();
+    festas = new Map();
   }
-  const hojeE = () => (festa ? ` Hoje é ${festa.nome}.` : "");
+  function festaDaCidade(id) {
+    if (!festas) return null;
+    if (!festas.has(id)) {
+      const c = mapa && mapa.porId.get(id);
+      festas.set(id, c ? Festas.naCidade({ id, uf: c.fora ? "" : c.uf }) : null);
+    }
+    return festas.get(id);
+  }
+  const hojeE = (f = festa) => (f ? ` Hoje é ${f.nome}.` : "");
   const niveis = { bairro: nivelBairro() }, toques = new Map();
 
-  // o bairro de hoje, desenhado 1:1 num quadro de 320x180 e ampliado pela câmera (a 1x, na escala fracionária que enche
-  // o palco, com uma pequena irregularidade de pixel; acima de 1x, em escala inteira)
+  // o bairro de hoje, desenhado 1:1 num quadro de 320x180 e ampliado pela câmera sempre em escala inteira; o céu
+  // que sobra em cima da tela é a cor do topo da cena, esticada
   function nivelBairro() {
-    const cena = MundoBairro.cena(entrar, { reduzido, destaque: !tv }), camera = Camera([0, 0, MundoBairro.W, MundoBairro.H]), p = cena.porta;
+    const cena = MundoBairro.cena(entrar, { reduzido, destaque: !tv }), p = cena.porta;
+    const camera = Camera([0, 0, MundoBairro.W, MundoBairro.H], { inteira: "ceu" });
     const quadro = document.createElement("canvas"); quadro.width = MundoBairro.W; quadro.height = MundoBairro.H;
     const qctx = quadro.getContext("2d");
     const porta = { id: "porta", x: p.x + p.w / 2, y: p.y + p.h / 2, alto: 0, titulo: "Recepção",
       texto: convite ? "Entrar com convite" : "Entrar na recepção", rotulo: "Porta do chalé com a placa: entrar na recepção" };
     return {
       nome: "bairro", camera,
-      entrar() { climaDaCidade(); }, sair() {},
-      quadro(c, dt, t) { qctx.imageSmoothingEnabled = false; cena.quadro(qctx, dt, t); c.drawImage(quadro, 0, 0); },
+      // entra com o recorte na porta da firma e o chão encostado embaixo
+      entrar() { climaDaCidade(); camera.x = porta.x; camera.y = MundoBairro.H; camera.limitar(); }, sair() {},
+      quadro(c, dt, t) {
+        qctx.imageSmoothingEnabled = false; cena.quadro(qctx, dt, t); c.drawImage(quadro, 0, 0);
+        c.fillStyle = cena.corDoTopo(); c.fillRect(-MundoBairro.W, -4 * MundoBairro.H, 3 * MundoBairro.W, 4 * MundoBairro.H);   // o céu esticado
+      },
       clique(x, y) { cena.clique(x, y); return null; },
       sobre(x, y) { return cena.sobre(x, y) ? porta : null; },
       alvos() { return [porta]; },
@@ -252,13 +277,13 @@ const Mundo = (() => {
     const hora = Ceu.agora().hora, c = atualCidade && mapa && mapa.porId.get(atualCidade);
     if (!mapa) estado.textContent = `${hora} · ${Clima.texto()} · O mapa não abriu agora; o bairro e a recepção seguem aqui.`;
     else if (nome === "globo") estado.textContent = `Terra, ${hora} em Brasília. Clique no Brasil ou aproxime para descer ao mapa; ` +
-      "os pontos dourados são cidades de outros países.";
+      "os pontos dourados são cidades de outros países." + hojeE();
     else if (nome === "brasil") {
       const casa = mapa.casa && mapa.porId.get(mapa.casa);
       estado.textContent = `Brasil, ${hora}.${hojeE()} Escolha uma cidade no mapa.${casa ? ` O escritório fica em ${casa.nome}.` : ""}`;
     } else if (nome === "cidade") {
       const casa = mapa.casa && mapa.porId.get(mapa.casa);
-      estado.textContent = `${c.nome} (${c.uf}), ${mapa.texto(c)}.${hojeE()} ` +
+      estado.textContent = `${c.nome} (${c.uf}), ${mapa.texto(c)}.${hojeE(festaDaCidade(c.id))} ` +
         (casa === c ? (nivel.planta.cena ? `A portaria do escritório fica ${nivel.planta.cena.texto.portaria}. Selecione-a para descer ao bairro.`
                                          : "O chalé com a placa é o escritório: clique nele para descer ao bairro.")
         : casa ? `O escritório fica em ${casa.nome}; Esc volta ${c.fora ? "ao globo" : "ao mapa"}.` : `Esc volta ${c.fora ? "ao globo" : "ao mapa"}.`);
@@ -309,7 +334,13 @@ const Mundo = (() => {
     const cam = nivel.camera, chave = cam.origem().join() + "," + cam.P + "," + W + "," + H + "," + (nivel.assinatura ? nivel.assinatura() : "");
     if (chave === chaveAlvos) return;
     chaveAlvos = chave;
-    for (const [b, a] of botoes) { const [x, y] = cam.tela(a.x, a.y); b.style.transform = `translate(${x / dpr}px, ${y / dpr - a.alto / 2}px)`; }
+    // O botão fica sempre inteiro dentro do palco (com o anel do foco): o Tab num alvo fora da vista não rola a página;
+    // o foco leva a câmera até ele (verAlvo) e o botão volta para cima do alvo. Os botões não pegam clique.
+    const Wc = W / dpr, Hc = H / dpr, M = BORDA_ALVO;
+    for (const [b, a] of botoes) {
+      const [x, y] = cam.tela(a.x, a.y);
+      b.style.transform = `translate(${prender(x / dpr, M, Wc - M)}px, ${prender(y / dpr - a.alto / 2, M, Hc - M)}px)`;
+    }
     if (dicaAlvo) {   // a dica ocupa [cx - w/2, cx + w/2] x [by - h, by] (o translate do visita.css) e não sai do palco
       const [x, y] = cam.tela(dicaAlvo.x, dicaAlvo.y), w = dica.offsetWidth, h = dica.offsetHeight, Wc = W / dpr, Hc = H / dpr;
       const cx = w > Wc - 2 * MARGEM ? Math.round(Wc / 2) : prender(x / dpr, MARGEM + w / 2, Wc - MARGEM - w / 2);
@@ -498,7 +529,7 @@ const Mundo = (() => {
     .then(dados => {
       mapa = MundoMapa.criar({ dados, Camera, reduzido, festa: () => festa });
       Object.assign(niveis, mapa.niveis, {
-        cidade: MundoCidade.criar({ dados, Camera, reduzido, mapa, clima: climaDaCidade, festa: () => festa,
+        cidade: MundoCidade.criar({ dados, Camera, reduzido, mapa, clima: climaDaCidade, festa: festaDaCidade,
           avisar: cena => {
             if (nome !== "cidade") return;
             // a cena integral troca os alvos: o foco do teclado fica no mesmo alvo (ou no primeiro, se ele saiu)
@@ -506,13 +537,14 @@ const Mundo = (() => {
             rotular(); montarAlvos();
             if (cena) {
               const novo = focado && (botoes.find(([, a]) => a.id === focado[1].id) || botoes[0]);
-              if (novo) novo[0].focus();
+              if (novo) novo[0].focus({ preventScroll: true });   // o focus mostra o alvo (verAlvo) sem rolar o palco
               if (nivel.destaque) destacar(nivel.alvos().find(a => a.id === nivel.destaque));
               if (!etiquetaAte) mostrar();
             }
           } }) });
       // sem o globo, a página abre no Brasil; a falha fica no console
-      try { niveis.globo = Globo.criar({ dados, Camera, reduzido }); } catch (e) { console.error("Globo não abriu:", e); }
+      try { niveis.globo = Globo.criar({ dados, Camera, reduzido, festa: () => festa, festaEm: festaDaCidade }); }
+      catch (e) { console.error("Globo não abriu:", e); }
     })
     .catch(() => { mapa = null; })   // sem o mapa, a página segue com o bairro, como antes
     .then(() => {

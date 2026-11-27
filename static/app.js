@@ -229,6 +229,7 @@ function ajustarEscala() {
   else vh = Math.round(Math.max(380, Math.min(window.innerHeight * 0.72, vw * predio.H / predio.W)));
   tela.width = Math.round(vw * dpr); tela.height = Math.round(vh * dpr);
   tela.style.width = `${vw}px`; tela.style.height = `${vh}px`;
+  palco.style.setProperty("--tela-h", `${vh}px`);   // estilo.css: no cartão do celular, o dock fica no pé do canvas
   if (!cam.ajustada) { verTudo(true); cam.ajustada = true; }
 }
 
@@ -626,10 +627,10 @@ function desenharCena(t) {
   desenharPortas(t);
   for (const s of [...predio.salas, ...predio.baixo]) if (Vida.emReuniao(s.chave)) Mapa.desenharPlacaReuniao(ctx, s);   // a placa "em reunião" na porta (mapa.js)
   if (Z) naEscala(() => Z.ar(ctx, ta));   // moscas, a placa de interditado, a cafeteira quebrada, o brilho e as faíscas
-  Clima.desenhar(ctx, predio, dtQuadro, t, Som.ligado ? Som : null);
   desenharMarcasDeSala(ceu);   // antes do multiply da noite: a placa pertence à parede e recebe a luz da sala
   desenharLuzes(dt0(t), ceu);
   desenharLuzesDasSalas(ceu);
+  Clima.desenhar(ctx, predio, dtQuadro, t, Som.ligado ? Som : null);   // depois da noite: a chuva (só lá fora) não some no escuro
   Efeitos.luzesNoite(ctx, ceu);
   Efeitos.festaAr(ctx, festa, t, dtQuadro, ceu);
   Efeitos.particulas(ctx, dtQuadro, mundo, t);
@@ -841,9 +842,9 @@ function desenharEntregador(e, t) {
 
 // o banheiro fica aceso com alguém numa cabine ou a faxina lá dentro
 const banheiroEmUso = () => !!(predio.banheiro && (predio.banheiro.cabines.some(k => k.ocupada) || (window.Zeladoria && Zeladoria.estado().limpando)));
-// a luz da noite é multiplicada (tinge sem apagar o desenho): azul lá fora e nos corredores, quase preto-azulado nas
-// salas vazias (dá para ler) e branco quente nas salas acesas, que ficam bem mais claras que o resto
-const NOITE = [78, 88, 150], SALA_APAGADA = [58, 64, 112], SALA_ACESA = [255, 234, 200];
+// a luz da noite é multiplicada (tinge sem apagar o desenho): azul lá fora e nos corredores, índigo nas salas vazias
+// (dá para ler) e uma penumbra leve nas acesas, onde abajures, telas, fliperamas e a cozinha fazem as poças de luz
+const NOITE = [78, 88, 150], SALA_APAGADA = [84, 90, 148], SALA_ACESA = [184, 178, 222];   // penumbra índigo leve: a luz vem das peças
 const tingir = (cor, n) => `rgb(${cor.map(v => Math.round(255 + (v - 255) * n)).join(",")})`;
 // portaria fechada: discreta, mas ainda legível; o expediente.js decide o aberto/fechado pela hora e pelo fuso do andar
 const PORTARIA_FECHADA = 0.22, LUZ_MINIMA = 0.5;
@@ -913,6 +914,9 @@ function desenharLuzes(dt, ceu) {
       } else if (/arcade|rack_tv|estacao_gamer|aquario|neon|tv_parede/.test(o.nome || "")) {
         const sala = o.sala || (o.sala = salaEm({ x: o.x + o.w / 2, y: o.y + o.h })), luz = sala ? sala.luz : 1;
         if (luz > 0.05) brilho(o.x + o.w / 2, o.y + o.h / 3, 26, `rgba(140,110,255,${0.22 * noite * luz})`);
+      } else if (/geladeira_bebidas|^vendas2?$|cafeteira|microondas/.test(o.nome || "")) {   // máquina e cozinha: luz fria de vitrine
+        const sala = o.sala || (o.sala = salaEm({ x: o.x + o.w / 2, y: o.y + o.h })), luz = sala ? Math.max(sala.luz, 0.5) : 1;
+        brilho(o.x + o.w / 2, o.y + o.h / 2, 22, `rgba(150,220,255,${0.24 * noite * luz})`);
       }
     }
     for (const l of [...(predio.luzesTeto || []), ...(predio.luzesTeto2 || [])]) { // luminárias de teto dos corredores: a lâmpada, o halo nela e a luz no chão
@@ -930,6 +934,12 @@ function desenharLuzes(dt, ceu) {
   }
 }
 
+// número de 0 a 1 fixo para (dia, i): o mesmo em toda carga do dia, sem Math.random
+function sorteioDoDia(dia, i) {
+  let h = Math.imul(dia ^ 0x9e3779b9, 2654435761) ^ Math.imul(i + 1, 40503);
+  h ^= h >>> 15; h = Math.imul(h, 2246822507); h ^= h >>> 13;
+  return (h >>> 0) / 4294967296;
+}
 // O que está aceso dentro vaza para as janelas e para a fachada. Só o agregado de cada sala (s.luz, calculado em
 // desenharLuzes pelo trabalho real) atravessa a parede: nome, tarefa ou qualquer dado de gente fica dentro do app.
 function desenharLuzesDasSalas(ceu) {
@@ -945,9 +955,18 @@ function desenharLuzesDasSalas(ceu) {
   };
   if (f) {
     ctx.save();
+    const dia = Math.floor((Date.now() - new Date().getTimezoneOffset() * 6e4) / 864e5);   // o dia local: troca à meia-noite, não às 21h
     for (let i = 0; i < f.janelas.length; i++) {
       const j = f.janelas[i];
-      const forca = luzDaFachada(i) * (0.16 + 0.34 * noite) * (aberto ? 1 : 0.55);
+      let forca = luzDaFachada(i) * (0.16 + 0.34 * noite) * (aberto ? 1 : 0.55);
+      // à noite, umas 70% das janelas ficam acesas (sorteio fixo no dia, igual em toda tela), com o reflexo na calçada
+      if (noite > 0.35 && sorteioDoDia(dia, i) < 0.7) {   // janela acesa: vidro amarelo cheio, a faixa de cima mais clara
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = `rgba(250,206,112,${0.85 * noite})`; ctx.fillRect(j.x + 1, j.y + 1, j.w - 2, j.h - 2);
+        ctx.fillStyle = `rgba(255,236,170,${0.85 * noite})`; ctx.fillRect(j.x + 1, j.y + 1, j.w - 2, 2);
+        ctx.fillStyle = `rgba(255,214,140,${0.3 * noite})`; ctx.fillRect(j.x + 1, f.porta.y + 3, j.w - 2, 2);   // reflexo na calçada
+        continue;
+      }
       if (forca < 0.012) continue;
       ctx.globalCompositeOperation = noite > 0.35 ? "lighter" : "source-over";
       ctx.fillStyle = `rgba(255,226,164,${forca})`; ctx.fillRect(j.x + 1, j.y + 1, j.w - 2, j.h - 2);
@@ -996,10 +1015,30 @@ function desenharMarcasDeSala(ceu) {
 // onde fica a lâmpada em cada luminária solta (x, y a partir do canto do sprite; espelhada, o x vira)
 const LUZ_DA_PECA = { luminaria: [6, 3], luminaria_chao: [12, 15], ring_light: [8, 7], luminaria_arco: [20, 10] };
 
+// Luz em 3 degraus duros, sem gradiente liso: um disco de pixel com 1/3, 2/3 e a força toda no miolo, feito uma vez por
+// raio e cor. O disco soma mais luz que o gradiente antigo (que caía até zero), então a força entra a 70%.
+const DISCOS_DE_LUZ = new Map();
+function discoDeLuz(R, rgb) {
+  const chave = R + "|" + rgb;
+  let c = DISCOS_DE_LUZ.get(chave);
+  if (c) return c;
+  c = document.createElement("canvas"); c.width = c.height = R * 2;
+  const g = c.getContext("2d"), img = g.createImageData(R * 2, R * 2), [cr, cg, cb] = rgb.split(",").map(Number);
+  for (let y = 0; y < R * 2; y++) for (let x = 0; x < R * 2; x++) {
+    const d = Math.hypot(x + 0.5 - R, y + 0.5 - R) / R, nivel = d < 1 / 3 ? 1 : d < 2 / 3 ? 2 / 3 : d < 1 ? 1 / 3 : 0;
+    const i = (y * R * 2 + x) * 4; img.data[i] = cr; img.data[i + 1] = cg; img.data[i + 2] = cb; img.data[i + 3] = Math.round(nivel * 255);
+  }
+  g.putImageData(img, 0, 0);
+  DISCOS_DE_LUZ.set(chave, c);
+  return c;
+}
 function brilho(x, y, r, cor) {
-  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-  g.addColorStop(0, cor); g.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  const i = cor.lastIndexOf(","), a = parseFloat(cor.slice(i + 1)) * 0.7, R = Math.max(1, Math.round(r));
+  if (!(a > 0.004)) return;
+  const antes = ctx.globalAlpha;
+  ctx.globalAlpha = Math.min(1, antes * a);
+  ctx.drawImage(discoDeLuz(R, cor.slice(cor.indexOf("(") + 1, i).replace(/\s/g, "")), Math.round(x) - R, Math.round(y) - R);
+  ctx.globalAlpha = antes;
 }
 
 // retângulo do mundo que aparece na tela agora (rótulos e balões ficam dentro dele)
@@ -1481,25 +1520,21 @@ function cartaoPedido(t, nome, handle, compacto) {
 
 // ---------- recepção no mapa: o atalho "Esperando você" ligado ao balcão (recepcao.js) ----
 // Conta a mesma fila do widget (agentes esperando + terminais da ponte), sem pedido novo e sem somar outros andares.
-let recepcaoUI = null, recepcaoOculta = false, recepcaoAssinatura = "", recepcaoFora = false;
-let recepcaoAplicado = "", recepcaoMetricas = null;
+let recepcaoUI = null, recepcaoOculta = false, recepcaoAssinatura = "";
 const CHAVE_RECEPC = "escritorio:recepcao";
 try { recepcaoOculta = localStorage.getItem(CHAVE_RECEPC) === "oculta"; } catch (e) { /* só nesta visita */ }
 
-const recepcaoEstreita = () => innerWidth <= 760;   // a decisão é da viewport; vw continua só na geometria do palco
 const recepcaoPermitida = () => !!config && !Andar.perfil(config).noSaguao;   // o saguão não tem Aprovações
 // entre Andar.definir e a primeira leitura do andar novo, a fila antiga não volta a aparecer (nem por ponte ou quadro)
 function recepcaoDoAndarAtual() { return !trocando && estadoAndar === Andar.atual; }
-function invalidarRecepcao() { recepcaoMetricas = null; recepcaoAplicado = ""; }
 // Some com o atalho e a fila de uma vez: troca de andar, saguão e perfil sem Aprovações não deixam fila antiga para trás.
 function limparFilaRecepcao() {
-  recepcaoAssinatura = ""; recepcaoFora = false;
+  recepcaoAssinatura = "";
   if (recepcaoUI) recepcaoUI.fechar(false);
   const b = $("recepc"), lista = $("recepc-lista"), n = $("recepc-n");
   if (b) b.hidden = true;
   if (lista) lista.replaceChildren();
   if (n) { n.hidden = true; n.textContent = ""; }
-  invalidarRecepcao();
 }
 
 function aplicarRecepcaoToggle() {
@@ -1510,7 +1545,6 @@ function aplicarRecepcaoToggle() {
   if (rot) rot.textContent = `${recepcaoOculta ? "Mostrar" : "Esconder"} recepção`;
   t.setAttribute("aria-label", recepcaoOculta ? 'Mostrar o "Esperando você" no mapa' : 'Esconder o "Esperando você" do mapa');
   if (recepcaoOculta && recepcaoUI && recepcaoUI.estaAberto()) recepcaoUI.fechar(false);
-  invalidarRecepcao();
   posicionarRecepcao();
 }
 function alternarRecepcao() {
@@ -1550,14 +1584,10 @@ function montarRecepcao() {
   const b = $("recepc"), p = $("recepc-painel");
   if (!b || !p) return;
   recepcaoUI = Recepcao.criar({ botao: b, painel: p, botaoFechar: $("recepc-fechar"),
-    aoAbrir: () => { fecharResumoSala(false); invalidarRecepcao(); posicionarRecepcao(); },   // fila e resumo não ficam abertos juntos
-    aoFechar: () => invalidarRecepcao() });
+    aoAbrir: () => fecharResumoSala(false),   // fila e resumo não ficam abertos juntos
+    aoFechar: () => {} });
   b.addEventListener("click", () => {
     if (!recepcaoUI.estaAberto()) fecharResumoSala(false);
-    if (!recepcaoUI.estaAberto() && recepcaoFora) {   // atalho de reserva: a pessoa pediu, então reenquadra a recepção
-      const s = predio && predio.salas.find(x => x.tipo === "recepcao");
-      if (s) { irParaEscritorio(); moverCamera({ x: s.px + s.pw / 2, y: s.py + s.ph / 2, k: Math.max(cam.k, 3.2 * dpr) }); }
-    }
     recepcaoUI.alternar();
   });
   // a origem da ficha é marcada antes do item abrir o cartão (captura). O Responder da pergunta conta; Permitir/Negar não.
@@ -1568,11 +1598,6 @@ function montarRecepcao() {
     if (ev.target.closest(".linha-ir, a, .decisao-responder")) recepcaoUI.fechar(false);
   });
   $("recepc-toggle").addEventListener("click", alternarRecepcao);
-  if (window.ResizeObserver) {   // mudou o tamanho dos controles, do atalho ou da lista: remede no próximo quadro
-    const ro = new ResizeObserver(invalidarRecepcao);
-    for (const el of [document.querySelector(".controles"), b, p]) if (el) ro.observe(el);
-  }
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(invalidarRecepcao).catch(() => {});
   aplicarRecepcaoToggle();
 }
 function atualizarRecepcao(esperando, espT, sit) {
@@ -1581,8 +1606,8 @@ function atualizarRecepcao(esperando, espT, sit) {
   if (!recepcaoDoAndarAtual()) { limparFilaRecepcao(); return; }   // trocando de andar: a fila antiga fica fora até a leitura nova
   if (!recepcaoPermitida()) { limparFilaRecepcao(); return; }   // saguão: sem atalho, fila e toggle
   const total = esperando.length + espT.length, n = $("recepc-n"), rotulo = total ? String(total) : "";
-  if (n.textContent !== rotulo) { n.textContent = rotulo; invalidarRecepcao(); }
-  if (n.hidden !== !total) { n.hidden = !total; invalidarRecepcao(); }
+  if (n.textContent !== rotulo) { n.textContent = rotulo; posicionarRecepcao(); }
+  if (n.hidden !== !total) { n.hidden = !total; posicionarRecepcao(); }
   const pronto = sit === "pronto";
   const resumo = total ? `${total} ${total === 1 ? "pendência" : "pendências"}` : pronto ? "nenhuma pendência" : "sem leitura agora";
   const etiqueta = `Esperando você: ${resumo}. Abrir a lista`;
@@ -1598,7 +1623,7 @@ function atualizarRecepcao(esperando, espT, sit) {
   lista.replaceChildren(...linhas);
   if (!linhas.length) lista.append(elem("p", "widget-vazio" + (sit === "carregando" ? " carregando" : ""),
     pronto ? "Nada esperando você agora." : (TEXTO_LEITURA[sit] ? TEXTO_LEITURA[sit].vazio : "Sem leitura de pendências agora.")));
-  invalidarRecepcao();
+  posicionarRecepcao();
   if (!aberto || !chave) return;
   // a fila aberta acompanha a leitura: foco no mesmo pedido quando ele continua; se o alvo sumiu, fecha e volta ao gatilho
   const mesmo = [...lista.querySelectorAll("[data-recepc-key]")].find(e => e.dataset.recepcKey === chave);
@@ -1606,54 +1631,17 @@ function atualizarRecepcao(esperando, espT, sit) {
   const alvo = mesmo.matches && mesmo.matches("button, a") ? mesmo : (mesmo.querySelector(".linha-ir") || mesmo.querySelector("button"));
   if (alvo) alvo.focus({ preventScroll: true });
 }
-// O chip segue o centro do balcão na câmera atual, preso ao mapa e desviando dos controles da câmera.
-function medirRecepcao() {
-  const b = $("recepc"), ctl = document.querySelector(".controles"), pr = $("palco").getBoundingClientRect();
-  let evitar = null;
-  if (ctl && !ctl.hidden) { const cr = ctl.getBoundingClientRect(); evitar = { x: cr.left - pr.left - 6, y: cr.top - pr.top - 6, w: cr.width + 12, h: cr.height + 12 }; }
-  const p = $("recepc-painel"), aberto = !!(recepcaoUI && recepcaoUI.estaAberto());
-  recepcaoMetricas = { vw, vh, bw: b.offsetWidth || 120, bh: b.offsetHeight || 30, evitar,
-    pw: aberto ? p.offsetWidth || 340 : 0, ph: aberto ? p.offsetHeight || 240 : 0 };
-}
+// O chip mora no canto de cima do HUD do mapa (CSS: .hud-se), sem seguir o balcão: aparece só com pendência na fila.
 function posicionarRecepcao() {
   const b = $("recepc");
   if (!b) return;
   const modoDeVer = document.body.classList.contains("tv") || document.body.classList.contains("modo-foto")
     || document.documentElement.classList.contains("apresentacao");
   const s = predio ? predio.salas.find(x => x.tipo === "recepcao") : null;
-  if (recepcaoOculta || !recepcaoDoAndarAtual() || !recepcaoPermitida() || !s || modoDeVer) {
-    if (recepcaoUI && recepcaoUI.estaAberto()) recepcaoUI.fechar(false);
-    if (recepcaoAplicado !== "oculto") {
-      if (!b.hidden) b.hidden = true;
-      b.classList.remove("recepc-fora");
-      recepcaoAplicado = "oculto";
-    }
-    return;
-  }
-  if (b.hidden) b.hidden = false;
-  if (!recepcaoMetricas || recepcaoMetricas.vw !== vw || recepcaoMetricas.vh !== vh) medirRecepcao();
-  const { bw, bh, evitar } = recepcaoMetricas;
-  const cx = (s.px + s.pw / 2 - cam.x) * cam.k / dpr + vw / 2;
-  const cy = (s.py + s.ph / 2 - cam.y) * cam.k / dpr + vh / 2;
-  // O balcão fora da vista (primeiro enquadramento em cima de quem espera, zoom no celular) não some: o atalho
-  // fica de reserva no canto livre (embaixo no desktop, em cima no celular), longe dos controles. Só o clique reenquadra.
-  recepcaoFora = cx < -48 || cx > vw + 48 || cy < -48 || cy > vh + 48;
-  const alvoX = recepcaoFora ? vw - bw - 12 : cx - bw / 2;
-  const alvoY = recepcaoFora ? (recepcaoEstreita() ? 12 : vh - bh - 12) : cy - bh - 10;
-  const pos = Recepcao.encaixar(alvoX, alvoY, bw, bh, { w: vw, h: vh }, evitar);
-  const aberto = !!(recepcaoUI && recepcaoUI.estaAberto());
-  const pp = aberto && !recepcaoEstreita()
-    ? Recepcao.encaixar(pos.x, pos.y - recepcaoMetricas.ph - 8, recepcaoMetricas.pw, recepcaoMetricas.ph, { w: vw, h: vh }, evitar)
-    : null;
-  const chave = [pos.x, pos.y, recepcaoFora ? 1 : 0, aberto ? 1 : 0, pp ? pp.x : "", pp ? pp.y : ""].join("|");
-  if (chave === recepcaoAplicado) return;   // mesmo lugar: nenhuma leitura de layout nem escrita
-  recepcaoAplicado = chave;
-  b.classList.toggle("recepc-fora", recepcaoFora);
-  b.style.left = pos.x + "px"; b.style.top = pos.y + "px";
-  const p = $("recepc-painel");
-  if (!p) return;
-  if (recepcaoEstreita()) { if (p.style.left) p.style.left = ""; if (p.style.top) p.style.top = ""; }
-  else if (pp) { p.style.left = pp.x + "px"; p.style.top = pp.y + "px"; }
+  const vazio = !(Number.parseInt($("recepc-n").textContent, 10) > 0);
+  const oculto = recepcaoOculta || !recepcaoDoAndarAtual() || !recepcaoPermitida() || !s || modoDeVer || vazio;
+  if (oculto && recepcaoUI && recepcaoUI.estaAberto()) recepcaoUI.fechar(false);
+  if (b.hidden !== oculto) b.hidden = oculto;
 }
 
 // ---------- terminais deste computador (ponte.js): contam nos chips e entram nos widgets, de qualquer programa ----------
@@ -3610,7 +3598,7 @@ async function trocarAndar(id, aviso) {
     if (id === Andar.PRINCIPAL) { falhou = true; mostrarConexao(); atualizarEstados(); setTimeout(() => location.reload(), 10000); return; }   // como a carga inicial
     Andar.definir(anterior); mostrarElevador();
     if (estado && estadoAndar === Andar.atual) desenharPainel();   // a fila do andar de antes volta com a leitura que já estava na tela
-    invalidarRecepcao(); posicionarRecepcao();
+    posicionarRecepcao();
     anunciarAndar(e instanceof AndarInvalido ? "Esse andar não está mais disponível." : "Não deu para ir para esse andar agora. Tente de novo.");
     if (e instanceof AndarInvalido) recarregarAndares();
   }
@@ -3734,7 +3722,7 @@ Novidades.iniciar();
 pintarIcones(document);
 window.addEventListener("hashchange", () => { const id = Andar.doHash(location.hash); if (id && id !== Andar.atual) trocarAndar(id); });
 window.addEventListener("hashchange", rota);
-window.addEventListener("resize", () => { medirFaixa(); ajustarEscala(); marcarRolavel(); invalidarRecepcao(); sincronizarFiltros(); });
+window.addEventListener("resize", () => { medirFaixa(); ajustarEscala(); marcarRolavel(); posicionarRecepcao(); sincronizarFiltros(); });
 rota();
 sincronizarFiltros();
 // a abertura do Firmópolis (abertura.js): uma vez por sessão, por cima do carregamento; a TV liga direto

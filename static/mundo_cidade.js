@@ -15,7 +15,7 @@
 //   do chão; a 1x a cena fica limpa;
 // - a etiqueta com o nome das construções notáveis (marco, igreja, hospital, mercado, campo, praça, coreto...), no clique,
 //   no toque, no foco do teclado ou sob o mouse;
-// - os enfeites da festa do dia (mundo_festa.js), cada um na camada dele.
+// - os enfeites da festa do dia na cidade (festa(id), mundo_festa.js), cada um na camada dele.
 // Só a cidade da casa tem o chalé com a placa, e só ele desce ao bairro ({ir: "bairro"}); placa e porta aparecem quando
 // o desenho do chalé chega. O tempo vem pelo Clima (o mundo.js o define); a noite, pelo Ceu. Com movimento reduzido,
 // carros, pedestres, copas, mar e pombos parados, e nada de partículas, fumaça ou passarinhos. O atlas é pedido na primeira
@@ -44,7 +44,7 @@ const MundoCidade = (() => {
   const hash = (a, b, c) => CidadeChao.hash(Math.round(a), Math.round(b), c);
 
   function criar({ dados, Camera, reduzido, mapa, clima, avisar, festa }) {
-    const camera = Camera([0, 0, W, H]);
+    const camera = Camera([0, 0, W, H], { inteira: "cobrir" });   // no celular, cena cheia em escala inteira
     camera.teto = () => Math.min(camera.W / QUADRA[0], camera.H / QUADRA[1]) / camera.base;
     const todas = Array.isArray(dados && dados.cidades) ? dados.cidades : [];
     const cidades = new Map(todas.filter(c => c && typeof c.id === "string").map(c => [c.id, c]));
@@ -426,12 +426,12 @@ const MundoCidade = (() => {
           ocultar(ctx, s.x, s.y);
           ctx.translate(s.b.x, s.b.y); ctx.scale(0.5, 0.5); ctx.translate(-s.b.x, -s.b.y);
         }
-        const q = Avatar.boneco(ctx, s.b, t, 1), f = s.festeiro && festa ? festa() : null;
+        const q = Avatar.boneco(ctx, s.b, t, 1), f = s.festeiro && festa ? festa(id) : null;
         if (f) Avatar.chapeu(ctx, q.x, q.y, f);   // na festa do dia, três em cada cinco de chapéu
         if (p.cena) ctx.restore();
         return;
       }
-      if (s.enfeite) return enfeites.desenhar(ctx, s);
+      if (s.enfeite) return enfeites.desenhar(ctx, s, escuro, t);
       if (s.placa) return placa(ctx, s);
       if (s.poste) {   // o poste: base, haste com um filete de luz e o braço com a luminária sobre a rua
         const x = s.x, y = s.y, l = s.lado;
@@ -555,11 +555,12 @@ const MundoCidade = (() => {
       vida.fumaca = vida.passaros = vida.balanco = vida.janelas = vida.janelasCobertas = vida.recortes = vida.pombos = 0;
       vida.placas = vida.depoisDaPlaca = 0;
       vida.perto = camera.z >= PERTO;
-      enfeites.comecar((atlas || p.cena) && festa ? festa() : null, p, id, postes);
+      enfeites.comecar((atlas || p.cena) && festa ? festa(id) : null, p, id, postes, vista);
       opChao.neve = tipo === "neve"; opChao.ceu = ceu; opChao.tipo = tipo; opChao.casa = casa; opChao.t = tt; opChao.perto = vida.perto && !!atlas;
       opChao.desvio = enfeites.desvio;
-      if (p.cena) ctx.drawImage(atual.img, 0, 0);
-      else chao.desenhar(ctx, vista, opChao);
+      if (p.cena) {
+        ctx.drawImage(atual.img, 0, 0);
+      } else chao.desenhar(ctx, vista, opChao);
       enfeites.chao(ctx, escuro, t);
       if (atlas || p.cena) {
         ctx.globalAlpha = 0.3 * chao.estado.forca; ctx.fillStyle = "#16202a";
@@ -604,6 +605,7 @@ const MundoCidade = (() => {
       ordenar(lista);
       if (atlas || p.cena) {
         for (let i = 0; i < lista.length; i++) desenhar(ctx, lista[i], t, casa, escuro);
+        enfeites.aereos(ctx, escuro, t);
         if (!reduzido) { fumaca(ctx, t); if (escuro < 0.4) passaros(ctx, t); }   // passarinhos só de dia
       }
       const x0 = Math.floor(vista[0]), y0 = Math.floor(vista[1]), w = Math.ceil(vista[2] - vista[0]) + 1, h = Math.ceil(vista[3] - vista[1]) + 1;
@@ -720,7 +722,7 @@ const MundoCidade = (() => {
         montar(atual ? CidadePlanta.cena(atual.dados) : CidadePlanta.planta(id, info(id)));
         if (params.nivel === "bairro" && ehCasa() && !reduzido) {   // voltando do bairro, a câmera sai de perto da casa
           camera.x = p.casa.x; camera.y = p.casa.y - (p.cena ? 12 : 28); camera.z = 4; camera.zoomPara(1);
-        } else { camera.x = p.W / 2; camera.y = p.H / 2; camera.z = camera.alvoZ = 1; }
+        } else { camera.x = p.centro ? p.centro.x : p.W / 2; camera.y = p.centro ? p.centro.y : p.H / 2; camera.z = camera.alvoZ = 1; }   // o recorte abre no marco
         camera.limitar(p.malha ? p.malha.caixa : [0, 0, W, H]);
         medirVista(); mover(0); carregar(); clima(); letreiros.pedir();
         carregarCena(id);
@@ -747,7 +749,7 @@ const MundoCidade = (() => {
       alvos() { return [...(portaPronta() ? [alvoPorta()] : []), ...notaveis.map(alvoNotavel)]; },
       mergulho() { return ehCasa() ? [p.casa.x, p.casa.y - (p.cena ? 12 : 28)] : [p.W / 2, p.H / 2]; },
       rotulo() {
-        const c = mapa.porId.get(id), f = festa ? festa() : null, m = temMarco() ? p.tituloCentro || info(id).marco_nome : "";
+        const c = mapa.porId.get(id), f = festa ? festa(id) : null, m = temMarco() ? p.tituloCentro || info(id).marco_nome : "";
         if (p.cena) return `${p.cena.texto.cena}. ${p.cena.texto.vida}` +
           (portaPronta() ? `, com a portaria do escritório ${p.cena.texto.portaria}` : "") +
           (f ? `. Hoje é ${f.nome}: a cidade está enfeitada` : "");

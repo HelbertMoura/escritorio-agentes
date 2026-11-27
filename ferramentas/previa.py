@@ -30,7 +30,7 @@ envio vai a um servidor de push falso, local (127.0.0.1, porta sorteada), que s�
 "push falso: ..." sem o endpoint. Nada sai para a rede. Para disparar, ponha uma tarefa do arquivo em waiting_approval
 ou waiting_input com a prévia aberta. Sem --push, as rotas do push respondem 404.
 """
-import atexit, datetime, json, os, random, shutil, signal, sys, threading, time
+import atexit, datetime, json, os, random, shutil, signal, sys, threading, time, traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import tempfile
@@ -242,7 +242,19 @@ srv.planta = e.Planta(e.ARQ_PLANTA, e.log, lambda dados: e.gravar(e.ARQ_PLANTA, 
 srv.clima.start()
 print(e.BASE, flush=True)
 print("dados temporários:", os.environ["ESCRITORIO_DADOS"], flush=True)   # somem ao sair
+codigo = 0
 try:
     srv.serve_forever()
-except KeyboardInterrupt:   # Ctrl+C: sai sem traceback, e o atexit apaga a pasta
+except (KeyboardInterrupt, SystemExit):   # Ctrl+C, SIGTERM e Ctrl+Break: sai limpo, sem traceback
     pass
+except BaseException:   # erro de verdade: o os._exit abaixo não pode engolir
+    traceback.print_exc()
+    codigo = 1
+finally:
+    # Sai sem a finalização do Python: uma thread daemon (o push, o log) que escreve no stdout bem nessa hora fica
+    # parada com a trava dele, e a finalização aborta ("_enter_buffered_busy") e demora o core dump. Aqui as threads
+    # ainda andam: a escrita delas termina, a saída esvazia e a pasta temporária sai antes.
+    shutil.rmtree(os.environ["ESCRITORIO_DADOS"], ignore_errors=True)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(codigo)
