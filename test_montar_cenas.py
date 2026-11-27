@@ -5,6 +5,7 @@ só serve a lista fechada e a ferramenta (ferramentas/montar_cenas.py) importa, 
 partes da ferramenta pedem Pillow, numpy e node."""
 import base64
 import contextlib
+import email.utils
 import hashlib
 import http.client
 import io
@@ -623,26 +624,33 @@ class Servidor(unittest.TestCase):
                              "public, max-age=3600" if nome.endswith(".png") else "no-cache", nome)
             self.assertEqual(corpo, ler(e.ESTATICO, nome), nome)
 
-    def test_cenas_validam_o_cache_com_etag(self):
+    def test_cenas_validam_o_cache(self):
         """O fetch das cenas vai com cache: "no-cache" (e ?v=, com SRI): a revalidação responde 304 sem corpo, e o
-        navegador reusa os bytes guardados. ETag de outro arquivo ou de outra versão devolve o arquivo inteiro."""
+        navegador reusa os bytes guardados. O servidor fala HTTP/1.0, e o Chrome só valida pelo Last-Modified nele
+        (If-Modified-Since); a ETag (If-None-Match) fica para quem fala 1.1 e, quando vem, manda sozinha."""
         cena = sorted(nomes())[0]
         for nome in ("mundo/cenas/" + cena, MANIFESTO, "mundo/brasil.png"):
             status, resposta, corpo = self.pedir(f"/{nome}?v=1")
-            etag, cache = resposta.getheader("ETag"), resposta.getheader("Cache-Control")
+            etag, data, cache = (resposta.getheader(k) for k in ("ETag", "Last-Modified", "Cache-Control"))
             self.assertEqual((status, corpo), (200, ler(e.ESTATICO, nome)), nome)
             self.assertRegex(etag or "", r'^"[0-9a-f]+-[0-9a-f]+"$', nome)
-            for pedida in (etag, "W/" + etag, f'"outra", {etag}', "*"):
-                status, resposta, corpo = self.pedir(f"/{nome}?v=1", cabecalhos={"If-None-Match": pedida})
-                self.assertEqual((status, corpo, resposta.getheader("ETag"), resposta.getheader("Cache-Control")),
-                                 (304, b"", etag, cache), (nome, pedida))
+            self.assertEqual(data, email.utils.formatdate(int(os.stat(os.path.join(e.ESTATICO, nome)).st_mtime), usegmt=True))
+            antes = email.utils.formatdate(int(os.stat(os.path.join(e.ESTATICO, nome)).st_mtime) - 1, usegmt=True)
+            for pedido in ({"If-None-Match": etag}, {"If-None-Match": "W/" + etag}, {"If-None-Match": f'"outra", {etag}'},
+                           {"If-None-Match": "*"}, {"If-Modified-Since": data},
+                           {"If-None-Match": etag, "If-Modified-Since": antes}):
+                status, resposta, corpo = self.pedir(f"/{nome}?v=1", cabecalhos=pedido)
+                self.assertEqual((status, corpo, resposta.getheader("ETag"), resposta.getheader("Last-Modified"),
+                                  resposta.getheader("Cache-Control")), (304, b"", etag, data, cache), (nome, pedido))
                 self.assertIsNone(resposta.getheader("Content-Length"), nome)
                 self.assertEqual(resposta.getheader("X-Content-Type-Options"), "nosniff", nome)
-            status, _, corpo = self.pedir(f"/{nome}?v=1", cabecalhos={"If-None-Match": '"0-0"'})
-            self.assertEqual((status, corpo), (200, ler(e.ESTATICO, nome)), nome)
+            for pedido in ({"If-None-Match": '"0-0"'}, {"If-Modified-Since": antes}, {"If-Modified-Since": "ontem"},
+                           {"If-None-Match": '"0-0"', "If-Modified-Since": data}):
+                status, _, corpo = self.pedir(f"/{nome}?v=1", cabecalhos=pedido)
+                self.assertEqual((status, corpo), (200, ler(e.ESTATICO, nome)), (nome, pedido))
         # a página sem cache (no-store) não tem o que validar: sem ETag, e o If-None-Match não vira 304
         status, resposta, _ = self.pedir("/mundo.html", cabecalhos={"If-None-Match": "*"})
-        self.assertEqual((status, resposta.getheader("ETag")), (200, None))
+        self.assertEqual((status, resposta.getheader("ETag"), resposta.getheader("Last-Modified")), (200, None, None))
 
     def test_fora_da_lista(self):
         for rota in ("/mundo/cenas/../mundo.json", "/mundo/cenas/%2e%2e/mundo.json", "/mundo/cenas/recife.PNG",

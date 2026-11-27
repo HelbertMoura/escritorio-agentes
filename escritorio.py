@@ -3192,10 +3192,17 @@ class Visitantes:
         return [{"id": i, "cor": CORES_VISITANTE[int(i, 16) % len(CORES_VISITANTE)]} for i in ids]
 
 
-def etag_confere(cabecalho, etag):
-    """O If-None-Match pede esta ETag? Comparação fraca (o W/ não conta); "*" vale para qualquer uma."""
-    pedidas = {p.strip().removeprefix("W/") for p in (cabecalho or "").split(",")}
-    return etag in pedidas or "*" in pedidas
+def nao_mudou(if_none_match, if_modified_since, etag, mtime):
+    """O pedido condicional já tem este arquivo? Com If-None-Match, só ele conta (comparação fraca: o W/ não vale; "*"
+    vale para qualquer uma); sem ele, o If-Modified-Since, em segundos. O servidor fala HTTP/1.0, e o Chrome só usa a
+    ETag como validador a partir do 1.1: no navegador quem valida é o Last-Modified."""
+    if if_none_match:
+        pedidas = {p.strip().removeprefix("W/") for p in if_none_match.split(",")}
+        return etag in pedidas or "*" in pedidas
+    try:
+        return int(mtime) <= email.utils.parsedate_to_datetime(if_modified_since).timestamp()
+    except (TypeError, ValueError, IndexError, OverflowError):   # sem o cabeçalho ou data inválida: manda o arquivo
+        return False
 
 
 class Pagina(BaseHTTPRequestHandler):
@@ -3920,23 +3927,26 @@ class Pagina(BaseHTTPRequestHandler):
         try:
             with open(os.path.join(ESTATICO, nome), "rb") as f:
                 # A validação do cache (o fetch das cenas vai com cache: "no-cache"): o mesmo arquivo responde 304 sem
-                # corpo, e o navegador reusa os bytes que já tem, que o SRI confere como sempre. A ETag sai do instante
-                # e do tamanho do arquivo aberto, como no nginx; a página com no-store não guarda nada para validar.
+                # corpo, e o navegador reusa os bytes que já tem, que o SRI confere como sempre. A ETag (instante e
+                # tamanho, como no nginx) e o Last-Modified saem do arquivo aberto; a página no-store não tem o que validar.
                 st = os.fstat(f.fileno())
-                etag = f'"{st.st_mtime_ns:x}-{st.st_size:x}"'
-                if cache != "no-store" and etag_confere(self.headers.get("If-None-Match"), etag):
-                    return self._nao_mudou(etag, cache, midia)
+                validadores = {"ETag": f'"{st.st_mtime_ns:x}-{st.st_size:x}"',
+                               "Last-Modified": email.utils.formatdate(int(st.st_mtime), usegmt=True)}
+                if cache != "no-store" and nao_mudou(self.headers.get("If-None-Match"),
+                                                     self.headers.get("If-Modified-Since"), validadores["ETag"], st.st_mtime):
+                    return self._nao_mudou(validadores, cache, midia)
                 corpo = f.read()
         except FileNotFoundError:   # da lista, mas ainda fora da pasta (um script novo que chega em outro land)
             return self._envia(404, b"")
-        extra = {"ETag": etag} if cache != "no-store" else None
+        extra = validadores if cache != "no-store" else None
         return self._envia(200, corpo, ARQUIVOS[nome], extra=extra, cache=cache, moldura=nome == "mundo.html", midia=midia)
 
-    def _nao_mudou(self, etag, cache, midia):
+    def _nao_mudou(self, validadores, cache, midia):
         """304 do estático: sem corpo e sem Content-Length (o cache guarda o tamanho da resposta inteira). Os cabeçalhos
         de segurança são os do 200: o navegador troca os guardados pelos do 304 (a CSP com as rádios, no index.html)."""
         self.send_response(304)
-        self.send_header("ETag", etag)
+        for k, v in validadores.items():
+            self.send_header(k, v)
         self.send_header("Cache-Control", cache)
         self._cabecalhos_seguranca(midia=midia)
         try:
