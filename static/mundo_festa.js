@@ -9,8 +9,8 @@
 // - luzes: à noite, por cima do escuro, o brilho do pisca (piscando), da fogueira e das lanternas;
 // - aereos: os vãos e contornos que a cena integral traz no campo festa (bandeirinhas, fitas e pisca por cima da arte);
 // - ar: fogos à noite (no céu da cena, quando ela o traz), confete, serpentina, neve e morcegos.
-// A cena com palco leva para ele a peça grande da festa. A neve só cai na cena com o campo festa; a assentada é da cidade
-// (mundo_cidade.js).
+// A cena com palco leva para ele a peça grande da festa. A neve só cai na cena com o campo festa, e só em flocos: a neve
+// assentada pelas cores de calçada pintava também fachadas e telhados com a mesma cor (piloto de Nova York, R11).
 // Com movimento reduzido: nada de fogos, confete, serpentina nem flocos, o pisca aceso e parado e os morcegos parados.
 // O estado do último quadro (o que foi desenhado) fica em `estado`.
 "use strict";
@@ -50,7 +50,7 @@ const MundoFesta = (() => {
   function rgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
 
   function criar({ reduzido, alto, recorte, atlas }) {
-    const telas = new Map(), contornos = new Map();
+    const telas = new Map(), contornos = new Map(), cabos = new Map();   // sprites das formas, telhados e vãos
     let chave = "", festa = null, cordoes = [], itens = [], anel = [], noPoste = null, desvio = 0, fonteR = null;
     let fogos = [], confete = [], fitas = [], flocos = [], espera = 0, postes = [], rgbs = [];
     let ancoras = null, vaos = [], contornosCena = [], vistaAtual = null;   // o campo festa da cena e o que se pendura nele
@@ -69,7 +69,7 @@ const MundoFesta = (() => {
                      get palco() { return noPalco.map(caixa); },
                      get fonte() { return fonteR && fonteR.slice(); } };
     const tem = e => !!festa && festa.enfeites.includes(e);
-    const neve = () => !!ancoras && tem("neve");   // a neve (flocos e chão) só na cena com o campo festa
+    const neve = () => !!ancoras && tem("neve");   // os flocos só na cena com o campo festa
     const cor = i => festa.cores[i % festa.cores.length];
 
     function sprite(nome) {   // a forma pintada uma vez nas cores da festa e depois só copiada
@@ -98,7 +98,7 @@ const MundoFesta = (() => {
     function preparar(f, p, id) {
       const k = f ? `${id}|${f.chave}|${!!recorte(p.praca.peca)}${p.cena ? "|" + !!atlas() : ""}` : "";
       if (k === chave) return;
-      chave = k; festa = f; cordoes = []; itens = []; anel = []; fogos = []; confete = []; fitas = []; flocos = []; desvio = 0; fonteR = null;
+      chave = k; festa = f; cabos.clear(); cordoes = []; itens = []; anel = []; fogos = []; confete = []; fitas = []; flocos = []; desvio = 0; fonteR = null;
       ancoras = (f && p.cena && p.cena.festa) || null; vaos = []; contornosCena = [];
       rgbs = f ? f.cores.map(rgb) : [];   // o RGB de cada cor da festa, uma vez (o brilho guarda o sprite pela cor, não pelo array)
       noPoste = f ? NOS_POSTES.find(tem) || null : null;
@@ -193,26 +193,36 @@ const MundoFesta = (() => {
 
     const naVista = (x, y) => x >= vistaAtual[0] - 1 && x <= vistaAtual[2] && y >= vistaAtual[1] - 1 && y <= vistaAtual[3];
     // um vão: a linha caída entre dois pontos (`sobe`: a altura deles acima do chão, a dos postes nos cordões e 0 nos
-    // fios, que já saem do alto), com as bandeirinhas e as fitas da festa e, na cena com o campo festa, o pisca
-    function vao(ctx, [ax, ay, bx, by], sobe, escuro, t) {
-      const L = Math.hypot(bx - ax, by - ay), caida = Math.min(8, 2 + L * 0.05), n = Math.ceil(L);
+    // fios, que já saem do alto), com as bandeirinhas e as fitas da festa, pintada uma vez por vão e festa e depois só
+    // copiada; o pisca (na cena com o campo festa) vai por cima a cada quadro
+    function cabo([ax, ay, bx, by], sobe) {
+      const k = `${ax},${ay},${bx},${by},${sobe}`;
+      let c = cabos.get(k);
+      if (c) return c;
+      const L = Math.hypot(bx - ax, by - ay), caida = Math.min(8, 2 + L * 0.05), n = Math.ceil(L), q = Math.max(2, Math.floor(L / 6));
       const ponto = u => [Math.round(ax + (bx - ax) * u), Math.round(ay - sobe + (by - ay) * u + caida * 4 * u * (1 - u))];
-      ctx.fillStyle = CORDAO;
-      for (let i = 0; i <= n; i++) { const [x, y] = ponto(i / n); ctx.fillRect(x, y, 1, 1); }
-      const q = Math.max(2, Math.floor(L / 6));
+      const rets = [];
+      for (let i = 0; i <= n; i++) rets.push([...ponto(i / n), 1, 1, CORDAO]);
+      let bandeirinhas = 0, fitas = 0;
       for (let i = 1; i < q; i++) {
-        const [x, y] = ponto(i / q);
-        ctx.fillStyle = cor(i);
-        if (tem("bandeirinhas")) {
-          ctx.fillRect(x - 2, y + 1, 5, 1); ctx.fillRect(x - 1, y + 2, 3, 1); ctx.fillRect(x, y + 3, 1, 1);
-          estado.bandeirinhas++;
-        }
-        if (tem("fitas")) {   // fitinhas penduradas, de comprimentos alternados
-          ctx.fillRect(x + 1, y + 1, 1, 4 + i % 3);
-          estado.fitas++;
-        }
+        const [x, y] = ponto(i / q), f = cor(i);
+        if (tem("bandeirinhas")) { rets.push([x - 2, y + 1, 5, 1, f], [x - 1, y + 2, 3, 1, f], [x, y + 3, 1, 1, f]); bandeirinhas++; }
+        if (tem("fitas")) { rets.push([x + 1, y + 1, 1, 4 + i % 3, f]); fitas++; }   // fitinhas de comprimentos alternados
       }
-      if (ancoras && tem("pisca")) for (let i = 0; i <= Math.floor(L / 4); i++) lampadaEm(ctx, ...ponto(i * 4 / L), i, escuro, t);
+      const x0 = Math.min(...rets.map(r => r[0])), y0 = Math.min(...rets.map(r => r[1]));
+      const tela = document.createElement("canvas");
+      tela.width = Math.max(...rets.map(r => r[0] + r[2])) - x0; tela.height = Math.max(...rets.map(r => r[1] + r[3])) - y0;
+      const g = tela.getContext("2d");
+      for (const [x, y, w, h, f] of rets) { g.fillStyle = f; g.fillRect(x - x0, y - y0, w, h); }
+      c = { tela, x: x0, y: y0, L, ponto, bandeirinhas, fitas };
+      cabos.set(k, c);
+      return c;
+    }
+    function vao(ctx, v, sobe, escuro, t) {
+      const c = cabo(v, sobe);
+      ctx.drawImage(c.tela, c.x, c.y);
+      estado.bandeirinhas += c.bandeirinhas; estado.fitas += c.fitas;
+      if (ancoras && tem("pisca")) for (let i = 0; i <= Math.floor(c.L / 4); i++) lampadaEm(ctx, ...c.ponto(i * 4 / c.L), i, escuro, t);
     }
     function desenhar(ctx, s, escuro, t) {   // um item da ordem de profundidade
       if (s.enfeite === "cordao") { estado.cordoes++; return vao(ctx, s.c, alto, escuro, t); }

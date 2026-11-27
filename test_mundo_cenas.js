@@ -24,7 +24,7 @@ function equivalencia() {
     vida: "Um pedestre nas calçadas e um carro na rua oeste",
     portaria: "na fachada azul",
   });
-  assert.equal(p.cena.festa, null);
+  assert.equal(p.cena.festa.fios.length, 6, "o Recife do piloto do Natal tem o campo festa");
   delete p.cena.luzes; delete p.cena.texto; delete p.cena.festa;
   assert.equal(JSON.stringify(p), readFileSync("test_dados/recife_raster_7c0df2c.json", "utf8"));
   assert.equal(CP.recifeRaster, undefined, "a cena vem dos dados");
@@ -203,18 +203,16 @@ async function festaNasAncoras() {
     assert.ok(!r.e.pecas.some(([n]) => n === nome), "a árvore sai da praça");
     assert.equal(r.e.neve, norte, id);
     assert.equal(r.flocos > 0 && r.flocos <= 80, norte, `${id}: flocos ${r.flocos}`);
-    // a neve assentada: um quarto dos pixels de calçada, calculada uma vez (a folga é dos flocos, também brancos)
-    const chao = neveNoChao(r.m), quarto = RECIFE.W * RECIFE.H / 4;
-    if (norte) assert.ok(chao >= quarto && chao < quarto + 80 * 64, "neve assentada: " + chao);
-    else assert.ok(chao < 5000, "sem neve no chão: " + chao);
+    // só flocos: nada de neve assentada no chão (R11), mesmo com a calçada toda declarada
+    assert.ok(neveNoChao(r.m) <= 80 * 64, "sem neve no chão: " + neveNoChao(r.m));
     assert.match(r.m.canvas["aria-label"], /Hoje é Natal/);
   }
-  // movimento reduzido: pisca aceso e parado, sem flocos nem fogos; a neve fica assentada
+  // movimento reduzido: pisca aceso e parado, sem flocos nem fogos, e nada de neve no chão
   for (const data of ["2026-12-25", "2026-12-31"]) {
     const r = await noPais("nova-york", data, { opcoes: { reduzido: true } });
     assert.ok(r.e.piscando === false && r.flocos === 0 && r.fogos === 0 && r.e.acesas > 0, JSON.stringify(r.e));
   }
-  assert.equal(neveNoChao((await noPais("nova-york", "2026-12-25", { opcoes: { reduzido: true } })).m), RECIFE.W * RECIFE.H / 4);
+  assert.equal(neveNoChao((await noPais("nova-york", "2026-12-25", { opcoes: { reduzido: true } })).m), 0);
   // os fogos estouram dentro do céu da cena
   const ano = await noPais("recife", "2026-12-31", { quadros: 200 });
   const subidas = ano.m.contexto.retangulos.filter(r => r[2] === 1 && r[3] === 2 && r[4] === "#ffe9a8");
@@ -227,7 +225,7 @@ async function festaNasAncoras() {
   assert.ok(volta.e.pecas.some(([n]) => n === "festa-arvore-natal") || volta.e.formas.includes("arvore_natal"));
   // o Réveillon leva o palco dele (EXTRAS) ao palco da cena
   assert.deepEqual(copia((await noPais("recife", "2026-12-31", { quadros: 4 })).e.palco.map(s => s[0])), ["festa-palco-anonovo"]);
-  // sem o campo, nem a neve do norte: nada de neve assentada nem flocos
+  // sem o campo, nem a neve do norte: nada de flocos
   const seca = await noPais("nova-york", "2026-12-25", { d: { ...dados("nova-york"), festa: undefined }, quadros: 20 });
   assert.ok(seca.e.neve === false && seca.flocos === 0 && neveNoChao(seca.m) === 0, `${JSON.stringify(seca.e)} ${neveNoChao(seca.m)}`);
   // sem o campo, nada de fios, contornos, palco ou cordões com pisca
@@ -237,7 +235,8 @@ async function festaNasAncoras() {
 
 // as respostas falsas: o PNG vira "blob:<id>" e o JSON é a cena do Recife com o id e o texto da cidade
 const png = id => ({ ok: true, blob: async () => "blob:" + id });
-const falsa = id => ({ ...copia(RECIFE), id, texto: { cena: "Cena de " + id, vida: "Vida de " + id, portaria: "no prédio de " + id } });
+// (sem o campo festa do Recife: cada caso de festa traz o dele)
+const falsa = id => ({ ...copia(RECIFE), id, texto: { cena: "Cena de " + id, vida: "Vida de " + id, portaria: "no prédio de " + id }, festa: undefined });
 const json = dados => ({ ok: true, json: async () => dados });
 const IDS = ["recife", "manaus", "salvador", "fortaleza"];
 const FALSAS = Object.fromEntries(IDS.map(id => [id, { v: "0", png: "sha256-p", json: "sha256-j" }]));
@@ -294,6 +293,15 @@ async function doManifesto(id) {
     await decodificar(f, dados.W, dados.H);
     await chegarAtlas(f);
     vistas.push(festaNaPraca(f.M.niveis.cidade, `${id} ${data}`));
+    if (dados.festa && data === "2026-12-25") {   // as âncoras da cena no Natal, à noite: fios, contornos, pisca e palco
+      const e = f.M.niveis.cidade.enfeites, a = dados.festa, onde = `${id} ${JSON.stringify(e)}`;
+      assert.ok(e.fios === (a.fios || []).length && e.contornos === (a.contornos || []).length && e.acesas > 0, onde);
+      if (a.palco) {
+        const [x0, y0, x1, y1] = a.palco.r, [nome, ...q] = e.palco[0] || [];
+        assert.ok(nome === "festa-arvore-natal" && q[0] >= x0 && q[1] >= y0 && q[2] <= x1 && q[3] <= y1, onde);
+      }
+      assert.equal(e.neve, id === "nova-york", onde);
+    }
     assert.deepEqual(f.contexto.erros || [], []);
   }
   festasDaCidade(vistas, dados.praca, id);

@@ -11,8 +11,9 @@ const cruza = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]
 // a cidade numa data, carregada e rodando alguns quadros; devolve o estado dos enfeites do último quadro e as cores pintadas
 async function cidade(data, opcoes = {}, quadros = 40) {
   const m = await abrir("#cidade=sao-paulo", { busca: data ? "?data=" + data : "", opaco: true, passo: 100, ...opcoes });
+  m.contexto.cores = new Set();   // desde a carga: os vãos (linha e bandeirinhas) são pintados uma vez e depois copiados
   await carregar(m);
-  m.contexto.cores = new Set(); m.contexto.gravar = [];
+  m.contexto.gravar = [];
   let fogos = 0, confete = 0, serpentina = 0, morcegos = 0;
   for (let i = 0; i < quadros; i++) {
     m.rodar();

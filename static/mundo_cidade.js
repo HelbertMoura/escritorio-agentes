@@ -15,8 +15,7 @@
 //   do chão; a 1x a cena fica limpa;
 // - a etiqueta com o nome das construções notáveis (marco, igreja, hospital, mercado, campo, praça, coreto...), no clique,
 //   no toque, no foco do teclado ou sob o mouse;
-// - os enfeites da festa do dia na cidade (festa(id), mundo_festa.js), cada um na camada dele, e a neve assentada na
-//   calçada quando a festa tem neve (só na cena com o campo festa).
+// - os enfeites da festa do dia na cidade (festa(id), mundo_festa.js), cada um na camada dele.
 // Só a cidade da casa tem o chalé com a placa, e só ele desce ao bairro ({ir: "bairro"}); placa e porta aparecem quando
 // o desenho do chalé chega. O tempo vem pelo Clima (o mundo.js o define); a noite, pelo Ceu. Com movimento reduzido,
 // carros, pedestres, copas, mar e pombos parados, e nada de partículas, fumaça ou passarinhos. O atlas é pedido na primeira
@@ -336,24 +335,6 @@ const MundoCidade = (() => {
     // base: o y do pé de quem acende (o poste, o carro): as peças com o pé mais abaixo ficam na frente e apagam o brilho
     // onde o desenho delas cobre (o sprite do brilho é copiado para uma tela de rascunho e recortado lá). Sem base (as
     // luzes das festas), o brilho vai inteiro
-    // a neve assentada: um pontilhado branco (um em cada quatro, pela matriz de Bayer) nas cores de calçada e de faixa
-    // que a cena declara, calculado uma vez por cena
-    function neveNoChao() {
-      if (atual.neve !== undefined) return atual.neve;
-      const tela = document.createElement("canvas"); tela.width = p.W; tela.height = p.H;
-      const g = tela.getContext("2d"), sup = atual.dados.superficies || {};
-      if (!g) return (atual.neve = null);
-      const cores = new Set([sup.calcada, sup.faixa].flatMap(l => Array.isArray(l) ? l : []).map(h => parseInt(h, 16)));
-      g.drawImage(atual.img, 0, 0);
-      const { data } = g.getImageData(0, 0, p.W, p.H);
-      g.clearRect(0, 0, p.W, p.H);
-      g.fillStyle = "#f8fafc";
-      for (let y = 0; y < p.H; y += 2) for (let x = 0; x < p.W; x += 2) {   // o quarto de Bayer 4x4: linha e coluna pares
-        const k = (y * p.W + x) * 4;
-        if (data[k + 3] && cores.has(data[k] << 16 | data[k + 1] << 8 | data[k + 2])) g.fillRect(x, y, 1, 1);
-      }
-      return (atual.neve = tela);
-    }
     function brilho(ctx, x, y, r, a, cor = LUZ, base = null) {
       const k = Math.max(1, Math.min(8, Math.ceil(camera.P))), chave = ((cor[0] << 16 | cor[1] << 8 | cor[2]) * 64 + r) * 16 + k;
       let tela = brilhos.get(chave);
@@ -579,8 +560,6 @@ const MundoCidade = (() => {
       opChao.desvio = enfeites.desvio;
       if (p.cena) {
         ctx.drawImage(atual.img, 0, 0);
-        const neve = enfeites.estado.neve && neveNoChao();
-        if (neve) ctx.drawImage(neve, 0, 0);
       } else chao.desenhar(ctx, vista, opChao);
       enfeites.chao(ctx, escuro, t);
       if (atlas || p.cena) {
