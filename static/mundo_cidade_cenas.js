@@ -71,7 +71,7 @@ const CidadeCenas = Object.freeze({
   "recife": Object.freeze({ v: "547704662e6f", png: "sha256-VHcEZi5vBhzzjC/tkLxRkaZLGB9YyjmQ54anzbZAVME=", json: "sha256-xcVI5YYHLFspC3IcqkBwRFDADut9C/4rmMNKCx9R+Vs=" }),
   "ribeirao-preto": Object.freeze({ v: "df14a2bd2265", png: "sha256-3xSivSJlYDfsrUaNOy1NOBnWbxuKNL3tFPDDrukxAmU=", json: "sha256-GjssSxMN6hcyY7+Dqv1vUIQC0sRi4yyv+LHxpAPC52s=" }),
   "rio-branco": Object.freeze({ v: "f4db0a3dec40", png: "sha256-9NsKPexAgEsTz8l5zy3lT+i0hPvxyqs8t+W/9h7MrQU=", json: "sha256-rVOg0im17ViHnfS7tO8lWkoWrXsFC5291DU1wUt7YQU=" }),
-  "rio-de-janeiro": Object.freeze({ v: "0eb94bc6c2b1", png: "sha256-DrlLxsKxMNCbh3eQ+QrkwLpIBohTXENDMgaNUi50NwM=", json: "sha256-lET/hzAWDOBa6mCjxNC9o7t11xGWFmezwzcREh5xHmo=" }),
+  "rio-de-janeiro": Object.freeze({ v: "0eb94bc6c2b1", png: "sha256-DrlLxsKxMNCbh3eQ+QrkwLpIBohTXENDMgaNUi50NwM=", json: "sha256-WnR27fSjoxroQN6XFI5/BFIBnCCHogWgc2ewTLawhgM=" }),
   "salvador": Object.freeze({ v: "6bee87f5283e", png: "sha256-a+6H9Sg+Z9wY7O/N0vTMPiBaqWCZuqwsV7P4bEdEJ8c=", json: "sha256-CyXry+23Ezl99E/NYUmiaLpMQZyH+pHulGJCymQSVEk=" }),
   "santa-maria": Object.freeze({ v: "7ae96f9121cd", png: "sha256-eulvkSHN2AAoKRkirQPNOFp3XonDUpGj53jUvUxRTq8=", json: "sha256-YzyByA1sIrdZB/+tYVPlBU5Y5BZfNzofDhIMcEC0Vtc=" }),
   "santarem": Object.freeze({ v: "4636133d317c", png: "sha256-RjYTPTF8reo7rEgyGxHJAVNz0rd39T3UZ/wf2UCUfW0=", json: "sha256-ZOyQn07/jxGlLB6vJSvAyI+bCri/wTeUgzeFUVuKKJ0=" }),
