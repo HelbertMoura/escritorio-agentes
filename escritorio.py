@@ -3192,6 +3192,12 @@ class Visitantes:
         return [{"id": i, "cor": CORES_VISITANTE[int(i, 16) % len(CORES_VISITANTE)]} for i in ids]
 
 
+def etag_confere(cabecalho, etag):
+    """O If-None-Match pede esta ETag? Comparação fraca (o W/ não conta); "*" vale para qualquer uma."""
+    pedidas = {p.strip().removeprefix("W/") for p in (cabecalho or "").split(",")}
+    return etag in pedidas or "*" in pedidas
+
+
 class Pagina(BaseHTTPRequestHandler):
     server_version = "escritorio"
     sys_version = ""
@@ -3908,15 +3914,35 @@ class Pagina(BaseHTTPRequestHandler):
     def _estatico(self, nome):
         if nome not in ARQUIVOS:
             return self._envia(404, b"")
-        try:
-            with open(os.path.join(ESTATICO, nome), "rb") as f:
-                corpo = f.read()
-        except FileNotFoundError:   # da lista, mas ainda fora da pasta (um script novo que chega em outro land)
-            return self._envia(404, b"")
         cache = ("no-store" if nome in ("visita.html", "visitas-admin.html", "recepcionista.html", "mundo.html") else
                  "public, max-age=3600" if nome.endswith((".png", ".ttf", ".woff2")) else "no-cache")
         midia = self._radios() if nome == "index.html" else ()
-        return self._envia(200, corpo, ARQUIVOS[nome], cache=cache, moldura=nome == "mundo.html", midia=midia)
+        try:
+            with open(os.path.join(ESTATICO, nome), "rb") as f:
+                # A validação do cache (o fetch das cenas vai com cache: "no-cache"): o mesmo arquivo responde 304 sem
+                # corpo, e o navegador reusa os bytes que já tem, que o SRI confere como sempre. A ETag sai do instante
+                # e do tamanho do arquivo aberto, como no nginx; a página com no-store não guarda nada para validar.
+                st = os.fstat(f.fileno())
+                etag = f'"{st.st_mtime_ns:x}-{st.st_size:x}"'
+                if cache != "no-store" and etag_confere(self.headers.get("If-None-Match"), etag):
+                    return self._nao_mudou(etag, cache, midia)
+                corpo = f.read()
+        except FileNotFoundError:   # da lista, mas ainda fora da pasta (um script novo que chega em outro land)
+            return self._envia(404, b"")
+        extra = {"ETag": etag} if cache != "no-store" else None
+        return self._envia(200, corpo, ARQUIVOS[nome], extra=extra, cache=cache, moldura=nome == "mundo.html", midia=midia)
+
+    def _nao_mudou(self, etag, cache, midia):
+        """304 do estático: sem corpo e sem Content-Length (o cache guarda o tamanho da resposta inteira). Os cabeçalhos
+        de segurança são os do 200: o navegador troca os guardados pelos do 304 (a CSP com as rádios, no index.html)."""
+        self.send_response(304)
+        self.send_header("ETag", etag)
+        self.send_header("Cache-Control", cache)
+        self._cabecalhos_seguranca(midia=midia)
+        try:
+            self.end_headers()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            self.close_connection = True
 
     def _radios(self):
         """As origens das rádios da internet dos andares que esta sessão vê: a página é uma só e troca de andar sem

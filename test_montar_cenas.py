@@ -586,11 +586,11 @@ class Servidor(unittest.TestCase):
         cls.thread.join()
         cls.pasta.cleanup()
 
-    def pedir(self, rota, cookie=None):
+    def pedir(self, rota, cookie=None, cabecalhos=None):
         conexao = http.client.HTTPConnection(*self.srv.server_address, timeout=3)
         try:
             with contextlib.redirect_stdout(io.StringIO()):
-                conexao.request("GET", rota, headers={"Cookie": cookie} if cookie else {})
+                conexao.request("GET", rota, headers={**({"Cookie": cookie} if cookie else {}), **(cabecalhos or {})})
                 resposta = conexao.getresponse()
                 return resposta.status, resposta, resposta.read()
         finally:
@@ -622,6 +622,27 @@ class Servidor(unittest.TestCase):
             self.assertEqual(resposta.getheader("Cache-Control"),
                              "public, max-age=3600" if nome.endswith(".png") else "no-cache", nome)
             self.assertEqual(corpo, ler(e.ESTATICO, nome), nome)
+
+    def test_cenas_validam_o_cache_com_etag(self):
+        """O fetch das cenas vai com cache: "no-cache" (e ?v=, com SRI): a revalidação responde 304 sem corpo, e o
+        navegador reusa os bytes guardados. ETag de outro arquivo ou de outra versão devolve o arquivo inteiro."""
+        cena = sorted(nomes())[0]
+        for nome in ("mundo/cenas/" + cena, MANIFESTO, "mundo/brasil.png"):
+            status, resposta, corpo = self.pedir(f"/{nome}?v=1")
+            etag, cache = resposta.getheader("ETag"), resposta.getheader("Cache-Control")
+            self.assertEqual((status, corpo), (200, ler(e.ESTATICO, nome)), nome)
+            self.assertRegex(etag or "", r'^"[0-9a-f]+-[0-9a-f]+"$', nome)
+            for pedida in (etag, "W/" + etag, f'"outra", {etag}', "*"):
+                status, resposta, corpo = self.pedir(f"/{nome}?v=1", cabecalhos={"If-None-Match": pedida})
+                self.assertEqual((status, corpo, resposta.getheader("ETag"), resposta.getheader("Cache-Control")),
+                                 (304, b"", etag, cache), (nome, pedida))
+                self.assertIsNone(resposta.getheader("Content-Length"), nome)
+                self.assertEqual(resposta.getheader("X-Content-Type-Options"), "nosniff", nome)
+            status, _, corpo = self.pedir(f"/{nome}?v=1", cabecalhos={"If-None-Match": '"0-0"'})
+            self.assertEqual((status, corpo), (200, ler(e.ESTATICO, nome)), nome)
+        # a página sem cache (no-store) não tem o que validar: sem ETag, e o If-None-Match não vira 304
+        status, resposta, _ = self.pedir("/mundo.html", cabecalhos={"If-None-Match": "*"})
+        self.assertEqual((status, resposta.getheader("ETag")), (200, None))
 
     def test_fora_da_lista(self):
         for rota in ("/mundo/cenas/../mundo.json", "/mundo/cenas/%2e%2e/mundo.json", "/mundo/cenas/recife.PNG",
