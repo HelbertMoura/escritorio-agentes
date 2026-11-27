@@ -15,7 +15,8 @@
 //   do chão; a 1x a cena fica limpa;
 // - a etiqueta com o nome das construções notáveis (marco, igreja, hospital, mercado, campo, praça, coreto...), no clique,
 //   no toque, no foco do teclado ou sob o mouse;
-// - os enfeites da festa do dia (mundo_festa.js), cada um na camada dele.
+// - os enfeites da festa do dia na cidade (festa(id), mundo_festa.js), cada um na camada dele, e a neve assentada na
+//   calçada quando a festa tem neve (só na cena com o campo festa).
 // Só a cidade da casa tem o chalé com a placa, e só ele desce ao bairro ({ir: "bairro"}); placa e porta aparecem quando
 // o desenho do chalé chega. O tempo vem pelo Clima (o mundo.js o define); a noite, pelo Ceu. Com movimento reduzido,
 // carros, pedestres, copas, mar e pombos parados, e nada de partículas, fumaça ou passarinhos. O atlas é pedido na primeira
@@ -335,6 +336,24 @@ const MundoCidade = (() => {
     // base: o y do pé de quem acende (o poste, o carro): as peças com o pé mais abaixo ficam na frente e apagam o brilho
     // onde o desenho delas cobre (o sprite do brilho é copiado para uma tela de rascunho e recortado lá). Sem base (as
     // luzes das festas), o brilho vai inteiro
+    // a neve assentada: um pontilhado branco (um em cada quatro, pela matriz de Bayer) nas cores de calçada e de faixa
+    // que a cena declara, calculado uma vez por cena
+    function neveNoChao() {
+      if (atual.neve !== undefined) return atual.neve;
+      const tela = document.createElement("canvas"); tela.width = p.W; tela.height = p.H;
+      const g = tela.getContext("2d"), sup = atual.dados.superficies || {};
+      if (!g) return (atual.neve = null);
+      const cores = new Set([sup.calcada, sup.faixa].flatMap(l => Array.isArray(l) ? l : []).map(h => parseInt(h, 16)));
+      g.drawImage(atual.img, 0, 0);
+      const { data } = g.getImageData(0, 0, p.W, p.H);
+      g.clearRect(0, 0, p.W, p.H);
+      g.fillStyle = "#f8fafc";
+      for (let y = 0; y < p.H; y += 2) for (let x = 0; x < p.W; x += 2) {   // o quarto de Bayer 4x4: linha e coluna pares
+        const k = (y * p.W + x) * 4;
+        if (data[k + 3] && cores.has(data[k] << 16 | data[k + 1] << 8 | data[k + 2])) g.fillRect(x, y, 1, 1);
+      }
+      return (atual.neve = tela);
+    }
     function brilho(ctx, x, y, r, a, cor = LUZ, base = null) {
       const k = Math.max(1, Math.min(8, Math.ceil(camera.P))), chave = ((cor[0] << 16 | cor[1] << 8 | cor[2]) * 64 + r) * 16 + k;
       let tela = brilhos.get(chave);
@@ -426,12 +445,12 @@ const MundoCidade = (() => {
           ocultar(ctx, s.x, s.y);
           ctx.translate(s.b.x, s.b.y); ctx.scale(0.5, 0.5); ctx.translate(-s.b.x, -s.b.y);
         }
-        const q = Avatar.boneco(ctx, s.b, t, 1), f = s.festeiro && festa ? festa() : null;
+        const q = Avatar.boneco(ctx, s.b, t, 1), f = s.festeiro && festa ? festa(id) : null;
         if (f) Avatar.chapeu(ctx, q.x, q.y, f);   // na festa do dia, três em cada cinco de chapéu
         if (p.cena) ctx.restore();
         return;
       }
-      if (s.enfeite) return enfeites.desenhar(ctx, s);
+      if (s.enfeite) return enfeites.desenhar(ctx, s, escuro, t);
       if (s.placa) return placa(ctx, s);
       if (s.poste) {   // o poste: base, haste com um filete de luz e o braço com a luminária sobre a rua
         const x = s.x, y = s.y, l = s.lado;
@@ -555,11 +574,14 @@ const MundoCidade = (() => {
       vida.fumaca = vida.passaros = vida.balanco = vida.janelas = vida.janelasCobertas = vida.recortes = vida.pombos = 0;
       vida.placas = vida.depoisDaPlaca = 0;
       vida.perto = camera.z >= PERTO;
-      enfeites.comecar((atlas || p.cena) && festa ? festa() : null, p, id, postes);
+      enfeites.comecar((atlas || p.cena) && festa ? festa(id) : null, p, id, postes, vista);
       opChao.neve = tipo === "neve"; opChao.ceu = ceu; opChao.tipo = tipo; opChao.casa = casa; opChao.t = tt; opChao.perto = vida.perto && !!atlas;
       opChao.desvio = enfeites.desvio;
-      if (p.cena) ctx.drawImage(atual.img, 0, 0);
-      else chao.desenhar(ctx, vista, opChao);
+      if (p.cena) {
+        ctx.drawImage(atual.img, 0, 0);
+        const neve = enfeites.estado.neve && neveNoChao();
+        if (neve) ctx.drawImage(neve, 0, 0);
+      } else chao.desenhar(ctx, vista, opChao);
       enfeites.chao(ctx, escuro, t);
       if (atlas || p.cena) {
         ctx.globalAlpha = 0.3 * chao.estado.forca; ctx.fillStyle = "#16202a";
@@ -604,6 +626,7 @@ const MundoCidade = (() => {
       ordenar(lista);
       if (atlas || p.cena) {
         for (let i = 0; i < lista.length; i++) desenhar(ctx, lista[i], t, casa, escuro);
+        enfeites.aereos(ctx, escuro, t);
         if (!reduzido) { fumaca(ctx, t); if (escuro < 0.4) passaros(ctx, t); }   // passarinhos só de dia
       }
       const x0 = Math.floor(vista[0]), y0 = Math.floor(vista[1]), w = Math.ceil(vista[2] - vista[0]) + 1, h = Math.ceil(vista[3] - vista[1]) + 1;
@@ -747,7 +770,7 @@ const MundoCidade = (() => {
       alvos() { return [...(portaPronta() ? [alvoPorta()] : []), ...notaveis.map(alvoNotavel)]; },
       mergulho() { return ehCasa() ? [p.casa.x, p.casa.y - (p.cena ? 12 : 28)] : [p.W / 2, p.H / 2]; },
       rotulo() {
-        const c = mapa.porId.get(id), f = festa ? festa() : null, m = temMarco() ? p.tituloCentro || info(id).marco_nome : "";
+        const c = mapa.porId.get(id), f = festa ? festa(id) : null, m = temMarco() ? p.tituloCentro || info(id).marco_nome : "";
         if (p.cena) return `${p.cena.texto.cena}. ${p.cena.texto.vida}` +
           (portaPronta() ? `, com a portaria do escritório ${p.cena.texto.portaria}` : "") +
           (f ? `. Hoje é ${f.nome}: a cidade está enfeitada` : "");

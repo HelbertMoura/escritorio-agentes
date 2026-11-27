@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Dev Maniac's
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """As cenas integrais das cidades (static/mundo/cenas): o manifesto confere com o disco, o peso fica no teto, o servidor
-só serve a lista fechada e a ferramenta (ferramentas/montar_cenas.py) importa, confere (A1 a A9) e desenha a autoria. As
+só serve a lista fechada e a ferramenta (ferramentas/montar_cenas.py) importa, confere (A1 a A10) e desenha a autoria. As
 partes da ferramenta pedem Pillow, numpy e node."""
 import base64
 import contextlib
@@ -52,6 +52,25 @@ def ids():
 
 
 class Disco(unittest.TestCase):
+    def congeladas(self, ext):
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_dados", f"cenas_{ext}_congeladas.txt")) as f:
+            return {nome: soma for soma, nome in (linha.split() for linha in f)}
+
+    def test_arte_congelada(self):
+        """Os 90 PNG de 2934b5c: a festa é camada por cima, e troca de arte aparece no diff deste arquivo."""
+        esperado = self.congeladas("png")
+        self.assertEqual(len(esperado), 90)
+        self.assertEqual({n: hashlib.sha256(ler(PASTA, n)).hexdigest() for n in nomes() if n.endswith(".png")}, esperado)
+
+    def test_cena_sem_festa_nao_muda(self):
+        """O JSON que não ganhou o campo festa é byte a byte o de 2934b5c."""
+        esperado = self.congeladas("json")
+        self.assertEqual(sorted(esperado), [n for n in nomes() if n.endswith(".json")])
+        for nome, soma in esperado.items():
+            dados = ler(PASTA, nome)
+            if "festa" not in json.loads(dados):
+                self.assertEqual(hashlib.sha256(dados).hexdigest(), soma, nome)
+
     def test_pares_de_cidades_do_mundo(self):
         mundo = json.loads(ler(e.ESTATICO, "mundo", "mundo.json"))
         cidades = {c["id"] for c in mundo["cidades"] + mundo["exterior"] + mundo["niveis"]["brasil"]["medias"]}
@@ -122,6 +141,11 @@ def arte_sintetica():
     g.line([198, 151, 202, 151], fill=FAIXA)
     g.point((0, 319), fill=JARDIM)
     return img
+
+
+def festa_sintetica():
+    return {"fios": [[20, 40, 120, 40]], "contornos": [[[200, 40], [260, 40]]],
+            "palco": {"x": 250, "y": 230, "r": [220, 180, 280, 235]}, "ceu": [10, 10, 300, 100]}
 
 
 @FERRAMENTA
@@ -273,6 +297,62 @@ class Validacao(unittest.TestCase):
         self.reprova("esquema", mudar=lambda d: d["carros"][0].update(v=41))
         self.reprova("esquema", mudar=lambda d: d.update(versao=2))
         self.assertTrue(mc.validar("salvador", self.raiz())[0], "sem os arquivos, reprova")
+
+    def test_a10_festa_valida(self):
+        self.assertEqual(mc.validar("manaus", self.raiz(mudar=lambda d: d.update(festa=festa_sintetica()))), ([], []))
+        self.assertEqual(self.violacoes(mudar=lambda d: d.update(festa={})), [])
+
+    def test_a10_festa(self):
+        def palco(x, y, r):
+            return {"palco": {"x": x, "y": y, "r": r}}
+        casos = {
+            "chave estranha": {"fio": []},
+            "fios demais": {"fios": [[20, 40, 40, 40]] * 17},
+            "fio curto": {"fios": [[20, 40, 27, 40]]},
+            "fio longo": {"fios": [[20, 40, 241, 40]]},
+            "fio fora da imagem": {"fios": [[400, 40, 481, 40]]},
+            "fio quebrado": {"fios": [[20.5, 40, 120, 40]]},
+            "fio na frente": {"fios": [[90, 90, 130, 90]]},
+            "fio na portaria": {"fios": [[40, 70, 80, 70]]},
+            "contornos demais": {"contornos": [[[20, 40], [30, 40]]] * 13},
+            "contorno de um ponto": {"contornos": [[[20, 40]]]},
+            "contorno longo": {"contornos": [[[x, 40] for x in range(49)]]},
+            "contorno na frente": {"contornos": [[[90, 100], [130, 100]]]},
+            "contorno na portaria": {"contornos": [[[20, 20], [60, 80]]]},
+            "palco sem o pé": palco(300, 240, [220, 180, 280, 235]),
+            "palco sobre a praça": palco(370, 290, [340, 240, 390, 295]),
+            "palco sobre a portaria": palco(80, 110, [40, 60, 110, 115]),
+            "palco sobre a frente": palco(120, 120, [100, 80, 150, 125]),
+            "palco sem a árvore": palco(250, 230, [240, 210, 260, 235]),
+            "palco com chave estranha": {"palco": {"x": 250, "y": 230, "r": [220, 180, 280, 235], "w": 1}},
+            "céu invertido": {"ceu": [300, 10, 10, 100]},
+            "lâmpadas demais": {"fios": [[10, 10 + 5 * i, 230, 10 + 5 * i] for i in range(11)]},
+        }
+        for nome, festa in casos.items():
+            with self.subTest(nome):
+                self.reprova("A10", mudar=lambda d: d.update(festa=festa))
+        self.reprova("A10", mudar=lambda d: d.update(festa=[]))
+
+    def test_a10_teto_de_lampadas_igual_nas_duas_pontas(self):
+        """A sintética sem cordões: o anel da fonte 20x14 tem 11 lâmpadas; sobram 589 para os fios (4 px) e contornos (3 px)."""
+        fios = [[10, 110 + 3 * i, 230, 110 + 3 * i] for i in range(10)]   # 10 x 56
+        no_teto = {"fios": fios + [[250, 10, 362, 10]]}   # +29 = 600
+        self.assertEqual(self.violacoes(mudar=lambda d: d.update(festa=no_teto)), [])
+        passa = {"fios": fios + [[250, 10, 366, 10]]}   # +30 = 601
+        achadas = self.violacoes(mudar=lambda d: d.update(festa=passa))
+        for regra in ("A10:", "esquema:"):
+            self.assertTrue(any(v.startswith(regra) and "lâmpadas" in v for v in achadas), (regra, achadas))
+
+    def test_revisar_desenha_a_festa(self):
+        raiz = self.raiz(mudar=lambda d: d.update(festa=festa_sintetica()))
+        with tempfile.TemporaryDirectory() as saida:
+            mc.revisar("manaus", saida, raiz)
+            with Image.open(os.path.join(saida, "manaus-revisao.png")) as im:
+                im = im.convert("RGB")
+                self.assertEqual(im.getpixel((70 * 3 + 1, 40 * 3 + 1)), mc.ROSA, "o fio")
+                self.assertEqual(im.getpixel((200 * 3 + 1, 40 * 3 + 1)), mc.AMARELO_CLARO, "a lâmpada do contorno")
+                self.assertEqual(im.getpixel((220 * 3, 200 * 3)), (255, 0, 255), "o palco como a praça")
+                self.assertEqual(im.getpixel((10 * 3 + 2, 10 * 3)), mc.CEU, "o céu tracejado")
 
     def test_saidas_da_autoria(self):
         raiz = self.raiz()

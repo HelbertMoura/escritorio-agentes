@@ -131,15 +131,25 @@ const Mundo = (() => {
   let botoes = [], chaveAlvos = "", dicaAlvo = null, anterior = performance.now(), pedido_ = false, gesto = null, roda = 0;
   let toque = null;   // o último toque solto (tempo e ponto): o segundo, logo depois e perto, aproxima no ponto
   // a festa do dia (festas.js): só depois da resposta do clima, que traz as festas desligadas (antes dela, nada de
-  // enfeite). Só o calendário embutido: as datas próprias da empresa nunca chegam à página pública
-  let festa = null, restoChuva = 0;
+  // enfeite). Só o calendário embutido: as datas próprias da empresa nunca chegam à página pública. O mapa e o globo
+  // usam a de Brasília; cada cidade, a dela (data local e regionais), calculada uma vez até a resposta seguinte
+  let festa = null, festas = null, restoChuva = 0;
   function definirFesta(resp) {
     if (!window.Festas) return;
     const d = resp && Array.isArray(resp.festas_desligadas) ? resp.festas_desligadas : [];
     Festas.configurar({ desligadas: d.filter(k => typeof k === "string") });
     festa = Festas.ativa();
+    festas = new Map();
   }
-  const hojeE = () => (festa ? ` Hoje é ${festa.nome}.` : "");
+  function festaDaCidade(id) {
+    if (!festas) return null;
+    if (!festas.has(id)) {
+      const c = mapa && mapa.porId.get(id);
+      festas.set(id, c ? Festas.naCidade({ id, uf: c.fora ? "" : c.uf }) : null);
+    }
+    return festas.get(id);
+  }
+  const hojeE = (f = festa) => (f ? ` Hoje é ${f.nome}.` : "");
   const niveis = { bairro: nivelBairro() }, toques = new Map();
 
   // o bairro de hoje, desenhado 1:1 num quadro de 320x180 e ampliado pela câmera (a 1x, na escala fracionária que enche
@@ -252,13 +262,13 @@ const Mundo = (() => {
     const hora = Ceu.agora().hora, c = atualCidade && mapa && mapa.porId.get(atualCidade);
     if (!mapa) estado.textContent = `${hora} · ${Clima.texto()} · O mapa não abriu agora; o bairro e a recepção seguem aqui.`;
     else if (nome === "globo") estado.textContent = `Terra, ${hora} em Brasília. Clique no Brasil ou aproxime para descer ao mapa; ` +
-      "os pontos dourados são cidades de outros países.";
+      "os pontos dourados são cidades de outros países." + hojeE();
     else if (nome === "brasil") {
       const casa = mapa.casa && mapa.porId.get(mapa.casa);
       estado.textContent = `Brasil, ${hora}.${hojeE()} Escolha uma cidade no mapa.${casa ? ` O escritório fica em ${casa.nome}.` : ""}`;
     } else if (nome === "cidade") {
       const casa = mapa.casa && mapa.porId.get(mapa.casa);
-      estado.textContent = `${c.nome} (${c.uf}), ${mapa.texto(c)}.${hojeE()} ` +
+      estado.textContent = `${c.nome} (${c.uf}), ${mapa.texto(c)}.${hojeE(festaDaCidade(c.id))} ` +
         (casa === c ? (nivel.planta.cena ? `A portaria do escritório fica ${nivel.planta.cena.texto.portaria}. Selecione-a para descer ao bairro.`
                                          : "O chalé com a placa é o escritório: clique nele para descer ao bairro.")
         : casa ? `O escritório fica em ${casa.nome}; Esc volta ${c.fora ? "ao globo" : "ao mapa"}.` : `Esc volta ${c.fora ? "ao globo" : "ao mapa"}.`);
@@ -498,7 +508,7 @@ const Mundo = (() => {
     .then(dados => {
       mapa = MundoMapa.criar({ dados, Camera, reduzido, festa: () => festa });
       Object.assign(niveis, mapa.niveis, {
-        cidade: MundoCidade.criar({ dados, Camera, reduzido, mapa, clima: climaDaCidade, festa: () => festa,
+        cidade: MundoCidade.criar({ dados, Camera, reduzido, mapa, clima: climaDaCidade, festa: festaDaCidade,
           avisar: cena => {
             if (nome !== "cidade") return;
             // a cena integral troca os alvos: o foco do teclado fica no mesmo alvo (ou no primeiro, se ele saiu)
@@ -512,7 +522,8 @@ const Mundo = (() => {
             }
           } }) });
       // sem o globo, a página abre no Brasil; a falha fica no console
-      try { niveis.globo = Globo.criar({ dados, Camera, reduzido }); } catch (e) { console.error("Globo não abriu:", e); }
+      try { niveis.globo = Globo.criar({ dados, Camera, reduzido, festa: () => festa, festaEm: festaDaCidade }); }
+      catch (e) { console.error("Globo não abriu:", e); }
     })
     .catch(() => { mapa = null; })   // sem o mapa, a página segue com o bairro, como antes
     .then(() => {

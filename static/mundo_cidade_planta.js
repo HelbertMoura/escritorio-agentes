@@ -675,6 +675,7 @@ const CidadePlanta = (() => {
 
   // Cena integral (esquema v1, mundo/cenas/<id>.json): a geometria em pixel nativo do PNG vira a planta que o desenho
   // anda. Cada aresta de calçada tem uma superfície; só a travessia usa o asfalto.
+  const LAMPADAS = 600;   // o teto de lâmpadas da festa numa cidade
   function cena(d) {
     const exigir = (ok, motivo) => { if (!ok) throw new Error("cena inválida: " + motivo); };
     const objeto = (v, nome) => { exigir(v && typeof v === "object" && !Array.isArray(v), nome); return v; };
@@ -800,8 +801,55 @@ const CidadePlanta = (() => {
       return [...ponto([v[0], v[1]], "luz"), v[2], v[3]];
     });
 
+    // O campo opcional festa (a regra A10 do montar_cenas.py): âncoras das datas comemorativas por cima da arte. Como
+    // não passam pela máscara de oclusão, nada nelas cruza a portaria nem a frente de uma oclusão (meio aberta, como
+    // a máscara), e o teto de lâmpadas conta cordões e fios (4 px), contornos (3 px) e o anel da praça.
+    let festa = null;
+    if (d.festa !== undefined) {
+      const f = objeto(d.festa, "festa");
+      exigir(Object.keys(f).every(k => ["fios", "contornos", "palco", "ceu"].includes(k)), "festa: chave desconhecida");
+      const frentes = oclusoes.map(o => o.frente);
+      const livre = (trecho, nome) => {
+        for (const [x, y] of bresenham(trecho[0], trecho[1])) {
+          exigir(!dentro([x, y], casa.r) && !frentes.some(([a, b, c, e]) => x >= a && x < c && y >= b && y < e),
+            nome + " cruza a portaria ou a frente de uma oclusão");
+        }
+      };
+      let lampadas = 0;
+      const fios = lista(f.fios === undefined ? [] : f.fios, 0, 16, "festa.fios").map(v => {
+        lista(v, 4, 4, "festa.fios");
+        const a = ponto([v[0], v[1]], "festa.fios"), b = ponto([v[2], v[3]], "festa.fios"), L = dist(a, b);
+        exigir(L >= 8 && L <= 220, "festa.fios: de 8 a 220 px");
+        livre([a, b], "festa.fios");
+        lampadas += Math.floor(L / 4) + 1;
+        return [...a, ...b];
+      });
+      const contornos = lista(f.contornos === undefined ? [] : f.contornos, 0, 12, "festa.contornos").map(v => {
+        const pontos = lista(v, 2, 48, "festa.contornos").map(z => ponto(z, "festa.contornos"));
+        let L = 0;
+        for (let i = 1; i < pontos.length; i++) {
+          L += dist(pontos[i - 1], pontos[i]);
+          livre([pontos[i - 1], pontos[i]], "festa.contornos");
+        }
+        lampadas += Math.floor(L / 3) + 1;
+        return pontos;
+      });
+      let palco = null;
+      if (f.palco !== undefined) {
+        exigir(Object.keys(objeto(f.palco, "festa.palco")).every(k => ["x", "y", "r"].includes(k)), "festa.palco: chave desconhecida");
+        palco = lugar(f.palco, "festa.palco");
+        exigir(dentro([palco.x, palco.y], palco.r), "festa.palco.r sem o pé");
+        exigir(![praca.r, casa.r, ...frentes].some(r => cruzam(palco.r, r)), "festa.palco cruza a praça, a portaria ou uma frente");
+      }
+      const ceu = f.ceu === undefined ? null : retangulo(f.ceu, "festa.ceu");
+      for (const [ax, ay, bx, by] of cordoes) lampadas += Math.floor(Math.hypot(bx - ax, by - ay) / 4) + 1;
+      lampadas += anelDaPraca(praca.fonte).length;
+      exigir(lampadas <= LAMPADAS, `festa: ${lampadas} lâmpadas (teto ${LAMPADAS})`);
+      festa = { fios, contornos, palco, ceu };
+    }
+
     return {
-      cena: { pontes, travessias, oclusoes, farol, placa, luzes, texto }, W, H, casa, centro: pontos[0].s, praca, pontos,
+      cena: { pontes, travessias, oclusoes, farol, placa, luzes, texto, festa }, W, H, casa, centro: pontos[0].s, praca, pontos,
       malha: { caixa: [0, 0, W, H], pista: { L, trechos }, placas: [], cordoes },
       pecas: [], postes: [], cruzamentos: [],
       rede: { nos, viz, peso: nos.map(() => 1), faixaPorAresta },
@@ -809,8 +857,27 @@ const CidadePlanta = (() => {
     };
   }
 
+  const cruzam = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+  function* bresenham([x, y], [x1, y1]) {
+    const dx = Math.abs(x1 - x), dy = -Math.abs(y1 - y), sx = x < x1 ? 1 : -1, sy = y < y1 ? 1 : -1;
+    for (let erro = dx + dy; ;) {
+      yield [x, y];
+      if (x === x1 && y === y1) return;
+      const dobro = 2 * erro;
+      if (dobro >= dy) { erro += dy; x += sx; }
+      if (dobro <= dx) { erro += dx; y += sy; }
+    }
+  }
+  // o anel de luzes no chão em volta da praça (mundo_festa.js), a partir do tamanho da fonte: [cos, sen] de cada lâmpada
+  // (só a frente e os lados do círculo; atrás ficam os bancos)
+  function anelDaPraca([largura, altura], ry = altura / 2 + 2) {
+    const n = Math.round(Math.PI * (largura / 2 + 3 + ry) / 3.5);
+    return Array.from({ length: n }, (_, i) => i / n * Math.PI * 2).filter(a => Math.sin(a) > -0.3)
+      .map(a => [Math.cos(a), Math.sin(a)]);
+  }
+
   function loteUrbano([peca, x, y, r, base], zona) { return { peca, x, y, r, base, zona }; }
 
-  return { planta, cena, sorteio, W, H, E, C, NOMES, PORTES, aguaEm, ponteEm, naPista, chaveAresta };
+  return { planta, cena, anelDaPraca, LAMPADAS, sorteio, W, H, E, C, NOMES, PORTES, aguaEm, ponteEm, naPista, chaveAresta };
 })();
 window.CidadePlanta = CidadePlanta;

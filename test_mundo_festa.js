@@ -153,9 +153,28 @@ async function principal() {
   const bd = await abrir("#brasil", { busca: "?data=2026-12-31" });   // de dia: sem fogos
   bd.rodar(300);
   assert.equal(bd.M.niveis.brasil.fogos, 0);
-  // no globo, nada da festa
+  // no globo, o status diz a festa do dia (o rótulo do canvas segue o de sempre)
   const gl = await abrir("#globo", { busca: "?data=2026-12-25" });
   gl.rodar(5);
-  assert.doesNotMatch(gl.elementos["mundo-estado"].textContent + gl.canvas["aria-label"], /Natal/);
+  assert.match(gl.elementos["mundo-estado"].textContent, /Hoje é Natal\./);
+  assert.doesNotMatch(gl.canvas["aria-label"], /Natal/);
+
+  // a festa é a da cidade (data local, regionais por cima); o mapa e o globo seguem a de Brasília. A regional de teste
+  // traz os enfeites novos por código: fitas nos cordões, velas e flores na praça
+  const reg = await abrir("#brasil", { busca: "?data=2026-12-25", passo: 100 });
+  await carregar(reg);
+  reg.contexto.window.Festas.LOCAIS.push({ chave: "teste", cidades: ["sao-paulo"], janela: () => [0, Infinity], base: null,
+    nome: "Festa da Cidade", cores: ["#123456", "#abcdef"], enfeites: ["fitas", "velas", "flores"], chapeu: null, falas: [] });
+  reg.contexto.cores = new Set();
+  reg.M.ir("cidade", { cidade: "sao-paulo" }); reg.rodar(10); await carregar(reg); reg.rodar(30);
+  const re = reg.M.niveis.cidade.enfeites;
+  assert.equal(re.chave, "teste");
+  assert.ok(re.cordoes > 0 && re.fitas > 0 && re.formas.includes("velas") && re.formas.includes("flores"), JSON.stringify(re));
+  assert.equal(re.bandeirinhas, 0);
+  assert.ok(pintou(reg.contexto.cores, ["#123456", "#abcdef"]));
+  assert.match(reg.canvas["aria-label"], /Hoje é Festa da Cidade/);
+  assert.match(reg.elementos["mundo-estado"].textContent, /Hoje é Festa da Cidade\./);
+  reg.M.ir("brasil"); reg.rodar(40);
+  assert.match(reg.elementos["mundo-estado"].textContent, /Hoje é Natal\./);
 }
 principal().catch(e => { console.error(e); process.exitCode = 1; });

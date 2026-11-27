@@ -588,6 +588,10 @@ GENERICOS = ([f"predios-{i}" for i in range(1, 15)] + [f"chale-{i}" for i in ran
 # as peças das festas, ao lado da fonte da praça: entram quando a arte existe (sem ela, a festa fica só nos enfeites)
 OPCIONAIS = ["festa-arvore-natal", "festa-fogueira", "festa-barraca-junina", "festa-abobora", "festa-ovo-pascoa",
              "festa-carro-alegorico", "festa-palco-anonovo"]
+# as peças de chão das festas novas, desenhadas no Aseprite em arte/festas (fonte .aseprite e .png ao lado), no tamanho
+# original (1x); cada uma entra com a sua linha de proveniência. Sem o PNG, fica de fora, como as OPCIONAIS
+FESTAS_1X = []
+PASTA_FESTAS = os.path.join(RAIZ, "arte", "festas")
 # a arte de cidade de Recife, Manaus e Belo Horizonte: opcional como as festas, mas no tamanho original (1x)
 ARTES_CIDADE = ["cidade-recife", "cidade-manaus", "cidade-bh-serra-curral", "recife-frente", "recife-pedra"]
 # desenhadas pelo PixelLab grandes demais para a cidade: entram no atlas na metade (o navegador desenha 1:1)
@@ -855,8 +859,8 @@ def montar_atlas(arte, cidades, saida):
     from PIL import Image
     pecas = {}
 
-    def abrir(nome):
-        im = Image.open(os.path.join(arte, nome + ".png")).convert("RGBA")
+    def abrir(nome, pasta=arte):
+        im = Image.open(os.path.join(pasta, nome + ".png")).convert("RGBA")
         im = im.crop(im.getchannel("A").getbbox())
         if nome in MANCHAS:
             im = sem_mancha(im, MANCHAS[nome])
@@ -871,6 +875,9 @@ def montar_atlas(arte, cidades, saida):
     for nome in OPCIONAIS:
         if os.path.exists(os.path.join(arte, nome + ".png")):
             pecas[nome] = abrir(nome)
+    for nome in FESTAS_1X:
+        if os.path.exists(os.path.join(PASTA_FESTAS, nome + ".png")):
+            pecas[nome] = abrir(nome, PASTA_FESTAS)
     for nome in ARTES_CIDADE:
         if os.path.exists(os.path.join(arte, nome + ".png")):
             pecas[nome] = abrir(nome)

@@ -12,7 +12,7 @@ Uso: python3 ferramentas/montar_cenas.py <subcomando>
                               se o JSON existir, a classe de cada cor vai por cima
   sugerir <id> --saida DIR    rede de calçadas (até 160 nós) e pista tiradas das "superficies": só sugestão, o autor copia
                               e corrige. A pista que reprova no A3 sai vazia
-  validar [id ...]            esquema, limites e o aceite A1 a A9; sai com 1 e lista as violações (sem id: todas)
+  validar [id ...]            esquema, limites e o aceite A1 a A10; sai com 1 e lista as violações (sem id: todas)
   revisar <id> --saida DIR    a arte a 3x com a geometria por cima, de dia, e a arte à noite com as luzes
   indice                      regrava static/mundo_cidade_cenas.js (rode antes do validar: o A1 confere o manifesto)
 
@@ -52,6 +52,9 @@ SECAO_RETOQUES = "## Retoques das cenas importadas (montar_cenas.py)"
 CABECALHO_RETOQUES = ("| Cidade | SHA-256 do bruto | SHA-256 do retocado | Retocado | Nota | Data |\n"
                       "|---|---|---|---|---|---|")
 LUZ = (255, 214, 130)   # a cor das luzes do mundo_cidade.js
+LAMPADAS = 600   # o teto de lâmpadas da festa numa cidade (o do mundo_cidade_planta.js)
+FIOS_PX = (8, 220)
+ROSA, AMARELO_CLARO, CEU = (255, 105, 180), (255, 244, 170), (150, 200, 255)   # as âncoras da festa no revisar
 # o esquema e os limites são os do cliente: uma fonte só
 NODE = ('const fs=require("fs"),vm=require("vm"),c=vm.createContext({window:{}});'
         'vm.runInContext(fs.readFileSync(process.argv[1],"utf8"),c);'
@@ -439,6 +442,90 @@ def a9_textos(d):
             yield f"{nome}: de 1 a {teto} caracteres, sem < > nem controle"
 
 
+def anel_da_praca(fonte):
+    """As lâmpadas do anel no chão em volta da praça, como o anelDaPraca do mundo_cidade_planta.js."""
+    n = math.floor(math.pi * (fonte[0] / 2 + 3 + fonte[1] / 2 + 2) / 3.5 + 0.5)
+    return sum(math.sin(i / n * math.pi * 2) > -0.3 for i in range(n))
+
+
+def caixa_da_arvore():
+    """O tamanho da árvore de Natal no atlas: a menor peça grande que um palco precisa receber."""
+    atlas = json.loads(ler(os.path.join(RAIZ, "static", "mundo", "atlas.json")))
+    return atlas["quadros"]["festa-arvore-natal"][2:]
+
+
+def a10_festa(d):
+    """O campo opcional festa: âncoras desenhadas por cima da arte, sem passar pela máscara de oclusão."""
+    if "festa" not in d:
+        return
+    f = d["festa"]
+    if not isinstance(f, dict) or set(f) - {"fios", "contornos", "palco", "ceu"}:
+        yield "festa: só fios, contornos, palco e ceu"
+        return
+    frentes = [o["frente"] for o in d["oclusoes"]]
+
+    def ponto(p):
+        return (isinstance(p, list) and len(p) == 2 and all(type(v) is int for v in p)
+                and 0 <= p[0] <= d["W"] and 0 <= p[1] <= d["H"])
+
+    def retangulo(r):
+        return isinstance(r, list) and len(r) == 4 and ponto(r[:2]) and ponto(r[2:]) and r[0] < r[2] and r[1] < r[3]
+
+    def coberto(a, b):   # a frente é meio aberta, como a máscara do cliente
+        return any(contem(d["portaria"]["r"], (x, y))
+                   or any(x0 <= x < x1 and y0 <= y < y1 for x0, y0, x1, y1 in frentes) for x, y in bresenham(a, b))
+
+    def cruza(a, b):
+        return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+
+    lampadas = anel_da_praca(d["praca"]["fonte"])
+    lampadas += sum(int(math.hypot(x1 - x0, y1 - y0) // 4) + 1 for x0, y0, x1, y1 in d["cordoes"])
+    fios = f.get("fios", [])
+    if not isinstance(fios, list) or len(fios) > 16:
+        yield "fios: de 0 a 16"
+        fios = []
+    for k, v in enumerate(fios):
+        if not (isinstance(v, list) and len(v) == 4 and ponto(v[:2]) and ponto(v[2:])):
+            yield f"fio {k}: [x0, y0, x1, y1] inteiros dentro da imagem"
+            continue
+        L = math.dist(v[:2], v[2:])
+        lampadas += int(L // 4) + 1
+        if not FIOS_PX[0] <= L <= FIOS_PX[1]:
+            yield f"fio {k}: mede {L:.1f} px (de {FIOS_PX[0]} a {FIOS_PX[1]})"
+        elif coberto(v[:2], v[2:]):
+            yield f"fio {k}: cruza a portaria ou a frente de uma oclusão"
+    contornos = f.get("contornos", [])
+    if not isinstance(contornos, list) or len(contornos) > 12:
+        yield "contornos: de 0 a 12"
+        contornos = []
+    for k, v in enumerate(contornos):
+        if not (isinstance(v, list) and 2 <= len(v) <= 48 and all(ponto(p) for p in v)):
+            yield f"contorno {k}: de 2 a 48 pontos inteiros dentro da imagem"
+            continue
+        L = 0.0
+        for a, b in zip(v, v[1:]):
+            L += math.dist(a, b)
+        lampadas += int(L // 3) + 1
+        if any(coberto(a, b) for a, b in zip(v, v[1:])):
+            yield f"contorno {k}: cruza a portaria ou a frente de uma oclusão"
+    if "palco" in f:
+        p = f["palco"]
+        if not (isinstance(p, dict) and set(p) == {"x", "y", "r"} and ponto([p["x"], p["y"]]) and retangulo(p["r"])):
+            yield "palco: {x, y, r} dentro da imagem"
+        else:
+            r, (w, h) = p["r"], caixa_da_arvore()
+            if not contem(r, (p["x"], p["y"])):
+                yield f"palco: r {r} sem o pé"
+            if not (contem(r, (p["x"] - w / 2, p["y"] - h)) and contem(r, (p["x"] + w / 2, p["y"]))):
+                yield f"palco: a árvore {w}x{h}, apoiada no pé, não cabe em r {r}"
+            if any(cruza(r, outro) for outro in [d["praca"]["r"], d["portaria"]["r"], *frentes]):
+                yield f"palco: r {r} cruza a praça, a portaria ou uma frente"
+    if "ceu" in f and not retangulo(f["ceu"]):
+        yield "ceu: [x0, y0, x1, y1] dentro da imagem"
+    if lampadas > LAMPADAS:
+        yield f"{lampadas} lâmpadas (teto {LAMPADAS})"
+
+
 def superficies(d, arte):
     sup = d.get("superficies")
     if not isinstance(sup, dict) or set(sup) != set(CLASSES):
@@ -463,7 +550,7 @@ def superficies(d, arte):
 
 
 def validar(cidade, raiz=RAIZ, resumo=None):
-    """(violações, avisos); cada linha começa pela regra: esquema, superficies ou A1 a A9."""
+    """(violações, avisos); cada linha começa pela regra: esquema, superficies ou A1 a A10."""
     resumo = [] if resumo is None else resumo
     try:
         d, arte = carregar(cidade, raiz)
@@ -479,7 +566,8 @@ def validar(cidade, raiz=RAIZ, resumo=None):
     regras = (("A1", lambda: a1_png(d, arte, cidade, raiz)), ("superficies", lambda: superficies(d, arte)),
               ("A2", lambda: a2_calcadas(d, arte, resumo)), ("A3", lambda: a3_pista(d, arte, resumo)),
               ("A4", lambda: a4_portaria(d)), ("A5", lambda: a5_pontos(d)), ("A6", lambda: a6_oclusoes(d)),
-              ("A7", lambda: a7_praca(d)), ("A8", lambda: a8_grafo(d)), ("A9", lambda: a9_textos(d)))
+              ("A7", lambda: a7_praca(d)), ("A8", lambda: a8_grafo(d)), ("A9", lambda: a9_textos(d)),
+              ("A10", lambda: a10_festa(d)))
     for nome, regra in regras:
         destino = avisos if nome == "A6" else violacoes
         try:
@@ -594,6 +682,24 @@ def revisar(cidade, saida, raiz=RAIZ):
         g.line([em_3x((x0, y0)), em_3x((x1, y1))], fill=magenta)
     for x, y, r, _ in d["luzes"]:
         marca((x, y), magenta, r * 3)
+    festa = d.get("festa") or {}
+    for x0, y0, x1, y1 in festa.get("fios", []):
+        g.line([em_3x((x0, y0)), em_3x((x1, y1))], fill=ROSA)
+    for contorno in festa.get("contornos", []):
+        g.line([em_3x(p) for p in contorno], fill=AMARELO_CLARO)
+        resto = 0.0   # um ponto onde cai cada lâmpada, a cada 3 px do caminho
+        for a, b in zip(contorno, contorno[1:]):
+            L = math.dist(a, b)
+            while resto <= L:
+                u = resto / L if L else 0
+                marca((a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u), AMARELO_CLARO, 1)
+                resto += 3
+            resto -= L
+    if "palco" in festa:
+        caixa(festa["palco"]["r"], magenta)
+        marca((festa["palco"]["x"], festa["palco"]["y"]), magenta)
+    if "ceu" in festa:
+        tracejado(g, festa["ceu"], CEU)
     dia.save(os.path.join(saida, f"{cidade}-revisao.png"))
 
     # à noite: o escuro do cliente (0,62 de #060a22) e cada luz somada, do centro para a borda

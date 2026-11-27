@@ -36,8 +36,8 @@ function abrir(busca, reduzido, terra = TERRA) {
   vm.createContext(contexto);
   for (const f of ["static/mundo_globo.js", "static/mundo.js"]) vm.runInContext(fs.readFileSync(f, "utf8"), contexto, { filename: f });
   const { Globo, Mundo } = contexto.window;
-  const nivel = () => {
-    const n = Globo.criar({ dados: JSON.parse(JSON.stringify(MUNDO)), Camera: Mundo.Camera, reduzido });
+  const nivel = (festas = {}) => {
+    const n = Globo.criar({ dados: JSON.parse(JSON.stringify(MUNDO)), Camera: Mundo.Camera, reduzido, ...festas });
     n.camera.tamanho(940, 800, 1); n.entrar({});
     return n;
   };
@@ -278,4 +278,60 @@ const luaSo = data => {
   return m.contexto.canvas.find(c => c.width === 29).estilos;
 };
 assert.ok(luaSo("2026-11-24").filter(e => e === "#e4dfd1").length > 150, "?data= sozinho: lua cheia (hoje não é)");
+// a festa no globo: tudo por cima da passada pixel a pixel (o buffer sai idêntico), um marcador em cada cidade de frente
+// com festa, o trenó no Natal, os estouros no Réveillon, a lua laranja e os morcegos no Halloween
+{
+  const cidades = [...MUNDO.cidades, ...MUNDO.exterior], graus = Math.PI / 180;
+  assert.equal(cidades.length, 40);
+  const CORES = { natal: ["#e11d48", "#22c55e"], anonovo: ["#facc15", "#a855f7"], halloween: ["#f97316", "#7c3aed"] };
+  const dia = (chave, enfeites = []) => ({ chave, cores: CORES[chave], enfeites });
+  const festejar = (festa, reduzido, { busca = "?data=2026-12-31&hora=0", quadros = 1, so = null } = {}) => {
+    const m = abrir(busca, reduzido);
+    const n = m.nivel(festa ? { festa: () => festa, festaEm: id => (!so || so.includes(id) ? festa : null) } : {});
+    const saida = m.rodar(n, quadros);
+    return { m, n, saida, e: n.enfeites };
+  };
+  const frente = (n, c) => {
+    const { lon, lat } = n.rotacao, f = c.lat * graus, f0 = lat * graus;
+    return Math.sin(f0) * Math.sin(f) + Math.cos(f0) * Math.cos(f) * Math.cos((c.lon - lon) * graus) > 0.25;
+  };
+  const sem = festejar(null, true), com = festejar(dia("natal"), true);
+  assert.deepEqual(Buffer.from(com.m.contexto.imagem.data), Buffer.from(sem.m.contexto.imagem.data), "o buffer não muda");
+  assert.deepEqual([sem.e.marcadores, sem.e.estouros, sem.e.treno, sem.e.morcegos], [0, 0, null, 0]);
+  const esperados = cidades.filter(c => frente(com.n, c)).length;
+  assert.ok(esperados > 20 && esperados < 40, "cidades de frente: " + esperados);
+  assert.equal(com.e.marcadores, esperados);
+  assert.equal(festejar(dia("natal"), true, { so: ["recife", "lisboa", "toquio"] }).e.marcadores, 2, "Tóquio está de costas");
+  // o marcador de 3x3: alterna as cores a cada 600 ms; com movimento reduzido, fica na primeira
+  const marcas = (saida, cor) => saida.split(";").filter(op => op.startsWith(`fillRect,${cor},`) && op.endsWith(",3,3")).length;
+  const quieto = festejar(dia("natal"), true, { quadros: 80, so: ["recife"] });
+  assert.ok(quieto.saida.every(s => marcas(s, "#e11d48") === 1 && marcas(s, "#22c55e") === 0), "reduzido: marcador parado");
+  const vivo = festejar(dia("natal"), false, { quadros: 80, so: ["recife"] });
+  assert.ok(vivo.saida.some(s => marcas(s, "#e11d48")) && vivo.saida.some(s => marcas(s, "#22c55e")), "o marcador alterna");
+  // o trenó: parado ao lado da lua com movimento reduzido; sem ele, cruza a lua a cada 40 s
+  const t0 = JSON.stringify(com.e.treno);
+  com.m.rodar(com.n, 200);
+  assert.ok(com.n.enfeites.treno && JSON.stringify(com.n.enfeites.treno) === t0, "reduzido: trenó parado");
+  const anda = festejar(dia("natal"), false), posicoes = new Set();
+  let vazios = 0;
+  for (let i = 0; i < 130; i++) { anda.m.rodar(anda.n, 20); const p = anda.n.enfeites.treno; if (p) posicoes.add(p[0]); else vazios++; }
+  assert.ok(posicoes.size > 3 && vazios > 0, `trenó cruza e some: ${posicoes.size}, ${vazios}`);
+  // Réveillon: até 4 estouros, no máximo 2 começando por segundo; nenhum com movimento reduzido nem de dia
+  const fogos = festejar(dia("anonovo", ["fogos"]), false);
+  let maior = 0;
+  fogos.m.rodar(fogos.n, 60);
+  assert.ok(fogos.n.enfeites.estouros >= 1 && fogos.n.enfeites.estouros <= 2, "no primeiro segundo: " + fogos.n.enfeites.estouros);
+  for (let i = 0; i < 400; i++) { fogos.m.rodar(fogos.n, 1); maior = Math.max(maior, fogos.n.enfeites.estouros); }
+  assert.ok(maior > 0 && maior <= 4, "estouros: " + maior);
+  assert.equal(festejar(dia("anonovo", ["fogos"]), true, { quadros: 100 }).e.estouros, 0);
+  assert.equal(festejar(dia("anonovo", ["fogos"]), false, { quadros: 100, busca: "?data=2026-12-31&hora=12", so: ["recife"] }).e.estouros, 0, "de dia, nada");
+  // Halloween: a lua tingida entra na chave do cache dela, e 3 morcegos cruzam (parados com movimento reduzido)
+  const hal = festejar(dia("halloween"), true);
+  assert.notEqual(hal.e.lua, sem.e.lua, "a chave da lua muda");
+  assert.equal(com.e.lua, sem.e.lua);
+  assert.equal(hal.e.morcegos, 3);
+  const tingida = r => r.m.contexto.canvas.find(c => c.width === 29).estilos.includes("#f97316");
+  assert.deepEqual([tingida(hal), tingida(sem)], [true, false], "a lua laranja só no Halloween");
+  assert.equal(new Set(hal.m.rodar(hal.n, 30)).size, 1, "reduzido: nada se mexe");
+}
 console.log("test_mundo_globo: ok");
