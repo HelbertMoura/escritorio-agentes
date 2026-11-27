@@ -1,0 +1,226 @@
+{
+ "versao": 1,
+ "id": "santiago",
+ "W": 576,
+ "H": 400,
+ "texto": {
+  "cena": "Santiago em pixel art, com a Catedral Metropolitana, a Plaza de Armas com palmeiras e a cordilheira dos Andes ao fundo",
+  "vida": "Dois pedestres entre a portaria e o centro da Plaza de Armas e um carro na rua do oeste",
+  "portaria": "no sobrado de sacadas em frente à praça"
+ },
+ "portaria": {
+  "x": 239,
+  "y": 318,
+  "r": [
+   231,
+   294,
+   247,
+   318
+  ],
+  "placa": [
+   239,
+   298
+  ],
+  "farol": [
+   239,
+   308
+  ]
+ },
+ "praca": {
+  "x": 373,
+  "y": 263,
+  "r": [
+   326,
+   226,
+   420,
+   272
+  ],
+  "fonte": [
+   10,
+   10
+  ]
+ },
+ "pontos": [
+  {
+   "x": 375,
+   "y": 175,
+   "r": [
+    305,
+    60,
+    450,
+    175
+   ],
+   "nome": "Catedral · Plaza de Armas"
+  }
+ ],
+ "calcadas": {
+  "nos": [
+   [
+    239,
+    318
+   ],
+   [
+    266,
+    318
+   ],
+   [
+    303,
+    316
+   ],
+   [
+    340,
+    315
+   ],
+   [
+    375,
+    315
+   ],
+   [
+    375,
+    286
+   ],
+   [
+    375,
+    262
+   ],
+   [
+    340,
+    259
+   ]
+  ],
+  "arestas": null,
+  "travessias": [
+   1
+  ],
+  "pontes": []
+ },
+ "pista": [
+  [
+   277.0,
+   232.0
+  ],
+  [
+   277.0,
+   282.0
+  ],
+  [
+   280.0,
+   284.5
+  ],
+  [
+   284.0,
+   285.5
+  ],
+  [
+   288.0,
+   284.5
+  ],
+  [
+   291.0,
+   282.0
+  ],
+  [
+   291.0,
+   232.0
+  ],
+  [
+   288.0,
+   229.5
+  ],
+  [
+   284.0,
+   228.5
+  ],
+  [
+   280.0,
+   229.5
+  ]
+ ],
+ "carros": [
+  {
+   "s": 0,
+   "v": 14,
+   "peca": "carro-5",
+   "tamanho": [
+    8,
+    4
+   ]
+  }
+ ],
+ "pedestres": [
+  {
+   "de": 0,
+   "para": 1,
+   "s": 6,
+   "v": 14
+  },
+  {
+   "de": 5,
+   "para": 6,
+   "s": 6,
+   "v": 15
+  }
+ ],
+ "oclusoes": [],
+ "cordoes": [
+  [
+   330,
+   264,
+   416,
+   264
+  ]
+ ],
+ "luzes": [
+  [
+   400,
+   202,
+   10,
+   0.45
+  ],
+  [
+   346,
+   240,
+   10,
+   0.45
+  ],
+  [
+   347,
+   278,
+   10,
+   0.45
+  ]
+ ],
+ "superficies": {
+  "calcada": [
+   "65434f",
+   "58394a",
+   "704f58",
+   "ddb381",
+   "b27e5e",
+   "d9ac7b",
+   "e3bd8a",
+   "be8f68",
+   "ce9f71",
+   "f3d6a2",
+   "ebcb97",
+   "d6a880",
+   "9e6749",
+   "4d2e42",
+   "482733",
+   "cb925f"
+  ],
+  "faixa": [
+   "5a4a5b",
+   "502c2f"
+  ],
+  "ponte": [],
+  "asfalto": [
+   "473247",
+   "20132b",
+   "191023",
+   "2a182b",
+   "341b2d",
+   "3a1e2f"
+  ]
+ }
+}
