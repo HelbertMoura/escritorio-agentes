@@ -146,6 +146,24 @@ PNG indexado sem perda (RGBA igual ao do bruto).
 | `maringa` | `maringa-pixen-576x400.png` | `ae4a2f7330bfa0b22322cf771d5f7fc306c381102e4ac3d6bf372bb1610c6c21` | 26/11/2026 |
 | `itajai` | `itajai-pixen-576x400.png` | `7c9223311f4d4669259705103393214b9fd42a4640bbe78d2ff38606ee0886d4` | 26/11/2026 |
 | `pelotas` | `pelotas-pixen-576x400.png` | `e1265d4c280287799f3323ec3c1d8a52eae604a8c9a6c237e5cc569661265b30` | 26/11/2026 |
+| `itu` | `itu-pixen-576x400.png` | `2a17696699b01b3c91f101a5aa07380c660c8ff540f8998253b475317ec984c6` | 26/11/2026 |
+| `anapolis` | `anapolis-pixen-576x400.png` | `02bef2bee7aee695c11e27a14d02414cd5c5db3067980d468245b6b1125711b4` | 26/11/2026 |
+| `vitoria-da-conquista` | `vitoria-da-conquista-pixen-576x400.png` | `88ae7827a0473dafd0f94ab689d055ad2763fabcfce3debc6224a1efd13a78c1` | 26/11/2026 |
+| `franca` | `franca-pixen-576x400.png` | `f6a0c24fac50e7b8b11330fbe693c74bccaf2b8b406ed2d3b36c8538827fad76` | 26/11/2026 |
+| `blumenau` | `blumenau-pixen-576x400.png` | `9fb15b99bfed59a7be763a205d791428d40d4a098b17af3086f58054d5cd71ee` | 26/11/2026 |
+| `ponta-grossa` | `ponta-grossa-pixen-576x400.png` | `30d7a2ef5ebdbd2a2042d755c0bcf3c9652b15da6f2fec5499056fb882fbb197` | 26/11/2026 |
+| `limeira` | `limeira-pixen-576x400.png` | `798034725bdcaf87a35d089f18cb6faf7d88f4f443964b02e21e7f0dba93964c` | 26/11/2026 |
+| `petropolis` | `petropolis-pixen-576x400.png` | `149ae9d6dd9eb2531dbb477900abe932b774de68560647085bc6f578afc8b7ae` | 26/11/2026 |
+| `crato` | `crato-pixen-576x400.png` | `d28e0795fbd3b52b8ade8c86cec824ed1634a04e2fce5737dd6c782a7413e636` | 27/11/2026 |
+| `cabo-frio` | `cabo-frio-pixen-576x400.png` | `ecc7cbbb9aaeebf4690bbf0ad81c95cf3c935e120d513c1120d7743bb6b12210` | 27/11/2026 |
+| `petrolina` | `petrolina-pixen-576x400.png` | `f2cf0eae1cd6aed2babf1022d301c3ea8c1faf15b89b72b5ea824fc7d87541ca` | 27/11/2026 |
+| `uberaba` | `uberaba-pixen-576x400.png` | `4637058351472d45d6dd2e230cd9a5e3e2d41d08f1aecd9fbd6abf95e9eb6179` | 27/11/2026 |
+| `cascavel` | `cascavel-pixen-576x400.png` | `113b53e232b8e0d84f1085e5a7f0fe5acaab14af103bb210f96351690af14ed3` | 27/11/2026 |
+| `governador-valadares` | `governador-valadares-pixen-576x400.png` | `2d0a6c25d0bdf381bde07b1b48f9abf1dc7d8979d922a7aa6eece469e4604300` | 27/11/2026 |
+| `santa-maria` | `santa-maria-pixen-576x400.png` | `9ec7c8070222651e1359fa99fd66819276d6994e9aee69550ccde415fa97e634` | 27/11/2026 |
+| `caruaru` | `caruaru-pixen-576x400.png` | `bdc5af6fca5be633b1e7303d679f8607e2f69c8763865d5c85ead3f39dfb044f` | 27/11/2026 |
+| `ilheus` | `ilheus-pixen-576x400.png` | `0b7bbad384cd1dec8a6ef549fc9d3959045a91bec722786dbe7d06acd1014b83` | 27/11/2026 |
+| `santarem` | `santarem-pixen-576x400.png` | `4101f4b502df2d15798edc1bf84f4aa68fe1add9e09c4b090c27b878827b65a3` | 27/11/2026 |
 | `imperatriz` | `imperatriz-pixen-576x400.png` | `871e30790f000392459c42a903ab2aab1e0930ea121441fa01236261b3755601` | 27/11/2026 |
 | `marilia` | `marilia-pixen-576x400.png` | `0fbe0d4f99aed1916469e042f41e1d2077eb8140697dd275705f6a7987d5bb98` | 27/11/2026 |
 | `presidente-prudente` | `presidente-prudente-pixen-576x400.png` | `7743e58939bf82d0a5d1c177662efac5c8c0c3a47e23696902085ac4901dbac7` | 27/11/2026 |
@@ -157,6 +175,12 @@ PNG indexado sem perda (RGBA igual ao do bruto).
 Lote 9 (27/11/2026): Imperatriz, Marília, Presidente Prudente, São Carlos, Criciúma, Guaratinguetá e Mossoró, autoria pelo
 Opus com `montar_cenas.py`. Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`, 1ª tentativa (nenhuma tem
 entrada no `escolhas.json`), sem retoque de pixel.
+
+Lote 7, parte 1 (26/11/2026): Itu, Anápolis, Vitória da Conquista, Franca e Blumenau, autoria pelo Opus com
+`montar_cenas.py`. Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`, 1ª tentativa, sem retoque de pixel.
+
+Lote 7, parte 2 (26 e 27/11/2026): Ponta Grossa, Limeira, Petrópolis, Crato e Cabo Frio, mesma autoria e mesmos brutos
+(1ª tentativa, sem retoque de pixel). O cordão de Blumenau saiu de cima do rio e foi para o gramado.
 
 Lote 5 (26/11/2026): Sorocaba, Ribeirão Preto, Londrina, Jundiaí, Feira de Santana, Juiz de Fora, Volta Redonda, Foz do
 Iguaçu, Campina Grande e Ipatinga, autoria pelo Opus com `montar_cenas.py`. Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`,

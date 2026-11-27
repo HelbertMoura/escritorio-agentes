@@ -1,0 +1,218 @@
+{
+  "versao": 1,
+  "id": "uberaba",
+  "W": 576,
+  "H": 400,
+  "texto": {
+    "cena": "Uberaba em pixel art, com a Catedral Metropolitana no largo, a feira de gado com as tendas listradas e as quadras de telhado de barro",
+    "vida": "Dois pedestres na calçada do sobrado amarelo e um carro na rua do meio",
+    "portaria": "na porta do sobrado amarelo de três janelas, a oeste da catedral"
+  },
+  "portaria": {
+    "x": 219,
+    "y": 212,
+    "r": [
+      211,
+      188,
+      227,
+      212
+    ],
+    "placa": [
+      219,
+      192
+    ],
+    "farol": [
+      219,
+      202
+    ]
+  },
+  "praca": {
+    "x": 374,
+    "y": 298,
+    "r": [
+      349,
+      250,
+      405,
+      301
+    ],
+    "fonte": [
+      10,
+      6
+    ]
+  },
+  "pontos": [
+    {
+      "x": 372,
+      "y": 232,
+      "r": [
+        335,
+        105,
+        420,
+        232
+      ],
+      "nome": "Catedral · Uberaba"
+    },
+    {
+      "x": 374,
+      "y": 298,
+      "r": [
+        349,
+        250,
+        405,
+        299
+      ],
+      "nome": "Largo da Catedral"
+    }
+  ],
+  "calcadas": {
+    "nos": [
+      [
+        214,
+        213
+      ],
+      [
+        219,
+        212
+      ],
+      [
+        232,
+        214
+      ]
+    ],
+    "arestas": null,
+    "travessias": [],
+    "pontes": []
+  },
+  "pista": [
+    [
+      167,
+      231
+    ],
+    [
+      210,
+      231
+    ],
+    [
+      212.5,
+      230
+    ],
+    [
+      214,
+      227
+    ],
+    [
+      212.5,
+      224
+    ],
+    [
+      210,
+      223
+    ],
+    [
+      167,
+      223
+    ],
+    [
+      164.5,
+      224
+    ],
+    [
+      163,
+      227
+    ],
+    [
+      164.5,
+      230
+    ]
+  ],
+  "carros": [
+    {
+      "s": 0,
+      "v": 14,
+      "peca": "carro-1",
+      "tamanho": [
+        8,
+        4
+      ]
+    }
+  ],
+  "pedestres": [
+    {
+      "de": 0,
+      "para": 1,
+      "s": 3,
+      "v": 12
+    },
+    {
+      "de": 1,
+      "para": 2,
+      "s": 6,
+      "v": 15
+    }
+  ],
+  "oclusoes": [],
+  "cordoes": [
+    [
+      352,
+      285,
+      400,
+      285
+    ]
+  ],
+  "luzes": [
+    [
+      57,
+      77,
+      10,
+      0.45
+    ],
+    [
+      247,
+      77,
+      10,
+      0.45
+    ],
+    [
+      157,
+      196,
+      10,
+      0.45
+    ],
+    [
+      389,
+      324,
+      10,
+      0.45
+    ],
+    [
+      357,
+      324,
+      10,
+      0.45
+    ]
+  ],
+  "superficies": {
+    "calcada": [
+      "c19a6b",
+      "af8962",
+      "c7a070",
+      "8e6650",
+      "75504b",
+      "a17455",
+      "895e50",
+      "7e554c",
+      "d4ac75",
+      "e2bb79",
+      "a98261",
+      "6a4147",
+      "6a4948",
+      "bc936e"
+    ],
+    "faixa": [],
+    "ponte": [],
+    "asfalto": [
+      "49354b",
+      "4b364c"
+    ]
+  }
+}

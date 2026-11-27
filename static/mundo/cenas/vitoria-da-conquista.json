@@ -1,0 +1,237 @@
+{
+  "versao": 1,
+  "id": "vitoria-da-conquista",
+  "W": 576,
+  "H": 400,
+  "texto": {
+    "cena": "Vitória da Conquista em pixel art, com a Catedral de Nossa Senhora das Vitórias e seu adro de pedra, as quadras de telhado de barro e os morros verdes",
+    "vida": "Dois pedestres na calçada da casa e um carro na rua do alto",
+    "portaria": "na porta da casa de janelas azuis, à esquerda da catedral"
+  },
+  "portaria": {
+    "x": 231,
+    "y": 215,
+    "r": [
+      223,
+      191,
+      239,
+      215
+    ],
+    "placa": [
+      231,
+      195
+    ],
+    "farol": [
+      231,
+      205
+    ]
+  },
+  "praca": {
+    "x": 349,
+    "y": 242,
+    "r": [
+      345,
+      215,
+      391,
+      243
+    ],
+    "fonte": [
+      2,
+      2
+    ]
+  },
+  "pontos": [
+    {
+      "x": 370,
+      "y": 214,
+      "r": [
+        330,
+        112,
+        415,
+        214
+      ],
+      "nome": "Catedral · Conquista"
+    },
+    {
+      "x": 370,
+      "y": 242,
+      "r": [
+        346,
+        215,
+        394,
+        242
+      ],
+      "nome": "Adro da Catedral"
+    }
+  ],
+  "calcadas": {
+    "nos": [
+      [
+        214,
+        215
+      ],
+      [
+        231,
+        215
+      ],
+      [
+        250,
+        215
+      ]
+    ],
+    "arestas": null,
+    "travessias": [],
+    "pontes": []
+  },
+  "pista": [
+    [
+      301,
+      16
+    ],
+    [
+      301,
+      72
+    ],
+    [
+      303,
+      75
+    ],
+    [
+      305.5,
+      76
+    ],
+    [
+      308,
+      75
+    ],
+    [
+      310,
+      72
+    ],
+    [
+      310,
+      16
+    ],
+    [
+      308,
+      13
+    ],
+    [
+      305.5,
+      12
+    ],
+    [
+      303,
+      13
+    ]
+  ],
+  "carros": [
+    {
+      "s": 0,
+      "v": 14,
+      "peca": "carro-1",
+      "tamanho": [
+        8,
+        4
+      ]
+    }
+  ],
+  "pedestres": [
+    {
+      "de": 0,
+      "para": 1,
+      "s": 3,
+      "v": 12
+    },
+    {
+      "de": 1,
+      "para": 2,
+      "s": 6,
+      "v": 15
+    }
+  ],
+  "oclusoes": [],
+  "cordoes": [
+    [
+      322,
+      250,
+      344,
+      250
+    ]
+  ],
+  "luzes": [
+    [
+      51,
+      329,
+      10,
+      0.45
+    ],
+    [
+      164,
+      328,
+      10,
+      0.45
+    ],
+    [
+      190,
+      331,
+      10,
+      0.45
+    ],
+    [
+      295,
+      331,
+      10,
+      0.45
+    ],
+    [
+      354,
+      324,
+      10,
+      0.45
+    ],
+    [
+      446,
+      325,
+      10,
+      0.45
+    ],
+    [
+      525,
+      332,
+      10,
+      0.45
+    ],
+    [
+      295,
+      82,
+      10,
+      0.45
+    ]
+  ],
+  "superficies": {
+    "calcada": [
+      "c7a67e",
+      "745657",
+      "664d54",
+      "836258",
+      "bd9c7c",
+      "513742",
+      "684848",
+      "986f59",
+      "906652",
+      "b59277",
+      "7c554c",
+      "9b826a"
+    ],
+    "faixa": [],
+    "ponte": [],
+    "asfalto": [
+      "604247",
+      "573d47",
+      "231a2e",
+      "332337",
+      "867a68"
+    ]
+  }
+}
