@@ -1,0 +1,227 @@
+{
+ "versao": 1,
+ "id": "taubate",
+ "W": 576,
+ "H": 400,
+ "texto": {
+  "cena": "Taubaté em pixel art, com a Catedral de São Francisco das Chagas, a praça calçada com a capelinha e as quadras de sobrados de telhado vermelho",
+  "vida": "Dois pedestres na calçada dos sobrados e um carro na rua abaixo deles",
+  "portaria": "na porta da casa de telhado vermelho, na quadra à esquerda da catedral"
+ },
+ "portaria": {
+  "x": 271,
+  "y": 214,
+  "r": [
+   263,
+   190,
+   279,
+   214
+  ],
+  "placa": [
+   271,
+   194
+  ],
+  "farol": [
+   271,
+   204
+  ]
+ },
+ "praca": {
+  "x": 370,
+  "y": 278,
+  "r": [
+   337,
+   245,
+   403,
+   279
+  ],
+  "fonte": [
+   6,
+   2
+  ]
+ },
+ "pontos": [
+  {
+   "x": 370,
+   "y": 242,
+   "r": [
+    315,
+    112,
+    425,
+    242
+   ],
+   "nome": "Catedral · Taubaté"
+  }
+ ],
+ "calcadas": {
+  "nos": [
+   [
+    200,
+    214
+   ],
+   [
+    236,
+    214
+   ],
+   [
+    271,
+    214
+   ],
+   [
+    284,
+    214
+   ]
+  ],
+  "arestas": null,
+  "travessias": [],
+  "pontes": []
+ },
+ "pista": [
+  [
+   30.0,
+   234.0
+  ],
+  [
+   170.0,
+   234.0
+  ],
+  [
+   174.0,
+   232.5
+  ],
+  [
+   175.5,
+   228.5
+  ],
+  [
+   174.0,
+   224.5
+  ],
+  [
+   170.0,
+   223.0
+  ],
+  [
+   30.0,
+   223.0
+  ],
+  [
+   26.0,
+   224.5
+  ],
+  [
+   24.5,
+   228.5
+  ],
+  [
+   26.0,
+   232.5
+  ]
+ ],
+ "carros": [
+  {
+   "s": 0,
+   "v": 14,
+   "peca": "carro-2",
+   "tamanho": [
+    8,
+    4
+   ]
+  }
+ ],
+ "pedestres": [
+  {
+   "de": 0,
+   "para": 1,
+   "s": 6,
+   "v": 14
+  },
+  {
+   "de": 2,
+   "para": 3,
+   "s": 6,
+   "v": 15
+  }
+ ],
+ "oclusoes": [],
+ "cordoes": [
+  [
+   341,
+   275,
+   399,
+   275
+  ]
+ ],
+ "luzes": [
+  [
+   156,
+   81,
+   10,
+   0.45
+  ],
+  [
+   188,
+   82,
+   10,
+   0.45
+  ],
+  [
+   294,
+   81,
+   10,
+   0.45
+  ],
+  [
+   309,
+   128,
+   10,
+   0.45
+  ],
+  [
+   547,
+   160,
+   10,
+   0.45
+  ],
+  [
+   164,
+   202,
+   10,
+   0.45
+  ],
+  [
+   288,
+   202,
+   10,
+   0.45
+  ],
+  [
+   445,
+   324,
+   10,
+   0.45
+  ]
+ ],
+ "superficies": {
+  "calcada": [
+   "b79a79",
+   "af9276",
+   "6d5352",
+   "7b6261",
+   "dac29f",
+   "cdae80",
+   "5c464e",
+   "7a5647",
+   "a0866f",
+   "967156",
+   "8a654f"
+  ],
+  "faixa": [],
+  "ponte": [],
+  "asfalto": [
+   "452f41",
+   "867367",
+   "937d6f"
+  ]
+ }
+}

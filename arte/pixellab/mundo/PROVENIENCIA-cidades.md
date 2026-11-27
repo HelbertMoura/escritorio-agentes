@@ -136,6 +136,16 @@ PNG indexado sem perda (RGBA igual ao do bruto).
 | `foz-do-iguacu` | `foz-do-iguacu-pixen-576x400.png` | `cd56055c157dc2619e1063fbfec98e642d4fae4026fdfa30a61cacf767cc73f7` | 26/11/2026 |
 | `campina-grande` | `campina-grande-pixen-576x400.png` | `7ded52ab2cc4222cee19a80db2df84d7816629cece0120d3b042f5aac68c8caf` | 26/11/2026 |
 | `ipatinga` | `ipatinga-pixen-576x400.png` | `4209bc5972770d2b82c07ef1cc7e2d92b1290979ae9969cc8d3802e6b59c4e9f` | 26/11/2026 |
+| `taubate` | `taubate-pixen-576x400.png` | `782cc5a59cbbff439c5d7e422e5cf1290cf9ae8b3b0f06b220e483a7d3195a32` | 26/11/2026 |
+| `campos` | `campos-pixen-576x400.png` | `bf8d51cc1fc27c41f3c5e51ed8649c70b37e3285bc809785d3975b7cb71b9071` | 26/11/2026 |
+| `caxias-do-sul` | `caxias-do-sul-pixen-576x400.png` | `6869c4b7c665f0a35d73d4f0a0d2059f763ab56a88bd69984324b107995d1b2f` | 26/11/2026 |
+| `sao-jose-do-rio-preto` | `sao-jose-do-rio-preto-pixen-576x400.png` | `270262bc461739ff971ee28b3a49495e2b371fea11b0fb24afca326bb84ed527` | 26/11/2026 |
+| `piracicaba` | `piracicaba-pixen-576x400.png` | `5f182f4c33eada7c49bfcb667112e8acf3280d33aa59285c80ec9b9af230a8a6` | 26/11/2026 |
+| `bauru` | `bauru-pixen-576x400.png` | `71ea2e7b121ad7660bc745f50b72912cafec47eecb022a7cf13d7b186cbb4ac7` | 26/11/2026 |
+| `montes-claros` | `montes-claros-pixen-576x400.png` | `068138dd831c35a20f1d540090c80b50bec403f256fb1cc72f2dbb5468f3697a` | 26/11/2026 |
+| `maringa` | `maringa-pixen-576x400.png` | `ae4a2f7330bfa0b22322cf771d5f7fc306c381102e4ac3d6bf372bb1610c6c21` | 26/11/2026 |
+| `itajai` | `itajai-pixen-576x400.png` | `7c9223311f4d4669259705103393214b9fd42a4640bbe78d2ff38606ee0886d4` | 26/11/2026 |
+| `pelotas` | `pelotas-pixen-576x400.png` | `e1265d4c280287799f3323ec3c1d8a52eae604a8c9a6c237e5cc569661265b30` | 26/11/2026 |
 | `petrolina` | `petrolina-pixen-576x400.png` | `f2cf0eae1cd6aed2babf1022d301c3ea8c1faf15b89b72b5ea824fc7d87541ca` | 27/11/2026 |
 | `uberaba` | `uberaba-pixen-576x400.png` | `4637058351472d45d6dd2e230cd9a5e3e2d41d08f1aecd9fbd6abf95e9eb6179` | 27/11/2026 |
 | `cascavel` | `cascavel-pixen-576x400.png` | `113b53e232b8e0d84f1085e5a7f0fe5acaab14af103bb210f96351690af14ed3` | 27/11/2026 |
