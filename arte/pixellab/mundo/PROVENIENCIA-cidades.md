@@ -146,6 +146,17 @@ PNG indexado sem perda (RGBA igual ao do bruto).
 | `maringa` | `maringa-pixen-576x400.png` | `ae4a2f7330bfa0b22322cf771d5f7fc306c381102e4ac3d6bf372bb1610c6c21` | 26/11/2026 |
 | `itajai` | `itajai-pixen-576x400.png` | `7c9223311f4d4669259705103393214b9fd42a4640bbe78d2ff38606ee0886d4` | 26/11/2026 |
 | `pelotas` | `pelotas-pixen-576x400.png` | `e1265d4c280287799f3323ec3c1d8a52eae604a8c9a6c237e5cc569661265b30` | 26/11/2026 |
+| `imperatriz` | `imperatriz-pixen-576x400.png` | `871e30790f000392459c42a903ab2aab1e0930ea121441fa01236261b3755601` | 27/11/2026 |
+| `marilia` | `marilia-pixen-576x400.png` | `0fbe0d4f99aed1916469e042f41e1d2077eb8140697dd275705f6a7987d5bb98` | 27/11/2026 |
+| `presidente-prudente` | `presidente-prudente-pixen-576x400.png` | `7743e58939bf82d0a5d1c177662efac5c8c0c3a47e23696902085ac4901dbac7` | 27/11/2026 |
+| `sao-carlos` | `sao-carlos-pixen-576x400.png` | `ba70438e4bfe895522cdfd3b3547e207453a82e6f11c7fa65eb2a772f8796fc2` | 27/11/2026 |
+| `criciuma` | `criciuma-pixen-576x400.png` | `9e2dface4ee07dab97ff011db7342204556970a5e2b9e6e9bec24938afa011e3` | 27/11/2026 |
+| `guaratingueta` | `guaratingueta-pixen-576x400.png` | `993ea5a235158a106a3a26b0b811f2e83b8ca6600c6f34d0e472379b7b9e589f` | 27/11/2026 |
+| `mossoro` | `mossoro-pixen-576x400.png` | `cca809897a79f53fcdb8e7388b879f3314ba89fa350ff11582776e71ebcce911` | 27/11/2026 |
+
+Lote 9 (27/11/2026): Imperatriz, Marília, Presidente Prudente, São Carlos, Criciúma, Guaratinguetá e Mossoró, autoria pelo
+Opus com `montar_cenas.py`. Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`, 1ª tentativa (nenhuma tem
+entrada no `escolhas.json`), sem retoque de pixel.
 
 Lote 5 (26/11/2026): Sorocaba, Ribeirão Preto, Londrina, Jundiaí, Feira de Santana, Juiz de Fora, Volta Redonda, Foz do
 Iguaçu, Campina Grande e Ipatinga, autoria pelo Opus com `montar_cenas.py`. Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`,

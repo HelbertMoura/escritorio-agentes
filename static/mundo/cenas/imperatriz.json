@@ -1,0 +1,186 @@
+{
+  "versao": 1,
+  "id": "imperatriz",
+  "W": 576,
+  "H": 400,
+  "texto": {
+    "cena": "Imperatriz em pixel art, com a igreja branca na praça de palmeiras, os quarteirões de casarões de telhado de barro e o rio Tocantins no canto",
+    "vida": "Dois pedestres na calçada do casarão amarelo e um carro na rua da praça",
+    "portaria": "na porta do casarão amarelo de dois andares, à esquerda da praça"
+  },
+  "portaria": {
+    "x": 221,
+    "y": 211,
+    "r": [
+      213,
+      188,
+      229,
+      212
+    ],
+    "placa": [
+      221,
+      192
+    ],
+    "farol": [
+      221,
+      202
+    ]
+  },
+  "praca": {
+    "x": 336,
+    "y": 245,
+    "r": [
+      303,
+      210,
+      340,
+      246
+    ],
+    "fonte": [
+      1,
+      2
+    ]
+  },
+  "pontos": [
+    {
+      "x": 368,
+      "y": 262,
+      "r": [
+        341,
+        160,
+        395,
+        262
+      ],
+      "nome": "Igreja de Santa Teresa"
+    },
+    {
+      "x": 40,
+      "y": 60,
+      "r": [
+        0,
+        0,
+        70,
+        120
+      ],
+      "nome": "Rio Tocantins"
+    }
+  ],
+  "calcadas": {
+    "nos": [
+      [
+        209,
+        212
+      ],
+      [
+        221,
+        211
+      ],
+      [
+        266,
+        212
+      ]
+    ],
+    "arestas": null,
+    "travessias": [],
+    "pontes": []
+  },
+  "pista": [
+    [
+      30,
+      233
+    ],
+    [
+      140,
+      233
+    ],
+    [
+      143,
+      231
+    ],
+    [
+      144,
+      228
+    ],
+    [
+      143,
+      225
+    ],
+    [
+      140,
+      223
+    ],
+    [
+      30,
+      223
+    ],
+    [
+      27,
+      225
+    ],
+    [
+      26,
+      228
+    ],
+    [
+      27,
+      231
+    ]
+  ],
+  "carros": [
+    {
+      "s": 0,
+      "v": 14,
+      "peca": "carro-3",
+      "tamanho": [
+        8,
+        4
+      ]
+    }
+  ],
+  "pedestres": [
+    {
+      "de": 0,
+      "para": 1,
+      "s": 3,
+      "v": 12
+    },
+    {
+      "de": 1,
+      "para": 2,
+      "s": 6,
+      "v": 15
+    }
+  ],
+  "oclusoes": [],
+  "cordoes": [
+    [
+      307,
+      240,
+      338,
+      240
+    ]
+  ],
+  "luzes": [],
+  "superficies": {
+    "calcada": [
+      "957969",
+      "836a61",
+      "b39b7b",
+      "ac9478",
+      "bfa680",
+      "684d53",
+      "765b57",
+      "d1b787",
+      "9c8160",
+      "93795e"
+    ],
+    "faixa": [],
+    "ponte": [],
+    "asfalto": [
+      "3f2a3e",
+      "412c3f",
+      "4a3241",
+      "4f3542",
+      "71646d"
+    ]
+  }
+}
