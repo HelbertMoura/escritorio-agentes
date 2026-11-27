@@ -311,7 +311,7 @@ async function doManifesto(id) {
         const [x0, y0, x1, y1] = a.palco.r, [nome, ...q] = e.palco[0] || [];
         assert.ok(nome === "festa-arvore-natal" && q[0] >= x0 && q[1] >= y0 && q[2] <= x1 && q[3] <= y1, onde);
       }
-      assert.equal(e.neve, id === "nova-york", onde);
+      assert.equal(e.neve, ["nova-york", "londres", "paris"].includes(id), onde);   // a.5: neve só no Natal das três do norte
     }
     assert.deepEqual(f.contexto.erros || [], []);
   }
