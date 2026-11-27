@@ -270,8 +270,12 @@ class Montagem(unittest.TestCase):
             raise AssertionError(r.stderr)
 
     def sha(self, pasta, nome):
+        """O hash do conteúdo; no PNG, sem a compressão (montar_mundo.conteudo_png): o zlib muda de uma máquina para
+        outra sem mudar um pixel nem a paleta."""
+        import montar_mundo as mm
         with open(os.path.join(pasta, nome), "rb") as f:
-            return hashlib.sha256(f.read()).hexdigest()
+            dados = f.read()
+        return hashlib.sha256(mm.conteudo_png(dados) if nome.endswith(".png") else dados).hexdigest()
 
     def gerados(self):
         """Todos os arquivos que a montagem escreve (os três níveis, o mapa das UFs de 2x e o atlas)."""
@@ -280,7 +284,7 @@ class Montagem(unittest.TestCase):
             f"perto4x/{k % 8}-{k // 8}.png" for k, c in enumerate(mascara) if c == "1")
 
     def test_deterministico(self):
-        """A montagem desta execução sai igual, byte a byte, à que foi versionada em static/mundo/ (outra execução, em
+        """A montagem desta execução sai igual, byte a byte (no PNG, o conteúdo descomprimido), à que foi versionada em static/mundo/ (outra execução, em
         outro momento): o mesmo dado dá sempre os mesmos arquivos. Uma montagem só por execução do teste (os três níveis
         levam ~1 min); os arquivos que sobram em static/mundo/perto4x/ (de uma máscara antiga) também contam."""
         for nome in self.gerados():

@@ -15,6 +15,7 @@ import os
 import re
 import string
 import sys
+import zlib
 from collections import Counter, deque
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -471,16 +472,37 @@ def versao(pixels, dados):
     return int(hashlib.sha256(pixels + json.dumps(dados, sort_keys=True).encode()).hexdigest()[:8], 16)
 
 
+def conteudo_png(dados):
+    """O conteúdo de um PNG sem a compressão: os blocos (cabeçalho, paleta...) e o IDAT descomprimido (as linhas de
+    pixels filtradas). O fluxo zlib muda com a versão do zlib que o Pillow traz (o optimize=True) sem mudar um pixel;
+    o conteúdo, não. Só a biblioteca padrão (os testes rodam sem o Pillow)."""
+    if dados[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError("não é PNG")
+    blocos, idat, i = b"", b"", 8
+    while i < len(dados):
+        n = int.from_bytes(dados[i:i + 4], "big")
+        tipo, corpo = dados[i + 4:i + 8], dados[i + 8:i + 8 + n]
+        if len(corpo) != n or zlib.crc32(tipo + corpo) != int.from_bytes(dados[i + 8 + n:i + 12 + n], "big"):
+            raise ValueError("PNG corrompido")
+        if tipo == b"IDAT":
+            idat += corpo
+        else:
+            blocos += len(corpo).to_bytes(4, "big") + tipo + corpo
+        i += 12 + n
+    return blocos + b"IDAT" + zlib.decompress(idat)
+
+
 def versao_dos_arquivos(saida, dados):
-    """A versão do mundo: os bytes dos arquivos gravados em `saida` (os PNG levam a paleta deles, então trocar uma cor
-    muda a versão mesmo com os mesmos índices), em ordem fixa, e os dados do mundo.json (sem a versão)."""
+    """A versão do mundo: o conteúdo dos arquivos gravados em `saida` (os PNG levam a paleta deles, então trocar uma cor
+    muda a versão mesmo com os mesmos índices; sem a compressão, que muda de uma máquina para outra), em ordem fixa, e
+    os dados do mundo.json (sem a versão)."""
     nomes = ["terra.png", "brasil.png", os.path.join("perto", "ufs.json")]
     for pasta in ("perto", "perto4x"):
         nomes += sorted(os.path.join(pasta, n) for n in os.listdir(os.path.join(saida, pasta)) if n.endswith(".png"))
     conteudo = b""
     for n in nomes:
         with open(os.path.join(saida, n), "rb") as f:
-            conteudo += f.read()
+            conteudo += conteudo_png(f.read()) if n.endswith(".png") else f.read()
     return versao(conteudo, dados)
 
 
