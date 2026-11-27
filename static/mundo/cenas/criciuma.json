@@ -5,8 +5,8 @@
   "H": 400,
   "texto": {
     "cena": "Criciúma em pixel art, com a catedral de cúpulas no largo cinzento, os quarteirões de casas de telhado de barro, os morros verdes e o mar no canto",
-    "vida": "Dois pedestres na calçada do prédio de telhado de barro e um carro na rua da catedral",
-    "portaria": "na porta do prédio baixo de telhado de barro, à esquerda da catedral"
+    "vida": "Dois pedestres na calçada do prédio baixo de laje cinza e um carro na rua da catedral",
+    "portaria": "na porta do prédio baixo de laje cinza, à esquerda da catedral"
   },
   "portaria": {
     "x": 205,

@@ -14,7 +14,7 @@ const CidadeCenas = Object.freeze({
   "campos": Object.freeze({ v: "004bbe5e3f3b", png: "sha256-AEu+Xj87mfAmfXP+q9AGt1kMiuAL/xuA12warHFZskw=", json: "sha256-ayaF9CkaSC3JtFKp8CNFQV1Blx+ITzKGKPixs9lfGZs=" }),
   "caxias-do-sul": Object.freeze({ v: "459177a3d06c", png: "sha256-RZF3o9BsiL05DfHX7ZJLp0D5CFLl3A5qdUoersyNpfY=", json: "sha256-8GLhhmJoRJcQyrT/w8Y6lrzU3cr0XkaDuT8P5b+gJek=" }),
   "cidade-do-mexico": Object.freeze({ v: "634d0f253f27", png: "sha256-Y00PJT8naoTmxnyGUWY3wSi1UUHyMEOmy3aVt92pKyM=", json: "sha256-4lQTaoTn4Tolvqg956ccKmWRIDxSnyk+SB1RJXE25C0=" }),
-  "criciuma": Object.freeze({ v: "4db402846e74", png: "sha256-TbQChG50+HzvSjhYCua+3LiEzUxrGriP2l4LSBC7yis=", json: "sha256-WcaF9TCuKxuA24FHuX3Qs3BSASbySAtQpAyNvX56F3A=" }),
+  "criciuma": Object.freeze({ v: "4db402846e74", png: "sha256-TbQChG50+HzvSjhYCua+3LiEzUxrGriP2l4LSBC7yis=", json: "sha256-j7AIMsJmFgOds4Z49VZkyrJcE177uZTCMBspL9JDd5s=" }),
   "cuiaba": Object.freeze({ v: "4ba972deb448", png: "sha256-S6ly3rRIpPsE6UCZGsW6tQ/O92yB6gpwt9khj7SfRcA=", json: "sha256-UAFSALtbiDDZj9RHGQnN6xlNwqVSHHxr+6+VM7Ub/i0=" }),
   "curitiba": Object.freeze({ v: "aff5fdd18057", png: "sha256-r/X90YBX66D78RlXm/Ar92u9aFc4Ylpt6mRZ8tu5bwU=", json: "sha256-aOrFRa0on2g0eqKateVz+cGYiwoQFgY6YZ42nW4H/j0=" }),
   "feira-de-santana": Object.freeze({ v: "42d6af060b63", png: "sha256-QtavBgtjQZ72HtDS9y8PKrc/zp6TlHhqbvDwRpVpKtk=", json: "sha256-cftqWB1Cxps5yikVuVwIFMmOG26AF21W8NgJfT79fh4=" }),
