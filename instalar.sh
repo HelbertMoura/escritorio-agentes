@@ -64,6 +64,11 @@ install -d -o escritorio -g escritorio -m 0700 "$CASA"
 
 # 2. Código e página, só do root (o serviço não reescreve o que executa nem o que serve)
 install -d -o root -g root -m 0755 /opt/escritorio /opt/escritorio/static /opt/escritorio/static/tema /opt/escritorio/static/fontes
+# o mapa do mundo e as cenas das cidades: a pasta sai inteira e volta só com os arquivos desta versão (o servidor serve
+# toda cena <id>.png/.json que achar em mundo/cenas/, e uma cena que saiu do manifesto não fica para trás)
+rm -rf /opt/escritorio/static/mundo
+install -d -o root -g root -m 0755 /opt/escritorio/static/mundo /opt/escritorio/static/mundo/perto \
+  /opt/escritorio/static/mundo/perto4x /opt/escritorio/static/mundo/cenas
 # o CHANGELOG.pt-BR.md é a página Novidades (novidades.py)
 install -o root -g root -m 0644 escritorio.py acesso.py andares.py presenca.py social.py planta.py ajustes.py jornal.py avisos.py vapid.py novidades.py visitas_sala.py \
   conversas_equipe.py migracao_saguao.py anexos.py linha.py ponte_espelho.py CHANGELOG.pt-BR.md /opt/escritorio/
@@ -71,7 +76,9 @@ if [ ! -f /opt/escritorio/times.json ]; then
   TIMES=times.json; [ -f "$TIMES" ] || TIMES=times.exemplo.json   # sem times.json, começa pelo exemplo
   install -o root -g root -m 0644 "$TIMES" /opt/escritorio/times.json
 fi
-for f in static/*.html static/*.js static/*.css static/*.png static/*.webmanifest; do
+for f in static/*.html static/*.js static/*.css static/*.png static/*.webmanifest \
+         static/mundo/*.png static/mundo/*.json static/mundo/perto/*.png static/mundo/perto/*.json \
+         static/mundo/perto4x/*.png static/mundo/cenas/*.png static/mundo/cenas/*.json; do
   [ -e "$f" ] || continue   # padrão sem arquivo (sem nullglob, o shell deixa o * como está)
   install -o root -g root -m 0644 "$f" "/opt/escritorio/$f"
 done

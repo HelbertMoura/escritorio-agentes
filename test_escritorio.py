@@ -1,6 +1,7 @@
 import ast
 import collections
 import contextlib
+import glob
 import datetime
 import hashlib
 import io
@@ -2990,6 +2991,20 @@ class Docker(unittest.TestCase):
                       for p in linha.split() if p.endswith(".py")}
         compilados = {os.path.basename(p) for linha in linhas if "py_compile" in linha for p in linha.split() if p.endswith(".py")}
         self.assertEqual((instalados, compilados), (esperados, esperados))
+
+    def test_instalador_leva_todo_estatico_servido(self):
+        # a instalação nova sai completa: todo estático da lista fechada (as cenas, o mapa e os azulejos de perto
+        # inclusive) que existe no repositório casa com algum padrão que o instalar.sh copia para /opt/escritorio/static
+        raiz = os.path.dirname(os.path.abspath(e.__file__))
+        with open(os.path.join(raiz, "instalar.sh"), encoding="utf-8") as f:
+            linhas = f.read().replace("\\\n", " ").splitlines()
+        padroes = {p.strip('";') for linha in linhas if linha.startswith(("install ", "for f in "))
+                   for p in linha.split() if p.startswith("static/")}
+        copiados = {os.path.relpath(c, os.path.join(raiz, "static")).replace(os.sep, "/")
+                    for p in padroes for c in glob.glob(os.path.join(raiz, p)) if os.path.isfile(c)}
+        servidos = {n for n in e.ARQUIVOS if os.path.isfile(os.path.join(raiz, "static", n))}
+        self.assertTrue({"mundo/brasil.png", "mundo/perto/ufs.json", "mundo/cenas/recife.png"} <= servidos)
+        self.assertEqual(servidos - copiados, set())
 
     def test_changelog_vai_junto_para_a_pagina_novidades(self):
         # o /api/novidades lê o CHANGELOG.pt-BR.md ao lado do escritorio.py: fora da imagem ou do instalar.sh, a página fica vazia
