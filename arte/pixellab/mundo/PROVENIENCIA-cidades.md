@@ -123,6 +123,9 @@ PNG indexado sem perda (RGBA igual ao do bruto).
 | `piracicaba` | `piracicaba-pixen-576x400.png` | `5f182f4c33eada7c49bfcb667112e8acf3280d33aa59285c80ec9b9af230a8a6` | 26/11/2026 |
 | `bauru` | `bauru-pixen-576x400.png` | `71ea2e7b121ad7660bc745f50b72912cafec47eecb022a7cf13d7b186cbb4ac7` | 26/11/2026 |
 | `montes-claros` | `montes-claros-pixen-576x400.png` | `068138dd831c35a20f1d540090c80b50bec403f256fb1cc72f2dbb5468f3697a` | 26/11/2026 |
+| `maringa` | `maringa-pixen-576x400.png` | `ae4a2f7330bfa0b22322cf771d5f7fc306c381102e4ac3d6bf372bb1610c6c21` | 26/11/2026 |
+| `itajai` | `itajai-pixen-576x400.png` | `7c9223311f4d4669259705103393214b9fd42a4640bbe78d2ff38606ee0886d4` | 26/11/2026 |
+| `pelotas` | `pelotas-pixen-576x400.png` | `e1265d4c280287799f3323ec3c1d8a52eae604a8c9a6c237e5cc569661265b30` | 26/11/2026 |
 
 Lote 2 (26/11/2026): Belém, João Pessoa, Curitiba, Teresina, Rio de Janeiro, Natal, Porto Alegre, Porto Velho, Boa Vista e
 Florianópolis, autoria pelo Opus com `montar_cenas.py`. Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`, 1ª tentativa
