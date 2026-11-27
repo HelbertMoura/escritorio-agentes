@@ -106,6 +106,20 @@ PNG indexado sem perda (RGBA igual ao do bruto).
 | `porto-velho` | `porto-velho-pixen-576x400.png` | `3e5578c6bcb681faf0f239cee95e15c1a8ec0791da6febd320bef39741f7bf39` | 26/11/2026 |
 | `boa-vista` | `boa-vista-pixen-576x400.png` | `c03f380f9c17219b7dd02bceb14ee720247b5c9abde4952955701b356ccc0d56` | 26/11/2026 |
 | `florianopolis` | `florianopolis-pixen-576x400.png` | `4e91e6cb5f6d7017158f1af18bf5cbda18fff79cbdb73a28f7a980fc230046ba` | 26/11/2026 |
+| `sorocaba` | `sorocaba-pixen-576x400.png` | `fbd08c643b881209df8e0dfd1d0fb2eb1cedf0c8263b774ae6ab342cd3e3b30d` | 26/11/2026 |
+| `ribeirao-preto` | `ribeirao-preto-pixen-576x400.png` | `a61c2a7ef8bad4aafca15fc16275ba2f5d279d36a29d753ec553d3b55585204b` | 26/11/2026 |
+| `londrina` | `londrina-pixen-576x400.png` | `f828c27384563de19de7dcdc598bb17a34ec31c50071e00205ebaf1e066e643d` | 26/11/2026 |
+| `jundiai` | `jundiai-pixen-576x400.png` | `792285c1127857255a33e6a6e0a9b0cdd501760c0ef0516a0dc5ccc64b6e6619` | 26/11/2026 |
+| `feira-de-santana` | `feira-de-santana-pixen-576x400.png` | `df2a654b6fefba4cb459710c7eb2ae9d8e81c611771d92152579f550614836b7` | 26/11/2026 |
+| `juiz-de-fora` | `juiz-de-fora-pixen-576x400.png` | `c80558be957eec7a66a0b9ab27de5a4cf93cceceb40b8cab2d3b7be9754e6913` | 26/11/2026 |
+| `volta-redonda` | `volta-redonda-pixen-576x400.png` | `5004edd020da6c7abc190f72f9d1b4d59d0c65ed265aae64cfdbbdb49238c703` | 26/11/2026 |
+| `foz-do-iguacu` | `foz-do-iguacu-pixen-576x400.png` | `cd56055c157dc2619e1063fbfec98e642d4fae4026fdfa30a61cacf767cc73f7` | 26/11/2026 |
+| `campina-grande` | `campina-grande-pixen-576x400.png` | `7ded52ab2cc4222cee19a80db2df84d7816629cece0120d3b042f5aac68c8caf` | 26/11/2026 |
+| `ipatinga` | `ipatinga-pixen-576x400.png` | `4209bc5972770d2b82c07ef1cc7e2d92b1290979ae9969cc8d3802e6b59c4e9f` | 26/11/2026 |
+
+Lote 5 (26/11/2026): Sorocaba, Ribeirão Preto, Londrina, Jundiaí, Feira de Santana, Juiz de Fora, Volta Redonda, Foz do
+Iguaçu, Campina Grande e Ipatinga, autoria pelo Opus com `montar_cenas.py`. Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`,
+1ª tentativa (nenhuma tem entrada no `escolhas.json`), sem retoque de pixel.
 
 Lote 2 (26/11/2026): Belém, João Pessoa, Curitiba, Teresina, Rio de Janeiro, Natal, Porto Alegre, Porto Velho, Boa Vista e
 Florianópolis, autoria pelo Opus com `montar_cenas.py`. Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`, 1ª tentativa

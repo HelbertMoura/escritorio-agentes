@@ -1,0 +1,186 @@
+{
+ "versao": 1,
+ "id": "foz-do-iguacu",
+ "W": 576,
+ "H": 400,
+ "texto": {
+  "cena": "Foz do Iguaçu em pixel art, com as Cataratas despencando no cânion entre a mata, a praça do obelisco e as quadras arborizadas da cidade",
+  "vida": "Dois pedestres na calçada da casinha da praça e um carro na rua abaixo do obelisco",
+  "portaria": "na porta da casinha de telhado em ponta, ao lado da praça"
+ },
+ "portaria": {
+  "x": 292,
+  "y": 214,
+  "r": [
+   284,
+   190,
+   300,
+   214
+  ],
+  "placa": [
+   292,
+   194
+  ],
+  "farol": [
+   292,
+   204
+  ]
+ },
+ "praca": {
+  "x": 371,
+  "y": 281,
+  "r": [
+   330,
+   252,
+   411,
+   286
+  ],
+  "fonte": [
+   0,
+   10
+  ]
+ },
+ "pontos": [
+  {
+   "x": 160,
+   "y": 95,
+   "r": [
+    120,
+    35,
+    215,
+    95
+   ],
+   "nome": "Cataratas · Foz do Iguaçu"
+  },
+  {
+   "x": 370,
+   "y": 251,
+   "r": [
+    345,
+    190,
+    395,
+    251
+   ],
+   "nome": "Obelisco · Foz do Iguaçu"
+  }
+ ],
+ "calcadas": {
+  "nos": [
+   [
+    279,
+    215
+   ],
+   [
+    292,
+    214
+   ],
+   [
+    306,
+    215
+   ]
+  ],
+  "arestas": null,
+  "travessias": [],
+  "pontes": []
+ },
+ "carros": [
+  {
+   "s": 0,
+   "v": 14,
+   "peca": "carro-3",
+   "tamanho": [
+    8,
+    4
+   ]
+  }
+ ],
+ "pedestres": [
+  {
+   "de": 0,
+   "para": 1,
+   "s": 4,
+   "v": 12
+  },
+  {
+   "de": 1,
+   "para": 2,
+   "s": 4,
+   "v": 14
+  }
+ ],
+ "luzes": [],
+ "superficies": {
+  "calcada": [
+   "6e5e5d",
+   "786965",
+   "83766d",
+   "38293d",
+   "685758",
+   "cdad84",
+   "24192a",
+   "7b5f5d",
+   "c4a47f",
+   "b99a77",
+   "4e3a3c",
+   "634a56",
+   "4b404f"
+  ],
+  "faixa": [],
+  "ponte": [],
+  "asfalto": [
+   "472f41",
+   "4d3241",
+   "5b3a40",
+   "493042",
+   "643f3f",
+   "513543",
+   "553640",
+   "e6cfa6",
+   "ae9c84"
+  ]
+ },
+ "pista": [
+  [
+   365,
+   320
+  ],
+  [
+   365,
+   386
+  ],
+  [
+   367,
+   388.5
+  ],
+  [
+   370.0,
+   389.5
+  ],
+  [
+   373,
+   388.5
+  ],
+  [
+   375,
+   386
+  ],
+  [
+   375,
+   320
+  ],
+  [
+   373,
+   317.5
+  ],
+  [
+   370.0,
+   316.5
+  ],
+  [
+   367,
+   317.5
+  ]
+ ],
+ "oclusoes": [],
+ "cordoes": []
+}
