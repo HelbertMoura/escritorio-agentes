@@ -1,0 +1,200 @@
+{
+ "versao": 1,
+ "id": "piracicaba",
+ "W": 576,
+ "H": 400,
+ "texto": {
+  "cena": "Piracicaba em pixel art, com o rio e o salto ao lado do centro, o casarão de tijolos no jardim de palmeiras e os prédios históricos das quadras",
+  "vida": "Dois pedestres na calçada do prédio de tijolos e um carro na rua abaixo do jardim",
+  "portaria": "na porta do prédio do meio, na quadra à esquerda do jardim"
+ },
+ "portaria": {
+  "x": 194,
+  "y": 250,
+  "r": [
+   186,
+   226,
+   202,
+   250
+  ],
+  "placa": [
+   194,
+   230
+  ],
+  "farol": [
+   194,
+   240
+  ]
+ },
+ "praca": {
+  "x": 370,
+  "y": 246,
+  "r": [
+   367,
+   211,
+   403,
+   247
+  ],
+  "fonte": [
+   2,
+   2
+  ]
+ },
+ "pontos": [
+  {
+   "x": 388,
+   "y": 246,
+   "r": [
+    300,
+    120,
+    475,
+    246
+   ],
+   "nome": "Jardim do casarão · Piracicaba"
+  }
+ ],
+ "calcadas": {
+  "nos": [
+   [
+    173,
+    250
+   ],
+   [
+    184,
+    250
+   ],
+   [
+    194,
+    250
+   ],
+   [
+    204,
+    250
+   ]
+  ],
+  "arestas": null,
+  "travessias": [],
+  "pontes": []
+ },
+ "pista": [
+  [
+   470.0,
+   284.0
+  ],
+  [
+   512.0,
+   284.0
+  ],
+  [
+   519.0,
+   281.0
+  ],
+  [
+   522.0,
+   274.0
+  ],
+  [
+   519.0,
+   267.0
+  ],
+  [
+   512.0,
+   264.0
+  ],
+  [
+   470.0,
+   264.0
+  ],
+  [
+   463.0,
+   267.0
+  ],
+  [
+   460.0,
+   274.0
+  ],
+  [
+   463.0,
+   281.0
+  ]
+ ],
+ "carros": [
+  {
+   "s": 0,
+   "v": 14,
+   "peca": "carro-5",
+   "tamanho": [
+    8,
+    4
+   ]
+  }
+ ],
+ "pedestres": [
+  {
+   "de": 0,
+   "para": 1,
+   "s": 6,
+   "v": 14
+  },
+  {
+   "de": 2,
+   "para": 3,
+   "s": 6,
+   "v": 15
+  }
+ ],
+ "oclusoes": [],
+ "cordoes": [],
+ "luzes": [
+  [
+   207,
+   241,
+   10,
+   0.45
+  ],
+  [
+   250,
+   241,
+   10,
+   0.45
+  ],
+  [
+   318,
+   243,
+   10,
+   0.45
+  ],
+  [
+   361,
+   244,
+   10,
+   0.45
+  ],
+  [
+   456,
+   245,
+   10,
+   0.45
+  ]
+ ],
+ "superficies": {
+  "calcada": [
+   "755751",
+   "523537",
+   "6f514e",
+   "492e34",
+   "8b7872",
+   "604144",
+   "7e635c"
+  ],
+  "faixa": [],
+  "ponte": [],
+  "asfalto": [
+   "3d2231",
+   "201324",
+   "412632",
+   "a79086",
+   "271728"
+  ]
+ }
+}

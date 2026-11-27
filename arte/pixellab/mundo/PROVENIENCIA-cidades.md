@@ -116,6 +116,13 @@ PNG indexado sem perda (RGBA igual ao do bruto).
 | `porto-velho` | `porto-velho-pixen-576x400.png` | `3e5578c6bcb681faf0f239cee95e15c1a8ec0791da6febd320bef39741f7bf39` | 26/11/2026 |
 | `boa-vista` | `boa-vista-pixen-576x400.png` | `c03f380f9c17219b7dd02bceb14ee720247b5c9abde4952955701b356ccc0d56` | 26/11/2026 |
 | `florianopolis` | `florianopolis-pixen-576x400.png` | `4e91e6cb5f6d7017158f1af18bf5cbda18fff79cbdb73a28f7a980fc230046ba` | 26/11/2026 |
+| `taubate` | `taubate-pixen-576x400.png` | `782cc5a59cbbff439c5d7e422e5cf1290cf9ae8b3b0f06b220e483a7d3195a32` | 26/11/2026 |
+| `campos` | `campos-pixen-576x400.png` | `bf8d51cc1fc27c41f3c5e51ed8649c70b37e3285bc809785d3975b7cb71b9071` | 26/11/2026 |
+| `caxias-do-sul` | `caxias-do-sul-pixen-576x400.png` | `6869c4b7c665f0a35d73d4f0a0d2059f763ab56a88bd69984324b107995d1b2f` | 26/11/2026 |
+| `sao-jose-do-rio-preto` | `sao-jose-do-rio-preto-pixen-576x400.png` | `270262bc461739ff971ee28b3a49495e2b371fea11b0fb24afca326bb84ed527` | 26/11/2026 |
+| `piracicaba` | `piracicaba-pixen-576x400.png` | `5f182f4c33eada7c49bfcb667112e8acf3280d33aa59285c80ec9b9af230a8a6` | 26/11/2026 |
+| `bauru` | `bauru-pixen-576x400.png` | `71ea2e7b121ad7660bc745f50b72912cafec47eecb022a7cf13d7b186cbb4ac7` | 26/11/2026 |
+| `montes-claros` | `montes-claros-pixen-576x400.png` | `068138dd831c35a20f1d540090c80b50bec403f256fb1cc72f2dbb5468f3697a` | 26/11/2026 |
 
 Lote 2 (26/11/2026): Belém, João Pessoa, Curitiba, Teresina, Rio de Janeiro, Natal, Porto Alegre, Porto Velho, Boa Vista e
 Florianópolis, autoria pelo Opus com `montar_cenas.py`. Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`, 1ª tentativa

@@ -1,0 +1,230 @@
+{
+ "versao": 1,
+ "id": "sao-jose-do-rio-preto",
+ "W": 576,
+ "H": 400,
+ "texto": {
+  "cena": "São José do Rio Preto em pixel art, com a catedral na praça de palmeiras, a represa municipal ao lado e as quadras de prédios baixos do centro",
+  "vida": "Dois pedestres na calçada dos prédios abaixo da praça e um carro na rua da direita",
+  "portaria": "na porta do prédio do meio, na quadra abaixo da catedral"
+ },
+ "portaria": {
+  "x": 267,
+  "y": 341,
+  "r": [
+   259,
+   317,
+   275,
+   341
+  ],
+  "placa": [
+   267,
+   321
+  ],
+  "farol": [
+   267,
+   331
+  ]
+ },
+ "praca": {
+  "x": 369,
+  "y": 297,
+  "r": [
+   334,
+   265,
+   403,
+   298
+  ],
+  "fonte": [
+   6,
+   2
+  ]
+ },
+ "pontos": [
+  {
+   "x": 370,
+   "y": 263,
+   "r": [
+    335,
+    155,
+    406,
+    263
+   ],
+   "nome": "Catedral · Rio Preto"
+  }
+ ],
+ "calcadas": {
+  "nos": [
+   [
+    212,
+    341
+   ],
+   [
+    240,
+    341
+   ],
+   [
+    267,
+    341
+   ],
+   [
+    300,
+    341
+   ],
+   [
+    335,
+    341
+   ]
+  ],
+  "arestas": null,
+  "travessias": [],
+  "pontes": []
+ },
+ "pista": [
+  [
+   529,
+   210
+  ],
+  [
+   529,
+   255
+  ],
+  [
+   530.5,
+   258.5
+  ],
+  [
+   534,
+   260
+  ],
+  [
+   537.5,
+   258.5
+  ],
+  [
+   539,
+   255
+  ],
+  [
+   539,
+   210
+  ],
+  [
+   537.5,
+   206.5
+  ],
+  [
+   534,
+   205
+  ],
+  [
+   530.5,
+   206.5
+  ]
+ ],
+ "carros": [
+  {
+   "s": 0,
+   "v": 14,
+   "peca": "carro-3",
+   "tamanho": [
+    8,
+    4
+   ]
+  }
+ ],
+ "pedestres": [
+  {
+   "de": 0,
+   "para": 1,
+   "s": 6,
+   "v": 14
+  },
+  {
+   "de": 2,
+   "para": 3,
+   "s": 6,
+   "v": 15
+  }
+ ],
+ "oclusoes": [],
+ "cordoes": [
+  [
+   340,
+   294,
+   398,
+   294
+  ]
+ ],
+ "luzes": [
+  [
+   309,
+   167,
+   10,
+   0.45
+  ],
+  [
+   433,
+   166,
+   10,
+   0.45
+  ],
+  [
+   409,
+   282,
+   10,
+   0.45
+  ],
+  [
+   259,
+   48,
+   10,
+   0.45
+  ],
+  [
+   209,
+   333,
+   10,
+   0.45
+  ],
+  [
+   341,
+   333,
+   10,
+   0.45
+  ],
+  [
+   156,
+   333,
+   10,
+   0.45
+  ]
+ ],
+ "superficies": {
+  "calcada": [
+   "886764",
+   "8e716a",
+   "825f60",
+   "c6b494",
+   "6f4e59",
+   "543547",
+   "664655",
+   "79565c",
+   "5a3a47",
+   "5d3e52",
+   "bead91",
+   "b4a187",
+   "67545c",
+   "958272"
+  ],
+  "faixa": [],
+  "ponte": [],
+  "asfalto": [
+   "4d3347",
+   "4a3145",
+   "241426",
+   "2f1e35",
+   "d2c4a5"
+  ]
+ }
+}

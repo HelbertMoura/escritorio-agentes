@@ -1,0 +1,175 @@
+{
+ "versao": 1,
+ "id": "campos",
+ "W": 576,
+ "H": 400,
+ "texto": {
+  "cena": "Campos dos Goytacazes em pixel art, com a praça de palmeiras e a igreja de duas torres no meio, os sobrados coloniais e os canaviais nas bordas",
+  "vida": "Dois pedestres na calçada dos sobrados amarelos e um carro na rua abaixo deles",
+  "portaria": "na porta do meio do sobrado amarelo, na quadra à esquerda da praça"
+ },
+ "portaria": {
+  "x": 218,
+  "y": 214,
+  "r": [
+   210,
+   190,
+   226,
+   214
+  ],
+  "placa": [
+   218,
+   194
+  ],
+  "farol": [
+   218,
+   204
+  ]
+ },
+ "praca": {
+  "x": 372,
+  "y": 289,
+  "r": [
+   336,
+   256,
+   408,
+   290
+  ],
+  "fonte": [
+   2,
+   2
+  ]
+ },
+ "pontos": [
+  {
+   "x": 372,
+   "y": 292,
+   "r": [
+    310,
+    172,
+    436,
+    292
+   ],
+   "nome": "Praça São Salvador · Campos"
+  }
+ ],
+ "calcadas": {
+  "nos": [
+   [
+    198,
+    214
+   ],
+   [
+    218,
+    214
+   ],
+   [
+    236,
+    214
+   ],
+   [
+    258,
+    214
+   ]
+  ],
+  "arestas": null,
+  "travessias": [],
+  "pontes": []
+ },
+ "pista": [
+  [
+   75.0,
+   233.0
+  ],
+  [
+   155.0,
+   233.0
+  ],
+  [
+   158.5,
+   231.5
+  ],
+  [
+   160.0,
+   228.0
+  ],
+  [
+   158.5,
+   224.5
+  ],
+  [
+   155.0,
+   223.0
+  ],
+  [
+   75.0,
+   223.0
+  ],
+  [
+   71.5,
+   224.5
+  ],
+  [
+   70.0,
+   228.0
+  ],
+  [
+   71.5,
+   231.5
+  ]
+ ],
+ "carros": [
+  {
+   "s": 0,
+   "v": 14,
+   "peca": "carro-4",
+   "tamanho": [
+    8,
+    4
+   ]
+  }
+ ],
+ "pedestres": [
+  {
+   "de": 0,
+   "para": 1,
+   "s": 6,
+   "v": 14
+  },
+  {
+   "de": 2,
+   "para": 3,
+   "s": 6,
+   "v": 15
+  }
+ ],
+ "oclusoes": [],
+ "cordoes": [],
+ "luzes": [],
+ "superficies": {
+  "calcada": [
+   "958072",
+   "9f8978",
+   "bfa685",
+   "2a1b2e",
+   "332230",
+   "6c585d",
+   "5f4a52",
+   "231526",
+   "ad957e",
+   "593f42",
+   "1c101a",
+   "8c786e",
+   "695250",
+   "836f66",
+   "473741"
+  ],
+  "faixa": [],
+  "ponte": [],
+  "asfalto": [
+   "493144",
+   "533943",
+   "7b665d"
+  ]
+ }
+}
