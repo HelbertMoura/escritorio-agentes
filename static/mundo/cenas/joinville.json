@@ -1,0 +1,265 @@
+{
+  "versao": 1,
+  "id": "joinville",
+  "W": 576,
+  "H": 400,
+  "texto": {
+    "cena": "Joinville em pixel art, com as casas enxaimel de telhado laranja, as igrejas de torre, as palmeiras e a baía da Babitonga",
+    "vida": "Dois pedestres no caminho e na calçada do pátio e um carro na avenida central",
+    "portaria": "na porta da casa enxaimel ao fundo do pátio ajardinado"
+  },
+  "portaria": {
+    "x": 266,
+    "y": 286,
+    "r": [
+      258,
+      262,
+      274,
+      286
+    ],
+    "placa": [
+      266,
+      266
+    ],
+    "farol": [
+      266,
+      276
+    ]
+  },
+  "praca": {
+    "x": 266,
+    "y": 314,
+    "r": [
+      224,
+      284,
+      293,
+      318
+    ],
+    "fonte": [
+      2,
+      2
+    ]
+  },
+  "pontos": [
+    {
+      "x": 432,
+      "y": 200,
+      "r": [
+        395,
+        90,
+        470,
+        200
+      ],
+      "nome": "Igreja da torre"
+    },
+    {
+      "x": 96,
+      "y": 318,
+      "r": [
+        50,
+        225,
+        145,
+        318
+      ],
+      "nome": "Capela enxaimel"
+    },
+    {
+      "x": 562,
+      "y": 330,
+      "r": [
+        548,
+        240,
+        576,
+        400
+      ],
+      "nome": "Baía da Babitonga"
+    }
+  ],
+  "calcadas": {
+    "nos": [
+      [
+        266,
+        286
+      ],
+      [
+        266,
+        302
+      ],
+      [
+        266,
+        319
+      ],
+      [
+        240,
+        319
+      ],
+      [
+        290,
+        319
+      ],
+      [
+        310,
+        319
+      ]
+    ],
+    "arestas": [
+      [
+        0,
+        1
+      ],
+      [
+        1,
+        2
+      ],
+      [
+        2,
+        3
+      ],
+      [
+        2,
+        4
+      ],
+      [
+        4,
+        5
+      ]
+    ],
+    "travessias": [],
+    "pontes": []
+  },
+  "pista": [
+    [
+      364,
+      20
+    ],
+    [
+      364,
+      266
+    ],
+    [
+      370,
+      271
+    ],
+    [
+      376,
+      266
+    ],
+    [
+      376,
+      20
+    ],
+    [
+      370,
+      15
+    ]
+  ],
+  "carros": [
+    {
+      "s": 0,
+      "v": 16,
+      "peca": "carro-1",
+      "tamanho": [
+        8,
+        4
+      ]
+    }
+  ],
+  "pedestres": [
+    {
+      "de": 0,
+      "para": 1,
+      "s": 6,
+      "v": 14
+    },
+    {
+      "de": 2,
+      "para": 4,
+      "s": 10,
+      "v": 16
+    }
+  ],
+  "oclusoes": [],
+  "cordoes": [
+    [
+      226,
+      314,
+      291,
+      314
+    ]
+  ],
+  "luzes": [
+    [
+      140,
+      81,
+      10,
+      0.45
+    ],
+    [
+      344,
+      74,
+      10,
+      0.45
+    ],
+    [
+      140,
+      190,
+      10,
+      0.45
+    ],
+    [
+      344,
+      190,
+      10,
+      0.45
+    ],
+    [
+      179,
+      239,
+      10,
+      0.45
+    ],
+    [
+      392,
+      240,
+      10,
+      0.45
+    ],
+    [
+      179,
+      305,
+      10,
+      0.45
+    ],
+    [
+      344,
+      305,
+      10,
+      0.45
+    ],
+    [
+      392,
+      305,
+      10,
+      0.45
+    ]
+  ],
+  "superficies": {
+    "calcada": [
+      "c0a57e",
+      "977162",
+      "8d5d54",
+      "b99b79",
+      "cbaf84",
+      "7b504b",
+      "ac866b"
+    ],
+    "faixa": [
+      "c8a296"
+    ],
+    "ponte": [],
+    "asfalto": [
+      "453149",
+      "30182f"
+    ]
+  }
+}

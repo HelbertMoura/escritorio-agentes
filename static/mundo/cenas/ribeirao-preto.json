@@ -1,0 +1,188 @@
+{
+ "versao": 1,
+ "id": "ribeirao-preto",
+ "W": 576,
+ "H": 400,
+ "texto": {
+  "cena": "Ribeirão Preto em pixel art, com o Theatro Pedro II entre palmeiras na praça, os prédios do centro e os canaviais na borda da cidade",
+  "vida": "Dois pedestres na calçada do prédio de arcos e um carro na rua do teatro",
+  "portaria": "na porta central do prédio de arcos"
+ },
+ "portaria": {
+  "x": 225,
+  "y": 148,
+  "r": [
+   217,
+   124,
+   233,
+   148
+  ],
+  "placa": [
+   225,
+   128
+  ],
+  "farol": [
+   225,
+   138
+  ]
+ },
+ "praca": {
+  "x": 378,
+  "y": 336,
+  "r": [
+   350,
+   306,
+   462,
+   342
+  ],
+  "fonte": [
+   52,
+   10
+  ]
+ },
+ "pontos": [
+  {
+   "x": 374,
+   "y": 274,
+   "r": [
+    330,
+    168,
+    416,
+    274
+   ],
+   "nome": "Theatro Pedro II · Ribeirão Preto"
+  }
+ ],
+ "calcadas": {
+  "nos": [
+   [
+    200,
+    147
+   ],
+   [
+    225,
+    148
+   ],
+   [
+    246,
+    147
+   ]
+  ],
+  "arestas": null,
+  "travessias": [],
+  "pontes": []
+ },
+ "carros": [
+  {
+   "s": 0,
+   "v": 14,
+   "peca": "carro-3",
+   "tamanho": [
+    8,
+    4
+   ]
+  }
+ ],
+ "pedestres": [
+  {
+   "de": 0,
+   "para": 1,
+   "s": 6,
+   "v": 14
+  },
+  {
+   "de": 1,
+   "para": 2,
+   "s": 6,
+   "v": 15
+  }
+ ],
+ "luzes": [
+  [
+   250,
+   130,
+   10,
+   0.45
+  ],
+  [
+   466,
+   293,
+   10,
+   0.45
+  ],
+  [
+   290,
+   293,
+   10,
+   0.45
+  ]
+ ],
+ "superficies": {
+  "calcada": [
+   "7b5d62",
+   "836567",
+   "917a76",
+   "5d4149",
+   "3e2938",
+   "36212f",
+   "442536",
+   "321d29",
+   "6c5254",
+   "2d1d2f"
+  ],
+  "faixa": [],
+  "ponte": [],
+  "asfalto": [
+   "453142",
+   "4b3544",
+   "251929",
+   "b6aa96",
+   "332537",
+   "291a2a"
+  ]
+ },
+ "pista": [
+  [
+   260,
+   284
+  ],
+  [
+   260,
+   344
+  ],
+  [
+   262,
+   346.5
+  ],
+  [
+   265.0,
+   347.5
+  ],
+  [
+   268,
+   346.5
+  ],
+  [
+   270,
+   344
+  ],
+  [
+   270,
+   284
+  ],
+  [
+   268,
+   281.5
+  ],
+  [
+   265.0,
+   280.5
+  ],
+  [
+   262,
+   281.5
+  ]
+ ],
+ "oclusoes": [],
+ "cordoes": []
+}
