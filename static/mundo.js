@@ -128,6 +128,7 @@ const Mundo = (() => {
 
   let W = 0, H = 0, dpr = 1, mapa = null, nome = null, nivel = null, atualCidade = null, ultimaCidade = null, trans = null;
   const MARGEM = 8;   // a folga da dica até a borda do palco, em px CSS
+  const BORDA_ALVO = 34;   // metade do maior botão de alvo (a porta, 56 px) com o anel do foco (3 + 2 px) e folga
   let botoes = [], chaveAlvos = "", dicaAlvo = null, anterior = performance.now(), pedido_ = false, gesto = null, roda = 0;
   let toque = null;   // o último toque solto (tempo e ponto): o segundo, logo depois e perto, aproxima no ponto
   // a festa do dia (festas.js): só depois da resposta do clima, que traz as festas desligadas (antes dela, nada de
@@ -309,7 +310,13 @@ const Mundo = (() => {
     const cam = nivel.camera, chave = cam.origem().join() + "," + cam.P + "," + W + "," + H + "," + (nivel.assinatura ? nivel.assinatura() : "");
     if (chave === chaveAlvos) return;
     chaveAlvos = chave;
-    for (const [b, a] of botoes) { const [x, y] = cam.tela(a.x, a.y); b.style.transform = `translate(${x / dpr}px, ${y / dpr - a.alto / 2}px)`; }
+    // O botão fica sempre inteiro dentro do palco (com o anel do foco): o Tab num alvo fora da vista não rola a página;
+    // o foco leva a câmera até ele (verAlvo) e o botão volta para cima do alvo. Os botões não pegam clique.
+    const Wc = W / dpr, Hc = H / dpr, M = BORDA_ALVO;
+    for (const [b, a] of botoes) {
+      const [x, y] = cam.tela(a.x, a.y);
+      b.style.transform = `translate(${prender(x / dpr, M, Wc - M)}px, ${prender(y / dpr - a.alto / 2, M, Hc - M)}px)`;
+    }
     if (dicaAlvo) {   // a dica ocupa [cx - w/2, cx + w/2] x [by - h, by] (o translate do visita.css) e não sai do palco
       const [x, y] = cam.tela(dicaAlvo.x, dicaAlvo.y), w = dica.offsetWidth, h = dica.offsetHeight, Wc = W / dpr, Hc = H / dpr;
       const cx = w > Wc - 2 * MARGEM ? Math.round(Wc / 2) : prender(x / dpr, MARGEM + w / 2, Wc - MARGEM - w / 2);
@@ -506,7 +513,7 @@ const Mundo = (() => {
             rotular(); montarAlvos();
             if (cena) {
               const novo = focado && (botoes.find(([, a]) => a.id === focado[1].id) || botoes[0]);
-              if (novo) novo[0].focus();
+              if (novo) novo[0].focus({ preventScroll: true });   // o focus mostra o alvo (verAlvo) sem rolar o palco
               if (nivel.destaque) destacar(nivel.alvos().find(a => a.id === nivel.destaque));
               if (!etiquetaAte) mostrar();
             }
