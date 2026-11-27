@@ -131,9 +131,17 @@ PNG indexado sem perda (RGBA igual ao do bruto).
 | `vitoria-da-conquista` | `vitoria-da-conquista-pixen-576x400.png` | `88ae7827a0473dafd0f94ab689d055ad2763fabcfce3debc6224a1efd13a78c1` | 26/11/2026 |
 | `franca` | `franca-pixen-576x400.png` | `f6a0c24fac50e7b8b11330fbe693c74bccaf2b8b406ed2d3b36c8538827fad76` | 26/11/2026 |
 | `blumenau` | `blumenau-pixen-576x400.png` | `9fb15b99bfed59a7be763a205d791428d40d4a098b17af3086f58054d5cd71ee` | 26/11/2026 |
+| `ponta-grossa` | `ponta-grossa-pixen-576x400.png` | `30d7a2ef5ebdbd2a2042d755c0bcf3c9652b15da6f2fec5499056fb882fbb197` | 26/11/2026 |
+| `limeira` | `limeira-pixen-576x400.png` | `798034725bdcaf87a35d089f18cb6faf7d88f4f443964b02e21e7f0dba93964c` | 26/11/2026 |
+| `petropolis` | `petropolis-pixen-576x400.png` | `149ae9d6dd9eb2531dbb477900abe932b774de68560647085bc6f578afc8b7ae` | 26/11/2026 |
+| `crato` | `crato-pixen-576x400.png` | `d28e0795fbd3b52b8ade8c86cec824ed1634a04e2fce5737dd6c782a7413e636` | 27/11/2026 |
+| `cabo-frio` | `cabo-frio-pixen-576x400.png` | `ecc7cbbb9aaeebf4690bbf0ad81c95cf3c935e120d513c1120d7743bb6b12210` | 27/11/2026 |
 
 Lote 7, parte 1 (26/11/2026): Itu, Anápolis, Vitória da Conquista, Franca e Blumenau, autoria pelo Opus com
 `montar_cenas.py`. Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`, 1ª tentativa, sem retoque de pixel.
+
+Lote 7, parte 2 (26 e 27/11/2026): Ponta Grossa, Limeira, Petrópolis, Crato e Cabo Frio, mesma autoria e mesmos brutos
+(1ª tentativa, sem retoque de pixel). O cordão de Blumenau saiu de cima do rio e foi para o gramado.
 
 Lote 4 (26/11/2026): Nova York, Londres, Paris, Madri, Tóquio, Campinas, Santos, Joinville, São José dos Campos e
 Uberlândia, autoria pelo Opus com `montar_cenas.py`. Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`, 1ª tentativa

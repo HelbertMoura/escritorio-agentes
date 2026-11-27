@@ -1,0 +1,194 @@
+{
+  "versao": 1,
+  "id": "crato",
+  "W": 576,
+  "H": 400,
+  "texto": {
+    "cena": "Crato em pixel art, com a igreja branca no largo de pedra com palmeiras, ao pé da Chapada do Araripe, e as casinhas coloridas do centro",
+    "vida": "Dois pedestres na calçada das casas verdes e um carro na rua estreita",
+    "portaria": "na porta da direita da casa verde, à esquerda do largo da igreja"
+  },
+  "portaria": {
+    "x": 245,
+    "y": 254,
+    "r": [
+      237,
+      230,
+      253,
+      254
+    ],
+    "placa": [
+      245,
+      234
+    ],
+    "farol": [
+      245,
+      244
+    ]
+  },
+  "praca": {
+    "x": 354,
+    "y": 255,
+    "r": [
+      350,
+      219,
+      388,
+      256
+    ],
+    "fonte": [
+      2,
+      2
+    ]
+  },
+  "pontos": [
+    {
+      "x": 367,
+      "y": 217,
+      "r": [
+        333,
+        140,
+        400,
+        217
+      ],
+      "nome": "Igreja branca · Crato"
+    },
+    {
+      "x": 369,
+      "y": 255,
+      "r": [
+        350,
+        219,
+        388,
+        256
+      ],
+      "nome": "Largo da igreja"
+    }
+  ],
+  "calcadas": {
+    "nos": [
+      [
+        232,
+        255
+      ],
+      [
+        245,
+        254
+      ],
+      [
+        258,
+        255
+      ]
+    ],
+    "arestas": null,
+    "travessias": [],
+    "pontes": []
+  },
+  "pista": [
+    [
+      198,
+      203
+    ],
+    [
+      198,
+      242
+    ],
+    [
+      200,
+      245
+    ],
+    [
+      202.5,
+      246
+    ],
+    [
+      205,
+      245
+    ],
+    [
+      207,
+      242
+    ],
+    [
+      207,
+      203
+    ],
+    [
+      205,
+      200
+    ],
+    [
+      202.5,
+      199
+    ],
+    [
+      200,
+      200
+    ]
+  ],
+  "carros": [
+    {
+      "s": 0,
+      "v": 14,
+      "peca": "carro-2",
+      "tamanho": [
+        8,
+        4
+      ]
+    }
+  ],
+  "pedestres": [
+    {
+      "de": 0,
+      "para": 1,
+      "s": 3,
+      "v": 12
+    },
+    {
+      "de": 1,
+      "para": 2,
+      "s": 6,
+      "v": 15
+    }
+  ],
+  "oclusoes": [],
+  "cordoes": [],
+  "luzes": [
+    [
+      70,
+      95,
+      10,
+      0.45
+    ],
+    [
+      59,
+      123,
+      10,
+      0.45
+    ],
+    [
+      144,
+      118,
+      10,
+      0.45
+    ]
+  ],
+  "superficies": {
+    "calcada": [
+      "735150",
+      "644049",
+      "482b34",
+      "3a262b",
+      "654e56",
+      "553646",
+      "815d60",
+      "d4aa79"
+    ],
+    "faixa": [],
+    "ponte": [],
+    "asfalto": [
+      "452b43",
+      "261a36",
+      "c8a6a2"
+    ]
+  }
+}
