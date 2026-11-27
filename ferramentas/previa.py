@@ -244,5 +244,13 @@ print(e.BASE, flush=True)
 print("dados temporários:", os.environ["ESCRITORIO_DADOS"], flush=True)   # somem ao sair
 try:
     srv.serve_forever()
-except KeyboardInterrupt:   # Ctrl+C: sai sem traceback, e o atexit apaga a pasta
+except KeyboardInterrupt:   # Ctrl+C: sai sem traceback
     pass
+finally:
+    # Sai sem a finalização do Python: uma thread daemon (o push, o log) que escreve no stdout bem nessa hora fica
+    # parada com a trava dele, e a finalização aborta ("_enter_buffered_busy") e demora o core dump. Aqui as threads
+    # ainda andam: a escrita delas termina, a saída esvazia e a pasta temporária sai antes.
+    shutil.rmtree(os.environ["ESCRITORIO_DADOS"], ignore_errors=True)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)

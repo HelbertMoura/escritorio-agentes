@@ -3578,8 +3578,10 @@ class Previa(unittest.TestCase):
     def parar(self, p, tmp):
         if p.poll() is None:
             p.send_signal(signal.CTRL_BREAK_EVENT if os.name == "nt" else signal.SIGTERM)
-            p.communicate(timeout=15)
+            _, erro = p.communicate(timeout=15)
             self.assertEqual(os.listdir(tmp), [])   # a prévia apagou a própria pasta ao sair
+            # e saiu limpa: sem o abort da finalização com uma thread no meio de um print ("_enter_buffered_busy")
+            self.assertEqual((p.returncode, "Fatal Python error" in erro), (0, False), erro[-2000:])
 
     def test_previa_le_conversa_pela_thread_e_pelo_canal(self):
         pasta = tempfile.mkdtemp(prefix="escritorio-previa-teste-")
