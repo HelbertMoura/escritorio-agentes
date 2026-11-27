@@ -1,9 +1,11 @@
 "use strict";
 // gerado por ferramentas/montar_cenas.py indice: não editar
 const CidadeCenas = Object.freeze({
+  "anapolis": Object.freeze({ v: "cf3c6f055aeb", png: "sha256-zzxvBVrrJ+EjcSX7isHzbKSFSWZU4kiXsX2k1U47pvQ=", json: "sha256-tXvC5Qg4iKLyIpBePdbkOqh+BNQ5HRfYFN5z8Gw+5yQ=" }),
   "aracaju": Object.freeze({ v: "5dba6b545ddf", png: "sha256-XbprVF3fAaRDa4c4Ydz9tirYEKpURb0EQwZzu0OIXzs=", json: "sha256-fqr4iC+HoOlA+pMFQhL/LxOfyaRc3KnYb8Le26M3DHE=" }),
   "belem": Object.freeze({ v: "936f0128508a", png: "sha256-k28BKFCKzQlJMAWeKi+zTIXA4O6tsrl9Ih4G68ik/48=", json: "sha256-9en9p+vmK7W7CAacLq5pimIiLF2ywpEQkJTvEg/FzQE=" }),
   "belo-horizonte": Object.freeze({ v: "00451018f5d6", png: "sha256-AEUQGPXW9Oo5x1VDyHRvgIx82i+qVng5o8B/imfpfpc=", json: "sha256-8611OWS9WC6YI6EpTdoijYWo1JHbzI1vt9eZOYa+O44=" }),
+  "blumenau": Object.freeze({ v: "7a485f7205e4", png: "sha256-ekhfcgXkdoVoosFLIO9b4I0hVLkivioDTNKX9SMKUgw=", json: "sha256-C4+V0DGTtMOgRGm3eyDQHxYxg7F/CR5yhG3ENSmNJ3Q=" }),
   "boa-vista": Object.freeze({ v: "659d37afeebc", png: "sha256-ZZ03r+68Gt3I7g4mPuqwzilrixPEMz+avi6+5oOobPU=", json: "sha256-xctMWw+9/F0YhhBLek1dWpuizPObaTYQAIQJP9tzqaI=" }),
   "brasilia": Object.freeze({ v: "971b5b7b4ff7", png: "sha256-lxtbe0/3dn7xRJ1KgHsTVhJrt2UH5revCFxzZw25pmI=", json: "sha256-RpMPK4JsvHnJgVct3gY99YaGnUCJRXV4WvcGSrDsuNE=" }),
   "buenos-aires": Object.freeze({ v: "5411b8451c18", png: "sha256-VBG4RRwYxosyCz3t3YKFEkgVEtq7BqBLj5EeFHy2seI=", json: "sha256-OrRQjUrFnI896G7NMIV2YlZrPBMzOZi6YBdCvEKaYfQ=" }),
@@ -14,7 +16,9 @@ const CidadeCenas = Object.freeze({
   "curitiba": Object.freeze({ v: "aff5fdd18057", png: "sha256-r/X90YBX66D78RlXm/Ar92u9aFc4Ylpt6mRZ8tu5bwU=", json: "sha256-aOrFRa0on2g0eqKateVz+cGYiwoQFgY6YZ42nW4H/j0=" }),
   "florianopolis": Object.freeze({ v: "6643bc27dd87", png: "sha256-ZkO8J92HY/SiOZbpX6KIyfw9T5tDHXQ+TzvopW4/Btc=", json: "sha256-RNKxI4XnV3eDZYgUqKCS8JwxFPEUcQcFpR9UANs7TGA=" }),
   "fortaleza": Object.freeze({ v: "3c1da075299b", png: "sha256-PB2gdSmbFdfI7TLEzcAIur7nVnuUCj8RlAD9HJKRSko=", json: "sha256-Rs9BRufbz5SRcaLfO981Cu0K8HGeVtXcgnv5UzHF+Rk=" }),
+  "franca": Object.freeze({ v: "ba79902ec816", png: "sha256-unmQLsgWpgB9qlhdDDSUxrzY6ZVET1RFzyOgsdiIT2Q=", json: "sha256-KAB12AkNqwwn1r0pKX7XZ01fV1S/5aGPXNMN6V5SN+I=" }),
   "goiania": Object.freeze({ v: "cabef6098b42", png: "sha256-yr72CYtCnuMPqwCIzTdmocwOapMEBMI58HWlIkIiBMU=", json: "sha256-GX9nlsBOrq5cHM7TwUp7+FOH/jhKbeJU38GmIFssTGg=" }),
+  "itu": Object.freeze({ v: "bb61821ff84d", png: "sha256-u2GCH/hNf++rPk8wM3lF/Afi9tv3+Kvjnm09foJf3yk=", json: "sha256-5rs5CIwRAb1AL9TDRFUQtQ3E7JLTN9HdIKQrGRp8thk=" }),
   "joao-pessoa": Object.freeze({ v: "288041d72385", png: "sha256-KIBB1yOFin10Es/CUs5cUYMqqr+Xo7krX0sx8vHTd2Q=", json: "sha256-MmMypWDP2VP/qLCrvr5q3kS8SB+haUvc5FUQp/Nldek=" }),
   "joinville": Object.freeze({ v: "a29d9fc9df5f", png: "sha256-op2fyd9fciXFqjTQxH7I0KWK2mNcqLB4pEtZoZRBJfs=", json: "sha256-uLB86IHIeKN4/et9N9XhrjZGyoh57h/IqOk3PV6oxmE=" }),
   "lisboa": Object.freeze({ v: "f4079b78bbf3", png: "sha256-9AebeLvz3jiJNC8FL8MijmI+2S0LXHSpwKo1DePcMxQ=", json: "sha256-DZjtZtBOTEOlJJ+IllzGyNvVLwBvlWDwO7QnUpqEjJA=" }),
@@ -46,5 +50,6 @@ const CidadeCenas = Object.freeze({
   "toquio": Object.freeze({ v: "f453a65358fb", png: "sha256-9FOmU1j7TvSlIWYroifa3exh3V/W8JciKoGBS18IGko=", json: "sha256-wnB9/zRZLqWxnOGs0hgQBRxVuhjSHTtReCVjOPd8R88=" }),
   "uberlandia": Object.freeze({ v: "d2cfa8256645", png: "sha256-0s+oJWZF5N5mO13vZ/qIlMpXBGnAYHb/GpPQG9gK+u4=", json: "sha256-GRQRsamGLtfpQVEZwZJVkYZ7ALk68AUAzVdqN3lwenQ=" }),
   "vitoria": Object.freeze({ v: "649f9d1f3103", png: "sha256-ZJ+dHzEDKuKEUy2WT5hihIvDGmJp+gnzUNG2oV8cwU8=", json: "sha256-JCLiRUA6sd28JgfQ4l5xjmalZ58f32aEt7nZDEZKyS8=" }),
+  "vitoria-da-conquista": Object.freeze({ v: "83ba59687893", png: "sha256-g7pZaHiTSdy4pZld37uhtQ3udzTnVWCRQqGyJqu3rq4=", json: "sha256-/lmnSjDS+72ndZz86313vlEON+NKWWzyzTLqjs4p55A=" }),
 });
 window.CidadeCenas = CidadeCenas;

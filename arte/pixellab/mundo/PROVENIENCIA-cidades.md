@@ -126,6 +126,14 @@ PNG indexado sem perda (RGBA igual ao do bruto).
 | `joinville` | `joinville-pixen-576x400.png` | `faabc4c96f620bb25876b5c4ce18243bfbe313e08f4d13db35a6354b18c273ae` | 26/11/2026 |
 | `sao-jose-dos-campos` | `sao-jose-dos-campos-pixen-576x400.png` | `54e9adcf9cab25dcd99d3d107031eeb969e8a26ae4847f703042be1b9c0f9ced` | 26/11/2026 |
 | `uberlandia` | `uberlandia-pixen-576x400.png` | `be608eb47b524d4ff1e3ba5007d2094b6ad7f57a965a8f552479daf6a34baa7e` | 26/11/2026 |
+| `itu` | `itu-pixen-576x400.png` | `2a17696699b01b3c91f101a5aa07380c660c8ff540f8998253b475317ec984c6` | 26/11/2026 |
+| `anapolis` | `anapolis-pixen-576x400.png` | `02bef2bee7aee695c11e27a14d02414cd5c5db3067980d468245b6b1125711b4` | 26/11/2026 |
+| `vitoria-da-conquista` | `vitoria-da-conquista-pixen-576x400.png` | `88ae7827a0473dafd0f94ab689d055ad2763fabcfce3debc6224a1efd13a78c1` | 26/11/2026 |
+| `franca` | `franca-pixen-576x400.png` | `f6a0c24fac50e7b8b11330fbe693c74bccaf2b8b406ed2d3b36c8538827fad76` | 26/11/2026 |
+| `blumenau` | `blumenau-pixen-576x400.png` | `9fb15b99bfed59a7be763a205d791428d40d4a098b17af3086f58054d5cd71ee` | 26/11/2026 |
+
+Lote 7, parte 1 (26/11/2026): Itu, Anápolis, Vitória da Conquista, Franca e Blumenau, autoria pelo Opus com
+`montar_cenas.py`. Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`, 1ª tentativa, sem retoque de pixel.
 
 Lote 4 (26/11/2026): Nova York, Londres, Paris, Madri, Tóquio, Campinas, Santos, Joinville, São José dos Campos e
 Uberlândia, autoria pelo Opus com `montar_cenas.py`. Brutos em `/home/dm/projetos/firmopolis-pixellab-cenas/raw/`, 1ª tentativa
