@@ -64,11 +64,12 @@ install -d -o escritorio -g escritorio -m 0700 "$CASA"
 
 # 2. Código e página, só do root (o serviço não reescreve o que executa nem o que serve)
 install -d -o root -g root -m 0755 /opt/escritorio /opt/escritorio/static /opt/escritorio/static/tema /opt/escritorio/static/fontes
-# o mapa do mundo e as cenas das cidades: a pasta sai inteira e volta só com os arquivos desta versão (o servidor serve
-# toda cena <id>.png/.json que achar em mundo/cenas/, e uma cena que saiu do manifesto não fica para trás)
-rm -rf /opt/escritorio/static/mundo
-install -d -o root -g root -m 0755 /opt/escritorio/static/mundo /opt/escritorio/static/mundo/perto \
-  /opt/escritorio/static/mundo/perto4x /opt/escritorio/static/mundo/cenas
+# o mapa do mundo e as cenas das cidades: montados numa pasta nova, trocada com mv no fim da cópia (o serviço segue no
+# ar com o mapa inteiro) e só com os arquivos desta versão (o servidor serve toda cena <id>.png/.json que achar em
+# mundo/cenas/, e uma cena que saiu do manifesto não fica para trás)
+MUNDO=/opt/escritorio/static/mundo
+rm -rf /opt/escritorio/static/mundo.novo /opt/escritorio/static/mundo.velho   # sobras de uma instalação interrompida
+install -d -o root -g root -m 0755 "$MUNDO.novo" "$MUNDO.novo/perto" "$MUNDO.novo/perto4x" "$MUNDO.novo/cenas"
 # o CHANGELOG.pt-BR.md é a página Novidades (novidades.py)
 install -o root -g root -m 0644 escritorio.py acesso.py andares.py presenca.py social.py planta.py ajustes.py jornal.py avisos.py vapid.py novidades.py visitas_sala.py \
   conversas_equipe.py migracao_saguao.py anexos.py linha.py ponte_espelho.py CHANGELOG.pt-BR.md /opt/escritorio/
@@ -80,8 +81,11 @@ for f in static/*.html static/*.js static/*.css static/*.png static/*.webmanifes
          static/mundo/*.png static/mundo/*.json static/mundo/perto/*.png static/mundo/perto/*.json \
          static/mundo/perto4x/*.png static/mundo/cenas/*.png static/mundo/cenas/*.json; do
   [ -e "$f" ] || continue   # padrão sem arquivo (sem nullglob, o shell deixa o * como está)
-  install -o root -g root -m 0644 "$f" "/opt/escritorio/$f"
+  install -o root -g root -m 0644 "$f" "/opt/escritorio/${f/#static\/mundo\//static/mundo.novo/}"
 done
+if [ -d "$MUNDO" ]; then mv "$MUNDO" "$MUNDO.velho"; fi
+mv "$MUNDO.novo" "$MUNDO"
+rm -rf /opt/escritorio/static/mundo.velho
 install -o root -g root -m 0644 static/tema/atlas.png static/tema/atlas.json /opt/escritorio/static/tema/
 install -o root -g root -m 0644 static/fontes/* /opt/escritorio/static/fontes/
 rm -f /opt/escritorio/static/maquete.js; rm -rf /opt/escritorio/static/vendor   # sobras da maquete 3D (removida), caminho fixo

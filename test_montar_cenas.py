@@ -636,6 +636,7 @@ class Servidor(unittest.TestCase):
             self.assertRegex(etag or "", r'^"[0-9a-f]+-[0-9a-f]+"$', nome)
             self.assertEqual(data, email.utils.formatdate(int(os.stat(os.path.join(e.ESTATICO, nome)).st_mtime), usegmt=True))
             antes = email.utils.formatdate(int(os.stat(os.path.join(e.ESTATICO, nome)).st_mtime) - 1, usegmt=True)
+            depois = email.utils.formatdate(int(os.stat(os.path.join(e.ESTATICO, nome)).st_mtime) + 1, usegmt=True)
             for pedido in ({"If-None-Match": etag}, {"If-None-Match": "W/" + etag}, {"If-None-Match": f'"outra", {etag}'},
                            {"If-None-Match": "*"}, {"If-Modified-Since": data},
                            {"If-None-Match": etag, "If-Modified-Since": antes}):
@@ -645,6 +646,7 @@ class Servidor(unittest.TestCase):
                 self.assertIsNone(resposta.getheader("Content-Length"), nome)
                 self.assertEqual(resposta.getheader("X-Content-Type-Options"), "nosniff", nome)
             for pedido in ({"If-None-Match": '"0-0"'}, {"If-Modified-Since": antes}, {"If-Modified-Since": "ontem"},
+                           {"If-Modified-Since": depois},   # rollback: o arquivo voltou com mtime mais antigo que o IMS
                            {"If-None-Match": '"0-0"', "If-Modified-Since": data}):
                 status, _, corpo = self.pedir(f"/{nome}?v=1", cabecalhos=pedido)
                 self.assertEqual((status, corpo), (200, ler(e.ESTATICO, nome)), (nome, pedido))

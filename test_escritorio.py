@@ -3638,6 +3638,28 @@ class Previa(unittest.TestCase):
         self.assertEqual((r.returncode, os.listdir(tmp)), (1, []))
         self.assertIn("--visitantes", r.stderr)
 
+    def test_previa_sai_com_erro_quando_o_servidor_quebra(self):
+        # o os._exit do fim não pode engolir a exceção; o Ctrl+C segue saindo com 0 (o SIGTERM, o parar() confere)
+        quebrar = ("import builtins, runpy, socketserver, sys\n"
+                   "erro, previa = getattr(builtins, sys.argv.pop(1)), sys.argv.pop(1)\n"
+                   "def quebrar(*a, **k): raise erro('quebrou de propósito')\n"
+                   "socketserver.BaseServer.serve_forever = quebrar\n"
+                   "runpy.run_path(previa, run_name='__main__')\n")
+        previa = os.path.join("ferramentas", "previa.py")
+        for erro, codigo in (("RuntimeError", 1), ("KeyboardInterrupt", 0)):
+            with socket.socket() as s:
+                s.bind(("127.0.0.1", 0))
+                porta = s.getsockname()[1]
+            tmp = tempfile.mkdtemp(prefix="escritorio-previa-teste-tmp-")
+            self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+            r = subprocess.run([sys.executable, "-B", "-c", quebrar, erro, previa,
+                                os.path.join("ferramentas", "previa.exemplo.json")], cwd=self.RAIZ, capture_output=True,
+                               text=True, encoding="utf-8", timeout=60,
+                               env={**os.environ, "PREVIA_PORTA": str(porta), "PYTHONUTF8": "1", "TEMP": tmp, "TMP": tmp,
+                                    "TMPDIR": tmp})
+            self.assertEqual((r.returncode, os.listdir(tmp)), (codigo, []), (erro, r.stderr[-2000:]))
+            self.assertEqual("quebrou de propósito" in r.stderr, codigo == 1, (erro, r.stderr[-2000:]))
+
     def test_previa_com_push_falso(self):
         """--push: a chave sai, o endpoint da lista é aceito (o de fora, não) e um pedido novo do arquivo vira aviso."""
         pasta = tempfile.mkdtemp(prefix="escritorio-previa-push-")

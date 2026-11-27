@@ -3194,13 +3194,14 @@ class Visitantes:
 
 def nao_mudou(if_none_match, if_modified_since, etag, mtime):
     """O pedido condicional já tem este arquivo? Com If-None-Match, só ele conta (comparação fraca: o W/ não vale; "*"
-    vale para qualquer uma); sem ele, o If-Modified-Since, em segundos. O servidor fala HTTP/1.0, e o Chrome só usa a
-    ETag como validador a partir do 1.1: no navegador quem valida é o Last-Modified."""
+    vale para qualquer uma); sem ele, o If-Modified-Since, em segundos e só com a data igual, como no nginx (num
+    rollback o arquivo volta com mtime mais antigo e sai inteiro). O servidor fala HTTP/1.0, e o Chrome só usa a ETag
+    como validador a partir do 1.1: no navegador quem valida é o Last-Modified."""
     if if_none_match:
         pedidas = {p.strip().removeprefix("W/") for p in if_none_match.split(",")}
         return etag in pedidas or "*" in pedidas
     try:
-        return int(mtime) <= email.utils.parsedate_to_datetime(if_modified_since).timestamp()
+        return int(mtime) == int(email.utils.parsedate_to_datetime(if_modified_since).timestamp())
     except (TypeError, ValueError, IndexError, OverflowError):   # sem o cabeçalho ou data inválida: manda o arquivo
         return False
 
