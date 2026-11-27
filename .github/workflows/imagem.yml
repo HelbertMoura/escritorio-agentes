@@ -30,10 +30,14 @@ jobs:
         run: go test ./...
       - name: Python
         # test_montar_mundo fica de fora no CI: compara PNGs byte a byte e o zlib do runner gera bytes diferentes
-        # (falha também fora da máquina que montou os mapas); rode local ao mexer no mundo.
+        # (falha também fora da máquina que montou os mapas); rode local ao mexer no mundo. Os padrões também deixam o
+        # test_montar_tema de fora. O test_montar_cenas entra pelo nome (compara pixels, não bytes do zlib), com o Pillow
+        # e o numpy que a ferramenta dele pede.
         run: |
+          python3 -m pip install --quiet pillow==10.2.0 numpy==1.26.4
           python3 -B -I -m unittest discover -p "test_[!m]*.py"
           python3 -B -I -m unittest discover -p "test_m[!o]*.py"
+          python3 -B -I -m unittest discover -p "test_montar_cenas.py"
       - name: JS
         run: |
           for t in test_*.js; do node "$t"; done

@@ -1,0 +1,44 @@
+{
+  "versao": 1,
+  "id": "recife",
+  "W": 632, "H": 424,
+  "texto": {
+    "cena": "Recife Antigo em pixel art, com o Marco Zero, o casario e duas pontes sobre o Capibaribe",
+    "vida": "Um pedestre nas calçadas e um carro na rua oeste",
+    "portaria": "na fachada azul"
+  },
+  "portaria": { "x": 467, "y": 163, "r": [454, 114, 479, 163], "placa": [467, 142], "farol": [467, 153] },
+  "praca": { "x": 481, "y": 222, "r": [448, 187, 520, 232], "fonte": [22, 15] },
+  "pontos": [{ "x": 468, "y": 230, "r": [438, 182, 504, 230], "nome": "Marco Zero · Recife Antigo" }],
+  "calcadas": {
+    "nos": [
+      [400, 306], [394, 318], [378, 318], [354, 325], [260, 325], [234, 318], [221, 306],
+      [221, 119], [221, 104], [239, 104], [257, 111], [356, 111], [381, 104], [393, 104],
+      [402, 119], [402, 159], [403, 168], [444, 170], [444, 203],
+      [462, 191], [467, 175], [467, 163]
+    ],
+    "arestas": null,
+    "travessias": [0, 1, 5, 7, 8, 12, 13],
+    "pontes": [2, 3, 4, 9, 10, 11]
+  },
+  "pista": [
+    [227, 176], [227, 293], [228, 295.5], [230.5, 296.5], [233, 295.5],
+    [234, 293], [234, 176], [233, 173.5], [230.5, 172.5], [228, 173.5]
+  ],
+  "carros": [{ "s": 74, "v": 19, "peca": "carro-1", "tamanho": [8, 4] }],
+  "pedestres": [{ "de": 17, "para": 18, "s": 16, "v": 17 }],
+  "oclusoes": [
+    { "frente": [215, 138, 228, 185], "pes": [215, 139, 224, 186], "transparente": ["3b2a5e", "d7d0b6", "c6b48c", "c7b89c", "ada592", "9f8883", "ad8a6d"] },
+    { "frente": [404, 105, 414, 161], "pes": [394, 104, 405, 161], "transparente": ["3b2a5e", "d7d0b6", "c6b48c", "c7b89c", "ada592", "9f8883", "ad8a6d"] },
+    { "frente": [251, 112, 359, 121], "pes": [251, 100, 359, 112], "transparente": [] },
+    { "frente": [258, 326, 356, 334], "pes": [258, 312, 356, 326], "transparente": [] }
+  ],
+  "cordoes": [[431, 184, 511, 184]],
+  "luzes": [],
+  "superficies": {
+    "calcada": ["d7d0b6", "c7b89c", "c6b48c", "ad8a6d", "ada592", "9f8883"],
+    "faixa": [],
+    "ponte": ["a98a5e", "886d51", "7a4b35", "baadae", "897568", "746157", "0c1419", "060f18", "60686f"],
+    "asfalto": ["3b2a5e"]
+  }
+}

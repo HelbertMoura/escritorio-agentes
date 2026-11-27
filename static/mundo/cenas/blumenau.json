@@ -1,0 +1,245 @@
+{
+  "versao": 1,
+  "id": "blumenau",
+  "W": 576,
+  "H": 400,
+  "texto": {
+    "cena": "Blumenau em pixel art, com as casas em enxaimel de telhado pontudo, a casa no meio do cruzamento, o rio e o gramado do morro",
+    "vida": "Dois pedestres na calçada da casa enxaimel e um carro na rua da esquerda",
+    "portaria": "na porta da casa enxaimel creme, à esquerda do centro"
+  },
+  "portaria": {
+    "x": 224,
+    "y": 211,
+    "r": [
+      216,
+      187,
+      232,
+      211
+    ],
+    "placa": [
+      224,
+      191
+    ],
+    "farol": [
+      224,
+      201
+    ]
+  },
+  "praca": {
+    "x": 18,
+    "y": 84,
+    "r": [
+      16,
+      60,
+      43,
+      86
+    ],
+    "fonte": [
+      2,
+      2
+    ]
+  },
+  "pontos": [
+    {
+      "x": 372,
+      "y": 245,
+      "r": [
+        350,
+        180,
+        395,
+        245
+      ],
+      "nome": "Casa enxaimel · Blumenau"
+    },
+    {
+      "x": 30,
+      "y": 85,
+      "r": [
+        0,
+        56,
+        160,
+        85
+      ],
+      "nome": "Gramado do rio"
+    }
+  ],
+  "calcadas": {
+    "nos": [
+      [
+        210,
+        212
+      ],
+      [
+        224,
+        211
+      ],
+      [
+        238,
+        212
+      ]
+    ],
+    "arestas": null,
+    "travessias": [],
+    "pontes": []
+  },
+  "pista": [
+    [
+      175,
+      254
+    ],
+    [
+      175,
+      322
+    ],
+    [
+      177,
+      325
+    ],
+    [
+      182,
+      326.5
+    ],
+    [
+      187,
+      325
+    ],
+    [
+      189,
+      322
+    ],
+    [
+      189,
+      254
+    ],
+    [
+      187,
+      251
+    ],
+    [
+      182,
+      249.5
+    ],
+    [
+      177,
+      251
+    ]
+  ],
+  "carros": [
+    {
+      "s": 0,
+      "v": 14,
+      "peca": "carro-4",
+      "tamanho": [
+        8,
+        4
+      ]
+    }
+  ],
+  "pedestres": [
+    {
+      "de": 0,
+      "para": 1,
+      "s": 3,
+      "v": 12
+    },
+    {
+      "de": 1,
+      "para": 2,
+      "s": 6,
+      "v": 15
+    }
+  ],
+  "oclusoes": [],
+  "cordoes": [
+    [
+      108,
+      90,
+      128,
+      90
+    ]
+  ],
+  "luzes": [
+    [
+      162,
+      195,
+      10,
+      0.45
+    ],
+    [
+      249,
+      194,
+      10,
+      0.45
+    ],
+    [
+      317,
+      195,
+      10,
+      0.45
+    ],
+    [
+      430,
+      196,
+      10,
+      0.45
+    ],
+    [
+      352,
+      322,
+      10,
+      0.45
+    ],
+    [
+      390,
+      323,
+      10,
+      0.45
+    ],
+    [
+      249,
+      322,
+      10,
+      0.45
+    ],
+    [
+      250,
+      121,
+      10,
+      0.45
+    ],
+    [
+      354,
+      76,
+      10,
+      0.45
+    ],
+    [
+      164,
+      72,
+      10,
+      0.45
+    ]
+  ],
+  "superficies": {
+    "calcada": [
+      "bfa683",
+      "8d7162",
+      "b99e7e",
+      "cbb189",
+      "816559",
+      "a78b68",
+      "9a7e69",
+      "a07d59"
+    ],
+    "faixa": [],
+    "ponte": [],
+    "asfalto": [
+      "50364c",
+      "2c1d33",
+      "543b4a",
+      "3b293e",
+      "ae8d8a"
+    ]
+  }
+}

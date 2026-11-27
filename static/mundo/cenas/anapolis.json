@@ -1,0 +1,221 @@
+{
+  "versao": 1,
+  "id": "anapolis",
+  "W": 576,
+  "H": 400,
+  "texto": {
+    "cena": "Anápolis em pixel art, com a Catedral do Bom Jesus no alto do largo de pedra, as árvores da praça e as quadras de telhado vermelho",
+    "vida": "Dois pedestres na calçada do sobrado e um carro na rua do leste",
+    "portaria": "na porta do meio do sobrado de três portas, no centro"
+  },
+  "portaria": {
+    "x": 219,
+    "y": 212,
+    "r": [
+      211,
+      188,
+      227,
+      212
+    ],
+    "placa": [
+      219,
+      192
+    ],
+    "farol": [
+      219,
+      202
+    ]
+  },
+  "praca": {
+    "x": 373,
+    "y": 286,
+    "r": [
+      341,
+      250,
+      405,
+      288
+    ],
+    "fonte": [
+      2,
+      2
+    ]
+  },
+  "pontos": [
+    {
+      "x": 373,
+      "y": 242,
+      "r": [
+        325,
+        112,
+        425,
+        242
+      ],
+      "nome": "Catedral · Anápolis"
+    },
+    {
+      "x": 373,
+      "y": 288,
+      "r": [
+        341,
+        244,
+        405,
+        288
+      ],
+      "nome": "Largo da Catedral"
+    }
+  ],
+  "calcadas": {
+    "nos": [
+      [
+        204,
+        213
+      ],
+      [
+        219,
+        212
+      ],
+      [
+        236,
+        213
+      ]
+    ],
+    "arestas": null,
+    "travessias": [],
+    "pontes": []
+  },
+  "pista": [
+    [
+      484,
+      100
+    ],
+    [
+      484,
+      150
+    ],
+    [
+      486,
+      152.5
+    ],
+    [
+      489,
+      153.5
+    ],
+    [
+      492,
+      152.5
+    ],
+    [
+      494,
+      150
+    ],
+    [
+      494,
+      100
+    ],
+    [
+      492,
+      97.5
+    ],
+    [
+      489,
+      96.5
+    ],
+    [
+      486,
+      97.5
+    ]
+  ],
+  "carros": [
+    {
+      "s": 0,
+      "v": 14,
+      "peca": "carro-2",
+      "tamanho": [
+        8,
+        4
+      ]
+    }
+  ],
+  "pedestres": [
+    {
+      "de": 0,
+      "para": 1,
+      "s": 3,
+      "v": 12
+    },
+    {
+      "de": 1,
+      "para": 2,
+      "s": 6,
+      "v": 15
+    }
+  ],
+  "oclusoes": [],
+  "cordoes": [],
+  "luzes": [
+    [
+      23,
+      199,
+      10,
+      0.45
+    ],
+    [
+      57,
+      199,
+      10,
+      0.45
+    ],
+    [
+      192,
+      199,
+      10,
+      0.45
+    ],
+    [
+      246,
+      196,
+      10,
+      0.45
+    ],
+    [
+      277,
+      199,
+      10,
+      0.45
+    ],
+    [
+      471,
+      200,
+      10,
+      0.45
+    ],
+    [
+      433,
+      264,
+      10,
+      0.45
+    ]
+  ],
+  "superficies": {
+    "calcada": [
+      "6d4645",
+      "674041",
+      "462a36",
+      "57353e",
+      "c2a27a",
+      "c7a87d",
+      "d7b37c",
+      "9c8166",
+      "92725c",
+      "b38f69",
+      "481e29"
+    ],
+    "faixa": [],
+    "ponte": [],
+    "asfalto": [
+      "493346",
+      "4b3447",
+      "684949"
+    ]
+  }
+}

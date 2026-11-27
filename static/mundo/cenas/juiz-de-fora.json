@@ -1,0 +1,172 @@
+{
+ "versao": 1,
+ "id": "juiz-de-fora",
+ "W": 576,
+ "H": 400,
+ "texto": {
+  "cena": "Juiz de Fora em pixel art, com o Cristo Redentor no alto do Morro do Imperador, as quadras de sobrados do centro e as avenidas em grade",
+  "vida": "Dois pedestres na calçada do sobrado e um carro na avenida do centro",
+  "portaria": "na porta do sobrado de janelas em arco"
+ },
+ "portaria": {
+  "x": 330,
+  "y": 99,
+  "r": [
+   322,
+   75,
+   338,
+   99
+  ],
+  "placa": [
+   330,
+   79
+  ],
+  "farol": [
+   330,
+   89
+  ]
+ },
+ "praca": {
+  "x": 128,
+  "y": 64,
+  "r": [
+   86,
+   33,
+   168,
+   82
+  ],
+  "fonte": [
+   30,
+   31
+  ]
+ },
+ "pontos": [
+  {
+   "x": 128,
+   "y": 60,
+   "r": [
+    105,
+    5,
+    150,
+    60
+   ],
+   "nome": "Cristo · Juiz de Fora"
+  }
+ ],
+ "calcadas": {
+  "nos": [
+   [
+    314,
+    99
+   ],
+   [
+    330,
+    99
+   ],
+   [
+    348,
+    99
+   ]
+  ],
+  "arestas": null,
+  "travessias": [],
+  "pontes": []
+ },
+ "carros": [
+  {
+   "s": 0,
+   "v": 14,
+   "peca": "carro-3",
+   "tamanho": [
+    8,
+    4
+   ]
+  }
+ ],
+ "pedestres": [
+  {
+   "de": 0,
+   "para": 1,
+   "s": 6,
+   "v": 14
+  },
+  {
+   "de": 1,
+   "para": 2,
+   "s": 6,
+   "v": 15
+  }
+ ],
+ "luzes": [
+  [
+   353,
+   87,
+   10,
+   0.45
+  ]
+ ],
+ "superficies": {
+  "calcada": [
+   "977658",
+   "cbb185",
+   "d1b88a",
+   "7f5847",
+   "8d694f",
+   "bd9d76",
+   "6a493d",
+   "ae845e",
+   "6f4443"
+  ],
+  "faixa": [],
+  "ponte": [],
+  "asfalto": [
+   "3d2a40",
+   "3a283e",
+   "a69ea0"
+  ]
+ },
+ "pista": [
+  [
+   366,
+   334
+  ],
+  [
+   366,
+   371
+  ],
+  [
+   368,
+   373.5
+  ],
+  [
+   371.0,
+   374.5
+  ],
+  [
+   374,
+   373.5
+  ],
+  [
+   376,
+   371
+  ],
+  [
+   376,
+   334
+  ],
+  [
+   374,
+   331.5
+  ],
+  [
+   371.0,
+   330.5
+  ],
+  [
+   368,
+   331.5
+  ]
+ ],
+ "oclusoes": [],
+ "cordoes": []
+}

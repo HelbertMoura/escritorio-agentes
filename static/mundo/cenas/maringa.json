@@ -1,0 +1,239 @@
+{
+ "versao": 1,
+ "id": "maringa",
+ "W": 576,
+ "H": 400,
+ "texto": {
+  "cena": "Maringá em pixel art, com a Catedral Basílica em forma de cone no meio da praça de pedra, os quarteirões arborizados e os prédios do centro",
+  "vida": "Dois pedestres na calçada dos prédios acima da catedral e um carro na rua em frente à praça",
+  "portaria": "na porta do meio do prédio de telhado vermelho, na quadra acima da catedral"
+ },
+ "portaria": {
+  "x": 256,
+  "y": 145,
+  "r": [
+   248,
+   121,
+   264,
+   145
+  ],
+  "placa": [
+   256,
+   125
+  ],
+  "farol": [
+   256,
+   135
+  ]
+ },
+ "praca": {
+  "x": 372,
+  "y": 308,
+  "r": [
+   338,
+   293,
+   407,
+   309
+  ],
+  "fonte": [
+   2,
+   2
+  ]
+ },
+ "pontos": [
+  {
+   "x": 372,
+   "y": 292,
+   "r": [
+    312,
+    150,
+    432,
+    292
+   ],
+   "nome": "Catedral Basílica · Maringá"
+  }
+ ],
+ "calcadas": {
+  "nos": [
+   [
+    186,
+    145
+   ],
+   [
+    220,
+    145
+   ],
+   [
+    256,
+    145
+   ],
+   [
+    270,
+    145
+   ]
+  ],
+  "arestas": null,
+  "travessias": [],
+  "pontes": []
+ },
+ "pista": [
+  [
+   360.0,
+   326.0
+  ],
+  [
+   430.0,
+   326.0
+  ],
+  [
+   432.5,
+   325.0
+  ],
+  [
+   434.0,
+   322.0
+  ],
+  [
+   432.5,
+   319.0
+  ],
+  [
+   430.0,
+   318.0
+  ],
+  [
+   360.0,
+   318.0
+  ],
+  [
+   357.5,
+   319.0
+  ],
+  [
+   356.0,
+   322.0
+  ],
+  [
+   357.5,
+   325.0
+  ]
+ ],
+ "carros": [
+  {
+   "s": 0,
+   "v": 14,
+   "peca": "carro-4",
+   "tamanho": [
+    8,
+    4
+   ]
+  }
+ ],
+ "pedestres": [
+  {
+   "de": 0,
+   "para": 1,
+   "s": 6,
+   "v": 14
+  },
+  {
+   "de": 2,
+   "para": 3,
+   "s": 6,
+   "v": 15
+  }
+ ],
+ "oclusoes": [],
+ "cordoes": [
+  [
+   303,
+   200,
+   319,
+   200
+  ]
+ ],
+ "luzes": [
+  [
+   300,
+   188,
+   10,
+   0.45
+  ],
+  [
+   445,
+   188,
+   10,
+   0.45
+  ],
+  [
+   300,
+   301,
+   10,
+   0.45
+  ],
+  [
+   445,
+   301,
+   10,
+   0.45
+  ],
+  [
+   112,
+   240,
+   10,
+   0.45
+  ],
+  [
+   156,
+   237,
+   10,
+   0.45
+  ],
+  [
+   52,
+   329,
+   10,
+   0.45
+  ],
+  [
+   26,
+   330,
+   10,
+   0.45
+  ],
+  [
+   185,
+   58,
+   10,
+   0.45
+  ]
+ ],
+ "superficies": {
+  "calcada": [
+   "603f3d",
+   "57393b",
+   "b89c71",
+   "c4a674",
+   "47282d",
+   "51353a",
+   "6c483b",
+   "d0b984",
+   "b29261",
+   "3a1e24"
+  ],
+  "faixa": [],
+  "ponte": [],
+  "asfalto": [
+   "554245",
+   "4f3e41",
+   "5c4844",
+   "4c3d45",
+   "483745",
+   "493945",
+   "8a7672",
+   "6e5b57",
+   "97877c",
+   "ab9173"
+  ]
+ }
+}

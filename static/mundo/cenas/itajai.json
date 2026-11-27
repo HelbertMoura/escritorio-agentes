@@ -1,0 +1,192 @@
+{
+ "versao": 1,
+ "id": "itajai",
+ "W": 576,
+ "H": 400,
+ "texto": {
+  "cena": "Itajaí em pixel art, com o porto e seus guindastes na foz do rio, a Igreja Matriz no quarteirão ajardinado e as casas de telhado laranja do centro",
+  "vida": "Dois pedestres na calçada das casas abaixo do cais e um carro na rua em frente",
+  "portaria": "na porta da casa de oitão, na quadra logo abaixo do cais"
+ },
+ "portaria": {
+  "x": 238,
+  "y": 215,
+  "r": [
+   230,
+   191,
+   246,
+   215
+  ],
+  "placa": [
+   238,
+   195
+  ],
+  "farol": [
+   238,
+   205
+  ]
+ },
+ "praca": {
+  "x": 158,
+  "y": 122,
+  "r": [
+   154,
+   86,
+   187,
+   123
+  ],
+  "fonte": [
+   2,
+   2
+  ]
+ },
+ "pontos": [
+  {
+   "x": 385,
+   "y": 322,
+   "r": [
+    358,
+    225,
+    412,
+    322
+   ],
+   "nome": "Igreja Matriz · Itajaí"
+  }
+ ],
+ "calcadas": {
+  "nos": [
+   [
+    189,
+    215
+   ],
+   [
+    214,
+    215
+   ],
+   [
+    238,
+    215
+   ],
+   [
+    252,
+    215
+   ]
+  ],
+  "arestas": null,
+  "travessias": [],
+  "pontes": []
+ },
+ "pista": [
+  [
+   178.0,
+   232.0
+  ],
+  [
+   262.0,
+   232.0
+  ],
+  [
+   265.5,
+   231.0
+  ],
+  [
+   267.0,
+   227.5
+  ],
+  [
+   265.5,
+   224.0
+  ],
+  [
+   262.0,
+   223.0
+  ],
+  [
+   178.0,
+   223.0
+  ],
+  [
+   174.5,
+   224.0
+  ],
+  [
+   173.0,
+   227.5
+  ],
+  [
+   174.5,
+   231.0
+  ]
+ ],
+ "carros": [
+  {
+   "s": 0,
+   "v": 14,
+   "peca": "carro-4",
+   "tamanho": [
+    8,
+    4
+   ]
+  }
+ ],
+ "pedestres": [
+  {
+   "de": 0,
+   "para": 1,
+   "s": 6,
+   "v": 14
+  },
+  {
+   "de": 2,
+   "para": 3,
+   "s": 6,
+   "v": 15
+  }
+ ],
+ "oclusoes": [],
+ "cordoes": [],
+ "luzes": [
+  [
+   406,
+   25,
+   10,
+   0.45
+  ],
+  [
+   445,
+   323,
+   10,
+   0.45
+  ]
+ ],
+ "superficies": {
+  "calcada": [
+   "c6ae8a",
+   "616864",
+   "d1b995",
+   "897563",
+   "5c5f5f",
+   "6d6f65",
+   "515053",
+   "aa9378",
+   "9e8469",
+   "453f4c",
+   "352e40",
+   "b9a181"
+  ],
+  "faixa": [],
+  "ponte": [],
+  "asfalto": [
+   "563743",
+   "573940",
+   "4b3045",
+   "4d3145",
+   "4a2e43",
+   "7f755f",
+   "8a7f61",
+   "714b41",
+   "7b4e42",
+   "5d3c42"
+  ]
+ }
+}

@@ -1,0 +1,243 @@
+{
+  "versao": 1,
+  "id": "ilheus",
+  "W": 576,
+  "H": 400,
+  "texto": {
+    "cena": "Ilhéus em pixel art, com a Catedral de São Sebastião, as igrejas brancas do centro histórico, a praia com coqueiros e as quadras de telhado de barro",
+    "vida": "Dois pedestres na calçada do sobrado amarelo e um carro na rua do meio",
+    "portaria": "na porta grande do sobrado amarelo, ao lado do coqueiro"
+  },
+  "portaria": {
+    "x": 222,
+    "y": 211,
+    "r": [
+      214,
+      187,
+      230,
+      211
+    ],
+    "placa": [
+      222,
+      191
+    ],
+    "farol": [
+      222,
+      201
+    ]
+  },
+  "praca": {
+    "x": 354,
+    "y": 330,
+    "r": [
+      350,
+      240,
+      386,
+      331
+    ],
+    "fonte": [
+      2,
+      2
+    ]
+  },
+  "pontos": [
+    {
+      "x": 428,
+      "y": 338,
+      "r": [
+        388,
+        215,
+        472,
+        338
+      ],
+      "nome": "Catedral · Ilhéus"
+    },
+    {
+      "x": 368,
+      "y": 330,
+      "r": [
+        350,
+        240,
+        386,
+        331
+      ],
+      "nome": "Rua da Catedral"
+    }
+  ],
+  "calcadas": {
+    "nos": [
+      [
+        210,
+        212
+      ],
+      [
+        222,
+        211
+      ],
+      [
+        236,
+        212
+      ]
+    ],
+    "arestas": null,
+    "travessias": [],
+    "pontes": []
+  },
+  "pista": [
+    [
+      200,
+      232
+    ],
+    [
+      248,
+      232
+    ],
+    [
+      250.5,
+      231
+    ],
+    [
+      252,
+      229
+    ],
+    [
+      252.5,
+      227
+    ],
+    [
+      252,
+      225
+    ],
+    [
+      250.5,
+      223
+    ],
+    [
+      248,
+      222
+    ],
+    [
+      200,
+      222
+    ],
+    [
+      197.5,
+      223
+    ],
+    [
+      196,
+      225
+    ],
+    [
+      195.5,
+      227
+    ],
+    [
+      196,
+      229
+    ],
+    [
+      197.5,
+      231
+    ]
+  ],
+  "carros": [
+    {
+      "s": 0,
+      "v": 14,
+      "peca": "carro-3",
+      "tamanho": [
+        8,
+        4
+      ]
+    }
+  ],
+  "pedestres": [
+    {
+      "de": 0,
+      "para": 1,
+      "s": 3,
+      "v": 12
+    },
+    {
+      "de": 1,
+      "para": 2,
+      "s": 6,
+      "v": 15
+    }
+  ],
+  "oclusoes": [],
+  "cordoes": [
+    [
+      356,
+      316,
+      380,
+      316
+    ]
+  ],
+  "luzes": [
+    [
+      192,
+      75,
+      10,
+      0.45
+    ],
+    [
+      192,
+      117,
+      10,
+      0.45
+    ],
+    [
+      159,
+      197,
+      10,
+      0.45
+    ],
+    [
+      25,
+      197,
+      10,
+      0.45
+    ],
+    [
+      56,
+      324,
+      10,
+      0.45
+    ],
+    [
+      252,
+      324,
+      10,
+      0.45
+    ],
+    [
+      540,
+      322,
+      10,
+      0.45
+    ]
+  ],
+  "superficies": {
+    "calcada": [
+      "b79871",
+      "bea076",
+      "7e5a49",
+      "89664e",
+      "765347",
+      "ac8a65",
+      "a28165",
+      "987150",
+      "937766",
+      "84655e"
+    ],
+    "faixa": [],
+    "ponte": [],
+    "asfalto": [
+      "523849",
+      "4f3647",
+      "563b4a"
+    ]
+  }
+}

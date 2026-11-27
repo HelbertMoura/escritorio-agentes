@@ -127,6 +127,7 @@ const Mundo = (() => {
   botaoEntrar.textContent = convite ? "Entrar com convite" : "Entrar na recepção";
 
   let W = 0, H = 0, dpr = 1, mapa = null, nome = null, nivel = null, atualCidade = null, ultimaCidade = null, trans = null;
+  const MARGEM = 8;   // a folga da dica até a borda do palco, em px CSS
   let botoes = [], chaveAlvos = "", dicaAlvo = null, anterior = performance.now(), pedido_ = false, gesto = null, roda = 0;
   let toque = null;   // o último toque solto (tempo e ponto): o segundo, logo depois e perto, aproxima no ponto
   // a festa do dia (festas.js): só depois da resposta do clima, que traz as festas desligadas (antes dela, nada de
@@ -258,7 +259,8 @@ const Mundo = (() => {
     } else if (nome === "cidade") {
       const casa = mapa.casa && mapa.porId.get(mapa.casa);
       estado.textContent = `${c.nome} (${c.uf}), ${mapa.texto(c)}.${hojeE()} ` +
-        (casa === c ? "O chalé com a placa é o escritório: clique nele para descer ao bairro."
+        (casa === c ? (nivel.planta.cena ? `A portaria do escritório fica ${nivel.planta.cena.texto.portaria}. Selecione-a para descer ao bairro.`
+                                         : "O chalé com a placa é o escritório: clique nele para descer ao bairro.")
         : casa ? `O escritório fica em ${casa.nome}; Esc volta ${c.fora ? "ao globo" : "ao mapa"}.` : `Esc volta ${c.fora ? "ao globo" : "ao mapa"}.`);
     }
     else estado.textContent = `${hora} · ${Clima.texto()}${c ? " · " + c.nome : ""}`;
@@ -308,8 +310,14 @@ const Mundo = (() => {
     if (chave === chaveAlvos) return;
     chaveAlvos = chave;
     for (const [b, a] of botoes) { const [x, y] = cam.tela(a.x, a.y); b.style.transform = `translate(${x / dpr}px, ${y / dpr - a.alto / 2}px)`; }
-    if (dicaAlvo) { const [x, y] = cam.tela(dicaAlvo.x, dicaAlvo.y); dica.style.transform = `translate(${x / dpr}px, ${y / dpr - dicaAlvo.alto}px)`; }
+    if (dicaAlvo) {   // a dica ocupa [cx - w/2, cx + w/2] x [by - h, by] (o translate do visita.css) e não sai do palco
+      const [x, y] = cam.tela(dicaAlvo.x, dicaAlvo.y), w = dica.offsetWidth, h = dica.offsetHeight, Wc = W / dpr, Hc = H / dpr;
+      const cx = w > Wc - 2 * MARGEM ? Math.round(Wc / 2) : prender(x / dpr, MARGEM + w / 2, Wc - MARGEM - w / 2);
+      dica.style.transform = `translate(${cx}px, ${prender(y / dpr - dicaAlvo.alto, MARGEM + h, Hc - MARGEM)}px)`;
+    }
   }
+  // em px CSS: o valor que cabe fica como está; o que passa para no limite, em pixel inteiro e para dentro
+  function prender(v, min, max) { return Math.min(Math.max(v, Math.ceil(min)), Math.floor(max)); }
 
   function medir() {
     const r = canvas.getBoundingClientRect(), d = window.devicePixelRatio || 1;
@@ -491,7 +499,18 @@ const Mundo = (() => {
       mapa = MundoMapa.criar({ dados, Camera, reduzido, festa: () => festa });
       Object.assign(niveis, mapa.niveis, {
         cidade: MundoCidade.criar({ dados, Camera, reduzido, mapa, clima: climaDaCidade, festa: () => festa,
-          avisar: () => { if (nome === "cidade") { rotular(); montarAlvos(); } } }) });   // o atlas chegou: placa, porta e marco
+          avisar: cena => {
+            if (nome !== "cidade") return;
+            // a cena integral troca os alvos: o foco do teclado fica no mesmo alvo (ou no primeiro, se ele saiu)
+            const focado = cena && botoes.find(([b]) => b === document.activeElement);
+            rotular(); montarAlvos();
+            if (cena) {
+              const novo = focado && (botoes.find(([, a]) => a.id === focado[1].id) || botoes[0]);
+              if (novo) novo[0].focus();
+              if (nivel.destaque) destacar(nivel.alvos().find(a => a.id === nivel.destaque));
+              if (!etiquetaAte) mostrar();
+            }
+          } }) });
       // sem o globo, a página abre no Brasil; a falha fica no console
       try { niveis.globo = Globo.criar({ dados, Camera, reduzido }); } catch (e) { console.error("Globo não abriu:", e); }
     })

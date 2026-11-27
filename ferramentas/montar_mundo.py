@@ -589,7 +589,7 @@ GENERICOS = ([f"predios-{i}" for i in range(1, 15)] + [f"chale-{i}" for i in ran
 OPCIONAIS = ["festa-arvore-natal", "festa-fogueira", "festa-barraca-junina", "festa-abobora", "festa-ovo-pascoa",
              "festa-carro-alegorico", "festa-palco-anonovo"]
 # a arte de cidade de Recife, Manaus e Belo Horizonte: opcional como as festas, mas no tamanho original (1x)
-ARTES_CIDADE = ["cidade-recife", "cidade-manaus", "cidade-bh-serra-curral"]
+ARTES_CIDADE = ["cidade-recife", "cidade-manaus", "cidade-bh-serra-curral", "recife-frente", "recife-pedra"]
 # desenhadas pelo PixelLab grandes demais para a cidade: entram no atlas na metade (o navegador desenha 1:1)
 METADE = {"carro-1", "carro-2", "carro-3", "carro-4", "carro-5", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1",
           "rua-1", "rua-2", "rua-3", "rua-4", "canteiro-1", "canteiro-2", "praia-1", "praia-2", *OPCIONAIS}
@@ -603,6 +603,16 @@ TRES_QUARTOS = {"lazer-4"}
 DERIVADAS = {"cidade-bh-serra-curral": (96, 36)}
 # as construções com janelas (acesas à noite): até JANELAS_MAX por peça, só as pequenas e fora da base do desenho
 COM_JANELAS = ("chale-", "casa-", "predios-", "marco-", "cidade-recife", "cidade-manaus")
+# Vidros marcados no recorte 1x, da esquerda para a direita: a cumeeira púrpura confunde o detector de cor.
+JANELAS_MARCADAS = {
+    "recife-frente": [
+        5, 39, 2, 3, 11, 39, 2, 3, 18, 39, 2, 3, 5, 52, 2, 2, 18, 52, 2, 2,
+        29, 38, 2, 3, 35, 38, 2, 3, 42, 38, 2, 3,
+        59, 26, 2, 2, 52, 35, 2, 2, 59, 35, 2, 2, 66, 35, 2, 2, 52, 43, 2, 2, 59, 43, 2, 2, 66, 43, 2, 2,
+        83, 24, 2, 2, 76, 34, 2, 3, 82, 34, 2, 3, 89, 34, 2, 3, 76, 44, 2, 3, 83, 44, 2, 3, 89, 44, 2, 3,
+        100, 40, 2, 4, 107, 40, 2, 4, 114, 40, 2, 4, 100, 52, 2, 2, 114, 52, 2, 2,
+    ],
+}
 JANELAS_MAX, JANELA_AREA = 48, 30
 ATLAS_LARGURA = 512
 MINI_MARCO, MINI_AVIAO = 32, 20   # pixels: o lado maior da miniatura do mapa, antes do contorno de 1 px
@@ -887,7 +897,13 @@ def montar_atlas(arte, cidades, saida):
     for nome, (px, py, _, _) in quadros.items():
         imagem.paste(pecas[nome], (px, py))
     quadros = dict(sorted(quadros.items()))
-    vidros = {nome: j for nome, im in sorted(pecas.items()) if nome.startswith(COM_JANELAS) for j in [janelas(im)] if j}
+    vidros = {}
+    for nome, im in sorted(pecas.items()):
+        js = JANELAS_MARCADAS.get(nome)
+        if js is None and nome.startswith(COM_JANELAS):
+            js = janelas(im)
+        if js:
+            vidros[nome] = js
     h = hashlib.sha256(imagem.tobytes() + json.dumps([quadros, vidros], sort_keys=True).encode())
     atlas = {"versao": int(h.hexdigest()[:8], 16), "quadros": quadros, "janelas": vidros}
 

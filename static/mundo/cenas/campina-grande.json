@@ -1,0 +1,173 @@
+{
+ "versao": 1,
+ "id": "campina-grande",
+ "W": 576,
+ "H": 400,
+ "texto": {
+  "cena": "Campina Grande em pixel art, com o Parque do Povo e suas bandeirinhas de São João, o Açude Velho junto às quadras e os sobrados coloridos do centro",
+  "vida": "Dois pedestres na calçada dos sobrados e um carro na rua abaixo do Parque do Povo",
+  "portaria": "na porta do sobrado verde, na quadra à esquerda do parque"
+ },
+ "portaria": {
+  "x": 258,
+  "y": 212,
+  "r": [
+   250,
+   188,
+   266,
+   212
+  ],
+  "placa": [
+   258,
+   192
+  ],
+  "farol": [
+   258,
+   202
+  ]
+ },
+ "praca": {
+  "x": 374,
+  "y": 241,
+  "r": [
+   312,
+   209,
+   433,
+   258
+  ],
+  "fonte": [
+   30,
+   32
+  ]
+ },
+ "pontos": [
+  {
+   "x": 372,
+   "y": 284,
+   "r": [
+    310,
+    172,
+    435,
+    284
+   ],
+   "nome": "Parque do Povo · Campina Grande"
+  }
+ ],
+ "calcadas": {
+  "nos": [
+   [
+    214,
+    212
+   ],
+   [
+    236,
+    212
+   ],
+   [
+    258,
+    212
+   ],
+   [
+    280,
+    212
+   ]
+  ],
+  "arestas": null,
+  "travessias": [],
+  "pontes": []
+ },
+ "carros": [
+  {
+   "s": 0,
+   "v": 14,
+   "peca": "carro-3",
+   "tamanho": [
+    8,
+    4
+   ]
+  }
+ ],
+ "pedestres": [
+  {
+   "de": 0,
+   "para": 1,
+   "s": 6,
+   "v": 14
+  },
+  {
+   "de": 2,
+   "para": 3,
+   "s": 6,
+   "v": 15
+  }
+ ],
+ "luzes": [],
+ "superficies": {
+  "calcada": [
+   "7b5a52",
+   "82645c",
+   "624346",
+   "56373f",
+   "8f7061",
+   "6f4d48",
+   "c3a47b",
+   "6a4a4a",
+   "26172c",
+   "a4795c",
+   "d1b182",
+   "a68c72"
+  ],
+  "faixa": [],
+  "ponte": [],
+  "asfalto": [
+   "493146",
+   "4e3746",
+   "bcad9a",
+   "482e46"
+  ]
+ },
+ "pista": [
+  [
+   365,
+   303
+  ],
+  [
+   365,
+   368
+  ],
+  [
+   367,
+   370.5
+  ],
+  [
+   370.0,
+   371.5
+  ],
+  [
+   373,
+   370.5
+  ],
+  [
+   375,
+   368
+  ],
+  [
+   375,
+   303
+  ],
+  [
+   373,
+   300.5
+  ],
+  [
+   370.0,
+   299.5
+  ],
+  [
+   367,
+   300.5
+  ]
+ ],
+ "oclusoes": [],
+ "cordoes": []
+}

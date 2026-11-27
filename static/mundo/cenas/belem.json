@@ -1,0 +1,190 @@
+{
+ "versao": 1,
+ "id": "belem",
+ "W": 576,
+ "H": 400,
+ "texto": {
+  "cena": "Belém em pixel art, com as torres azuis do Mercado de Ferro do Ver-o-Peso, o casario e os barcos na Baía do Guajará",
+  "vida": "Dois pedestres nas calçadas da portaria e um carro na rua das torres",
+  "portaria": "no casarão de arcos do quarteirão central"
+ },
+ "portaria": {
+  "x": 268,
+  "y": 343,
+  "r": [
+   258,
+   318,
+   278,
+   343
+  ],
+  "placa": [
+   268,
+   322
+  ],
+  "farol": [
+   268,
+   332
+  ]
+ },
+ "praca": {
+  "x": 72,
+  "y": 235,
+  "r": [
+   61,
+   211,
+   171,
+   246
+  ],
+  "fonte": [
+   22,
+   15
+  ]
+ },
+ "pontos": [
+  {
+   "x": 420,
+   "y": 335,
+   "r": [
+    395,
+    70,
+    445,
+    335
+   ],
+   "nome": "Mercado de Ferro · Ver-o-Peso"
+  },
+  {
+   "x": 30,
+   "y": 210,
+   "r": [
+    0,
+    0,
+    62,
+    215
+   ],
+   "nome": "Baía do Guajará"
+  }
+ ],
+ "calcadas": {
+  "nos": [
+   [
+    342,
+    256
+   ],
+   [
+    342,
+    300
+   ],
+   [
+    342,
+    343
+   ],
+   [
+    305,
+    343
+   ],
+   [
+    268,
+    343
+   ],
+   [
+    232,
+    343
+   ],
+   [
+    204,
+    343
+   ]
+  ],
+  "arestas": null,
+  "travessias": [],
+  "pontes": []
+ },
+ "pista": [
+  [
+   356,
+   311.5
+  ],
+  [
+   356,
+   380.5
+  ],
+  [
+   367.5,
+   392
+  ],
+  [
+   379,
+   380.5
+  ],
+  [
+   379,
+   311.5
+  ],
+  [
+   367.5,
+   300
+  ]
+ ],
+ "carros": [
+  {
+   "s": 0,
+   "v": 16,
+   "peca": "carro-2",
+   "tamanho": [
+    8,
+    4
+   ]
+  }
+ ],
+ "pedestres": [
+  {
+   "de": 0,
+   "para": 1,
+   "s": 10,
+   "v": 15
+  },
+  {
+   "de": 4,
+   "para": 5,
+   "s": 20,
+   "v": 16
+  }
+ ],
+ "oclusoes": [],
+ "cordoes": [
+  [
+   63,
+   239,
+   168,
+   239
+  ]
+ ],
+ "luzes": [],
+ "superficies": {
+  "calcada": [
+   "846a5f",
+   "5e4447",
+   "694b47",
+   "c5a284",
+   "765b55",
+   "ceac8a",
+   "dac8a0",
+   "936e64",
+   "b2967b",
+   "bfae8b",
+   "d5ba91"
+  ],
+  "faixa": [
+   "75565f",
+   "967c72",
+   "4d3645"
+  ],
+  "ponte": [],
+  "asfalto": [
+   "4a3444",
+   "573d43",
+   "322132",
+   "291c2f"
+  ]
+ }
+}

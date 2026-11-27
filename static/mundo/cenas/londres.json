@@ -1,0 +1,32 @@
+{
+  "versao": 1,
+  "id": "londres",
+  "W": 576,
+  "H": 400,
+  "texto": {
+    "cena": "Londres em pixel art, com o Palácio de Westminster, o Big Ben, o Tâmisa e as praças-jardim georgianas de tijolo",
+    "vida": "Dois pedestres na calçada em frente ao palácio e um carro na avenida do Big Ben",
+    "portaria": "na porta em arco do Palácio de Westminster, de frente para a calçada"
+  },
+  "portaria": {"x": 265, "y": 336, "r": [255, 311, 275, 336], "placa": [265, 315], "farol": [265, 325]},
+  "praca": {"x": 156, "y": 330, "r": [119, 252, 193, 340], "fonte": [4, 4]},
+  "pontos": [
+    {"x": 368, "y": 228, "r": [350, 55, 386, 232], "nome": "Big Ben"},
+    {"x": 265, "y": 340, "r": [203, 150, 350, 340], "nome": "Palácio de Westminster"},
+    {"x": 400, "y": 120, "r": [392, 0, 484, 232], "nome": "Rio Tâmisa"},
+    {"x": 156, "y": 340, "r": [119, 248, 194, 344], "nome": "Praça-jardim"}
+  ],
+  "calcadas": {"nos": [[265, 336], [265, 345], [225, 345], [210, 345], [300, 345], [320, 345]], "arestas": [[0, 1], [1, 2], [2, 3], [1, 4], [4, 5]], "travessias": [], "pontes": []},
+  "pista": [[14, 244], [116, 244], [118.5, 241.5], [116, 239], [14, 239], [11.5, 241.5]],
+  "carros": [{"s": 0, "v": 17, "peca": "carro-1", "tamanho": [8, 4]}],
+  "pedestres": [{"de": 1, "para": 2, "s": 10, "v": 15}, {"de": 1, "para": 4, "s": 20, "v": 16}],
+  "oclusoes": [],
+  "cordoes": [[121, 330, 191, 330]],
+  "luzes": [],
+  "superficies": {
+    "calcada": ["cebb99", "d5c7a8", "a68872", "bea382"],
+    "faixa": ["e6e4b5"],
+    "ponte": [],
+    "asfalto": ["4a4556", "484254", "2e273b"]
+  }
+}

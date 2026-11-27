@@ -39,8 +39,9 @@ DESENHADOS = {"onibus-cima-1": [44, 17], "onibus-cima-2": [44, 17], "bici-1": [1
 OPCIONAIS = {"festa-arvore-natal", "festa-fogueira", "festa-barraca-junina", "festa-abobora", "festa-ovo-pascoa",
              "festa-carro-alegorico", "festa-palco-anonovo"}
 # a arte de cidade (Recife, Manaus e a serra de BH): opcional; a serra entra no atlas reduzida a 96x36 (o original fica 128x48)
-ARTES_CIDADE = {"cidade-recife", "cidade-manaus", "cidade-bh-serra-curral"}
-TAM_CIDADE = {"cidade-recife": (78, 55), "cidade-manaus": (90, 58), "cidade-bh-serra-curral": (96, 36)}
+ARTES_CIDADE = {"cidade-recife", "cidade-manaus", "cidade-bh-serra-curral", "recife-frente", "recife-pedra"}
+TAM_CIDADE = {"cidade-recife": (78, 55), "cidade-manaus": (90, 58), "cidade-bh-serra-curral": (96, 36),
+              "recife-frente": (121, 62), "recife-pedra": (40, 10)}
 METADE = ({"carro-1", "carro-2", "carro-3", "carro-4", "carro-5", "banca-1", "ponto-onibus-1", "carrinho-1", "banco-poste-1",
            "rua-1", "rua-2", "rua-3", "rua-4", "canteiro-1", "canteiro-2", "praia-1", "praia-2"} | OPCIONAIS)
 # o porte de cada cidade (pela população da capital) e as capitais de praia (Belém e Macapá ficam no rio)
@@ -349,6 +350,27 @@ class Montagem(unittest.TestCase):
                 x, y, jw, jh = lista[i:i + 4]
                 self.assertTrue(x >= 0 and y >= 0 and x + jw <= w and y + jh <= h * 0.88 and 0 < jw <= 10 and 0 < jh <= 12,
                                 (nome, lista[i:i + 4]))
+
+    def test_janelas_da_frente_do_recife(self):
+        from PIL import Image
+        with open(os.path.join(self.pastas[0], "atlas.json"), encoding="utf-8") as f:
+            atlas = json.load(f)
+        u, v, _, _ = atlas["quadros"]["recife-frente"]
+        lista = atlas["janelas"]["recife-frente"]
+        janelas = [lista[i:i + 4] for i in range(0, len(lista), 4)]
+        # A altura da fachada varia por imóvel. Só os dois vãos dos frontões podem acender acima dela.
+        fachadas = [(0, 25, 36), (25, 48, 35), (48, 72, 31), (72, 96, 30), (96, 121, 38)]
+        frontoes = [(58, 62, 24), (82, 86, 22)]
+        with Image.open(os.path.join(self.pastas[0], "atlas.png")) as imagem:
+            for x, y, w, h in janelas:
+                self.assertTrue(any(a <= x and x + w <= b and y >= topo for a, b, topo in fachadas + frontoes),
+                                [x, y, w, h])
+                alfa = imagem.crop((u + x, v + y, u + x + w, v + y + h)).getchannel("A")
+                self.assertEqual(alfa.getextrema(), (255, 255), [x, y, w, h])
+        for a, b, _ in fachadas:
+            self.assertTrue(any(a <= x < b for x, _, _, _ in janelas), (a, b))
+        self.assertTrue(any(58 <= x <= 60 and 24 <= y <= 28 for x, y, _, _ in janelas))
+        self.assertTrue(any(82 <= x <= 84 and 22 <= y <= 26 for x, y, _, _ in janelas))
 
     def test_predio_11_sem_sombra_solta(self):
         """A sombra cinza solta do predios-11 (#404040, ligada ao fundo) sai no atlas."""

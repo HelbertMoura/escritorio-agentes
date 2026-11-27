@@ -15,6 +15,7 @@ const COMPILADOS = new Map();
 function elemento() {
   const el = {
     ouvintes: {}, style: {}, dataset: {}, hidden: false, textContent: "", filhos: [], disabled: false,
+    offsetWidth: 0, offsetHeight: 0,   // o tamanho em px CSS: o teste da dica ajusta
     addEventListener(t, f) { (el.ouvintes[t] ||= []).push(f); },
     disparar(t, ev = {}) { for (const f of el.ouvintes[t] || []) f({ preventDefault() {}, stopPropagation() {}, target: el, ...ev }); },
     setAttribute(k, v) { el[k] = String(v); }, removeAttribute(k) { delete el[k]; },
@@ -29,10 +30,11 @@ function elemento() {
 // Opções: clima (a resposta da rota), climaFalha (a rota cai), climaPendente (a resposta nunca chega), reduzido, tela
 // [w, h, dpr], atlas, som, busca (location.search, como "?data=2026-12-25"), escuro (a noite do Ceu, de 0 a 1), opaco
 // (getImageData devolve pixels opacos: o contorno dos telhados), passo (ms de relógio por quadro; o dt vai até 0,25 s) e
-// globoFalha (Globo.criar lança erro) e fontePendente (document.fonts.load nunca termina). O globo é sempre o de verdade: o
-// campo de nuvens só é montado quando ele desenha
+// globoFalha (Globo.criar lança erro) e fontePendente (document.fonts.load nunca termina). Das cenas de cidade:
+// imagemRecife(opcoes, id) responde o PNG de qualquer cena (sem ela, 404), jsonCena(id, opcoes) troca o JSON do disco e
+// cenas troca o manifesto. O globo é sempre o de verdade: o campo de nuvens só é montado quando ele desenha
 async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false, climaPendente = false, tela = [640, 400, 1],
-  atlas = ATLAS, som = null, busca = "", escuro = 0, opaco = false, passo = 16, globoFalha = false, fontePendente = false } = {}) {
+  atlas = ATLAS, som = null, busca = "", escuro = 0, opaco = false, passo = 16, globoFalha = false, fontePendente = false, imagemRecife, jsonCena, cenas } = {}) {
   const quadros = [], requisicoes = [], intervalos = [], tamanho = [...tela];
   // putImageData conta as passadas pixel a pixel do globo; getImageData dá pixels zerados (ou opacos) quando o teste faz uma
   // imagem carregar. drawImage guarda o recorte de origem [sx, sy, sw, sh] quando o teste liga contexto.gravar (um array);
@@ -87,6 +89,7 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
       carregar() { this.width = 512; this.height = 2048; for (const f of this.ouvintes.load || []) f(); }   // o tamanho do atlas
       falhar() { for (const f of this.ouvintes.error || []) f(); }
     },
+    Request, URL: { createObjectURL: blob => blob, revokeObjectURL() {} },
     Som: som,
     Ceu: { agora: () => ({ h: escuro > 0.5 ? 22 : 12, cima: "#3d95ee", baixo: "#a9d8ff", escuro, hora: escuro > 0.5 ? "22:00" : "12:00" }) },
     // desenhar conta as chamadas: as partículas de chuva e neve e o clarão do raio só saem do Clima.desenhar
@@ -94,6 +97,13 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
              desenhar() { contexto.desenhos = (contexto.desenhos || 0) + 1; }, balanco: () => 0 },
     fetch: async (url, opcoes) => {
       requisicoes.push([url, opcoes]);
+      const [, cena, tipo] = url.match(/^\/mundo\/cenas\/([a-z0-9-]+)\.(png|json)\?/) || [];
+      if (tipo === "png") return imagemRecife ? imagemRecife(opcoes, cena) : { ok: false };
+      if (tipo === "json") {
+        if (jsonCena) return jsonCena(cena, opcoes);
+        const arquivo = `static/mundo/cenas/${cena}.json`;
+        return fs.existsSync(arquivo) ? { ok: true, json: async () => JSON.parse(fs.readFileSync(arquivo, "utf8")) } : { ok: false };
+      }
       if (url.startsWith("/mundo/mundo.json")) return { ok: true, json: async () => JSON.parse(JSON.stringify(MUNDO)) };
       if (url.startsWith("/mundo/atlas.json")) return { ok: true, json: async () => JSON.parse(JSON.stringify(atlas)) };
       if (url.startsWith("/mundo/perto/ufs.json")) return { ok: true, json: async () => JSON.parse(JSON.stringify(UFS_PERTO)) };
@@ -108,12 +118,13 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
   contexto.window.Som = som;
   const scripts = ["static/festas.js", "static/avatar.js", "static/mundo_bairro.js", "static/mundo_mapa_arte.js", "static/mundo_mapa_perto.js",
     "static/mundo_mapa.js",
-    "static/mundo_globo.js", "static/mundo_cidade_planta.js", "static/mundo_festa.js",
+    "static/mundo_globo.js", "static/mundo_cidade_cenas.js", "static/mundo_cidade_planta.js", "static/mundo_festa.js",
     "static/mundo_cidade_chao.js", "static/mundo_cidade_letreiro.js", "static/mundo_cidade.js", "static/mundo.js"];
   for (const f of scripts) {   // cada script compilado uma vez para o arquivo todo (as páginas abertas o reaproveitam)
     if (!COMPILADOS.has(f)) COMPILADOS.set(f, new vm.Script(fs.readFileSync(f, "utf8"), { filename: f }));
     COMPILADOS.get(f).runInContext(contexto);
   }
+  if (cenas) janela.CidadeCenas = cenas;
   if (globoFalha) vm.runInContext("Globo.criar = () => { throw new Error('globo quebrado'); };", contexto);
   for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r));   // mundo.json e clima chegam
   let relogio = 0;
@@ -131,6 +142,30 @@ async function abrir(hash, { clima = CLIMA, reduzido = false, climaFalha = false
 }
 const espera = async () => { for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r)); };
 const carregar = async m => { await espera(); for (const img of m.contexto.imagens || []) img.carregar(); m.rodar(2); };
+// o atlas chega sem mexer nas outras imagens (a da cena)
+async function chegarAtlas(m) {
+  await espera();
+  for (const img of m.contexto.imagens || []) if (String(img.src).startsWith("/mundo/atlas.png")) img.carregar();
+  m.rodar(2);
+}
+// a festa do dia na cena de uma cidade (com o atlas): algo desenhado, e a fonte e cada peça dentro da praça.
+// Devolve se alguma arte do atlas apareceu e se alguma forma por código apareceu
+function festaNaPraca(c, onde) {
+  const e = c.enfeites, [x0, y0, x1, y1] = c.planta.praca.r;
+  const dentro = r => r[0] >= x0 && r[1] >= y0 && r[2] <= x1 && r[3] <= y1;
+  assert.ok(e.chave, `${onde}: a festa do dia`);
+  assert.ok(e.formas.length + e.pecas.length + e.cordoes > 0, `${onde}: algo desenhado`);
+  assert.ok(e.fonte && dentro(e.fonte), `${onde}: fonte ${e.fonte} na praça`);
+  for (const s of e.pecas) assert.ok(dentro(s.slice(1)), `${onde}: ${s[0]} na praça`);
+  return { pecas: e.pecas.length > 0, formas: e.formas.length > 0 };
+}
+// em todas as datas juntas: se alguma arte de festa do atlas cabe na praça (a altura acima do pé e a largura no vão ao
+// lado da fonte, com as folgas de 2 px do mundo_festa.js), ao menos uma peça; senão, ao menos uma forma por código
+function festasDaCidade(vistas, praca, onde) {
+  const [x0, y0, x1] = praca.r, meia = Math.ceil(praca.fonte[0] / 2), vao = Math.max(praca.x - meia - x0, x1 - praca.x - meia) - 4;
+  const cabe = Object.entries(ATLAS.quadros).some(([n, r]) => n.startsWith("festa-") && r[2] <= vao && r[3] <= praca.y - y0);
+  assert.ok(vistas.some(v => (cabe ? v.pecas : v.formas)), `${onde}: ${cabe ? "arte" : "forma"} em ao menos uma data`);
+}
 
 const cidade = id => MUNDO.cidades.find(c => c.id === id);
 const NOITE_TODAS = { ...CLIMA, cidades: Object.fromEntries(MUNDO.cidades.map(c => [c.id, { tipo: "limpo", vento: 0, noite: true }])) };
@@ -229,7 +264,7 @@ async function principal() {
   k.clicar(320, 200); k.rodar(12);
   assert.equal(k.M.nivel, "cidade", "Manaus não é a casa: o clique na cidade não desce ao bairro");
 
-  // nível Cidade: a planta sai da semente do id e dos dados da cidade, nas 28 cidades (sempre a mesma para o mesmo id)
+  // nível Cidade: a planta do id é determinística. As grades procedurais e as malhas autorais têm geometrias próprias.
   const Cid = k.contexto.window.MundoCidade, CP = k.contexto.window.CidadePlanta;
   const plantaDe = id => Cid.planta(id, cidade(id)), planta = id => JSON.stringify(plantaDe(id));
   assert.equal(planta("recife"), planta("recife"), "a mesma cidade, a mesma planta");
@@ -244,6 +279,7 @@ async function principal() {
     const p = plantaDe(cc.id), id = cc.id, itens = [p.centro, p.casa, ...p.pecas], de = re => itens.filter(s => re.test(s.peca));
     assert.equal(planta(id), JSON.stringify(p), `${id}: determinística`);
     assert.equal(p.porte, cc.porte, id);
+    if (p.malha) continue;   // as três malhas têm suas próprias asserções geométricas em test_mundo_malhas.js
     // as zonas: o marco no centro, o parque com a praça (fonte ou lago) e o coreto ou a feira, o esporte com o campo e a
     // quadra ou o parquinho, e as casas (casas e chalés, cada uma num lote cercado)
     assert.ok(p.zonas.centro.centro && p.zonas.parque.anel === 1 && p.zonas.esporte.anel === 1, id);
@@ -324,22 +360,16 @@ async function principal() {
       assert.ok(cruzes.every(k => Math.abs(c.s - k) >= CP.E / 2 + 16), `${id}: carro começa no cruzamento ${c.s}`);
     }
   }
-  // a arte própria de Recife, Manaus e Belo Horizonte ocupa um lote já sorteado, com a caixa do desenho dentro da
-  // vaga e da cidade; as outras cidades não mudam
+  // A arte própria ocupa os lotes históricos das três malhas, com um desenho de reserva do mesmo atlas.
   const TAM_CIDADE = { "cidade-recife": [78, 55], "cidade-manaus": [90, 58], "cidade-bh-serra-curral": [96, 36] };
   for (const [cid, arte] of [["recife", "cidade-recife"], ["manaus", "cidade-manaus"], ["belo-horizonte", "cidade-bh-serra-curral"]]) {
     const pp = plantaDe(cid), s = pp.pecas.find(x => x.peca === arte), [aw, ah] = TAM_CIDADE[arte];
-    assert.ok(s && /^(predios-|casa-|chale-)/.test(s.base), `${cid}: ${arte} num lote de construção`);
+    assert.ok(s && ATLAS.quadros[s.base], `${cid}: ${arte} tem imagem de reserva`);
     assert.ok(pp.notaveis.includes(s), `${cid}: ${arte} nomeável`);
     const box = [s.x - aw / 2, s.y - ah, s.x + aw / 2, s.y];
     assert.ok(box[0] >= 0 && box[2] <= pp.W && box[1] >= 0 && box[3] <= pp.H + 20, `${cid}: caixa na cidade`);
     assert.ok(s.r[0] <= box[0] && box[2] <= s.r[2] && s.r[1] <= box[1] && box[3] <= s.r[3], `${cid}: caixa dentro do lote`);
-    if (cid === "recife") {
-      assert.equal(s.base, "predios-10", "o casario ocupa o lote do Hospital ilustrativo (não há casa segura na orla)");
-      assert.ok(s.r[2] <= pp.orla.x, "recife: casario antes da orla");
-    }
-    if (cid === "manaus") assert.equal(s.base, "predios-14", "o Mercado Municipal vira o Adolpho Lisboa");
-    if (cid === "belo-horizonte") assert.equal(s.base, "predios-8", "a serra usa o lote largo do predios-8");
+    assert.ok(!pp.orla && pp.malha.agua.length, `${cid}: paisagem e vias vêm da malha`);
   }
   for (const cid of ["sao-paulo", "curitiba", "mateus-leme"]) {
     assert.ok(!plantaDe(cid).pecas.some(x => x.base), `${cid}: sem arte de cidade`);
@@ -878,6 +908,61 @@ async function principal() {
   await carregar(vf);
   assert.equal(vf.elementos["mundo-vista"].textContent, "Paris · França");
   assert.equal(vf.elementos["mundo-voltar"]["aria-label"], "Voltar para o globo", "cidade estrangeira sobe ao globo");
+  await dicaNoNucleo();
 }
-module.exports = { abrir, espera, carregar, MUNDO, ATLAS, CLIMA, UFS_PERTO };
+
+// a dica do alvo fica a pelo menos 8 px CSS das bordas do palco, em qualquer nível; longe delas, o transform não muda
+async function dicaNoNucleo() {
+  const M_ = 8, LARG = 200, ALT = 60;
+  const lida = m => m.elementos["mundo-dica"].style.transform.match(/^translate\((-?[\d.]+)px, (-?[\d.]+)px\)$/).slice(1).map(Number);
+  for (const dpr of [1, 2]) {
+    const W = 360, H = 600, m = await abrir("#brasil", { tela: [W, H, dpr], reduzido: true }), n = m.M.niveis.brasil;
+    // um alvo só, de teste: o ponto muda e a assinatura nova faz o mundo reposicionar com a câmera parada
+    const alvo = { id: "teste", x: 0, y: 0, alto: 10, titulo: "Alvo", texto: "texto", rotulo: "Alvo" };
+    let versao = 0;
+    n.alvos = () => [alvo]; n.assinatura = () => versao;
+    m.M.ir("globo"); m.M.ir("brasil"); m.rodar(2);
+    const dica = m.elementos["mundo-dica"];
+    dica.offsetWidth = LARG; dica.offsetHeight = ALT;
+    m.elementos["mundo-alvos"].filhos[0].disparar("focus"); m.rodar(60);
+    const por = (sx, sy) => {   // o alvo no ponto (sx, sy) do palco, em px CSS
+      [alvo.x, alvo.y] = n.camera.mundo(sx * dpr, sy * dpr); versao++; m.rodar();
+      return lida(m);
+    };
+    const antiga = () => { const [x, y] = n.camera.tela(alvo.x, alvo.y); return `translate(${x / dpr}px, ${y / dpr - alvo.alto}px)`; };
+    por(180.25, 300.75);
+    assert.equal(dica.style.transform, antiga(), `(a) no centro, dpr ${dpr}: o transform de sempre`);
+    assert.equal(por(5, 300)[0], M_ + LARG / 2, `(b) borda esquerda, dpr ${dpr}`);
+    assert.equal(por(358, 300)[0], W - M_ - LARG / 2, `(c) borda direita, dpr ${dpr}`);
+    assert.equal(por(180, 20)[1], M_ + ALT, `(d) topo, dpr ${dpr}`);
+    assert.equal(por(180, 640)[1], H - M_, `base, dpr ${dpr}`);
+    assert.deepEqual(por(2, 4), [M_ + LARG / 2, M_ + ALT], `(e) em px CSS no dpr ${dpr}`);
+    dica.offsetWidth = 359; alvo.x++; versao++;
+    assert.equal(por(5, 300)[0], W / 2, `(f) mais larga que a tela: centrada, dpr ${dpr}`);
+    dica.offsetWidth = 101;
+    assert.equal(por(5, 300)[0], Math.ceil(M_ + 101 / 2), "preso na borda, em px inteiro e para dentro");
+    assert.equal(por(358, 300)[0], Math.floor(W - M_ - 101 / 2));
+  }
+  // (g) Manaus a 360 px, no zoom máximo e com o foco na portaria
+  const cena = JSON.parse(fs.readFileSync("static/mundo/cenas/manaus.json", "utf8"));
+  const g = await abrir("#cidade=manaus", { tela: [360, 600, 1], clima: { ...CLIMA, casa: "manaus" }, reduzido: true,
+    imagemRecife: () => ({ ok: true, blob: async () => "blob:manaus" }) });
+  await espera();
+  const img = g.contexto.imagens.find(i => i.src === "blob:manaus");
+  img.naturalWidth = cena.W; img.naturalHeight = cena.H; img.carregar();
+  await espera(); g.rodar(2);
+  const n = g.M.niveis.cidade, cam = n.camera, porta = n.alvos()[0], dica = g.elementos["mundo-dica"];
+  assert.equal(porta.id, "porta"); assert.ok(n.planta.cena);
+  for (let i = 0; i < 8; i++) g.elementos["mundo-mais"].disparar("click");
+  g.rodar(60);
+  // a portaria a 50 px da borda esquerda: dentro da margem de 40 px do foco, a câmera não sai do lugar
+  cam.voar(porta.x + (180 - 50) / cam.P, porta.y); g.rodar(60);
+  assert.ok(Math.abs(cam.tela(porta.x, porta.y)[0] - 50) <= cam.P, "a portaria perto da borda: " + cam.tela(porta.x, porta.y)[0]);
+  dica.offsetWidth = 300; dica.offsetHeight = ALT;
+  g.elementos["mundo-alvos"].filhos[0].disparar("focus"); g.rodar(60);
+  const [x, y] = lida(g);
+  assert.ok(x - 150 >= M_ && x + 150 <= 360 - M_, `(g) a dica cabe na largura: ${x}`);
+  assert.ok(y - ALT >= M_ && y <= 600 - M_, `(g) a dica cabe na altura: ${y}`);
+}
+module.exports = { abrir, espera, carregar, chegarAtlas, festaNaPraca, festasDaCidade, MUNDO, ATLAS, CLIMA, UFS_PERTO };
 if (require.main === module) principal().catch(e => { console.error(e); process.exitCode = 1; });
