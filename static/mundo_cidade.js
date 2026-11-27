@@ -51,6 +51,7 @@ const MundoCidade = (() => {
     const info = id => cidades.get(id) || (mapa && mapa.porId.get(id)) || {};   // a média vem do mapa (porte, praia e UF)
     let id = null, p = CidadePlanta.planta(""), carros = [], pedestres = [], pecas = [], postes = [], rua = Math.random;
     let atlas = null, quadros = {}, janelas = {}, pedido = false, escolhido = null, notaveis = [], rascunho = null, placaCasa = null;
+    let abriu = null;   // onde a câmera abriu a cidade, para a cena que chega depois abrir igual (ativarCena)
     const cenas = new Map(), pedidas = new Set();   // id → { dados, img, mascaras }, da usada há mais tempo à mais recente
     let visita = null, atual = null;   // a cidade na tela (null fora do nível) e a cena em uso
     let placas = [];   // as plaquinhas de cada cruzamento (com os letreiros guardados), entram na ordem de profundidade
@@ -148,14 +149,25 @@ const MundoCidade = (() => {
       }
     }
 
+    // Em dia de festa, no celular em retrato, a cena integral abre na praça (com o palco, se cabem juntos): lá a vista é
+    // um recorte, e o marco pode ficar longe da festa. Nos dias comuns e em paisagem, segue abrindo no marco.
+    function abrirNaFesta() {
+      if (!p.cena || !festa || !festa(id) || camera.H <= camera.W) return false;
+      [camera.x, camera.y] = MundoFesta.enquadrar(p, camera.W / camera.base, camera.H / camera.base);
+      camera.limitar();
+      return true;
+    }
     function ativarCena(nova) {
       atual = cenas.get(visita);
       const rx = camera.x / p.W, ry = camera.y / p.H;
       const focouPorta = cidade.destaque === "porta";
+      // a câmera ainda onde a cidade abriu (ninguém arrastou nem deu zoom): a cena que chegou abre como se já estivesse aqui
+      const naAbertura = !!abriu && camera.z === 1 && camera.alvoZ === 1 && Math.hypot(camera.x - abriu[0], camera.y - abriu[1]) < 0.5;
       montar(nova);
       camera.x = focouPorta ? p.casa.x : rx * p.W;
       camera.y = focouPorta ? p.casa.y : ry * p.H;
       camera.limitar(p.malha.caixa);
+      if (!focouPorta && naAbertura) abrirNaFesta();
       camera.zoomPara(camera.alvoZ);   // a caixa mudou: o zoom volta a parar em escala inteira
       medirVista(); mover(0);
       if (avisar) avisar(true);
@@ -724,6 +736,7 @@ const MundoCidade = (() => {
           camera.x = p.casa.x; camera.y = p.casa.y - (p.cena ? 12 : 28); camera.z = 4; camera.zoomPara(1);
         } else { camera.x = p.centro ? p.centro.x : p.W / 2; camera.y = p.centro ? p.centro.y : p.H / 2; camera.z = camera.alvoZ = 1; }   // o recorte abre no marco
         camera.limitar(p.malha ? p.malha.caixa : [0, 0, W, H]);
+        abriu = camera.z === 1 ? (abrirNaFesta(), [camera.x, camera.y]) : null;
         medirVista(); mover(0); carregar(); clima(); letreiros.pedir();
         carregarCena(id);
       },

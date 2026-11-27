@@ -13,6 +13,7 @@ As mudanças que importam neste projeto ficam aqui, da mais nova para a mais ant
 - **Visita:** o mapa sem tarja bege (o canvas toma o formato da área, em escala inteira), placa de pixel com cadeado em "Com convite" e estado vazio desenhado na Conversa, com a recepcionista acenando. A placa cresce com a largura do mapa (12 px ou mais na tela) e, no celular, o mapa enquadra a recepção com zoom.
 
 ### Corrigido
+- **Festa no celular:** em dia de festa, no celular em retrato, a cidade abre na praça (e no palco, quando cabem juntos) em vez do marco, e os fogos estouram no céu da cena só quando ele está na tela; senão, no alto da vista. Nos dias comuns e no computador, nada muda.
 - **Rio de Janeiro no Carnaval:** a praça das festas sai da rua e vai para o calçadão de pedra aos pés do Cristo, entre os dois postes; o carro alegórico do Carnaval e as peças das outras festas voltam (o Natal segue com as formas pequenas).
 - **Instalação nova completa:** o `instalar.sh` passa a copiar `static/mundo/` (o mapa, os azulejos de perto e as cenas das cidades).
 - **Cache dos arquivos da página:** os arquivos estáticos saem com `ETag` e `Last-Modified`, e a revalidação responde 304; ao voltar a uma cidade, o navegador confere a cena sem baixar o PNG de novo.

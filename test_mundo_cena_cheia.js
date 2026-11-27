@@ -38,4 +38,48 @@ assert.equal(Camera([0, 0, 320, 180], { inteira: "ceu" }).tamanho(1100, 900, 1).
 assert.equal(Camera([0, 0, 320, 180], { inteira: "ceu" }).tamanho(390, 590, 1).base, 3);
 // sem a opção, a câmera continua como antes (a 1x a caixa cabe inteira, em escala fracionária)
 assert.equal(Camera([0, 0, 320, 180]).tamanho(1100, 900, 1).base, 1100 / 320);
+
+// Festa no celular (achado 1 da auditoria do PR #49), nas 90 cenas: a cidade abre como o entrar() do mundo_cidade.js e,
+// em dia de festa em retrato, vai para a praça (e o palco, se cabem juntos) com o MundoFesta.enquadrar. Os fogos estouram
+// dentro da vista (MundoFesta.estouro) e a praça ou o palco ficam inteiros na tela (390x582: o palco do mundo.html num
+// celular de 390x844, com o painel embaixo).
+{
+  const ctxPlanta = vm.createContext({ window: {} });
+  for (const f of ["static/mundo_cidade_cenas.js", "static/mundo_cidade_planta.js", "static/mundo_festa.js"]) {
+    vm.runInContext(fs.readFileSync(f, "utf8"), ctxPlanta);
+  }
+  const { CidadePlanta: CP, CidadeCenas: CENAS, MundoFesta: MF } = ctxPlanta.window;
+  const ids = Object.keys(CENAS);
+  assert.equal(ids.length, 90, "as 90 cenas do manifesto");
+  const dentro = (r, v) => r[0] >= v[0] - 1e-6 && r[1] >= v[1] - 1e-6 && r[2] <= v[2] + 1e-6 && r[3] <= v[3] + 1e-6;
+  const abrir = (p, W, H, festa) => {   // as contas do entrar() (e do abrirNaFesta) do mundo_cidade.js
+    const c = Camera([0, 0, p.W, p.H], { inteira: "cobrir" }).tamanho(W, H, 1);
+    c.x = p.centro.x; c.y = p.centro.y; c.limitar([0, 0, p.W, p.H]);
+    if (festa && H > W) { [c.x, c.y] = MF.enquadrar(p, W / c.base, H / c.base); c.limitar(); }
+    return [...c.mundo(0, 0), ...c.mundo(W, H)];
+  };
+  for (const id of ids) {
+    const p = CP.cena(JSON.parse(fs.readFileSync(`static/mundo/cenas/${id}.json`, "utf8")));
+    const f = p.cena.festa, ceu = f && f.ceu, palco = f && f.palco;
+    const [fw, fh] = p.praca.fonte, fonte = [p.praca.x - fw / 2, p.praca.y - fh, p.praca.x + fw / 2, p.praca.y];
+    for (const [w, h] of [[390, 844], [390, 582], [390, 664], [360, 740], [430, 932]]) for (const dpr of [1, 2, 3]) {
+      const W = w * dpr, H = h * dpr, vista = abrir(p, W, H, true), nome = `${id} ${w}x${h}@${dpr}`;
+      assert.ok(dentro(fonte, vista) || (palco && dentro(palco.r, vista)), `${nome}: praça e palco fora da vista na entrada`);
+      const e = MF.estouro(ceu, vista);
+      assert.ok(e[2] > e[0] && e[3] > e[1] && dentro(e, vista), `${nome}: fogos fora da vista ${JSON.stringify(e)}`);
+    }
+    // no computador (paisagem) nada muda: abre no marco e os fogos estouram no céu inteiro da cena, como antes
+    const vista = abrir(p, 1440, 900, true), comum = abrir(p, 1440, 900, false);
+    assert.deepEqual(vista, comum, `${id}: a 1440 a abertura não muda na festa`);
+    if (ceu) assert.deepEqual(MF.estouro(ceu, vista), ceu, `${id}: a 1440 os fogos seguem no céu da cena`);
+    // dia comum no celular: segue abrindo no marco
+    const marco = Camera([0, 0, p.W, p.H], { inteira: "cobrir" }).tamanho(390, 844, 1);
+    marco.x = p.centro.x; marco.y = p.centro.y; marco.limitar();
+    assert.deepEqual(abrir(p, 390, 844, false), [...marco.mundo(0, 0), ...marco.mundo(390, 844)], `${id}: o dia comum abre no marco`);
+  }
+  // o céu que cruza a vista: só a parte na tela; a lasca na borda não conta
+  assert.deepEqual([...MF.estouro([0, 0, 100, 80], [40, 20, 200, 300])], [40, 20, 100, 80]);
+  assert.deepEqual([...MF.estouro([0, 0, 50, 80], [40, 20, 200, 300])], [70, 36, 170, 148]);
+  assert.deepEqual([...MF.estouro(null, [40, 20, 200, 300])], [70, 36, 170, 148]);
+}
 console.log("test_mundo_cena_cheia.js: ok");

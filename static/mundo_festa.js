@@ -8,7 +8,7 @@
 //   contorno do telhado, lido da arte);
 // - luzes: à noite, por cima do escuro, o brilho do pisca (piscando), da fogueira e das lanternas;
 // - aereos: os vãos e contornos que a cena integral traz no campo festa (bandeirinhas, fitas e pisca por cima da arte);
-// - ar: fogos à noite (no céu da cena, quando ela o traz), confete, serpentina, neve e morcegos.
+// - ar: fogos à noite (no céu da cena, quando ela o traz e ele está na tela), confete, serpentina, neve e morcegos.
 // A cena com palco leva para ele a peça grande da festa. A neve só cai na cena com o campo festa, e só em flocos: a neve
 // assentada pelas cores de calçada pintava também fachadas e telhados com a mesma cor (piloto de Nova York, R11).
 // Com movimento reduzido: nada de fogos, confete, serpentina nem flocos, o pisca aceso e parado e os morcegos parados.
@@ -48,6 +48,26 @@ const MundoFesta = (() => {
   const FLOCOS = 80, BRILHOS = 300;   // tetos por quadro
 
   function rgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
+
+  // onde os fogos estouram, [x0, y0, x1, y1]: no céu da cena quando ele cruza a vista (só a parte na tela, e não uma
+  // lasca na borda); senão, na faixa de cima da vista. No celular a vista é um recorte e o céu pode ficar fora dele
+  function estouro(ceu, [vx0, vy0, vx1, vy1]) {
+    if (ceu) {
+      const x0 = Math.max(ceu[0], vx0), y0 = Math.max(ceu[1], vy0), x1 = Math.min(ceu[2], vx1), y1 = Math.min(ceu[3], vy1);
+      if (x1 - x0 >= 24 && y1 - y0 >= 12) return [x0, y0, x1, y1];
+    }
+    const h = vy1 - vy0;
+    return [vx0 + 30, vy0 + 16, vx1 - 30, vy0 + 16 + h * 0.4];
+  }
+  // o centro da câmera da cena integral em dia de festa, numa vista de largura x altura do mundo: a praça e o palco
+  // juntos quando cabem; senão, a praça (a fonte, com o pisca e as peças da festa em volta)
+  function enquadrar(p, largura, altura) {
+    const [fw, fh] = p.praca.fonte, fonte = [p.praca.x - fw / 2, p.praca.y - fh, p.praca.x + fw / 2, p.praca.y];
+    const palco = p.cena && p.cena.festa && p.cena.festa.palco, r = palco && palco.r;
+    const u = r ? [Math.min(fonte[0], r[0]), Math.min(fonte[1], r[1]), Math.max(fonte[2], r[2]), Math.max(fonte[3], r[3])] : fonte;
+    const c = u[2] - u[0] <= largura && u[3] - u[1] <= altura ? u : fonte;
+    return [(c[0] + c[2]) / 2, (c[1] + c[3]) / 2];
+  }
 
   function criar({ reduzido, alto, recorte, atlas }) {
     const telas = new Map(), contornos = new Map(), cabos = new Map();   // sprites das formas, telhados e vãos
@@ -322,9 +342,9 @@ const MundoFesta = (() => {
       const [vx0, vy0, vx1, vy1] = vista, w = vx1 - vx0, h = vy1 - vy0, rnd = Math.random;
       if (tem("fogos") && escuro > 0.4 && !reduzido) {
         if ((espera -= dt) <= 0 && fogos.length < 5) {
-          const ceu = ancoras && ancoras.ceu, i = Math.floor(rnd() * 3);   // estouram no céu da cena; sem ele, na vista
-          const y = ceu ? ceu[1] + rnd() * (ceu[3] - ceu[1]) : vy0 + 16 + rnd() * h * 0.4;
-          fogos.push({ x: ceu ? ceu[0] + rnd() * (ceu[2] - ceu[0]) : vx0 + 30 + rnd() * (w - 60), y, y0: y + 60 + rnd() * 30, k: 0, cor: cor(i), cor2: cor(i + 1), rgb: rgbs[i % rgbs.length],
+          const [ex0, ey0, ex1, ey1] = estouro(ancoras && ancoras.ceu, vista), i = Math.floor(rnd() * 3);
+          const y = ey0 + rnd() * (ey1 - ey0);
+          fogos.push({ x: ex0 + rnd() * (ex1 - ex0), y, y0: y + 60 + rnd() * 30, k: 0, cor: cor(i), cor2: cor(i + 1), rgb: rgbs[i % rgbs.length],
                        fase: rnd() * 6, alcance: 20 + rnd() * 12 });
           espera = 0.5 + rnd() * 0.9;
         }
@@ -411,6 +431,6 @@ const MundoFesta = (() => {
     return { comecar, terminar, chao, desenhar, aereos, poste, telhado, noite, ar, estado,
              get itens() { return itens; }, get festa() { return festa; }, get desvio() { return desvio; } };
   }
-  return { criar };
+  return { criar, estouro, enquadrar };
 })();
 window.MundoFesta = MundoFesta;

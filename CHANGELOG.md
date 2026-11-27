@@ -13,6 +13,7 @@ All notable changes to this project are listed here, newest first. The format fo
 - **Visit:** the map without the beige bands (the canvas takes the area's shape, at an integer scale), a pixel sign with a padlock on "By invitation" and a drawn empty state in the Conversation panel, with the receptionist waving. The sign grows with the map's width (12 px or more on screen) and, on phones, the map frames the front desk with zoom.
 
 ### Fixed
+- **Holidays on phones:** on a holiday, in portrait on a phone, the city opens on the square (and the stage, when both fit) instead of the landmark, and fireworks burst in the scene's sky only when it is on screen; otherwise, at the top of the view. Regular days and desktop are unchanged.
 - **Rio de Janeiro at Carnival:** the holiday square moves off the street onto the stone promenade at the foot of Christ the Redeemer, between the two lamp posts; the Carnival float and the other holiday pieces are back (Christmas still uses the small shapes).
 - **Complete fresh install:** `instalar.sh` now copies `static/mundo/` (the map, the close-up tiles and the city scenes).
 - **Page file caching:** static files are served with `ETag` and `Last-Modified`, and revalidation answers 304; when you return to a city, the browser checks the scene without downloading the PNG again.
