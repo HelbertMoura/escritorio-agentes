@@ -7,6 +7,11 @@ As mudanças que importam neste projeto ficam aqui, da mais nova para a mais ant
 ## Não lançado
 
 ### Corrigido
+- **Rio de Janeiro no Carnaval:** a praça das festas sai da rua e vai para o calçadão de pedra aos pés do Cristo, entre os dois postes; o carro alegórico do Carnaval e as peças das outras festas voltam (o Natal segue com as formas pequenas).
+- **Instalação nova completa:** o `instalar.sh` passa a copiar `static/mundo/` (o mapa, os azulejos de perto e as cenas das cidades).
+- **Cache dos arquivos da página:** os arquivos estáticos saem com `ETag` e `Last-Modified`, e a revalidação responde 304; ao voltar a uma cidade, o navegador confere a cena sem baixar o PNG de novo.
+- **Foco do teclado no mapa:** passar com Tab por um ponto fora da vista não rola mais o palco; a câmera vai até o ponto.
+- **Testes estáveis:** a montagem do mapa compara o conteúdo dos PNG (sem depender da versão do zlib), e a prévia sai limpa no SIGTERM, sem o abort que travava o teste do aviso no celular.
 - **Dica do mapa na tela pequena:** a dica de um ponto perto da borda (no mapa, na cidade ou na cena) agora fica dentro da tela, a 8 px da borda.
 - **Conferência das cenas:** a pista aceita faixa de pedestre (com pelo menos 70% do eixo no asfalto ou na ponte), cada cor entra em uma só classe de superfície, uma oclusão listrada não esconde mais uma calçada traçada fora da arte, o JSON editado sem `indice` reprova e a fonte da festa precisa caber na praça (ajuste em Belo Horizonte e Mateus Leme). O `sugerir` passa a limpar ruído e respeitar o teto de nós, e o `importar` registra retoques na proveniência.
 

@@ -7,6 +7,11 @@ All notable changes to this project are listed here, newest first. The format fo
 ## Unreleased
 
 ### Fixed
+- **Rio de Janeiro at Carnival:** the holiday square moves off the street onto the stone promenade at the foot of Christ the Redeemer, between the two lamp posts; the Carnival float and the other holiday pieces are back (Christmas still uses the small shapes).
+- **Complete fresh install:** `instalar.sh` now copies `static/mundo/` (the map, the close-up tiles and the city scenes).
+- **Page file caching:** static files are served with `ETag` and `Last-Modified`, and revalidation answers 304; when you return to a city, the browser checks the scene without downloading the PNG again.
+- **Keyboard focus on the map:** tabbing to a point outside the view no longer scrolls the stage; the camera flies to the point.
+- **Stable tests:** the map build compares PNG content (independent of the zlib version), and the preview exits cleanly on SIGTERM, without the abort that hung the phone notification test.
 - **Map tooltip on small screens:** the tooltip of a point near the edge (map, city or scene) now stays on screen, 8 px from the edge.
 - **Scene checks:** the car loop accepts crosswalk pixels (with at least 70% of its centre line on asphalt or bridge), each colour belongs to a single surface class, a striped occlusion no longer hides a sidewalk traced off the art, a JSON edited without `indice` fails, and the festival fountain must fit inside the square (adjusted in Belo Horizonte and Mateus Leme). `sugerir` now removes noise and respects the node cap, and `importar` records retouches in the provenance file.
 
