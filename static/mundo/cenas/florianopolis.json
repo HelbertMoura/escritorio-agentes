@@ -1,0 +1,262 @@
+{
+ "versao": 1,
+ "id": "florianopolis",
+ "W": 576,
+ "H": 400,
+ "texto": {
+  "cena": "Florianópolis em pixel art, com a Ponte Hercílio Luz sobre o canal, o morro verde e o casario da Ilha",
+  "vida": "Dois pedestres nas calçadas da portaria, com travessia na rua da ponte, e um carro na rua ao lado",
+  "portaria": "no sobrado de janelas claras, a uma quadra da ponte"
+ },
+ "portaria": {
+  "x": 205,
+  "y": 343,
+  "r": [
+   195,
+   318,
+   215,
+   343
+  ],
+  "placa": [
+   205,
+   322
+  ],
+  "farol": [
+   205,
+   332
+  ]
+ },
+ "praca": {
+  "x": 355,
+  "y": 362,
+  "r": [
+   300,
+   330,
+   410,
+   370
+  ],
+  "fonte": [
+   22,
+   15
+  ]
+ },
+ "pontos": [
+  {
+   "x": 378,
+   "y": 250,
+   "r": [
+    285,
+    200,
+    470,
+    275
+   ],
+   "nome": "Ponte Hercílio Luz"
+  },
+  {
+   "x": 380,
+   "y": 180,
+   "r": [
+    310,
+    110,
+    440,
+    195
+   ],
+   "nome": "Morro da Ilha"
+  }
+ ],
+ "calcadas": {
+  "nos": [
+   [
+    190,
+    343
+   ],
+   [
+    205,
+    343
+   ],
+   [
+    235,
+    343
+   ],
+   [
+    253,
+    343
+   ],
+   [
+    257,
+    336
+   ],
+   [
+    257,
+    300
+   ],
+   [
+    257,
+    250
+   ],
+   [
+    287,
+    342
+   ],
+   [
+    320,
+    342
+   ],
+   [
+    360,
+    342
+   ],
+   [
+    420,
+    342
+   ]
+  ],
+  "arestas": [
+   [
+    0,
+    1
+   ],
+   [
+    1,
+    2
+   ],
+   [
+    2,
+    3
+   ],
+   [
+    3,
+    4
+   ],
+   [
+    4,
+    5
+   ],
+   [
+    5,
+    6
+   ],
+   [
+    3,
+    7
+   ],
+   [
+    7,
+    8
+   ],
+   [
+    8,
+    9
+   ],
+   [
+    9,
+    10
+   ]
+  ],
+  "travessias": [
+   {
+    "aresta": 6,
+    "centro": [
+     272,
+     342
+    ]
+   }
+  ],
+  "pontes": []
+ },
+ "pista": [
+  [
+   263,
+   262.5
+  ],
+  [
+   263,
+   361.5
+  ],
+  [
+   267.5,
+   366
+  ],
+  [
+   272,
+   361.5
+  ],
+  [
+   272,
+   262.5
+  ],
+  [
+   267.5,
+   258
+  ]
+ ],
+ "carros": [
+  {
+   "s": 0,
+   "v": 16,
+   "peca": "carro-5",
+   "tamanho": [
+    8,
+    4
+   ]
+  }
+ ],
+ "pedestres": [
+  {
+   "de": 0,
+   "para": 1,
+   "s": 8,
+   "v": 15
+  },
+  {
+   "de": 8,
+   "para": 9,
+   "s": 20,
+   "v": 16
+  }
+ ],
+ "oclusoes": [],
+ "cordoes": [
+  [
+   304,
+   366,
+   406,
+   366
+  ]
+ ],
+ "luzes": [],
+ "superficies": {
+  "calcada": [
+   "bea882",
+   "b49f7d",
+   "c6b088",
+   "decea6",
+   "d2c19a",
+   "8e8071",
+   "7e7772",
+   "68535c",
+   "594855",
+   "634d57",
+   "6c5d64",
+   "5d4d5e",
+   "7e6460",
+   "735b5a",
+   "886e62",
+   "9e8369",
+   "a69478",
+   "d4bb89",
+   "493649"
+  ],
+  "faixa": [
+   "756a6d"
+  ],
+  "ponte": [],
+  "asfalto": [
+   "442e46",
+   "453147",
+   "422d44",
+   "4e3949",
+   "1a1221"
+  ]
+ }
+}
