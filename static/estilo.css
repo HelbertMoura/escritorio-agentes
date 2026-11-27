@@ -500,6 +500,7 @@ body.travado { overflow: hidden; }
 .aviso-greve { position: absolute; left: 14px; bottom: 14px; z-index: 5; display: flex; align-items: center; gap: 12px; max-width: min(460px, calc(100% - 28px)); padding: 8px 8px 8px 12px;
   border-radius: 0; background: rgba(28, 28, 27, .95); border: 1px solid color-mix(in srgb, var(--ambar) 55%, transparent); box-shadow: 6px 6px 0 rgba(0, 0, 0, .45); animation: surgir var(--medio); }
 .aviso-greve[hidden] { display: none; }
+.palco:has(> .sim-no-mapa) .aviso-greve { bottom: 62px; }   /* com a Simulação no mesmo canto, a greve sobe para cima da faixa dela */
 .greve-linha { margin: 0; flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; font-size: 14px; line-height: 1.3; }
 .greve-ic { flex: none; font-size: 18px; }
 .greve-motivo { color: var(--ambar-texto); font-weight: 700; overflow-wrap: anywhere; }
@@ -1252,6 +1253,11 @@ body.demo [data-rota="personalizar"] { display: none; }
   /* a ficha do agente entra embaixo do mapa, dentro do cartão, sem cobrir o agente */
   /* o aviso da greve também: embaixo do mapa, para não tapar a fileira de cima (nem o "!" de quem espera você) */
   .palco-cartao:not(.cheio) .aviso-greve { position: static; border: 0; border-top: 1px solid var(--borda); border-radius: 0; box-shadow: none; background: var(--cartao); padding: 8px 10px; animation: none; }
+  /* no cartão, a greve e a ficha entram no fluxo embaixo do mapa: o dock e a Simulação ficam presos ao pé do canvas
+     (--tela-h, app.js: ajustarEscala), e não ao pé do palco, para não cobrir o "Atender o pedido" */
+  .palco-cartao:not(.cheio) .controles { bottom: calc(100% - var(--tela-h, 100%) + 8px); }
+  .palco-cartao:not(.cheio) .palco .sim-aviso { bottom: calc(100% - var(--tela-h, 100%) + 62px); }
+  .palco-cartao.cheio .palco:has(> .sim-no-mapa) .aviso-greve { bottom: 120px; }   /* tela cheia: dock, Simulação e greve empilhados */
   .palco-cartao:not(.cheio) .ficha { position: static; width: auto; border: 0; border-top: 1px solid var(--borda); border-radius: 0; box-shadow: none; background: var(--cartao); }
   /* recepção: a ficha aberta pelo atalho vira folha de 40dvh, sem empurrar o mapa; o × fica preso no topo e o resto rola */
   #ficha.ficha-recepc { position: absolute; left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right));

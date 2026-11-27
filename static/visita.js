@@ -87,12 +87,21 @@
   const canvas = document.getElementById("cena"), ctx = canvas.getContext("2d");
   const mapaEstado = document.getElementById("mapa-estado"), verSala = document.getElementById("ver-sala");
   const verEscritorio = document.getElementById("ver-escritorio");
-  let predio, imagem, atlasDados;
+  let predio, imagem, atlasDados, salaAtual;
   function desenhar(sala) {
     if (!predio) return;
+    salaAtual = sala;
     const publico = sala === "publico", recepcao = publico && predio.salas.find(s => s.chave === "recepcao");
-    const area = sala && !publico ? predio.baixo.find(s => s.chave === "reuniao") : { px: 0, py: 0, pw: predio.W, ph: predio.H };
+    let area = sala && !publico ? predio.baixo.find(s => s.chave === "reuniao") : { px: 0, py: 0, pw: predio.W, ph: predio.H };
     if (!area) return;
+    // recepção pública: no mapa estreito (celular), o quadro fecha na recepção até meio px de tela por px do mundo, e a
+    // placa "Com convite" cresce com a largura exibida para sair com PLACA_TELA px ou mais na tela
+    const largura = canvas.clientWidth;
+    if (publico && recepcao && largura > 0 && largura * 2 < predio.W) {
+      const pw = Math.ceil(largura * 2), cx = recepcao.px + recepcao.pw / 2;
+      area = { px: Math.round(Math.max(0, Math.min(predio.W - pw, cx - pw / 2))), py: 0, pw, ph: predio.H };
+    }
+    const fonte = Math.max(PLACA_TELA, Math.ceil(PLACA_TELA * area.pw / (largura > 0 ? largura : area.pw)));
     // o canvas toma o formato da área em escala inteira (uns 1280 px de largura, que o CSS reduz): sem tarja em volta
     const k = Math.max(1, Math.round(1280 / area.pw));
     canvas.width = Math.round(area.pw * k); canvas.height = Math.round(area.ph * k);
@@ -113,15 +122,21 @@
     if (publico && recepcao) {
       ctx.fillStyle = "rgba(8, 10, 18, 0.82)"; ctx.beginPath();
       ctx.rect(0, 0, predio.W, predio.H); ctx.rect(recepcao.px, recepcao.py, recepcao.pw, recepcao.ph); ctx.fill("evenodd");
-      for (const s of [...predio.salas, ...predio.baixo]) if (s !== recepcao && s.pw) placaConvite(s.px + s.pw / 2, s.py + s.ph / 2);
+      for (const s of [...predio.salas, ...predio.baixo]) {
+        const cx = s.px + s.pw / 2;   // sala com o meio fora do quadro (celular): sem placa, para não encavalar na vizinha
+        if (s !== recepcao && s.pw && cx >= area.px && cx <= area.px + area.pw) placaConvite(cx, s.py + s.ph / 2, fonte, area);
+      }
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
-  // "Com convite": placa de pixel com cadeado no meio da sala apagada (em pixels do mundo, com o texto em Pixeloid)
-  function placaConvite(cx, cy) {
-    const texto = "COM CONVITE", u = 2;   // u: o pixel da placa (borda e cadeado), em pixels do mundo
-    ctx.font = "11px Pixeloid, monospace";
-    const tw = Math.ceil(ctx.measureText(texto).width), w = tw + 14 * u, h = 10 * u, x = Math.round(cx - w / 2), y = Math.round(cy - h / 2);
+  // "Com convite": placa de pixel com cadeado no meio da sala apagada (em pixels do mundo, com o texto em Pixeloid), presa
+  // dentro do quadro (a sala cortada pela borda mostra a placa inteira)
+  const PLACA_TELA = 12;   // px CSS do texto da placa, no mínimo
+  function placaConvite(cx, cy, fonte, area) {
+    const texto = "COM CONVITE", u = Math.max(2, Math.round(fonte / 6));   // u: o pixel da placa (borda e cadeado), em pixels do mundo
+    ctx.font = `${fonte}px Pixeloid, monospace`;
+    const tw = Math.ceil(ctx.measureText(texto).width), w = tw + 14 * u, h = 10 * u, y = Math.round(cy - h / 2);
+    const x = Math.round(Math.max(area.px + u, Math.min(area.px + area.pw - w - u, cx - w / 2)));
     ctx.fillStyle = "#111116"; ctx.fillRect(x - u, y - u, w + 2 * u, h + 2 * u);
     ctx.fillStyle = "#2c3a78"; ctx.fillRect(x, y, w, h);
     ctx.fillStyle = "#5468bf"; ctx.fillRect(x, y, w, u); ctx.fillRect(x, y, u, h);
@@ -150,6 +165,7 @@
   }
   verSala.addEventListener("click", () => { desenhar(true); document.getElementById("titulo-conversa").scrollIntoView({ behavior: "smooth" }); });
   verEscritorio.addEventListener("click", () => desenhar(false));
+  window.addEventListener("resize", () => { if (salaAtual === "publico") desenhar("publico"); });   // girar o celular refaz o quadro
   if (!convite) {
     estado.textContent = "A conversa e as demais salas exigem convite.";
     sair.disabled = true;

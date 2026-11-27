@@ -229,6 +229,7 @@ function ajustarEscala() {
   else vh = Math.round(Math.max(380, Math.min(window.innerHeight * 0.72, vw * predio.H / predio.W)));
   tela.width = Math.round(vw * dpr); tela.height = Math.round(vh * dpr);
   tela.style.width = `${vw}px`; tela.style.height = `${vh}px`;
+  palco.style.setProperty("--tela-h", `${vh}px`);   // estilo.css: no cartão do celular, o dock fica no pé do canvas
   if (!cam.ajustada) { verTudo(true); cam.ajustada = true; }
 }
 
@@ -954,7 +955,7 @@ function desenharLuzesDasSalas(ceu) {
   };
   if (f) {
     ctx.save();
-    const dia = Math.floor(Date.now() / 864e5);
+    const dia = Math.floor((Date.now() - new Date().getTimezoneOffset() * 6e4) / 864e5);   // o dia local: troca à meia-noite, não às 21h
     for (let i = 0; i < f.janelas.length; i++) {
       const j = f.janelas[i];
       let forca = luzDaFachada(i) * (0.16 + 0.34 * noite) * (aberto ? 1 : 0.55);
@@ -1544,7 +1545,6 @@ function aplicarRecepcaoToggle() {
   if (rot) rot.textContent = `${recepcaoOculta ? "Mostrar" : "Esconder"} recepção`;
   t.setAttribute("aria-label", recepcaoOculta ? 'Mostrar o "Esperando você" no mapa' : 'Esconder o "Esperando você" do mapa');
   if (recepcaoOculta && recepcaoUI && recepcaoUI.estaAberto()) recepcaoUI.fechar(false);
-  posicionarRecepcao();
   posicionarRecepcao();
 }
 function alternarRecepcao() {

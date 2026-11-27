@@ -39,7 +39,8 @@ const Clima = (() => {
   function balanco(fase) {
     return -vento * 2.5 + Math.sin(giro + fase) * (0.8 + vento * 1.6);
   }
-  const calmo = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reduzir = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;   // um só, lido a cada quadro
+  const calmo = () => !!(reduzir && reduzir.matches);
   function chove() { return ["chuva", "garoa", "tempestade"].includes(tipo()); }
   function texto(curto) { // curto: só a temperatura (relógio do celular)
     if (curto) return atual.temperatura != null ? `${Math.round(atual.temperatura)}°C` : "";
