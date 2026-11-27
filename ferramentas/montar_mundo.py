@@ -472,10 +472,35 @@ def versao(pixels, dados):
     return int(hashlib.sha256(pixels + json.dumps(dados, sort_keys=True).encode()).hexdigest()[:8], 16)
 
 
+def sem_filtro(linhas, passo, bpp):
+    """As linhas de um PNG (um byte de filtro e `passo` bytes cada) de volta aos bytes dos pixels; `bpp`: bytes por
+    pixel (1 quando o pixel ocupa menos)."""
+    if len(linhas) % (passo + 1):
+        raise ValueError("PNG corrompido")
+    saida, antes = bytearray(), bytes(passo)
+    for i in range(0, len(linhas), passo + 1):
+        f, linha = linhas[i], bytearray(linhas[i + 1:i + passo + 1])
+        if f > 4:
+            raise ValueError("PNG corrompido")
+        if f:
+            for x in range(passo):
+                a, c = (linha[x - bpp], antes[x - bpp]) if x >= bpp else (0, 0)
+                b = antes[x]
+                if f == 4:   # Paeth: o vizinho mais perto de a + b - c (no empate, a, depois b)
+                    pa, pb, pc = abs(b - c), abs(a - c), abs(a + b - c - c)
+                    previsto = a if pa <= pb and pa <= pc else b if pb <= pc else c
+                else:
+                    previsto = a if f == 1 else b if f == 2 else (a + b) // 2
+                linha[x] = (linha[x] + previsto) & 255
+        saida += linha
+        antes = linha
+    return bytes(saida)
+
+
 def conteudo_png(dados):
-    """O conteúdo de um PNG sem a compressão: os blocos (cabeçalho, paleta...) e o IDAT descomprimido (as linhas de
-    pixels filtradas). O fluxo zlib muda com a versão do zlib que o Pillow traz (o optimize=True) sem mudar um pixel;
-    o conteúdo, não. Só a biblioteca padrão (os testes rodam sem o Pillow)."""
+    """O conteúdo de um PNG sem a compressão nem os filtros de linha: os blocos (cabeçalho, paleta...) e os bytes dos
+    pixels. O fluxo zlib e os filtros mudam de um Pillow para outro (o do Ubuntu filtra o PNG de paleta, o do pip não)
+    sem mudar um pixel; o conteúdo, não. Só a biblioteca padrão (os testes rodam sem o Pillow)."""
     if dados[:8] != b"\x89PNG\r\n\x1a\n":
         raise ValueError("não é PNG")
     blocos, idat, i = b"", b"", 8
@@ -489,13 +514,18 @@ def conteudo_png(dados):
         else:
             blocos += len(corpo).to_bytes(4, "big") + tipo + corpo
         i += 12 + n
-    return blocos + b"IDAT" + zlib.decompress(idat)
+    largura = int.from_bytes(dados[16:20], "big")   # o IHDR é sempre o primeiro bloco
+    bits, cor, entrelace = dados[24], dados[25], dados[28]
+    if entrelace:
+        raise ValueError("PNG entrelaçado")
+    por_pixel = bits * {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[cor]
+    return blocos + b"IDAT" + sem_filtro(zlib.decompress(idat), (largura * por_pixel + 7) // 8, max(1, por_pixel // 8))
 
 
 def versao_dos_arquivos(saida, dados):
     """A versão do mundo: o conteúdo dos arquivos gravados em `saida` (os PNG levam a paleta deles, então trocar uma cor
-    muda a versão mesmo com os mesmos índices; sem a compressão, que muda de uma máquina para outra), em ordem fixa, e
-    os dados do mundo.json (sem a versão)."""
+    muda a versão mesmo com os mesmos índices; sem a compressão nem os filtros, que mudam de uma máquina para outra), em
+    ordem fixa, e os dados do mundo.json (sem a versão)."""
     nomes = ["terra.png", "brasil.png", os.path.join("perto", "ufs.json")]
     for pasta in ("perto", "perto4x"):
         nomes += sorted(os.path.join(pasta, n) for n in os.listdir(os.path.join(saida, pasta)) if n.endswith(".png"))

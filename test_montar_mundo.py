@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zlib
 
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 CIDADES = os.path.join(RAIZ, "arte", "mundo", "cidades.json")
@@ -215,6 +216,39 @@ class Rodovia(unittest.TestCase):
         self.assertIn("faixa", [nomes[c] for c in cor])
 
 
+class ConteudoPng(unittest.TestCase):
+    def png(self, cor, bits, w, linhas, filtros):
+        """Um PNG com as `linhas` de pixels gravadas com o filtro de cada uma (0 a 4, como no padrão PNG)."""
+        bpp = max(1, {3: 1, 6: 4}[cor] * bits // 8)
+        corpo, antes = b"", bytes(len(linhas[0]))
+        for linha, f in zip(linhas, filtros):
+            saida = bytearray([f])
+            for x, v in enumerate(linha):
+                a, c = (linha[x - bpp], antes[x - bpp]) if x >= bpp else (0, 0)
+                b = antes[x]
+                paeth = min((a, b, c), key=lambda n: abs(a + b - c - n))   # no empate, a, depois b
+                saida.append((v - (0, a, b, (a + b) // 2, paeth)[f]) % 256)
+            corpo, antes = corpo + saida, linha
+
+        def bloco(tipo, dados):
+            return len(dados).to_bytes(4, "big") + tipo + dados + zlib.crc32(tipo + dados).to_bytes(4, "big")
+        cabeca = w.to_bytes(4, "big") + len(linhas).to_bytes(4, "big") + bytes([bits, cor, 0, 0, 0])
+        return (b"\x89PNG\r\n\x1a\n" + bloco(b"IHDR", cabeca) + bloco(b"IDAT", zlib.compress(corpo))
+                + bloco(b"IEND", b""))
+
+    def test_filtro_de_linha_nao_muda_o_conteudo(self):
+        """O Pillow do Ubuntu grava o PNG de paleta com filtros adaptativos, e o do pip (o do CI) com o filtro 0: os
+        mesmos pixels dão o mesmo conteúdo, e um pixel diferente, outro."""
+        import montar_mundo as mm
+        for cor, bits, w, passo in ((3, 4, 13, 7), (3, 8, 9, 9), (6, 8, 5, 20)):   # paleta de 4 e 8 bits e RGBA
+            linhas = [bytes((x * x * 37 + y * 91 + x * y) % 256 for x in range(passo)) for y in range(10)]
+            zero = mm.conteudo_png(self.png(cor, bits, w, linhas, [0] * 10))
+            for filtros in ([1, 2, 3, 4, 0] * 2, [4] * 10, [3, 1, 4, 2, 2, 4, 1, 3, 4, 4]):
+                self.assertEqual(mm.conteudo_png(self.png(cor, bits, w, linhas, filtros)), zero, (cor, bits, filtros))
+            outras = linhas[:-1] + [bytes([linhas[-1][0] ^ 1]) + linhas[-1][1:]]
+            self.assertNotEqual(mm.conteudo_png(self.png(cor, bits, w, outras, [4] * 10)), zero, (cor, bits))
+
+
 class Montagem(unittest.TestCase):
     """Roda ferramentas/montar_mundo.py como processo, igual ao uso real. Com -I o teste não vê o Pillow
     do site-packages do usuário; o processo filho (sem -I) vê."""
@@ -270,8 +304,8 @@ class Montagem(unittest.TestCase):
             raise AssertionError(r.stderr)
 
     def sha(self, pasta, nome):
-        """O hash do conteúdo; no PNG, sem a compressão (montar_mundo.conteudo_png): o zlib muda de uma máquina para
-        outra sem mudar um pixel nem a paleta."""
+        """O hash do conteúdo; no PNG, sem a compressão nem os filtros (montar_mundo.conteudo_png): eles mudam de uma
+        máquina para outra sem mudar um pixel nem a paleta."""
         import montar_mundo as mm
         with open(os.path.join(pasta, nome), "rb") as f:
             dados = f.read()
@@ -284,7 +318,7 @@ class Montagem(unittest.TestCase):
             f"perto4x/{k % 8}-{k // 8}.png" for k, c in enumerate(mascara) if c == "1")
 
     def test_deterministico(self):
-        """A montagem desta execução sai igual, byte a byte (no PNG, o conteúdo descomprimido), à que foi versionada em static/mundo/ (outra execução, em
+        """A montagem desta execução sai igual, byte a byte (no PNG, os pixels e a paleta), à que foi versionada em static/mundo/ (outra execução, em
         outro momento): o mesmo dado dá sempre os mesmos arquivos. Uma montagem só por execução do teste (os três níveis
         levam ~1 min); os arquivos que sobram em static/mundo/perto4x/ (de uma máscara antiga) também contam."""
         for nome in self.gerados():
